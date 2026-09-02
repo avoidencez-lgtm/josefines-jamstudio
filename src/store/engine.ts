@@ -91,6 +91,15 @@ export interface EngineState {
   steerAiMusic: (delta: string) => Promise<void>;
   setAiMusicVolume: (volume: number) => Promise<void>;
 
+  // Rig Orchestration (M5)
+  rigState: import("../ipc/contract").RigState | null;
+  availableProfiles: import("../ipc/contract").RigProfile[];
+  loadRigProfiles: () => Promise<void>;
+  selectRigProfile: (id: string) => Promise<void>;
+  selectRigScene: (sceneIdx: number) => Promise<void>;
+  setRigSectionMapping: (section: string, sceneIdx: number) => Promise<void>;
+  refreshRigState: () => Promise<void>;
+
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -168,6 +177,8 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     promptDelta: "",
     mixVolume: 0.8,
   },
+  rigState: null,
+  availableProfiles: [],
 
   setScreen: (screen) => set({ currentScreen: screen }),
 
@@ -476,6 +487,78 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       }));
     } catch (e) {
       console.error("Failed to set AI music volume:", e);
+    }
+  },
+
+  loadRigProfiles: async () => {
+    try {
+      const profiles =
+        await invoke<import("../ipc/contract").RigProfile[]>(
+          "rig_list_profiles",
+        );
+      const state =
+        await invoke<import("../ipc/contract").RigState>("rig_get_state");
+      set({ availableProfiles: profiles, rigState: state });
+    } catch (e) {
+      console.error("Failed to load rig profiles:", e);
+    }
+  },
+
+  selectRigProfile: async (id: string) => {
+    try {
+      const profile = await invoke<import("../ipc/contract").RigProfile>(
+        "rig_select_profile",
+        { profileId: id },
+      );
+      set((state) => ({
+        rigState: state.rigState
+          ? { ...state.rigState, currentProfile: profile, currentScene: 0 }
+          : null,
+      }));
+    } catch (e) {
+      console.error("Failed to select rig profile:", e);
+    }
+  },
+
+  selectRigScene: async (sceneIdx: number) => {
+    try {
+      await invoke("rig_select_scene", { sceneIdx });
+      set((state) => ({
+        rigState: state.rigState
+          ? { ...state.rigState, currentScene: sceneIdx }
+          : null,
+      }));
+    } catch (e) {
+      console.error("Failed to select rig scene:", e);
+    }
+  },
+
+  setRigSectionMapping: async (section: string, sceneIdx: number) => {
+    try {
+      await invoke("rig_set_section_mapping", { section, sceneIdx });
+      set((state) => ({
+        rigState: state.rigState
+          ? {
+              ...state.rigState,
+              sectionMappings: {
+                ...state.rigState.sectionMappings,
+                [section]: sceneIdx,
+              },
+            }
+          : null,
+      }));
+    } catch (e) {
+      console.error("Failed to set section mapping:", e);
+    }
+  },
+
+  refreshRigState: async () => {
+    try {
+      const state =
+        await invoke<import("../ipc/contract").RigState>("rig_get_state");
+      set({ rigState: state });
+    } catch (e) {
+      console.error("Failed to refresh rig state:", e);
     }
   },
 

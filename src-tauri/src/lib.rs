@@ -20,6 +20,7 @@ pub struct AppState {
     pub engine: Arc<Mutex<AudioEngine>>,
     pub store: Arc<Mutex<store::IndexStore>>,
     pub ai_music: Arc<Mutex<jam_audio::ai_music::AiMusicEngine>>,
+    pub rig: Arc<Mutex<jam_rig::RigOrchestrator>>,
 }
 
 #[tauri::command]
@@ -398,6 +399,69 @@ fn band_list_charts() -> Vec<Chart> {
     ]
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigStateDto {
+    pub current_profile: jam_rig::RigProfile,
+    pub current_scene: usize,
+    pub section_mappings: std::collections::HashMap<String, usize>,
+}
+
+#[tauri::command]
+fn rig_list_profiles() -> Vec<jam_rig::RigProfile> {
+    vec![
+        jam_rig::RigProfile::quad_cortex(),
+        jam_rig::RigProfile::helix(),
+        jam_rig::RigProfile::kemper(),
+        jam_rig::RigProfile::axe_fx(),
+        jam_rig::RigProfile::black_spirit(),
+    ]
+}
+
+#[tauri::command]
+fn rig_select_profile(
+    profile_id: String,
+    state: State<'_, AppState>,
+) -> Result<jam_rig::RigProfile, String> {
+    let profile = match profile_id.as_str() {
+        "quad-cortex" => jam_rig::RigProfile::quad_cortex(),
+        "helix" => jam_rig::RigProfile::helix(),
+        "kemper" => jam_rig::RigProfile::kemper(),
+        "axe-fx" => jam_rig::RigProfile::axe_fx(),
+        "black-spirit" => jam_rig::RigProfile::black_spirit(),
+        _ => return Err(format!("Unknown rig profile: {}", profile_id)),
+    };
+    let mut rig = state.rig.lock();
+    rig.profile = profile.clone();
+    rig.current_scene = 0;
+    Ok(profile)
+}
+
+#[tauri::command]
+fn rig_select_scene(scene_idx: usize, state: State<'_, AppState>) -> Result<(), String> {
+    state.rig.lock().select_scene(scene_idx)
+}
+
+#[tauri::command]
+fn rig_set_section_mapping(
+    section: String,
+    scene_idx: usize,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.rig.lock().set_section_mapping(section, scene_idx);
+    Ok(())
+}
+
+#[tauri::command]
+fn rig_get_state(state: State<'_, AppState>) -> Result<RigStateDto, String> {
+    let rig = state.rig.lock();
+    Ok(RigStateDto {
+        current_profile: rig.profile.clone(),
+        current_scene: rig.current_scene,
+        section_mappings: rig.section_mappings.clone(),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let config = AudioConfig::default();
@@ -421,11 +485,16 @@ pub fn run() {
 
     let ai_music_engine = Arc::new(Mutex::new(jam_audio::ai_music::AiMusicEngine::new(48_000)));
 
+    let rig_orchestrator = Arc::new(Mutex::new(jam_rig::RigOrchestrator::with_memory_sink(
+        jam_rig::RigProfile::quad_cortex(),
+    )));
+
     let app_state = AppState {
         secret_store,
         engine: Arc::clone(&engine_arc),
         store: Arc::clone(&store_arc),
         ai_music: Arc::clone(&ai_music_engine),
+        rig: Arc::clone(&rig_orchestrator),
     };
 
     tauri::Builder::default()
@@ -490,6 +559,11 @@ pub fn run() {
             ai_music_steer,
             ai_music_set_volume,
             ai_music_get_state,
+            rig_list_profiles,
+            rig_select_profile,
+            rig_select_scene,
+            rig_set_section_mapping,
+            rig_get_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
