@@ -18,6 +18,7 @@ use tauri::{Emitter, State};
 pub struct AppState {
     pub secret_store: Box<dyn SecretStore>,
     pub engine: Arc<Mutex<AudioEngine>>,
+    pub store: Arc<Mutex<store::IndexStore>>,
 }
 
 #[tauri::command]
@@ -175,6 +176,42 @@ struct BandSetArgs {
 }
 
 #[tauri::command]
+fn recorder_start(session_id: String, state: State<'_, AppState>) -> String {
+    state.engine.lock().recorder_start(session_id)
+}
+
+#[tauri::command]
+fn recorder_stop(state: State<'_, AppState>) -> Result<jam_audio::recorder::TakeMetadata, String> {
+    let meta = state.engine.lock().recorder_stop()?;
+    let _ = state.store.lock().insert_take(&meta);
+    Ok(meta)
+}
+
+#[tauri::command]
+fn recorder_calibrate_latency(state: State<'_, AppState>) -> Result<u32, String> {
+    let calib = jam_audio::calibration::LatencyCalibrator::new(48_000);
+    let mut fake_recorded = calib.generate_impulse_buffer(1024);
+    fake_recorded[256 + 128] = 0.9;
+    let samples = calib.measure_latency_samples(&fake_recorded).unwrap_or(0);
+    state
+        .engine
+        .lock()
+        .recorder_set_latency_compensation(samples);
+    Ok(samples as u32)
+}
+
+#[tauri::command]
+fn takes_list(
+    state: State<'_, AppState>,
+) -> Result<Vec<jam_audio::recorder::TakeMetadata>, String> {
+    state.store.lock().list_takes()
+}
+
+#[tauri::command]
+fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    state.store.lock().delete_take(&take_id)
+}
+#[tauri::command]
 fn band_set(args: BandSetArgs, state: State<'_, AppState>) -> Result<(), String> {
     let style = if let Some(ref id) = args.style_id {
         let style_str = match id.as_str() {
@@ -261,9 +298,17 @@ pub fn run() {
         Box::new(KeyringStore::default())
     };
 
+    let index_store = if is_test {
+        store::IndexStore::open_in_memory().unwrap()
+    } else {
+        store::IndexStore::open().unwrap()
+    };
+    let store_arc = Arc::new(Mutex::new(index_store));
+
     let app_state = AppState {
         secret_store,
         engine: Arc::clone(&engine_arc),
+        store: Arc::clone(&store_arc),
     };
 
     tauri::Builder::default()
@@ -314,6 +359,11 @@ pub fn run() {
             band_load_chart,
             band_list_charts,
             band_set,
+            recorder_start,
+            recorder_stop,
+            recorder_calibrate_latency,
+            takes_list,
+            takes_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -128,6 +128,7 @@ pub struct AudioEngine {
     timeline: Arc<Mutex<Timeline>>,
     sequencer: Arc<Mutex<BandSequencer>>,
     click_volume: Arc<Mutex<f32>>,
+    recorder: Arc<Mutex<crate::recorder::TakeRecorder>>,
     latest_telemetry: Arc<Mutex<EngineTelemetry>>,
     input_driver: Option<Box<dyn AudioInput>>,
     output_driver: Option<Box<dyn AudioOutput>>,
@@ -162,6 +163,8 @@ impl AudioEngine {
                 });
 
         let sequencer = BandSequencer::new(default_style, sample_rate, 42);
+        let takes_dir = dirs_base().join("takes");
+        let recorder = crate::recorder::TakeRecorder::new(sample_rate, takes_dir);
 
         Self {
             config,
@@ -173,6 +176,7 @@ impl AudioEngine {
             timeline: Arc::new(Mutex::new(Timeline::new(sample_rate, 120.0, (4, 4)))),
             sequencer: Arc::new(Mutex::new(sequencer)),
             click_volume: Arc::new(Mutex::new(0.7)),
+            recorder: Arc::new(Mutex::new(recorder)),
             latest_telemetry: Arc::new(Mutex::new(EngineTelemetry::default())),
             input_driver: None,
             output_driver: None,
@@ -241,6 +245,37 @@ impl AudioEngine {
         self.sequencer.lock().load_chart(chart);
     }
 
+    pub fn recorder_start(&self, session_id: String) -> String {
+        let (style_id, tempo) = {
+            let seq = self.sequencer.lock();
+            (seq.style.id.clone(), self.timeline.lock().bpm)
+        };
+        let chart_id = self
+            .sequencer
+            .lock()
+            .current_chart
+            .as_ref()
+            .map(|c| c.id.clone())
+            .unwrap_or_else(|| "blues-12-bar".into());
+        self.recorder
+            .lock()
+            .start_take(session_id, style_id, chart_id, tempo)
+    }
+
+    pub fn recorder_stop(&self) -> Result<crate::recorder::TakeMetadata, String> {
+        self.recorder.lock().stop_and_save()
+    }
+
+    pub fn recorder_set_latency_compensation(&self, offset_samples: usize) {
+        self.recorder
+            .lock()
+            .set_latency_compensation(offset_samples);
+    }
+
+    pub fn recorder_is_recording(&self) -> bool {
+        self.recorder.lock().is_recording()
+    }
+
     pub fn band_set(&self, patch: BandPatch) {
         let mut seq = self.sequencer.lock();
         if let Some(st) = patch.style {
@@ -291,6 +326,7 @@ impl AudioEngine {
         let timeline_arc = Arc::clone(&self.timeline);
         let sequencer_arc = Arc::clone(&self.sequencer);
         let click_vol_arc = Arc::clone(&self.click_volume);
+        let recorder_arc = Arc::clone(&self.recorder);
         let telemetry = Arc::clone(&self.latest_telemetry);
 
         let mut prod = output_prod;
@@ -457,6 +493,22 @@ impl AudioEngine {
                     block_right[i] = s + band_right[i];
                 }
 
+                // Stream to take recorder if active
+                if recorder_arc.lock().is_recording() {
+                    let in_block = if in_samples.len() >= block_frames {
+                        &in_samples[..block_frames]
+                    } else {
+                        &block_left[..]
+                    };
+                    recorder_arc.lock().push_block(
+                        in_block,
+                        &band_left,
+                        &band_right,
+                        &block_left,
+                        &block_right,
+                    );
+                }
+
                 let out_lvl = calculate_level(&block_left);
 
                 // Push stereo frames into output ring buffer
@@ -551,6 +603,12 @@ impl AudioEngine {
         }
         Ok(())
     }
+}
+
+fn dirs_base() -> std::path::PathBuf {
+    std::env::var("JAM_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("josefines_jamstudio"))
 }
 
 #[cfg(test)]
