@@ -6,6 +6,8 @@ pub mod store;
 
 use jam_audio::devices::{list_devices, AudioConfig, AudioDevices};
 use jam_audio::engine::{AudioEngine, EngineTelemetry};
+use jam_band::sequencer::Cue;
+use jam_core::style::Style;
 use keys::{KeyringStore, MemoryStore, SecretStore};
 use parking_lot::Mutex;
 use settings::{load_settings, save_settings, AppSettings};
@@ -124,6 +126,46 @@ fn transport_set_click_volume(volume: f32, state: State<'_, AppState>) {
     state.engine.lock().set_click_volume(volume);
 }
 
+#[tauri::command]
+fn band_set_style(style_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let style_str = match style_id.as_str() {
+        "blues-shuffle" => include_str!("../../styles/blues-shuffle.json"),
+        "rock-straight" => include_str!("../../styles/rock-straight.json"),
+        _ => return Err(format!("Unknown style id: {}", style_id)),
+    };
+    let style: Style = serde_json::from_str(style_str).map_err(|e| e.to_string())?;
+    state.engine.lock().band_set_style(style);
+    Ok(())
+}
+
+#[tauri::command]
+fn band_set_intensity(intensity: f32, state: State<'_, AppState>) {
+    state.engine.lock().band_set_intensity(intensity);
+}
+
+#[tauri::command]
+fn band_cue(cue: String, state: State<'_, AppState>) -> Result<(), String> {
+    let c = match cue.as_str() {
+        "fill" => Cue::Fill,
+        "crash" => Cue::Crash,
+        "stop" => Cue::Stop,
+        "ending" => Cue::Ending,
+        "none" => Cue::None,
+        _ => return Err(format!("Unknown cue: {}", cue)),
+    };
+    state.engine.lock().band_cue(c);
+    Ok(())
+}
+
+#[tauri::command]
+fn band_list_styles() -> Vec<Style> {
+    let blues: Style =
+        serde_json::from_str(include_str!("../../styles/blues-shuffle.json")).unwrap();
+    let rock: Style =
+        serde_json::from_str(include_str!("../../styles/rock-straight.json")).unwrap();
+    vec![blues, rock]
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let config = AudioConfig::default();
@@ -156,6 +198,7 @@ pub fn run() {
                 let tel = eng.lock().get_telemetry();
                 let _ = app_handle.emit("meters", &tel.output_level);
                 let _ = app_handle.emit("transport.state", &tel.transport);
+                let _ = app_handle.emit("band.state", &tel.band);
                 if let Some(t) = &tel.tuner {
                     let _ = app_handle.emit("tuner.state", t);
                 }
@@ -183,6 +226,10 @@ pub fn run() {
             transport_set_tempo,
             transport_set_time_signature,
             transport_set_click_volume,
+            band_set_style,
+            band_set_intensity,
+            band_cue,
+            band_list_styles,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

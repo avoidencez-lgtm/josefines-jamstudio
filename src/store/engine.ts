@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type {
   AppSettings,
   AudioDevices,
+  BandTelemetry,
   EngineTelemetry,
   MeterTelemetry,
   TransportTelemetry,
@@ -46,6 +47,13 @@ export interface EngineState {
     denominator: number,
   ) => Promise<void>;
 
+  // Band actions
+  bandSetStyle: (styleId: string) => Promise<void>;
+  bandSetIntensity: (intensity: number) => Promise<void>;
+  bandCue: (
+    cue: "none" | "fill" | "crash" | "stop" | "ending",
+  ) => Promise<void>;
+
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -77,6 +85,13 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       loop_start_bar: 1,
       loop_end_bar: 5,
       count_in_bars: 1,
+    },
+    band: {
+      style_id: "blues-shuffle",
+      style_name: "Blues Shuffle",
+      intensity: 0.5,
+      active_cue: "none",
+      pending_cue: "none",
     },
   },
   devices: { inputs: [], outputs: [] },
@@ -179,6 +194,31 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     }
   },
 
+  bandSetStyle: async (styleId) => {
+    try {
+      await invoke("band_set_style", { styleId });
+    } catch (e) {
+      console.error("Failed to set band style:", e);
+    }
+  },
+
+  bandSetIntensity: async (intensity) => {
+    const clamped = Math.max(0, Math.min(1, intensity));
+    try {
+      await invoke("band_set_intensity", { intensity: clamped });
+    } catch (e) {
+      console.error("Failed to set band intensity:", e);
+    }
+  },
+
+  bandCue: async (cue) => {
+    try {
+      await invoke("band_cue", { cue });
+    } catch (e) {
+      console.error("Failed to set band cue:", e);
+    }
+  },
+
   refreshDevices: async () => {
     try {
       const devs = await invoke<AudioDevices>("audio_list_devices");
@@ -266,10 +306,20 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       },
     );
 
+    const unlistenBand = await listen<BandTelemetry>("band.state", (event) => {
+      set((state) => ({
+        telemetry: {
+          ...state.telemetry,
+          band: event.payload,
+        },
+      }));
+    });
+
     return () => {
       unlistenMeter();
       unlistenTuner();
       unlistenTransport();
+      unlistenBand();
     };
   },
 }));

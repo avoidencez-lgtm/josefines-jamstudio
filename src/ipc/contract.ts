@@ -44,12 +44,21 @@ export interface TransportTelemetry {
   count_in_bars: number;
 }
 
+export interface BandTelemetry {
+  style_id: string;
+  style_name: string;
+  intensity: number;
+  active_cue: "none" | "fill" | "crash" | "stop" | "ending";
+  pending_cue: "none" | "fill" | "crash" | "stop" | "ending";
+}
+
 export interface EngineTelemetry {
   xruns: number;
   input_level: MeterTelemetry;
   output_level: MeterTelemetry;
   tuner?: TunerTelemetry | null;
   transport: TransportTelemetry;
+  band: BandTelemetry;
 }
 
 export interface AppSettings {

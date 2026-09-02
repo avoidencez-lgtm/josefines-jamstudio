@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "packs": [
+    {
+      "id": "standard-rock-kit",
+      "name": "Standard Rock Kit",
+      "version": "1.0.0",
+      "url": "https://github.com/avoidencez-lgtm/josefines-jamstudio/releases/download/assets-v1/standard-rock-kit.zip",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 1024,
+      "licence": "CC0-1.0",
+      "attribution": "Public Domain multisampled acoustic kit"
+    }
+  ]
+}

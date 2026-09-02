@@ -57,7 +57,7 @@ The project is done when every point below is true and verified, the owner gates
 |---|---|---|---|
 | M0 | Foundation: scaffold, crates, gates, CI, design shell, keychain settings, seam registries, tuner, metronome, spikes S1 to S3 | ✅ | #2 |
 | M1a | Transport, timeline, click, count-in | ✅ | #4 |
-| M1b | Drums: sampler, style engine, cues, render-ahead worker | ☐ | |
+| M1b | Drums: sampler, style engine, cues, render-ahead worker | ⏳ | |
 | M1c | Bass, comp, chart, six styles, chart presets, golden renders | ☐ | |
 | M1d | Live steering and the Stage screen | ☐ | |
 | M1e | Recorder, latency calibration, take browser | ☐ | |
