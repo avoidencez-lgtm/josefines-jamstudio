@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "blues-8-bar",
+  "name": "8-Bar Blues",
+  "keyTonic": 0,
+  "mode": "major",
+  "timeSig": [4, 4],
+  "defaultBpm": 95.0,
+  "defaultStyleId": "blues-shuffle",
+  "sections": [
+    {
+      "id": "chorus",
+      "name": "Chorus",
+      "bars": [
+        [{ "chord": "C7", "beats": 4.0 }],
+        [{ "chord": "G7", "beats": 4.0 }],
+        [{ "chord": "F7", "beats": 4.0 }],
+        [{ "chord": "C7", "beats": 4.0 }],
+        [{ "chord": "C7", "beats": 4.0 }],
+        [{ "chord": "F7", "beats": 4.0 }],
+        [{ "chord": "C7", "beats": 4.0 }],
+        [{ "chord": "G7", "beats": 4.0 }]
+      ]
+    }
+  ],
+  "arrangement": [{ "sectionId": "chorus", "repeats": 2 }]
+}

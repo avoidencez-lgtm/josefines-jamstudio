@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "rock-16-bar",
+  "name": "16-Bar Rock Anthem",
+  "keyTonic": 4,
+  "mode": "major",
+  "timeSig": [4, 4],
+  "defaultBpm": 132.0,
+  "defaultStyleId": "metal-gallop",
+  "sections": [
+    {
+      "id": "verse",
+      "name": "Verse",
+      "bars": [
+        [{ "chord": "E5", "beats": 4.0 }],
+        [{ "chord": "E5", "beats": 4.0 }],
+        [{ "chord": "D5", "beats": 4.0 }],
+        [{ "chord": "A5", "beats": 4.0 }],
+        [{ "chord": "E5", "beats": 4.0 }],
+        [{ "chord": "E5", "beats": 4.0 }],
+        [{ "chord": "D5", "beats": 4.0 }],
+        [{ "chord": "B5", "beats": 4.0 }],
+        [{ "chord": "C5", "beats": 4.0 }],
+        [{ "chord": "D5", "beats": 4.0 }],
+        [{ "chord": "E5", "beats": 4.0 }],
+        [{ "chord": "E5", "beats": 4.0 }],
+        [{ "chord": "C5", "beats": 4.0 }],
+        [{ "chord": "D5", "beats": 4.0 }],
+        [{ "chord": "B5", "beats": 4.0 }],
+        [{ "chord": "E5", "beats": 4.0 }]
+      ]
+    }
+  ],
+  "arrangement": [{ "sectionId": "verse", "repeats": 2 }]
+}

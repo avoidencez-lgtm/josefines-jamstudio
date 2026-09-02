@@ -50,6 +50,8 @@ export interface BandTelemetry {
   intensity: number;
   active_cue: "none" | "fill" | "crash" | "stop" | "ending";
   pending_cue: "none" | "fill" | "crash" | "stop" | "ending";
+  current_chord: string;
+  next_chord?: string | null;
 }
 
 export interface EngineTelemetry {

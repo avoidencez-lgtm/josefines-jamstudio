@@ -7,6 +7,7 @@ pub mod store;
 use jam_audio::devices::{list_devices, AudioConfig, AudioDevices};
 use jam_audio::engine::{AudioEngine, EngineTelemetry};
 use jam_band::sequencer::Cue;
+use jam_core::chart::Chart;
 use jam_core::style::Style;
 use keys::{KeyringStore, MemoryStore, SecretStore};
 use parking_lot::Mutex;
@@ -131,6 +132,10 @@ fn band_set_style(style_id: String, state: State<'_, AppState>) -> Result<(), St
     let style_str = match style_id.as_str() {
         "blues-shuffle" => include_str!("../../styles/blues-shuffle.json"),
         "rock-straight" => include_str!("../../styles/rock-straight.json"),
+        "funk-16" => include_str!("../../styles/funk-16.json"),
+        "jazz-swing" => include_str!("../../styles/jazz-swing.json"),
+        "ballad-68" => include_str!("../../styles/ballad-68.json"),
+        "metal-gallop" => include_str!("../../styles/metal-gallop.json"),
         _ => return Err(format!("Unknown style id: {}", style_id)),
     };
     let style: Style = serde_json::from_str(style_str).map_err(|e| e.to_string())?;
@@ -159,11 +164,46 @@ fn band_cue(cue: String, state: State<'_, AppState>) -> Result<(), String> {
 
 #[tauri::command]
 fn band_list_styles() -> Vec<Style> {
-    let blues: Style =
-        serde_json::from_str(include_str!("../../styles/blues-shuffle.json")).unwrap();
-    let rock: Style =
-        serde_json::from_str(include_str!("../../styles/rock-straight.json")).unwrap();
-    vec![blues, rock]
+    vec![
+        serde_json::from_str(include_str!("../../styles/blues-shuffle.json")).unwrap(),
+        serde_json::from_str(include_str!("../../styles/rock-straight.json")).unwrap(),
+        serde_json::from_str(include_str!("../../styles/funk-16.json")).unwrap(),
+        serde_json::from_str(include_str!("../../styles/jazz-swing.json")).unwrap(),
+        serde_json::from_str(include_str!("../../styles/ballad-68.json")).unwrap(),
+        serde_json::from_str(include_str!("../../styles/metal-gallop.json")).unwrap(),
+    ]
+}
+
+#[tauri::command]
+fn band_load_chart(chart_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let chart_str = match chart_id.as_str() {
+        "blues-12-bar" => include_str!("../../charts/blues-12-bar.json"),
+        "blues-quick-change" => include_str!("../../charts/blues-quick-change.json"),
+        "blues-8-bar" => include_str!("../../charts/blues-8-bar.json"),
+        "blues-minor" => include_str!("../../charts/blues-minor.json"),
+        "i-v-vi-iv" => include_str!("../../charts/i-v-vi-iv.json"),
+        "ii-v-i" => include_str!("../../charts/ii-v-i.json"),
+        "rock-16-bar" => include_str!("../../charts/rock-16-bar.json"),
+        "one-chord-vamp" => include_str!("../../charts/one-chord-vamp.json"),
+        _ => return Err(format!("Unknown chart id: {}", chart_id)),
+    };
+    let chart: Chart = serde_json::from_str(chart_str).map_err(|e| e.to_string())?;
+    state.engine.lock().band_load_chart(chart.resolve());
+    Ok(())
+}
+
+#[tauri::command]
+fn band_list_charts() -> Vec<Chart> {
+    vec![
+        serde_json::from_str(include_str!("../../charts/blues-12-bar.json")).unwrap(),
+        serde_json::from_str(include_str!("../../charts/blues-quick-change.json")).unwrap(),
+        serde_json::from_str(include_str!("../../charts/blues-8-bar.json")).unwrap(),
+        serde_json::from_str(include_str!("../../charts/blues-minor.json")).unwrap(),
+        serde_json::from_str(include_str!("../../charts/i-v-vi-iv.json")).unwrap(),
+        serde_json::from_str(include_str!("../../charts/ii-v-i.json")).unwrap(),
+        serde_json::from_str(include_str!("../../charts/rock-16-bar.json")).unwrap(),
+        serde_json::from_str(include_str!("../../charts/one-chord-vamp.json")).unwrap(),
+    ]
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -230,6 +270,8 @@ pub fn run() {
             band_set_intensity,
             band_cue,
             band_list_styles,
+            band_load_chart,
+            band_list_charts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -48,8 +48,10 @@ pub struct ChartManifest {
     pub schema_version: u32,
     pub id: String,
     pub name: String,
-    pub key: String,
-    pub time_signature: (u8, u8),
+    #[serde(default)]
+    pub key: Option<String>,
+    #[serde(default, alias = "timeSig")]
+    pub time_signature: Option<(u8, u8)>,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }

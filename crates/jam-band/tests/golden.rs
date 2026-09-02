@@ -7,13 +7,14 @@ use std::time::Instant;
 fn render_style_headless(style_json: &str, bars: u32, bpm: f64, seed: u64) -> (Vec<f32>, Vec<f32>) {
     let sample_rate = 48_000;
     let style: Style = serde_json::from_str(style_json).expect("valid style JSON");
-    let mut seq = BandSequencer::new(style, sample_rate, seed);
+    let beats_per_bar = style.feel.time_sig.0 as f64;
+    let mut seq = BandSequencer::new(style.clone(), sample_rate, seed);
 
-    let mut timeline = Timeline::new(sample_rate, bpm, (4, 4));
+    let mut timeline = Timeline::new(sample_rate, bpm, style.feel.time_sig);
     timeline.set_count_in(0);
     timeline.play();
 
-    let total_beats = (bars * 4) as f64;
+    let total_beats = bars as f64 * beats_per_bar;
     let total_frames = beats_to_samples(total_beats, bpm, sample_rate) as usize;
 
     let block_size = 256;
@@ -45,55 +46,70 @@ fn render_style_headless(style_json: &str, bars: u32, bpm: f64, seed: u64) -> (V
 
 #[test]
 fn test_golden_render_blues_shuffle() {
-    let blues_json = include_str!("../../../styles/blues-shuffle.json");
-    let (left, right) = render_style_headless(blues_json, 8, 100.0, 42);
-
-    // 8 bars @ 100 bpm in 4/4 = 32 beats = 19.2s = 921,600 samples
-    assert_eq!(left.len(), 921_600);
-    assert_eq!(right.len(), 921_600);
-
-    let lvl_l = calculate_level(&left);
-    let lvl_r = calculate_level(&right);
-
-    println!(
-        "Blues Shuffle 8-bar RMS: L={:.2} dB, R={:.2} dB",
-        lvl_l.rms_db, lvl_r.rms_db
-    );
-    assert!(lvl_l.peak_db > -40.0, "Expected audible drum signal");
-    assert!(lvl_l.rms_db > -60.0, "Expected non-trivial RMS");
-
-    // Deterministic check: re-render must be 100% bit-identical
-    let (left2, _) = render_style_headless(blues_json, 8, 100.0, 42);
-    assert_eq!(
-        left, left2,
-        "Golden render must be deterministic with seed 42"
-    );
+    let json = include_str!("../../../styles/blues-shuffle.json");
+    let (l, r) = render_style_headless(json, 8, 100.0, 42);
+    assert_eq!(l.len(), 921_600);
+    assert_eq!(r.len(), 921_600);
+    let lvl = calculate_level(&l);
+    assert!(lvl.peak_db > -40.0 && lvl.rms_db > -60.0);
+    let (l2, _) = render_style_headless(json, 8, 100.0, 42);
+    assert_eq!(l, l2, "Deterministic golden render seed 42");
 }
 
 #[test]
 fn test_golden_render_rock_straight() {
-    let rock_json = include_str!("../../../styles/rock-straight.json");
-    let (left, right) = render_style_headless(rock_json, 8, 100.0, 42);
+    let json = include_str!("../../../styles/rock-straight.json");
+    let (l, _) = render_style_headless(json, 8, 100.0, 42);
+    assert_eq!(l.len(), 921_600);
+    let lvl = calculate_level(&l);
+    assert!(lvl.peak_db > -40.0 && lvl.rms_db > -60.0);
+    let (l2, _) = render_style_headless(json, 8, 100.0, 42);
+    assert_eq!(l, l2);
+}
 
-    assert_eq!(left.len(), 921_600);
-    assert_eq!(right.len(), 921_600);
+#[test]
+fn test_golden_render_funk_16() {
+    let json = include_str!("../../../styles/funk-16.json");
+    let (l, _) = render_style_headless(json, 8, 100.0, 42);
+    assert_eq!(l.len(), 921_600);
+    let lvl = calculate_level(&l);
+    assert!(lvl.peak_db > -40.0 && lvl.rms_db > -60.0);
+    let (l2, _) = render_style_headless(json, 8, 100.0, 42);
+    assert_eq!(l, l2);
+}
 
-    let lvl_l = calculate_level(&left);
-    println!("Rock Straight 8-bar RMS: L={:.2} dB", lvl_l.rms_db);
-    assert!(lvl_l.peak_db > -40.0);
-    assert!(lvl_l.rms_db > -60.0);
+#[test]
+fn test_golden_render_jazz_swing() {
+    let json = include_str!("../../../styles/jazz-swing.json");
+    let (l, _) = render_style_headless(json, 8, 120.0, 42);
+    let lvl = calculate_level(&l);
+    assert!(lvl.peak_db > -40.0 && lvl.rms_db > -60.0);
+    let (l2, _) = render_style_headless(json, 8, 120.0, 42);
+    assert_eq!(l, l2);
+}
 
-    // Deterministic check
-    let (left2, _) = render_style_headless(rock_json, 8, 100.0, 42);
-    assert_eq!(
-        left, left2,
-        "Golden render must be deterministic with seed 42"
-    );
+#[test]
+fn test_golden_render_ballad_68() {
+    let json = include_str!("../../../styles/ballad-68.json");
+    let (l, _) = render_style_headless(json, 8, 60.0, 42);
+    let lvl = calculate_level(&l);
+    assert!(lvl.peak_db > -40.0 && lvl.rms_db > -60.0);
+    let (l2, _) = render_style_headless(json, 8, 60.0, 42);
+    assert_eq!(l, l2);
+}
+
+#[test]
+fn test_golden_render_metal_gallop() {
+    let json = include_str!("../../../styles/metal-gallop.json");
+    let (l, _) = render_style_headless(json, 8, 140.0, 42);
+    let lvl = calculate_level(&l);
+    assert!(lvl.peak_db > -40.0 && lvl.rms_db > -60.0);
+    let (l2, _) = render_style_headless(json, 8, 140.0, 42);
+    assert_eq!(l, l2);
 }
 
 #[test]
 fn test_render_worker_benchmark_budget() {
-    // 10 000 blocks of 256 frames = 2,560,000 frames = ~53.33s real-time
     let rock_json = include_str!("../../../styles/rock-straight.json");
     let style: Style = serde_json::from_str(rock_json).unwrap();
     let mut seq = BandSequencer::new(style, 48_000, 42);
@@ -117,10 +133,9 @@ fn test_render_worker_benchmark_budget() {
     let elapsed = start.elapsed();
 
     println!("10,000 blocks (53.3s audio) rendered in: {:?}", elapsed);
-    // Real-time = 53.33s. Budget (under 25% of real time) = 13.33s.
     assert!(
         elapsed.as_secs_f64() < 13.33,
-        "Render exceeded 25% real-time budget: took {:?}",
+        "Render exceeded 25% budget: took {:?}",
         elapsed
     );
 }
