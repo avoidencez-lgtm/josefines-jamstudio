@@ -1,0 +1,122 @@
+//! src-tauri: Tauri application library and command dispatch.
+
+pub mod keys;
+pub mod settings;
+pub mod store;
+
+use jam_audio::devices::{list_devices, AudioConfig, AudioDevices};
+use jam_audio::engine::{AudioEngine, EngineTelemetry};
+use keys::{KeyringStore, MemoryStore, SecretStore};
+use parking_lot::Mutex;
+use settings::{load_settings, save_settings, AppSettings};
+use std::sync::Arc;
+use tauri::{Emitter, State};
+
+pub struct AppState {
+    pub secret_store: Box<dyn SecretStore>,
+    pub engine: Arc<Mutex<AudioEngine>>,
+}
+
+#[tauri::command]
+fn keys_set(provider: String, key: String, state: State<'_, AppState>) -> Result<(), String> {
+    state.secret_store.set(&provider, &key)
+}
+
+#[tauri::command]
+fn keys_has(provider: String, state: State<'_, AppState>) -> bool {
+    state.secret_store.has(&provider)
+}
+
+#[tauri::command]
+fn keys_delete(provider: String, state: State<'_, AppState>) -> Result<(), String> {
+    state.secret_store.delete(&provider)
+}
+
+#[tauri::command]
+fn settings_get() -> AppSettings {
+    load_settings()
+}
+
+#[tauri::command]
+fn settings_set(settings: AppSettings) -> Result<(), String> {
+    save_settings(&settings)
+}
+
+#[tauri::command]
+fn audio_list_devices() -> AudioDevices {
+    list_devices()
+}
+
+#[tauri::command]
+fn tone_set(on: bool, hz: f32, state: State<'_, AppState>) {
+    state.engine.lock().set_tone(on, hz);
+}
+
+#[tauri::command]
+fn metronome_set(on: bool, bpm: f64, state: State<'_, AppState>) {
+    state.engine.lock().set_metronome(on, bpm);
+}
+
+#[tauri::command]
+fn tuner_set(on: bool, state: State<'_, AppState>) {
+    state.engine.lock().set_tuner(on);
+}
+
+#[tauri::command]
+fn audio_get_telemetry(state: State<'_, AppState>) -> EngineTelemetry {
+    state.engine.lock().get_telemetry()
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let config = AudioConfig::default();
+    let mut engine = AudioEngine::new(config);
+    let _ = engine.start();
+    let engine_arc = Arc::new(Mutex::new(engine));
+
+    let is_test = std::env::var("JAM_HEADLESS").unwrap_or_default() == "1";
+    let secret_store: Box<dyn SecretStore> = if is_test {
+        Box::new(MemoryStore::default())
+    } else {
+        Box::new(KeyringStore::default())
+    };
+
+    let app_state = AppState {
+        secret_store,
+        engine: Arc::clone(&engine_arc),
+    };
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new().build())
+        .manage(app_state)
+        .setup(move |app| {
+            let app_handle = app.handle().clone();
+            let eng = Arc::clone(&engine_arc);
+
+            // Emit telemetry at 30 Hz
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_millis(33));
+                let tel = eng.lock().get_telemetry();
+                let _ = app_handle.emit("meters", &tel.output_level);
+                if let Some(t) = &tel.tuner {
+                    let _ = app_handle.emit("tuner.state", t);
+                }
+            });
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            keys_set,
+            keys_has,
+            keys_delete,
+            settings_get,
+            settings_set,
+            audio_list_devices,
+            tone_set,
+            metronome_set,
+            tuner_set,
+            audio_get_telemetry,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

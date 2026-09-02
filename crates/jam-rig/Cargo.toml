@@ -1,0 +1,11 @@
+﻿[package]
+name = "jam-rig"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+jam-core.workspace = true
+midir.workspace = true
+midly.workspace = true
+thiserror.workspace = true

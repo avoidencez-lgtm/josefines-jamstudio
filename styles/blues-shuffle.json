@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "blues-shuffle",
+  "name": "Blues Shuffle",
+  "description": "Medium 12-bar blues shuffle with swung eighths",
+  "default_bpm": 110.0
+}

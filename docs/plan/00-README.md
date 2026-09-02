@@ -55,7 +55,7 @@ The project is done when every point below is true and verified, the owner gates
 
 | Milestone | Content | Status | PR / release |
 |---|---|---|---|
-| M0 | Foundation: scaffold, crates, gates, CI, design shell, keychain settings, seam registries, tuner, metronome, spikes S1 to S3 | ☐ | |
+| M0 | Foundation: scaffold, crates, gates, CI, design shell, keychain settings, seam registries, tuner, metronome, spikes S1 to S3 | ⏳ | |
 | M1a | Transport, timeline, click, count-in | ☐ | |
 | M1b | Drums: sampler, style engine, cues, render-ahead worker | ☐ | |
 | M1c | Bass, comp, chart, six styles, chart presets, golden renders | ☐ | |

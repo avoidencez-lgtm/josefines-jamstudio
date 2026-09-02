@@ -1,7 +1,5 @@
 name: ci
 
-# Docs-only skeleton. M0 adds the ts, rust and bundle jobs specified in docs/plan/03-build-plan.md §0.2.
-
 on:
   push:
     branches: [main]
@@ -27,7 +25,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: lycheeverse/lychee-action@v2
         with:
           args: --offline --no-progress --root-dir "${{ github.workspace }}" "**/*.md"
           fail: true
+
+  ts:
+    name: ts (lint, types, test, licenses, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm approve-builds --all
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm licenses:check
+      - run: pnpm build
+
+  rust:
+    name: rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test (headless)
+        run: cargo test --workspace
+        env:
+          JAM_HEADLESS: "1"
+      - name: License and advisory check (cargo deny)
+        run: cargo deny check

@@ -1,0 +1,11 @@
+[package]
+name = "jam-dsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+jam-core.workspace = true
+pitch-detection.workspace = true
+rustfft.workspace = true
+thiserror.workspace = true
