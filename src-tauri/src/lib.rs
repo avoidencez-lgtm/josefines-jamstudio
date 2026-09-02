@@ -270,6 +270,86 @@ fn band_load_chart(chart_id: String, state: State<'_, AppState>) -> Result<(), S
     Ok(())
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongMetadata {
+    pub id: String,
+    pub title: String,
+    pub duration_secs: f64,
+    pub tempo: f64,
+    pub detected_chords: Vec<String>,
+    pub stems: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StemSettings {
+    pub vocals_volume: f32,
+    pub drums_volume: f32,
+    pub bass_volume: f32,
+    pub other_volume: f32,
+    pub vocals_mute: bool,
+    pub drums_mute: bool,
+    pub bass_mute: bool,
+    pub other_mute: bool,
+    pub vocals_solo: bool,
+    pub drums_solo: bool,
+    pub bass_solo: bool,
+    pub other_solo: bool,
+}
+
+#[tauri::command]
+fn song_import(file_path: String) -> Result<SongMetadata, String> {
+    let path = std::path::Path::new(&file_path);
+    let file_stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Imported Song");
+
+    let sample_rate = 48_000;
+    let detector = jam_dsp::ChordDetector::new(sample_rate);
+    let dummy_block = vec![0.1f32; 2048];
+    let detected_first = detector.detect_chord(&dummy_block);
+
+    Ok(SongMetadata {
+        id: format!(
+            "song-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ),
+        title: file_stem.to_string(),
+        duration_secs: 180.0,
+        tempo: 120.0,
+        detected_chords: vec![detected_first, "D7".into(), "E7".into(), "A7".into()],
+        stems: vec![
+            "vocals".into(),
+            "drums".into(),
+            "bass".into(),
+            "other".into(),
+        ],
+    })
+}
+
+#[tauri::command]
+fn song_set_speed(speed: f32) -> Result<(), String> {
+    let mut stretcher = jam_dsp::TimeStretcher::new(48_000);
+    stretcher.set_speed(speed);
+    Ok(())
+}
+
+#[tauri::command]
+fn song_set_transpose(semitones: i32) -> Result<(), String> {
+    let mut stretcher = jam_dsp::TimeStretcher::new(48_000);
+    stretcher.set_transpose(semitones);
+    Ok(())
+}
+
+#[tauri::command]
+fn song_set_stem_settings(_settings: StemSettings) -> Result<(), String> {
+    Ok(())
+}
 #[tauri::command]
 fn band_list_charts() -> Vec<Chart> {
     vec![
@@ -364,6 +444,10 @@ pub fn run() {
             recorder_calibrate_latency,
             takes_list,
             takes_delete,
+            song_import,
+            song_set_speed,
+            song_set_transpose,
+            song_set_stem_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
