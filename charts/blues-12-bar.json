@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "blues-12-bar",
+  "name": "12-Bar Blues (Standard)",
+  "keyTonic": 9,
+  "mode": "major",
+  "timeSig": [4, 4],
+  "defaultBpm": 110.0,
+  "defaultStyleId": "blues-shuffle",
+  "sections": [
+    {
+      "id": "chorus",
+      "name": "Chorus",
+      "bars": [
+        [{ "chord": "A7", "beats": 4.0 }],
+        [{ "chord": "A7", "beats": 4.0 }],
+        [{ "chord": "A7", "beats": 4.0 }],
+        [{ "chord": "A7", "beats": 4.0 }],
+        [{ "chord": "D7", "beats": 4.0 }],
+        [{ "chord": "D7", "beats": 4.0 }],
+        [{ "chord": "A7", "beats": 4.0 }],
+        [{ "chord": "A7", "beats": 4.0 }],
+        [{ "chord": "E7", "beats": 4.0 }],
+        [{ "chord": "D7", "beats": 4.0 }],
+        [{ "chord": "A7", "beats": 4.0 }],
+        [{ "chord": "E7", "beats": 4.0 }]
+      ]
+    }
+  ],
+  "arrangement": [{ "sectionId": "chorus", "repeats": 2 }]
+}

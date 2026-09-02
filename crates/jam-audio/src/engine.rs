@@ -74,6 +74,8 @@ pub struct BandTelemetry {
     pub intensity: f32,
     pub active_cue: String,
     pub pending_cue: String,
+    pub current_chord: String,
+    pub next_chord: Option<String>,
 }
 
 impl Default for BandTelemetry {
@@ -84,6 +86,8 @@ impl Default for BandTelemetry {
             intensity: 0.5,
             active_cue: "none".into(),
             pending_cue: "none".into(),
+            current_chord: "A7".into(),
+            next_chord: Some("D7".into()),
         }
     }
 }
@@ -208,6 +212,10 @@ impl AudioEngine {
 
     pub fn band_cue(&self, cue: Cue) {
         self.sequencer.lock().cue(cue);
+    }
+
+    pub fn band_load_chart(&self, chart: jam_core::chart::ResolvedChart) {
+        self.sequencer.lock().load_chart(chart);
     }
 
     pub fn get_telemetry(&self) -> EngineTelemetry {
@@ -345,6 +353,8 @@ impl AudioEngine {
                         intensity: seq.intensity,
                         active_cue: cue_to_str(seq.active_cue).into(),
                         pending_cue: cue_to_str(seq.pending_cue).into(),
+                        current_chord: seq.current_chord.clone(),
+                        next_chord: seq.next_chord.clone(),
                     }
                 };
 

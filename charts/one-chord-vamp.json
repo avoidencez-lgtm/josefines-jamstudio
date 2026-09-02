@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "one-chord-vamp",
+  "name": "One-Chord Groove Vamp",
+  "keyTonic": 4,
+  "mode": "major",
+  "timeSig": [4, 4],
+  "defaultBpm": 108.0,
+  "defaultStyleId": "funk-16",
+  "sections": [
+    {
+      "id": "vamp",
+      "name": "Vamp",
+      "bars": [
+        [{ "chord": "E7", "beats": 4.0 }],
+        [{ "chord": "E7", "beats": 4.0 }],
+        [{ "chord": "E7", "beats": 4.0 }],
+        [{ "chord": "E7", "beats": 4.0 }]
+      ]
+    }
+  ],
+  "arrangement": [{ "sectionId": "vamp", "repeats": 4 }]
+}

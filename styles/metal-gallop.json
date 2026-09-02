@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "id": "metal-gallop",
+  "name": "Heavy Metal Gallop",
+  "genre": "Metal",
+  "feel": {
+    "swing": 0.0,
+    "timeSig": [4, 4],
+    "bpmRange": [120.0, 200.0]
+  },
+  "kitId": "standard-rock-kit",
+  "bassProgram": "dist-bass",
+  "compProgram": "high-gain-guitar",
+  "patterns": [
+    {
+      "intensity": [0.0, 1.0],
+      "drums": {
+        "lengthBeats": 4.0,
+        "hits": [
+          { "instrument": "kick", "atBeats": 0.0, "velocity": 1.0 },
+          { "instrument": "kick", "atBeats": 0.5, "velocity": 0.9 },
+          { "instrument": "kick", "atBeats": 0.75, "velocity": 0.95 },
+          { "instrument": "snare", "atBeats": 1.0, "velocity": 1.0 },
+          { "instrument": "kick", "atBeats": 1.5, "velocity": 0.9 },
+          { "instrument": "kick", "atBeats": 1.75, "velocity": 0.95 },
+          { "instrument": "kick", "atBeats": 2.0, "velocity": 1.0 },
+          { "instrument": "snare", "atBeats": 3.0, "velocity": 1.0 },
+          { "instrument": "crash", "atBeats": 0.0, "velocity": 0.9 }
+        ]
+      },
+      "bass": {
+        "lengthBeats": 4.0,
+        "notes": [
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.0,
+            "durBeats": 0.4,
+            "velocity": 0.95
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.5,
+            "durBeats": 0.2,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.75,
+            "durBeats": 0.2,
+            "velocity": 0.95
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 1.0,
+            "durBeats": 0.4,
+            "velocity": 0.95
+          }
+        ]
+      },
+      "comp": {
+        "lengthBeats": 4.0,
+        "voicing": "power",
+        "strums": [
+          {
+            "atBeats": 0.0,
+            "durBeats": 0.5,
+            "velocity": 0.9,
+            "direction": "down"
+          },
+          {
+            "atBeats": 1.0,
+            "durBeats": 0.5,
+            "velocity": 0.9,
+            "direction": "down"
+          },
+          {
+            "atBeats": 2.0,
+            "durBeats": 0.5,
+            "velocity": 0.9,
+            "direction": "down"
+          },
+          {
+            "atBeats": 3.0,
+            "durBeats": 0.5,
+            "velocity": 0.9,
+            "direction": "down"
+          }
+        ]
+      }
+    }
+  ],
+  "fills": [
+    {
+      "lengthBeats": 4.0,
+      "hits": [
+        { "instrument": "snare", "atBeats": 0.0, "velocity": 1.0 },
+        { "instrument": "snare", "atBeats": 0.5, "velocity": 1.0 },
+        { "instrument": "tom_high", "atBeats": 1.0, "velocity": 0.95 },
+        { "instrument": "tom_mid", "atBeats": 2.0, "velocity": 0.95 },
+        { "instrument": "tom_low", "atBeats": 3.0, "velocity": 1.0 }
+      ]
+    }
+  ],
+  "endings": [
+    {
+      "lengthBeats": 4.0,
+      "hits": [
+        { "instrument": "kick", "atBeats": 0.0, "velocity": 1.0 },
+        { "instrument": "snare", "atBeats": 0.0, "velocity": 1.0 },
+        { "instrument": "crash", "atBeats": 0.0, "velocity": 1.0 }
+      ]
+    }
+  ],
+  "humanize": { "timingMs": 0.5, "velocity": 0.02 }
+}

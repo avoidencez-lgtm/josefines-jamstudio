@@ -53,6 +53,7 @@ export interface EngineState {
   bandCue: (
     cue: "none" | "fill" | "crash" | "stop" | "ending",
   ) => Promise<void>;
+  bandLoadChart: (chartId: string) => Promise<void>;
 
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
@@ -92,6 +93,8 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       intensity: 0.5,
       active_cue: "none",
       pending_cue: "none",
+      current_chord: "A7",
+      next_chord: "D7",
     },
   },
   devices: { inputs: [], outputs: [] },
@@ -216,6 +219,14 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       await invoke("band_cue", { cue });
     } catch (e) {
       console.error("Failed to set band cue:", e);
+    }
+  },
+
+  bandLoadChart: async (chartId: string) => {
+    try {
+      await invoke("band_load_chart", { chartId });
+    } catch (e) {
+      console.error("Failed to load chart:", e);
     }
   },
 

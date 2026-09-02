@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "id": "funk-16",
+  "name": "Funk 16th Groove",
+  "genre": "Funk",
+  "feel": {
+    "swing": 0.15,
+    "timeSig": [4, 4],
+    "bpmRange": [80.0, 130.0]
+  },
+  "kitId": "standard-rock-kit",
+  "bassProgram": "slap-bass",
+  "compProgram": "clean-strat",
+  "patterns": [
+    {
+      "intensity": [0.0, 1.0],
+      "drums": {
+        "lengthBeats": 4.0,
+        "hits": [
+          { "instrument": "kick", "atBeats": 0.0, "velocity": 0.9 },
+          { "instrument": "hihat_closed", "atBeats": 0.0, "velocity": 0.7 },
+          { "instrument": "hihat_closed", "atBeats": 0.25, "velocity": 0.5 },
+          { "instrument": "hihat_closed", "atBeats": 0.5, "velocity": 0.6 },
+          { "instrument": "hihat_closed", "atBeats": 0.75, "velocity": 0.5 },
+          { "instrument": "snare", "atBeats": 1.0, "velocity": 0.9 },
+          { "instrument": "kick", "atBeats": 1.75, "velocity": 0.8 },
+          { "instrument": "kick", "atBeats": 2.0, "velocity": 0.85 },
+          { "instrument": "snare", "atBeats": 3.0, "velocity": 0.9 }
+        ]
+      },
+      "bass": {
+        "lengthBeats": 4.0,
+        "notes": [
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.0,
+            "durBeats": 0.25,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 1,
+            "atBeats": 0.5,
+            "durBeats": 0.25,
+            "velocity": 0.8
+          },
+          {
+            "degree": 7,
+            "octave": 0,
+            "atBeats": 1.5,
+            "durBeats": 0.25,
+            "velocity": 0.85
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 2.0,
+            "durBeats": 0.25,
+            "velocity": 0.9
+          }
+        ]
+      },
+      "comp": {
+        "lengthBeats": 4.0,
+        "voicing": "shell",
+        "strums": [
+          {
+            "atBeats": 0.5,
+            "durBeats": 0.25,
+            "velocity": 0.7,
+            "direction": "down"
+          },
+          {
+            "atBeats": 1.5,
+            "durBeats": 0.25,
+            "velocity": 0.75,
+            "direction": "up"
+          },
+          {
+            "atBeats": 2.5,
+            "durBeats": 0.25,
+            "velocity": 0.7,
+            "direction": "down"
+          }
+        ]
+      }
+    }
+  ],
+  "fills": [
+    {
+      "lengthBeats": 4.0,
+      "hits": [
+        { "instrument": "snare", "atBeats": 0.0, "velocity": 0.8 },
+        { "instrument": "snare", "atBeats": 0.5, "velocity": 0.85 },
+        { "instrument": "snare", "atBeats": 1.0, "velocity": 0.9 },
+        { "instrument": "tom_high", "atBeats": 2.0, "velocity": 0.85 },
+        { "instrument": "tom_mid", "atBeats": 2.5, "velocity": 0.85 },
+        { "instrument": "tom_low", "atBeats": 3.0, "velocity": 0.9 }
+      ]
+    }
+  ],
+  "endings": [
+    {
+      "lengthBeats": 4.0,
+      "hits": [
+        { "instrument": "kick", "atBeats": 0.0, "velocity": 0.95 },
+        { "instrument": "snare", "atBeats": 0.0, "velocity": 0.95 },
+        { "instrument": "crash", "atBeats": 0.0, "velocity": 0.95 }
+      ]
+    }
+  ],
+  "humanize": { "timingMs": 1.0, "velocity": 0.03 }
+}

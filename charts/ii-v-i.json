@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "ii-v-i",
+  "name": "ii - V - I Jazz Turnaround",
+  "keyTonic": 0,
+  "mode": "major",
+  "timeSig": [4, 4],
+  "defaultBpm": 130.0,
+  "defaultStyleId": "jazz-swing",
+  "sections": [
+    {
+      "id": "turnaround",
+      "name": "Turnaround",
+      "bars": [
+        [{ "chord": "Dm7", "beats": 4.0 }],
+        [{ "chord": "G7", "beats": 4.0 }],
+        [{ "chord": "Cmaj7", "beats": 4.0 }],
+        [{ "chord": "Cmaj7", "beats": 4.0 }]
+      ]
+    }
+  ],
+  "arrangement": [{ "sectionId": "turnaround", "repeats": 4 }]
+}

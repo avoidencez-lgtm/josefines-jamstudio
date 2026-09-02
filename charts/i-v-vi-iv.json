@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "i-v-vi-iv",
+  "name": "I - V - vi - IV Progression",
+  "keyTonic": 0,
+  "mode": "major",
+  "timeSig": [4, 4],
+  "defaultBpm": 120.0,
+  "defaultStyleId": "rock-straight",
+  "sections": [
+    {
+      "id": "prog",
+      "name": "Progression",
+      "bars": [
+        [{ "chord": "C", "beats": 4.0 }],
+        [{ "chord": "G", "beats": 4.0 }],
+        [{ "chord": "Am", "beats": 4.0 }],
+        [{ "chord": "F", "beats": 4.0 }]
+      ]
+    }
+  ],
+  "arrangement": [{ "sectionId": "prog", "repeats": 4 }]
+}
