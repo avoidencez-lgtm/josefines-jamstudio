@@ -54,6 +54,9 @@ export interface EngineState {
     cue: "none" | "fill" | "crash" | "stop" | "ending",
   ) => Promise<void>;
   bandLoadChart: (chartId: string) => Promise<void>;
+  bandSet: (patch: import("../ipc/contract").BandPatch) => Promise<void>;
+  togglePart: (part: "drums" | "bass" | "comp") => Promise<void>;
+  toggleFollowEnergy: () => Promise<void>;
 
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
@@ -95,6 +98,11 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       pending_cue: "none",
       current_chord: "A7",
       next_chord: "D7",
+      mute_drums: false,
+      mute_bass: false,
+      mute_comp: false,
+      follow_energy: false,
+      current_energy: 0.0,
     },
   },
   devices: { inputs: [], outputs: [] },
@@ -228,6 +236,28 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     } catch (e) {
       console.error("Failed to load chart:", e);
     }
+  },
+
+  bandSet: async (patch) => {
+    try {
+      await invoke("band_set", { args: patch });
+    } catch (e) {
+      console.error("Failed to apply band patch:", e);
+    }
+  },
+
+  togglePart: async (part) => {
+    const band = get().telemetry.band;
+    const patch: import("../ipc/contract").BandPatch = {};
+    if (part === "drums") patch.muteDrums = !band.mute_drums;
+    if (part === "bass") patch.muteBass = !band.mute_bass;
+    if (part === "comp") patch.muteComp = !band.mute_comp;
+    await get().bandSet(patch);
+  },
+
+  toggleFollowEnergy: async () => {
+    const band = get().telemetry.band;
+    await get().bandSet({ followEnergy: !band.follow_energy });
   },
 
   refreshDevices: async () => {

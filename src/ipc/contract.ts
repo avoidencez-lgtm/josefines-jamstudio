@@ -52,6 +52,23 @@ export interface BandTelemetry {
   pending_cue: "none" | "fill" | "crash" | "stop" | "ending";
   current_chord: string;
   next_chord?: string | null;
+  mute_drums: boolean;
+  mute_bass: boolean;
+  mute_comp: boolean;
+  follow_energy: boolean;
+  current_energy: number;
+  pending_style_id?: string | null;
+  pending_intensity?: number | null;
+}
+
+export interface BandPatch {
+  styleId?: string;
+  intensity?: number;
+  followEnergy?: boolean;
+  muteDrums?: boolean;
+  muteBass?: boolean;
+  muteComp?: boolean;
+  atNextBar?: boolean;
 }
 
 export interface EngineTelemetry {

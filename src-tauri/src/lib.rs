@@ -162,6 +162,47 @@ fn band_cue(cue: String, state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BandSetArgs {
+    style_id: Option<String>,
+    intensity: Option<f32>,
+    follow_energy: Option<bool>,
+    mute_drums: Option<bool>,
+    mute_bass: Option<bool>,
+    mute_comp: Option<bool>,
+    at_next_bar: Option<bool>,
+}
+
+#[tauri::command]
+fn band_set(args: BandSetArgs, state: State<'_, AppState>) -> Result<(), String> {
+    let style = if let Some(ref id) = args.style_id {
+        let style_str = match id.as_str() {
+            "blues-shuffle" => include_str!("../../styles/blues-shuffle.json"),
+            "rock-straight" => include_str!("../../styles/rock-straight.json"),
+            "funk-16" => include_str!("../../styles/funk-16.json"),
+            "jazz-swing" => include_str!("../../styles/jazz-swing.json"),
+            "ballad-68" => include_str!("../../styles/ballad-68.json"),
+            "metal-gallop" => include_str!("../../styles/metal-gallop.json"),
+            _ => return Err(format!("Unknown style id: {}", id)),
+        };
+        Some(serde_json::from_str(style_str).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+
+    state.engine.lock().band_set(jam_audio::engine::BandPatch {
+        style,
+        intensity: args.intensity,
+        follow_energy: args.follow_energy,
+        mute_drums: args.mute_drums,
+        mute_bass: args.mute_bass,
+        mute_comp: args.mute_comp,
+        at_next_bar: args.at_next_bar.unwrap_or(false),
+    });
+
+    Ok(())
+}
 #[tauri::command]
 fn band_list_styles() -> Vec<Style> {
     vec![
@@ -272,6 +313,7 @@ pub fn run() {
             band_list_styles,
             band_load_chart,
             band_list_charts,
+            band_set,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
