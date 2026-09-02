@@ -82,6 +82,15 @@ export interface EngineState {
     patch: Partial<import("../ipc/contract").StemSettings>,
   ) => Promise<void>;
 
+  // AI Music Streaming (M4)
+  aiMusic: import("../ipc/contract").AiMusicState;
+  startAiMusic: (
+    config?: Partial<import("../ipc/contract").AiMusicConfig>,
+  ) => Promise<void>;
+  stopAiMusic: () => Promise<void>;
+  steerAiMusic: (delta: string) => Promise<void>;
+  setAiMusicVolume: (volume: number) => Promise<void>;
+
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -151,6 +160,13 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     drumsSolo: false,
     bassSolo: false,
     otherSolo: false,
+  },
+  aiMusic: {
+    active: false,
+    provider: "offline-synthetic",
+    currentPrompt: "Neo-soul groove with rhodes and pocket drums",
+    promptDelta: "",
+    mixVolume: 0.8,
   },
 
   setScreen: (screen) => set({ currentScreen: screen }),
@@ -404,6 +420,62 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       set({ stemSettings: updated });
     } catch (e) {
       console.error("Failed to update stem settings:", e);
+    }
+  },
+
+  startAiMusic: async (config) => {
+    const fullConfig: import("../ipc/contract").AiMusicConfig = {
+      provider: config?.provider ?? "offline-synthetic",
+      prompt: config?.prompt ?? get().aiMusic.currentPrompt,
+      tempo: config?.tempo ?? 120,
+      key: config?.key ?? "A",
+      mixVolume: config?.mixVolume ?? get().aiMusic.mixVolume,
+    };
+    try {
+      await invoke("ai_music_start", { config: fullConfig });
+      set((state) => ({
+        aiMusic: {
+          ...state.aiMusic,
+          active: true,
+          provider: fullConfig.provider,
+          currentPrompt: fullConfig.prompt,
+        },
+      }));
+    } catch (e) {
+      console.error("Failed to start AI music stream:", e);
+    }
+  },
+
+  stopAiMusic: async () => {
+    try {
+      await invoke("ai_music_stop");
+      set((state) => ({
+        aiMusic: { ...state.aiMusic, active: false },
+      }));
+    } catch (e) {
+      console.error("Failed to stop AI music stream:", e);
+    }
+  },
+
+  steerAiMusic: async (delta: string) => {
+    try {
+      await invoke("ai_music_steer", { delta });
+      set((state) => ({
+        aiMusic: { ...state.aiMusic, promptDelta: delta },
+      }));
+    } catch (e) {
+      console.error("Failed to steer AI music stream:", e);
+    }
+  },
+
+  setAiMusicVolume: async (volume: number) => {
+    try {
+      await invoke("ai_music_set_volume", { volume });
+      set((state) => ({
+        aiMusic: { ...state.aiMusic, mixVolume: volume },
+      }));
+    } catch (e) {
+      console.error("Failed to set AI music volume:", e);
     }
   },
 

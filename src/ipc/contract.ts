@@ -129,3 +129,19 @@ export interface StemSettings {
   bassSolo: boolean;
   otherSolo: boolean;
 }
+
+export interface AiMusicConfig {
+  provider: string;
+  prompt: string;
+  tempo: number;
+  key: string;
+  mixVolume: number;
+}
+
+export interface AiMusicState {
+  active: boolean;
+  provider: string;
+  currentPrompt: string;
+  promptDelta: string;
+  mixVolume: number;
+}

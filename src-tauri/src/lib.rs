@@ -19,6 +19,7 @@ pub struct AppState {
     pub secret_store: Box<dyn SecretStore>,
     pub engine: Arc<Mutex<AudioEngine>>,
     pub store: Arc<Mutex<store::IndexStore>>,
+    pub ai_music: Arc<Mutex<jam_audio::ai_music::AiMusicEngine>>,
 }
 
 #[tauri::command]
@@ -351,6 +352,39 @@ fn song_set_stem_settings(_settings: StemSettings) -> Result<(), String> {
     Ok(())
 }
 #[tauri::command]
+fn ai_music_start(
+    config: jam_audio::ai_music::AiMusicConfig,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.ai_music.lock().start_stream(config);
+    Ok(())
+}
+
+#[tauri::command]
+fn ai_music_stop(state: State<'_, AppState>) -> Result<(), String> {
+    state.ai_music.lock().stop_stream();
+    Ok(())
+}
+
+#[tauri::command]
+fn ai_music_steer(delta: String, state: State<'_, AppState>) -> Result<(), String> {
+    state.ai_music.lock().steer_prompt(delta);
+    Ok(())
+}
+
+#[tauri::command]
+fn ai_music_set_volume(volume: f32, state: State<'_, AppState>) -> Result<(), String> {
+    state.ai_music.lock().set_mix_volume(volume);
+    Ok(())
+}
+
+#[tauri::command]
+fn ai_music_get_state(
+    state: State<'_, AppState>,
+) -> Result<jam_audio::ai_music::AiMusicState, String> {
+    Ok(state.ai_music.lock().get_state())
+}
+#[tauri::command]
 fn band_list_charts() -> Vec<Chart> {
     vec![
         serde_json::from_str(include_str!("../../charts/blues-12-bar.json")).unwrap(),
@@ -385,10 +419,13 @@ pub fn run() {
     };
     let store_arc = Arc::new(Mutex::new(index_store));
 
+    let ai_music_engine = Arc::new(Mutex::new(jam_audio::ai_music::AiMusicEngine::new(48_000)));
+
     let app_state = AppState {
         secret_store,
         engine: Arc::clone(&engine_arc),
         store: Arc::clone(&store_arc),
+        ai_music: Arc::clone(&ai_music_engine),
     };
 
     tauri::Builder::default()
@@ -448,6 +485,11 @@ pub fn run() {
             song_set_speed,
             song_set_transpose,
             song_set_stem_settings,
+            ai_music_start,
+            ai_music_stop,
+            ai_music_steer,
+            ai_music_set_volume,
+            ai_music_get_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
