@@ -105,3 +105,27 @@ export interface TakeMetadata {
   waveformPeaks: number[];
   notes: string;
 }
+
+export interface SongMetadata {
+  id: string;
+  title: string;
+  durationSecs: number;
+  tempo: number;
+  detectedChords: string[];
+  stems: string[];
+}
+
+export interface StemSettings {
+  vocalsVolume: number;
+  drumsVolume: number;
+  bassVolume: number;
+  otherVolume: number;
+  vocalsMute: boolean;
+  drumsMute: boolean;
+  bassMute: boolean;
+  otherMute: boolean;
+  vocalsSolo: boolean;
+  drumsSolo: boolean;
+  bassSolo: boolean;
+  otherSolo: boolean;
+}

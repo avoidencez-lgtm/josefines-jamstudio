@@ -68,6 +68,20 @@ export interface EngineState {
   loadTakes: () => Promise<void>;
   deleteTake: (id: string) => Promise<void>;
 
+  // Real Song & Stem Separation (M3)
+  currentSong: import("../ipc/contract").SongMetadata | null;
+  songSpeed: number;
+  songTranspose: number;
+  stemSettings: import("../ipc/contract").StemSettings;
+  importSong: (
+    filePath: string,
+  ) => Promise<import("../ipc/contract").SongMetadata | null>;
+  setSongSpeed: (speed: number) => Promise<void>;
+  setSongTranspose: (semitones: number) => Promise<void>;
+  updateStemSettings: (
+    patch: Partial<import("../ipc/contract").StemSettings>,
+  ) => Promise<void>;
+
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -121,6 +135,23 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   takes: [],
   isRecording: false,
   calibratedLatencySamples: 0,
+  currentSong: null,
+  songSpeed: 1.0,
+  songTranspose: 0,
+  stemSettings: {
+    vocalsVolume: 1.0,
+    drumsVolume: 1.0,
+    bassVolume: 1.0,
+    otherVolume: 1.0,
+    vocalsMute: false,
+    drumsMute: false,
+    bassMute: false,
+    otherMute: false,
+    vocalsSolo: false,
+    drumsSolo: false,
+    bassSolo: false,
+    otherSolo: false,
+  },
 
   setScreen: (screen) => set({ currentScreen: screen }),
 
@@ -329,6 +360,50 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       }));
     } catch (e) {
       console.error("Failed to delete take:", e);
+    }
+  },
+
+  importSong: async (filePath: string) => {
+    try {
+      const song = await invoke<import("../ipc/contract").SongMetadata>(
+        "song_import",
+        { filePath },
+      );
+      set({ currentSong: song });
+      return song;
+    } catch (e) {
+      console.error("Failed to import song:", e);
+      return null;
+    }
+  },
+
+  setSongSpeed: async (speed: number) => {
+    try {
+      const clamped = Math.max(0.5, Math.min(1.5, speed));
+      await invoke("song_set_speed", { speed: clamped });
+      set({ songSpeed: clamped });
+    } catch (e) {
+      console.error("Failed to set song speed:", e);
+    }
+  },
+
+  setSongTranspose: async (semitones: number) => {
+    try {
+      const clamped = Math.max(-12, Math.min(12, semitones));
+      await invoke("song_set_transpose", { semitones: clamped });
+      set({ songTranspose: clamped });
+    } catch (e) {
+      console.error("Failed to set song transpose:", e);
+    }
+  },
+
+  updateStemSettings: async (patch) => {
+    const updated = { ...get().stemSettings, ...patch };
+    try {
+      await invoke("song_set_stem_settings", { settings: updated });
+      set({ stemSettings: updated });
+    } catch (e) {
+      console.error("Failed to update stem settings:", e);
     }
   },
 
