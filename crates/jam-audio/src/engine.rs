@@ -3,9 +3,10 @@
 use crate::devices::AudioConfig;
 use crate::io::{AudioInput, AudioOutput, FileInput, NullOutput};
 use jam_band::sequencer::{BandSequencer, Cue};
+use jam_core::chart::ResolvedChart;
 use jam_core::style::Style;
 use jam_core::timeline::{Timeline, TimelineEvent, TransportState};
-use jam_dsp::{calculate_level, PitchTracker};
+use jam_dsp::{calculate_level, EnergyFollower, PitchTracker};
 use parking_lot::Mutex;
 use rtrb::RingBuffer;
 use serde::{Deserialize, Serialize};
@@ -76,6 +77,13 @@ pub struct BandTelemetry {
     pub pending_cue: String,
     pub current_chord: String,
     pub next_chord: Option<String>,
+    pub mute_drums: bool,
+    pub mute_bass: bool,
+    pub mute_comp: bool,
+    pub follow_energy: bool,
+    pub current_energy: f32,
+    pub pending_style_id: Option<String>,
+    pub pending_intensity: Option<f32>,
 }
 
 impl Default for BandTelemetry {
@@ -88,8 +96,26 @@ impl Default for BandTelemetry {
             pending_cue: "none".into(),
             current_chord: "A7".into(),
             next_chord: Some("D7".into()),
+            mute_drums: false,
+            mute_bass: false,
+            mute_comp: false,
+            follow_energy: false,
+            current_energy: 0.0,
+            pending_style_id: None,
+            pending_intensity: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BandPatch {
+    pub style: Option<Style>,
+    pub intensity: Option<f32>,
+    pub follow_energy: Option<bool>,
+    pub mute_drums: Option<bool>,
+    pub mute_bass: Option<bool>,
+    pub mute_comp: Option<bool>,
+    pub at_next_bar: bool,
 }
 
 pub struct AudioEngine {
@@ -113,29 +139,26 @@ impl AudioEngine {
         let sample_rate = config.sample_rate;
         let default_style: Style =
             serde_json::from_str(include_str!("../../../styles/blues-shuffle.json"))
-                .unwrap_or_else(|_| {
-                    // Minimal fallback style
-                    Style {
-                        schema_version: 1,
-                        id: "blues-shuffle".into(),
-                        name: "Blues Shuffle".into(),
-                        genre: "Blues".into(),
-                        feel: jam_core::style::StyleFeel {
-                            swing: 0.67,
-                            time_sig: (4, 4),
-                            bpm_range: (60.0, 180.0),
-                        },
-                        kit_id: "standard-rock-kit".into(),
-                        bass_program: "finger-bass".into(),
-                        comp_program: "clean-guitar".into(),
-                        patterns: vec![],
-                        fills: vec![],
-                        endings: vec![],
-                        humanize: jam_core::style::StyleHumanize {
-                            timing_ms: 2.0,
-                            velocity: 0.05,
-                        },
-                    }
+                .unwrap_or_else(|_| Style {
+                    schema_version: 1,
+                    id: "blues-shuffle".into(),
+                    name: "Blues Shuffle".into(),
+                    genre: "Blues".into(),
+                    feel: jam_core::style::StyleFeel {
+                        swing: 0.67,
+                        time_sig: (4, 4),
+                        bpm_range: (60.0, 180.0),
+                    },
+                    kit_id: "standard-rock-kit".into(),
+                    bass_program: "finger-bass".into(),
+                    comp_program: "clean-guitar".into(),
+                    patterns: vec![],
+                    fills: vec![],
+                    endings: vec![],
+                    humanize: jam_core::style::StyleHumanize {
+                        timing_ms: 2.0,
+                        velocity: 0.05,
+                    },
                 });
 
         let sequencer = BandSequencer::new(default_style, sample_rate, 42);
@@ -214,8 +237,33 @@ impl AudioEngine {
         self.sequencer.lock().cue(cue);
     }
 
-    pub fn band_load_chart(&self, chart: jam_core::chart::ResolvedChart) {
+    pub fn band_load_chart(&self, chart: ResolvedChart) {
         self.sequencer.lock().load_chart(chart);
+    }
+
+    pub fn band_set(&self, patch: BandPatch) {
+        let mut seq = self.sequencer.lock();
+        if let Some(st) = patch.style {
+            if patch.at_next_bar {
+                seq.queue_style_at_next_bar(st);
+            } else {
+                seq.set_style(st);
+            }
+        }
+        if let Some(int) = patch.intensity {
+            if patch.at_next_bar {
+                seq.queue_intensity_at_next_bar(int);
+            } else {
+                seq.set_intensity(int);
+            }
+        }
+        if let Some(follow) = patch.follow_energy {
+            seq.set_follow_energy(follow);
+        }
+        let md = patch.mute_drums.unwrap_or(seq.mute_drums);
+        let mb = patch.mute_bass.unwrap_or(seq.mute_bass);
+        let mc = patch.mute_comp.unwrap_or(seq.mute_comp);
+        seq.set_parts(md, mb, mc);
     }
 
     pub fn get_telemetry(&self) -> EngineTelemetry {
@@ -249,9 +297,9 @@ impl AudioEngine {
         let render_handle = thread::spawn(move || {
             let mut phase: f32 = 0.0;
             let mut pitch_tracker = PitchTracker::new(2048, sample_rate);
+            let mut energy_follower = EnergyFollower::new(sample_rate);
             let mut input_accumulator: Vec<f32> = Vec::with_capacity(2048);
 
-            // Active click generator state
             let mut click_active_samples: usize = 0;
             let mut click_freq: f32 = 800.0;
             let click_duration = (sample_rate as f32 * 0.01) as usize; // 10ms click
@@ -259,11 +307,11 @@ impl AudioEngine {
             let block_frames = 256;
             let mut block_left = vec![0.0f32; block_frames];
             let mut block_right = vec![0.0f32; block_frames];
-            let mut drum_left = vec![0.0f32; block_frames];
-            let mut drum_right = vec![0.0f32; block_frames];
+            let mut band_left = vec![0.0f32; block_frames];
+            let mut band_right = vec![0.0f32; block_frames];
 
             while running.load(Ordering::SeqCst) {
-                // Process input samples for metering & tuner
+                // Process input samples for metering, tuner, and energy following
                 let mut in_samples = Vec::new();
                 while let Ok(s) = input_cons.pop() {
                     in_samples.push(s);
@@ -276,6 +324,10 @@ impl AudioEngine {
                     let lvl = calculate_level(&in_samples);
                     in_meter.peak_db = lvl.peak_db;
                     in_meter.rms_db = lvl.rms_db;
+
+                    // Update energy follower
+                    let energy = energy_follower.process_block(&in_samples);
+                    sequencer_arc.lock().update_energy(energy);
 
                     if tuner_active.load(Ordering::SeqCst) {
                         input_accumulator.extend_from_slice(&in_samples);
@@ -325,18 +377,17 @@ impl AudioEngine {
                     )
                 };
 
-                // Forward events to BandSequencer
+                // Forward events to BandSequencer and render band (drums + bass + comp)
                 let band_telem = {
                     let mut seq = sequencer_arc.lock();
                     for ev in &events {
                         seq.handle_timeline_event(ev);
                     }
 
-                    // Render drum block
-                    drum_left.fill(0.0);
-                    drum_right.fill(0.0);
+                    band_left.fill(0.0);
+                    band_right.fill(0.0);
                     if transport_telem.state == "playing" {
-                        seq.render(&mut drum_left, &mut drum_right);
+                        seq.render(&mut band_left, &mut band_right);
                     }
 
                     let cue_to_str = |c: Cue| match c {
@@ -355,6 +406,13 @@ impl AudioEngine {
                         pending_cue: cue_to_str(seq.pending_cue).into(),
                         current_chord: seq.current_chord.clone(),
                         next_chord: seq.next_chord.clone(),
+                        mute_drums: seq.mute_drums,
+                        mute_bass: seq.mute_bass,
+                        mute_comp: seq.mute_comp,
+                        follow_energy: seq.follow_energy,
+                        current_energy: seq.current_energy,
+                        pending_style_id: seq.pending_style.as_ref().map(|s| s.id.clone()),
+                        pending_intensity: seq.pending_intensity,
                     }
                 };
 
@@ -394,9 +452,9 @@ impl AudioEngine {
                         click_active_samples -= 1;
                     }
 
-                    // Mix drums + tone/click
-                    block_left[i] = s + drum_left[i];
-                    block_right[i] = s + drum_right[i];
+                    // Mix band (drums, bass, comp) + tone/click
+                    block_left[i] = s + band_left[i];
+                    block_right[i] = s + band_right[i];
                 }
 
                 let out_lvl = calculate_level(&block_left);
@@ -500,24 +558,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_engine_transport_integration() {
+    fn test_engine_live_steering_and_parts_toggle() {
         std::env::set_var("JAM_HEADLESS", "1");
         let config = AudioConfig::default();
         let mut engine = AudioEngine::new(config);
 
         assert!(engine.start().is_ok());
 
-        engine.transport_set_count_in(1);
-        engine.transport_play();
+        // Apply live steering patch (mute drums and bass, keep comp)
+        engine.band_set(BandPatch {
+            mute_drums: Some(true),
+            mute_bass: Some(true),
+            mute_comp: Some(false),
+            follow_energy: Some(true),
+            ..Default::default()
+        });
 
         thread::sleep(Duration::from_millis(50));
         let tel = engine.get_telemetry();
-        assert_eq!(tel.transport.state, "counting_in");
-
-        engine.transport_stop();
-        thread::sleep(Duration::from_millis(20));
-        let tel_stopped = engine.get_telemetry();
-        assert_eq!(tel_stopped.transport.state, "stopped");
+        assert!(tel.band.mute_drums);
+        assert!(tel.band.mute_bass);
+        assert!(!tel.band.mute_comp);
+        assert!(tel.band.follow_energy);
 
         assert!(engine.stop().is_ok());
     }

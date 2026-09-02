@@ -1,4 +1,5 @@
 import type React from "react";
+import { useEffect, useState } from "react";
 import { BigReadout } from "../components/BigReadout";
 import { Button } from "../components/Button";
 import { Meter } from "../components/Meter";
@@ -28,6 +29,8 @@ const PRESET_STYLES = [
 ];
 
 export const Stage: React.FC = () => {
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
   const {
     tunerOn,
     toneOn,
@@ -36,11 +39,18 @@ export const Stage: React.FC = () => {
     setTone,
     setTuner,
     setClickVolume,
+    transportPlay,
+    transportPause,
+    transportStop,
+    transportSetLoop,
+    transportSetCountIn,
     transportSetTempo,
     bandSetStyle,
     bandSetIntensity,
     bandCue,
     bandLoadChart,
+    togglePart,
+    toggleFollowEnergy,
   } = useEngineStore();
 
   const tunerData = telemetry.tuner;
@@ -48,9 +58,124 @@ export const Stage: React.FC = () => {
   const band = telemetry.band;
   const isCountingIn = transport.state === "counting_in";
 
+  // Global Keyboard shortcuts per M1d
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      switch (e.key) {
+        case " ":
+          e.preventDefault();
+          if (
+            transport.state === "playing" ||
+            transport.state === "counting_in"
+          ) {
+            transportPause();
+          } else {
+            transportPlay();
+          }
+          break;
+        case "Enter":
+          e.preventDefault();
+          transportStop();
+          break;
+        case "l":
+        case "L":
+          e.preventDefault();
+          transportSetLoop(
+            transport.loop_start_bar,
+            transport.loop_end_bar,
+            !transport.loop_enabled,
+          );
+          break;
+        case "c":
+        case "C":
+          e.preventDefault();
+          transportSetCountIn(transport.count_in_bars > 0 ? 0 : 1);
+          break;
+        case "f":
+        case "F":
+          e.preventDefault();
+          bandCue("fill");
+          break;
+        case "k":
+        case "K":
+          e.preventDefault();
+          bandCue("crash");
+          break;
+        case "s":
+        case "S":
+          e.preventDefault();
+          bandCue("stop");
+          break;
+        case "e":
+        case "E":
+          e.preventDefault();
+          bandCue("ending");
+          break;
+        case "m":
+        case "M":
+          e.preventDefault();
+          togglePart("drums");
+          break;
+        case "b":
+        case "B":
+          e.preventDefault();
+          togglePart("bass");
+          break;
+        case "p":
+        case "P":
+          e.preventDefault();
+          togglePart("comp");
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          bandSetIntensity(band.intensity + 0.05);
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          bandSetIntensity(band.intensity - 0.05);
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          transportSetTempo(transport.bpm - 1);
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          transportSetTempo(transport.bpm + 1);
+          break;
+        case "?":
+          e.preventDefault();
+          setShowShortcuts((prev) => !prev);
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    transport,
+    band,
+    transportPlay,
+    transportPause,
+    transportStop,
+    transportSetLoop,
+    transportSetCountIn,
+    transportSetTempo,
+    bandSetIntensity,
+    bandCue,
+    togglePart,
+  ]);
+
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
-      {/* Top configuration row: Chart, Style, Intensity, Click, Tuner */}
+      {/* Configuration row: Chart, Style, Intensity, Click, Tuner */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] p-4 rounded-[var(--radius-m)] border border-[var(--line)]">
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
@@ -147,13 +272,79 @@ export const Stage: React.FC = () => {
             onChange={(c) => setTone(c, 440)}
             label="Tone"
           />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setShowShortcuts(true)}
+          >
+            ?
+          </Button>
         </div>
       </div>
 
-      {/* Cues Bar: Fill, Crash, Stop, Ending */}
-      <div className="flex items-center justify-between bg-[var(--bg-1)] px-4 py-2.5 rounded-[var(--radius-m)] border border-[var(--line)]">
+      {/* Live Steering Row: Parts Muting, Energy Following, Cues, Next-Bar Indicator */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] px-4 py-2.5 rounded-[var(--radius-m)] border border-[var(--line)]">
+        {/* Parts Muting */}
         <div className="flex items-center gap-2">
-          <span className="text-xs uppercase font-mono text-[var(--fg-2)] tracking-wider mr-2">
+          <span className="text-xs uppercase font-mono text-[var(--fg-2)] tracking-wider mr-1">
+            Parts
+          </span>
+          <Button
+            size="sm"
+            variant={band.mute_drums ? "secondary" : "primary"}
+            onClick={() => togglePart("drums")}
+          >
+            {band.mute_drums ? "Drums [Muted]" : "Drums"}
+          </Button>
+          <Button
+            size="sm"
+            variant={band.mute_bass ? "secondary" : "primary"}
+            onClick={() => togglePart("bass")}
+          >
+            {band.mute_bass ? "Bass [Muted]" : "Bass"}
+          </Button>
+          <Button
+            size="sm"
+            variant={band.mute_comp ? "secondary" : "primary"}
+            onClick={() => togglePart("comp")}
+          >
+            {band.mute_comp ? "Comp [Muted]" : "Comp"}
+          </Button>
+        </div>
+
+        <div className="h-4 w-px bg-[var(--line)]" />
+
+        {/* Energy Following */}
+        <div className="flex items-center gap-3">
+          <Button
+            size="sm"
+            variant={band.follow_energy ? "primary" : "secondary"}
+            onClick={toggleFollowEnergy}
+          >
+            {band.follow_energy
+              ? "Energy Following: ON"
+              : "Energy Following: OFF"}
+          </Button>
+          {band.follow_energy && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] uppercase font-mono text-[var(--fg-2)]">
+                DI Dynamics
+              </span>
+              <div className="w-16 h-2 bg-[var(--bg-2)] rounded overflow-hidden border border-[var(--line)]">
+                <div
+                  className="h-full bg-[var(--accent)] transition-all duration-150"
+                  style={{ width: `${Math.round(band.current_energy * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="h-4 w-px bg-[var(--line)]" />
+
+        {/* Cues Bar */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs uppercase font-mono text-[var(--fg-2)] tracking-wider mr-1">
             Cues
           </span>
           <Button
@@ -202,11 +393,16 @@ export const Stage: React.FC = () => {
           </Button>
         </div>
 
-        {band.pending_cue !== "none" && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-[var(--accent)] animate-pulse">
-              Next bar cue:{" "}
-              <strong className="uppercase">{band.pending_cue}</strong>
+        {/* At Next Bar Indicator Badge */}
+        {(band.pending_cue !== "none" || band.pending_style_id != null) && (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs font-mono text-[var(--accent)] animate-pulse bg-[var(--bg-2)] px-2 py-0.5 rounded border border-[var(--accent)]">
+              Next bar:{" "}
+              <strong className="uppercase">
+                {band.pending_cue !== "none"
+                  ? band.pending_cue
+                  : band.pending_style_id}
+              </strong>
             </span>
           </div>
         )}
@@ -280,7 +476,7 @@ export const Stage: React.FC = () => {
         </Panel>
       </div>
 
-      {/* Realtime Meters row */}
+      {/* Realtime Signal Telemetry */}
       <Panel title="Signal Telemetry">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
           <Meter
@@ -297,6 +493,64 @@ export const Stage: React.FC = () => {
           />
         </div>
       </Panel>
+
+      {/* Shortcuts Help Modal */}
+      {showShortcuts && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--bg-1)] border border-[var(--line)] rounded-[var(--radius-l)] max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold tracking-wide uppercase font-mono text-[var(--fg-0)]">
+                Keyboard Shortcuts
+              </h2>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setShowShortcuts(false)}
+              >
+                ✕
+              </Button>
+            </div>
+            <div className="space-y-2 text-xs font-mono text-[var(--fg-1)]">
+              <div className="flex justify-between py-1 border-b border-[var(--line)]">
+                <span className="text-[var(--fg-0)]">Space</span>
+                <span>Play / Pause</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[var(--line)]">
+                <span className="text-[var(--fg-0)]">Enter</span>
+                <span>Stop</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[var(--line)]">
+                <span className="text-[var(--fg-0)]">L</span>
+                <span>Toggle Loop</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[var(--line)]">
+                <span className="text-[var(--fg-0)]">C</span>
+                <span>Toggle Count-In</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[var(--line)]">
+                <span className="text-[var(--fg-0)]">F / K / S / E</span>
+                <span>Cue: Fill / Crash / Stop / End</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[var(--line)]">
+                <span className="text-[var(--fg-0)]">M / B / P</span>
+                <span>Mute: Drums / Bass / Comp</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[var(--line)]">
+                <span className="text-[var(--fg-0)]">↑ / ↓</span>
+                <span>Intensity ±5%</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[var(--line)]">
+                <span className="text-[var(--fg-0)]">← / →</span>
+                <span>Tempo ±1 BPM</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-[var(--fg-0)]">?</span>
+                <span>Toggle this help</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

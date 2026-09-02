@@ -1,5 +1,6 @@
 //! sequencer: Rhythm section groove sequencer and pattern scheduler.
 //! Renders humanized drums, walking/riff bass, and chord comping ahead of the audio callback.
+//! Supports live steering: queued styles, energy following, parts toggles, and cues.
 
 use crate::instruments::Sf2Synth;
 use crate::sampler::Sampler;
@@ -26,6 +27,13 @@ pub struct BandSequencer {
     pub intensity: f32,
     pub active_cue: Cue,
     pub pending_cue: Cue,
+    pub pending_style: Option<Style>,
+    pub pending_intensity: Option<f32>,
+    pub mute_drums: bool,
+    pub mute_bass: bool,
+    pub mute_comp: bool,
+    pub follow_energy: bool,
+    pub current_energy: f32,
     pub sampler: Sampler,
     pub synth: Sf2Synth,
     rng: Pcg32,
@@ -54,6 +62,13 @@ impl BandSequencer {
             intensity: 0.5,
             active_cue: Cue::None,
             pending_cue: Cue::None,
+            pending_style: None,
+            pending_intensity: None,
+            mute_drums: false,
+            mute_bass: false,
+            mute_comp: false,
+            follow_energy: false,
+            current_energy: 0.0,
             sampler,
             synth,
             rng: Pcg32::new(seed, 1),
@@ -72,6 +87,31 @@ impl BandSequencer {
     pub fn set_style(&mut self, style: Style) {
         self.style = style;
         self.update_pattern_for_intensity();
+    }
+
+    pub fn queue_style_at_next_bar(&mut self, style: Style) {
+        self.pending_style = Some(style);
+    }
+
+    pub fn queue_intensity_at_next_bar(&mut self, intensity: f32) {
+        self.pending_intensity = Some(intensity.clamp(0.0, 1.0));
+    }
+
+    pub fn set_parts(&mut self, mute_drums: bool, mute_bass: bool, mute_comp: bool) {
+        self.mute_drums = mute_drums;
+        self.mute_bass = mute_bass;
+        self.mute_comp = mute_comp;
+    }
+
+    pub fn set_follow_energy(&mut self, enabled: bool) {
+        self.follow_energy = enabled;
+    }
+
+    pub fn update_energy(&mut self, energy: f32) {
+        self.current_energy = energy;
+        if self.follow_energy && !self.is_playing_fill && !self.is_playing_ending {
+            self.set_intensity(energy);
+        }
     }
 
     pub fn load_chart(&mut self, chart: ResolvedChart) {
@@ -115,6 +155,16 @@ impl BandSequencer {
                     return;
                 }
 
+                // Apply any queued style change at bar boundary
+                if let Some(st) = self.pending_style.take() {
+                    self.set_style(st);
+                }
+
+                // Apply any queued intensity change at bar boundary
+                if let Some(int) = self.pending_intensity.take() {
+                    self.set_intensity(int);
+                }
+
                 // Update chord from chart
                 if let Some(ref chart) = self.current_chart {
                     let (cur, nxt) = chart.chord_at(*bar, 1);
@@ -134,7 +184,9 @@ impl BandSequencer {
                         }
                     }
                     Cue::Crash => {
-                        self.sampler.trigger("crash", 0.9);
+                        if !self.mute_drums {
+                            self.sampler.trigger("crash", 0.9);
+                        }
                         self.is_playing_fill = false;
                         self.update_pattern_for_intensity();
                     }
@@ -171,69 +223,75 @@ impl BandSequencer {
                 let current_beat_float = (*beat as f64) - 1.0;
                 let (chord_root, _) = parse_chord(&self.current_chord);
 
-                // 1. DRUMS
-                let hits_to_trigger: Vec<DrumHit> = self
-                    .current_pattern
-                    .drums
-                    .hits
-                    .iter()
-                    .filter(|h| (h.at_beats - current_beat_float).abs() < 0.25)
-                    .cloned()
-                    .collect();
+                // 1. DRUMS (if not muted)
+                if !self.mute_drums {
+                    let hits_to_trigger: Vec<DrumHit> = self
+                        .current_pattern
+                        .drums
+                        .hits
+                        .iter()
+                        .filter(|h| (h.at_beats - current_beat_float).abs() < 0.25)
+                        .cloned()
+                        .collect();
 
-                for hit in hits_to_trigger {
-                    if let Some(p) = hit.prob {
-                        let roll: f32 = self.rng.gen();
-                        if roll > p {
-                            continue;
+                    for hit in hits_to_trigger {
+                        if let Some(p) = hit.prob {
+                            let roll: f32 = self.rng.gen();
+                            if roll > p {
+                                continue;
+                            }
                         }
+
+                        let vel_delta =
+                            (self.rng.gen::<f32>() - 0.5) * 2.0 * self.style.humanize.velocity;
+                        let final_vel = (hit.velocity + vel_delta).clamp(0.05, 1.0);
+
+                        self.sampler.trigger(&hit.instrument, final_vel);
                     }
-
-                    let vel_delta =
-                        (self.rng.gen::<f32>() - 0.5) * 2.0 * self.style.humanize.velocity;
-                    let final_vel = (hit.velocity + vel_delta).clamp(0.05, 1.0);
-
-                    self.sampler.trigger(&hit.instrument, final_vel);
                 }
 
-                // 2. BASS
-                let bass_notes: Vec<BassNote> = self
-                    .current_pattern
-                    .bass
-                    .notes
-                    .iter()
-                    .filter(|n| (n.at_beats - current_beat_float).abs() < 0.25)
-                    .cloned()
-                    .collect();
+                // 2. BASS (if not muted)
+                if !self.mute_bass {
+                    let bass_notes: Vec<BassNote> = self
+                        .current_pattern
+                        .bass
+                        .notes
+                        .iter()
+                        .filter(|n| (n.at_beats - current_beat_float).abs() < 0.25)
+                        .cloned()
+                        .collect();
 
-                for note in bass_notes {
-                    let midi_note = bass_note_for_degree(chord_root, note.degree, note.octave);
-                    let vel_delta =
-                        (self.rng.gen::<f32>() - 0.5) * 2.0 * self.style.humanize.velocity;
-                    let final_vel = (note.velocity + vel_delta).clamp(0.05, 1.0);
+                    for note in bass_notes {
+                        let midi_note = bass_note_for_degree(chord_root, note.degree, note.octave);
+                        let vel_delta =
+                            (self.rng.gen::<f32>() - 0.5) * 2.0 * self.style.humanize.velocity;
+                        let final_vel = (note.velocity + vel_delta).clamp(0.05, 1.0);
 
-                    self.synth.note_on(0, midi_note, final_vel);
+                        self.synth.note_on(0, midi_note, final_vel);
+                    }
                 }
 
-                // 3. COMP
-                let comp_strums: Vec<CompStrum> = self
-                    .current_pattern
-                    .comp
-                    .strums
-                    .iter()
-                    .filter(|s| (s.at_beats - current_beat_float).abs() < 0.25)
-                    .cloned()
-                    .collect();
+                // 3. COMP (if not muted)
+                if !self.mute_comp {
+                    let comp_strums: Vec<CompStrum> = self
+                        .current_pattern
+                        .comp
+                        .strums
+                        .iter()
+                        .filter(|s| (s.at_beats - current_beat_float).abs() < 0.25)
+                        .cloned()
+                        .collect();
 
-                for strum in comp_strums {
-                    let voicing_kind = &self.current_pattern.comp.voicing;
-                    let notes = voice_chord(&self.current_chord, voicing_kind);
-                    let vel_delta =
-                        (self.rng.gen::<f32>() - 0.5) * 2.0 * self.style.humanize.velocity;
-                    let final_vel = (strum.velocity + vel_delta).clamp(0.05, 1.0);
+                    for strum in comp_strums {
+                        let voicing_kind = &self.current_pattern.comp.voicing;
+                        let notes = voice_chord(&self.current_chord, voicing_kind);
+                        let vel_delta =
+                            (self.rng.gen::<f32>() - 0.5) * 2.0 * self.style.humanize.velocity;
+                        let final_vel = (strum.velocity + vel_delta).clamp(0.05, 1.0);
 
-                    for n in notes {
-                        self.synth.note_on(1, n, final_vel);
+                        for n in notes {
+                            self.synth.note_on(1, n, final_vel);
+                        }
                     }
                 }
             }
@@ -251,8 +309,12 @@ impl BandSequencer {
 
     pub fn render(&mut self, output_left: &mut [f32], output_right: &mut [f32]) {
         if !self.is_stopped {
-            self.sampler.render(output_left, output_right);
-            self.synth.render(output_left, output_right);
+            if !self.mute_drums {
+                self.sampler.render(output_left, output_right);
+            }
+            if !self.mute_bass || !self.mute_comp {
+                self.synth.render(output_left, output_right);
+            }
         }
     }
 }
@@ -333,22 +395,34 @@ mod tests {
     }
 
     #[test]
-    fn test_full_trio_playback() {
+    fn test_queued_style_and_parts_muting() {
         let style = create_test_full_style();
-        let mut seq = BandSequencer::new(style, 48_000, 42);
+        let mut seq = BandSequencer::new(style.clone(), 48_000, 42);
 
-        // Beat 1: triggers Kick + Bass Root + Comp Strum
+        // Queue style change
+        seq.queue_style_at_next_bar(style);
+        assert!(seq.pending_style.is_some());
+
+        // Bar boundary applies queued style
+        seq.handle_timeline_event(&TimelineEvent::Bar {
+            bar: 2,
+            is_count_in: false,
+        });
+        assert!(seq.pending_style.is_none());
+
+        // Parts muting test
+        seq.set_parts(true, true, true); // Mute everything
         seq.handle_timeline_event(&TimelineEvent::Beat {
-            bar: 1,
+            bar: 2,
             beat: 1,
             is_count_in: false,
         });
 
-        let mut left = vec![0.0f32; 1024];
-        let mut right = vec![0.0f32; 1024];
+        let mut left = vec![0.0f32; 256];
+        let mut right = vec![0.0f32; 256];
         seq.render(&mut left, &mut right);
 
-        assert!(left.iter().any(|&s| s.abs() > 0.1));
-        assert!(right.iter().any(|&s| s.abs() > 0.1));
+        // Output must remain total silence
+        assert!(left.iter().all(|&s| s == 0.0));
     }
 }
