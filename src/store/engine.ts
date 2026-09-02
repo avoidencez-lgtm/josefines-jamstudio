@@ -58,6 +58,16 @@ export interface EngineState {
   togglePart: (part: "drums" | "bass" | "comp") => Promise<void>;
   toggleFollowEnergy: () => Promise<void>;
 
+  // Recorder & Takes
+  takes: import("../ipc/contract").TakeMetadata[];
+  isRecording: boolean;
+  calibratedLatencySamples: number;
+  startRecording: (sessionId?: string) => Promise<string>;
+  stopRecording: () => Promise<import("../ipc/contract").TakeMetadata | null>;
+  calibrateLatency: () => Promise<number>;
+  loadTakes: () => Promise<void>;
+  deleteTake: (id: string) => Promise<void>;
+
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -108,6 +118,9 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   devices: { inputs: [], outputs: [] },
   settings: null,
   keysPresent: {},
+  takes: [],
+  isRecording: false,
+  calibratedLatencySamples: 0,
 
   setScreen: (screen) => set({ currentScreen: screen }),
 
@@ -258,6 +271,65 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   toggleFollowEnergy: async () => {
     const band = get().telemetry.band;
     await get().bandSet({ followEnergy: !band.follow_energy });
+  },
+
+  startRecording: async (sessionId = "default-session") => {
+    try {
+      const takeId = await invoke<string>("recorder_start", { sessionId });
+      set({ isRecording: true });
+      return takeId;
+    } catch (e) {
+      console.error("Failed to start recording:", e);
+      return "";
+    }
+  },
+
+  stopRecording: async () => {
+    try {
+      const meta =
+        await invoke<import("../ipc/contract").TakeMetadata>("recorder_stop");
+      set((state) => ({
+        isRecording: false,
+        takes: [meta, ...state.takes],
+      }));
+      return meta;
+    } catch (e) {
+      console.error("Failed to stop recording:", e);
+      set({ isRecording: false });
+      return null;
+    }
+  },
+
+  calibrateLatency: async () => {
+    try {
+      const samples = await invoke<number>("recorder_calibrate_latency");
+      set({ calibratedLatencySamples: samples });
+      return samples;
+    } catch (e) {
+      console.error("Failed to calibrate latency:", e);
+      return 0;
+    }
+  },
+
+  loadTakes: async () => {
+    try {
+      const takes =
+        await invoke<import("../ipc/contract").TakeMetadata[]>("takes_list");
+      set({ takes });
+    } catch (e) {
+      console.error("Failed to load takes:", e);
+    }
+  },
+
+  deleteTake: async (takeId: string) => {
+    try {
+      await invoke("takes_delete", { takeId });
+      set((state) => ({
+        takes: state.takes.filter((t) => t.id !== takeId),
+      }));
+    } catch (e) {
+      console.error("Failed to delete take:", e);
+    }
   },
 
   refreshDevices: async () => {

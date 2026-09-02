@@ -89,3 +89,19 @@ export interface AppSettings {
   buffer_size: number;
   [key: string]: unknown;
 }
+
+export interface TakeMetadata {
+  id: string;
+  sessionId: string;
+  timestamp: string;
+  durationSecs: number;
+  styleId: string;
+  chartId: string;
+  tempo: number;
+  sampleCount: number;
+  pathInput: string;
+  pathBand: string;
+  pathMaster: string;
+  waveformPeaks: number[];
+  notes: string;
+}
