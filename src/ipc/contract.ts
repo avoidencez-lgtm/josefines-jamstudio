@@ -32,11 +32,24 @@ export interface TunerTelemetry {
   confidence: number;
 }
 
+export interface TransportTelemetry {
+  state: "stopped" | "counting_in" | "playing" | "paused";
+  bar: number;
+  beat: number;
+  bpm: number;
+  time_signature: [number, number];
+  loop_enabled: boolean;
+  loop_start_bar: number;
+  loop_end_bar: number;
+  count_in_bars: number;
+}
+
 export interface EngineTelemetry {
   xruns: number;
   input_level: MeterTelemetry;
   output_level: MeterTelemetry;
   tuner?: TunerTelemetry | null;
+  transport: TransportTelemetry;
 }
 
 export interface AppSettings {

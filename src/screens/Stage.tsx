@@ -11,16 +11,17 @@ export const Stage: React.FC = () => {
   const {
     tunerOn,
     toneOn,
-    metronomeOn,
-    metronomeBpm,
+    clickVolume,
     telemetry,
     setTone,
-    setMetronome,
     setTuner,
-    setBpm,
+    setClickVolume,
+    transportSetTempo,
   } = useEngineStore();
 
   const tunerData = telemetry.tuner;
+  const transport = telemetry.transport;
+  const isCountingIn = transport.state === "counting_in";
 
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
@@ -32,25 +33,42 @@ export const Stage: React.FC = () => {
           </span>
           <StatusPill status="live" label="Jam Band" />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
+              Click Vol
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={clickVolume}
+              onChange={(e) =>
+                setClickVolume(Number.parseFloat(e.target.value))
+              }
+              className="w-20 accent-[var(--accent)] cursor-pointer"
+            />
+          </div>
           <Toggle checked={tunerOn} onChange={setTuner} label="Tuner" />
           <Toggle
             checked={toneOn}
             onChange={(c) => setTone(c, 440)}
             label="440 Hz Tone"
           />
-          <Toggle
-            checked={metronomeOn}
-            onChange={(c) => setMetronome(c)}
-            label="Metronome"
-          />
         </div>
       </div>
 
-      {/* Main stage readouts: Tuner / Chord */}
+      {/* Main stage readouts: Tuner / Count-In / Tempo */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Panel className="flex flex-col items-center justify-center min-h-[260px]">
-          {tunerOn ? (
+          {isCountingIn ? (
+            <BigReadout
+              value={`${transport.bar} : ${transport.beat}`}
+              label="Count-In (Get Ready)"
+              highlight={true}
+            />
+          ) : tunerOn ? (
             <BigReadout
               value={tunerData?.note ?? "--"}
               label="Guitar Tuner (DI Input)"
@@ -67,21 +85,33 @@ export const Stage: React.FC = () => {
 
         <Panel className="flex flex-col items-center justify-center min-h-[260px]">
           <BigReadout
-            value={`${metronomeBpm.toFixed(0)}`}
+            value={`${transport.bpm.toFixed(0)}`}
             subValue="BPM"
             label="Tempo"
           />
           <div className="flex items-center gap-2 mt-4">
-            <Button size="sm" onClick={() => setBpm(metronomeBpm - 5)}>
+            <Button
+              size="sm"
+              onClick={() => transportSetTempo(transport.bpm - 5)}
+            >
               -5
             </Button>
-            <Button size="sm" onClick={() => setBpm(metronomeBpm - 1)}>
+            <Button
+              size="sm"
+              onClick={() => transportSetTempo(transport.bpm - 1)}
+            >
               -1
             </Button>
-            <Button size="sm" onClick={() => setBpm(metronomeBpm + 1)}>
+            <Button
+              size="sm"
+              onClick={() => transportSetTempo(transport.bpm + 1)}
+            >
               +1
             </Button>
-            <Button size="sm" onClick={() => setBpm(metronomeBpm + 5)}>
+            <Button
+              size="sm"
+              onClick={() => transportSetTempo(transport.bpm + 5)}
+            >
               +5
             </Button>
           </div>
