@@ -1817,12 +1817,14 @@ version = "0.1.0"
 dependencies = [
  "cpal",
  "hound",
+ "jam-band",
  "jam-core",
  "jam-dsp",
  "parking_lot",
  "rtrb",
  "rubato",
  "serde",
+ "serde_json",
  "symphonia",
  "thiserror 2.0.20",
  "tracing",
@@ -1832,12 +1834,13 @@ dependencies = [
 name = "jam-band"
 version = "0.1.0"
 dependencies = [
- "jam-audio",
  "jam-core",
  "jam-dsp",
  "rand",
  "rand_pcg",
  "rustysynth",
+ "serde",
+ "serde_json",
  "thiserror 2.0.20",
 ]
 

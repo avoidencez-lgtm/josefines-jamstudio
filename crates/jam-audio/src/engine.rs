@@ -1,7 +1,9 @@
-//! engine: Lock-free audio engine with render-ahead worker thread, timeline transport, click, and tuner metering.
+//! engine: Lock-free audio engine with render-ahead worker thread, timeline transport, drum sequencer, click, and tuner metering.
 
 use crate::devices::AudioConfig;
 use crate::io::{AudioInput, AudioOutput, FileInput, NullOutput};
+use jam_band::sequencer::{BandSequencer, Cue};
+use jam_core::style::Style;
 use jam_core::timeline::{Timeline, TimelineEvent, TransportState};
 use jam_dsp::{calculate_level, PitchTracker};
 use parking_lot::Mutex;
@@ -19,6 +21,7 @@ pub struct EngineTelemetry {
     pub output_level: MeterTelemetry,
     pub tuner: Option<TunerTelemetry>,
     pub transport: TransportTelemetry,
+    pub band: BandTelemetry,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -64,6 +67,27 @@ impl Default for TransportTelemetry {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BandTelemetry {
+    pub style_id: String,
+    pub style_name: String,
+    pub intensity: f32,
+    pub active_cue: String,
+    pub pending_cue: String,
+}
+
+impl Default for BandTelemetry {
+    fn default() -> Self {
+        Self {
+            style_id: "blues-shuffle".into(),
+            style_name: "Blues Shuffle".into(),
+            intensity: 0.5,
+            active_cue: "none".into(),
+            pending_cue: "none".into(),
+        }
+    }
+}
+
 pub struct AudioEngine {
     config: AudioConfig,
     running: Arc<AtomicBool>,
@@ -72,6 +96,7 @@ pub struct AudioEngine {
     tuner_active: Arc<AtomicBool>,
     xruns: Arc<AtomicU64>,
     timeline: Arc<Mutex<Timeline>>,
+    sequencer: Arc<Mutex<BandSequencer>>,
     click_volume: Arc<Mutex<f32>>,
     latest_telemetry: Arc<Mutex<EngineTelemetry>>,
     input_driver: Option<Box<dyn AudioInput>>,
@@ -82,6 +107,35 @@ pub struct AudioEngine {
 impl AudioEngine {
     pub fn new(config: AudioConfig) -> Self {
         let sample_rate = config.sample_rate;
+        let default_style: Style =
+            serde_json::from_str(include_str!("../../../styles/blues-shuffle.json"))
+                .unwrap_or_else(|_| {
+                    // Minimal fallback style
+                    Style {
+                        schema_version: 1,
+                        id: "blues-shuffle".into(),
+                        name: "Blues Shuffle".into(),
+                        genre: "Blues".into(),
+                        feel: jam_core::style::StyleFeel {
+                            swing: 0.67,
+                            time_sig: (4, 4),
+                            bpm_range: (60.0, 180.0),
+                        },
+                        kit_id: "standard-rock-kit".into(),
+                        bass_program: "finger-bass".into(),
+                        comp_program: "clean-guitar".into(),
+                        patterns: vec![],
+                        fills: vec![],
+                        endings: vec![],
+                        humanize: jam_core::style::StyleHumanize {
+                            timing_ms: 2.0,
+                            velocity: 0.05,
+                        },
+                    }
+                });
+
+        let sequencer = BandSequencer::new(default_style, sample_rate, 42);
+
         Self {
             config,
             running: Arc::new(AtomicBool::new(false)),
@@ -90,6 +144,7 @@ impl AudioEngine {
             tuner_active: Arc::new(AtomicBool::new(true)),
             xruns: Arc::new(AtomicU64::new(0)),
             timeline: Arc::new(Mutex::new(Timeline::new(sample_rate, 120.0, (4, 4)))),
+            sequencer: Arc::new(Mutex::new(sequencer)),
             click_volume: Arc::new(Mutex::new(0.7)),
             latest_telemetry: Arc::new(Mutex::new(EngineTelemetry::default())),
             input_driver: None,
@@ -143,6 +198,18 @@ impl AudioEngine {
         self.timeline.lock().set_time_signature(ts);
     }
 
+    pub fn band_set_style(&self, style: Style) {
+        self.sequencer.lock().set_style(style);
+    }
+
+    pub fn band_set_intensity(&self, intensity: f32) {
+        self.sequencer.lock().set_intensity(intensity);
+    }
+
+    pub fn band_cue(&self, cue: Cue) {
+        self.sequencer.lock().cue(cue);
+    }
+
     pub fn get_telemetry(&self) -> EngineTelemetry {
         self.latest_telemetry.lock().clone()
     }
@@ -166,6 +233,7 @@ impl AudioEngine {
         let tuner_active = Arc::clone(&self.tuner_active);
         let xruns = Arc::clone(&self.xruns);
         let timeline_arc = Arc::clone(&self.timeline);
+        let sequencer_arc = Arc::clone(&self.sequencer);
         let click_vol_arc = Arc::clone(&self.click_volume);
         let telemetry = Arc::clone(&self.latest_telemetry);
 
@@ -183,6 +251,8 @@ impl AudioEngine {
             let block_frames = 256;
             let mut block_left = vec![0.0f32; block_frames];
             let mut block_right = vec![0.0f32; block_frames];
+            let mut drum_left = vec![0.0f32; block_frames];
+            let mut drum_right = vec![0.0f32; block_frames];
 
             while running.load(Ordering::SeqCst) {
                 // Process input samples for metering & tuner
@@ -215,7 +285,7 @@ impl AudioEngine {
                     }
                 }
 
-                // Advance timeline and check events
+                // Advance timeline and dispatch events to BandSequencer
                 let (events, transport_telem) = {
                     let mut tl = timeline_arc.lock();
                     let evs = tl.advance(block_frames);
@@ -245,6 +315,37 @@ impl AudioEngine {
                             count_in_bars: tl.count_in_bars,
                         },
                     )
+                };
+
+                // Forward events to BandSequencer
+                let band_telem = {
+                    let mut seq = sequencer_arc.lock();
+                    for ev in &events {
+                        seq.handle_timeline_event(ev);
+                    }
+
+                    // Render drum block
+                    drum_left.fill(0.0);
+                    drum_right.fill(0.0);
+                    if transport_telem.state == "playing" {
+                        seq.render(&mut drum_left, &mut drum_right);
+                    }
+
+                    let cue_to_str = |c: Cue| match c {
+                        Cue::None => "none",
+                        Cue::Fill => "fill",
+                        Cue::Crash => "crash",
+                        Cue::Stop => "stop",
+                        Cue::Ending => "ending",
+                    };
+
+                    BandTelemetry {
+                        style_id: seq.style.id.clone(),
+                        style_name: seq.style.name.clone(),
+                        intensity: seq.intensity,
+                        active_cue: cue_to_str(seq.active_cue).into(),
+                        pending_cue: cue_to_str(seq.pending_cue).into(),
+                    }
                 };
 
                 // Trigger click on Beat event
@@ -283,8 +384,9 @@ impl AudioEngine {
                         click_active_samples -= 1;
                     }
 
-                    block_left[i] = s;
-                    block_right[i] = s;
+                    // Mix drums + tone/click
+                    block_left[i] = s + drum_left[i];
+                    block_right[i] = s + drum_right[i];
                 }
 
                 let out_lvl = calculate_level(&block_left);
@@ -312,6 +414,7 @@ impl AudioEngine {
                         tel.tuner = Some(t);
                     }
                     tel.transport = transport_telem;
+                    tel.band = band_telem;
                 }
 
                 if can_push {

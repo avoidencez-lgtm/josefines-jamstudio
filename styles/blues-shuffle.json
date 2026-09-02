@@ -2,6 +2,68 @@
   "schemaVersion": 1,
   "id": "blues-shuffle",
   "name": "Blues Shuffle",
-  "description": "Medium 12-bar blues shuffle with swung eighths",
-  "default_bpm": 110.0
+  "genre": "Blues",
+  "feel": {
+    "swing": 0.67,
+    "timeSig": [4, 4],
+    "bpmRange": [60.0, 180.0]
+  },
+  "kitId": "standard-rock-kit",
+  "bassProgram": "finger-bass",
+  "compProgram": "clean-guitar",
+  "patterns": [
+    {
+      "intensity": [0.0, 1.0],
+      "drums": {
+        "lengthBeats": 4.0,
+        "hits": [
+          { "instrument": "kick", "atBeats": 0.0, "velocity": 0.85 },
+          { "instrument": "ride", "atBeats": 0.0, "velocity": 0.65 },
+          { "instrument": "ride", "atBeats": 0.67, "velocity": 0.55 },
+          { "instrument": "snare", "atBeats": 1.0, "velocity": 0.8 },
+          { "instrument": "hihat_closed", "atBeats": 1.0, "velocity": 0.7 },
+          { "instrument": "ride", "atBeats": 1.0, "velocity": 0.6 },
+          { "instrument": "ride", "atBeats": 1.67, "velocity": 0.5 },
+          { "instrument": "kick", "atBeats": 2.0, "velocity": 0.85 },
+          { "instrument": "ride", "atBeats": 2.0, "velocity": 0.65 },
+          { "instrument": "ride", "atBeats": 2.67, "velocity": 0.55 },
+          { "instrument": "snare", "atBeats": 3.0, "velocity": 0.85 },
+          { "instrument": "hihat_closed", "atBeats": 3.0, "velocity": 0.7 },
+          { "instrument": "ride", "atBeats": 3.0, "velocity": 0.6 },
+          { "instrument": "ride", "atBeats": 3.67, "velocity": 0.5 }
+        ]
+      }
+    }
+  ],
+  "fills": [
+    {
+      "lengthBeats": 4.0,
+      "hits": [
+        { "instrument": "snare", "atBeats": 0.0, "velocity": 0.8 },
+        { "instrument": "snare", "atBeats": 0.67, "velocity": 0.75 },
+        { "instrument": "tom_high", "atBeats": 1.0, "velocity": 0.8 },
+        { "instrument": "tom_high", "atBeats": 1.67, "velocity": 0.75 },
+        { "instrument": "tom_mid", "atBeats": 2.0, "velocity": 0.85 },
+        { "instrument": "tom_mid", "atBeats": 2.67, "velocity": 0.8 },
+        { "instrument": "tom_low", "atBeats": 3.0, "velocity": 0.9 },
+        { "instrument": "kick", "atBeats": 3.67, "velocity": 0.95 }
+      ]
+    }
+  ],
+  "endings": [
+    {
+      "lengthBeats": 4.0,
+      "hits": [
+        { "instrument": "kick", "atBeats": 0.0, "velocity": 0.95 },
+        { "instrument": "snare", "atBeats": 0.0, "velocity": 0.9 },
+        { "instrument": "crash", "atBeats": 0.0, "velocity": 0.95 },
+        { "instrument": "kick", "atBeats": 2.0, "velocity": 0.9 },
+        { "instrument": "crash", "atBeats": 2.0, "velocity": 0.85 }
+      ]
+    }
+  ],
+  "humanize": {
+    "timingMs": 2.5,
+    "velocity": 0.05
+  }
 }

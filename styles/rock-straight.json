@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "rock-straight",
+  "name": "Rock Straight 8th",
+  "genre": "Rock",
+  "feel": {
+    "swing": 0.0,
+    "timeSig": [4, 4],
+    "bpmRange": [70.0, 190.0]
+  },
+  "kitId": "standard-rock-kit",
+  "bassProgram": "picked-bass",
+  "compProgram": "power-guitar",
+  "patterns": [
+    {
+      "intensity": [0.0, 1.0],
+      "drums": {
+        "lengthBeats": 4.0,
+        "hits": [
+          { "instrument": "kick", "atBeats": 0.0, "velocity": 0.9 },
+          { "instrument": "hihat_closed", "atBeats": 0.0, "velocity": 0.7 },
+          { "instrument": "hihat_closed", "atBeats": 0.5, "velocity": 0.6 },
+          { "instrument": "snare", "atBeats": 1.0, "velocity": 0.85 },
+          { "instrument": "hihat_closed", "atBeats": 1.0, "velocity": 0.7 },
+          { "instrument": "hihat_closed", "atBeats": 1.5, "velocity": 0.6 },
+          { "instrument": "kick", "atBeats": 2.0, "velocity": 0.9 },
+          { "instrument": "hihat_closed", "atBeats": 2.0, "velocity": 0.7 },
+          { "instrument": "hihat_closed", "atBeats": 2.5, "velocity": 0.6 },
+          { "instrument": "snare", "atBeats": 3.0, "velocity": 0.85 },
+          { "instrument": "hihat_closed", "atBeats": 3.0, "velocity": 0.7 },
+          { "instrument": "hihat_closed", "atBeats": 3.5, "velocity": 0.6 }
+        ]
+      }
+    }
+  ],
+  "fills": [
+    {
+      "lengthBeats": 4.0,
+      "hits": [
+        { "instrument": "snare", "atBeats": 0.0, "velocity": 0.8 },
+        { "instrument": "snare", "atBeats": 0.5, "velocity": 0.8 },
+        { "instrument": "tom_high", "atBeats": 1.0, "velocity": 0.85 },
+        { "instrument": "tom_high", "atBeats": 1.5, "velocity": 0.85 },
+        { "instrument": "tom_mid", "atBeats": 2.0, "velocity": 0.85 },
+        { "instrument": "tom_mid", "atBeats": 2.5, "velocity": 0.85 },
+        { "instrument": "tom_low", "atBeats": 3.0, "velocity": 0.9 },
+        { "instrument": "kick", "atBeats": 3.5, "velocity": 0.95 }
+      ]
+    }
+  ],
+  "endings": [
+    {
+      "lengthBeats": 4.0,
+      "hits": [
+        { "instrument": "kick", "atBeats": 0.0, "velocity": 1.0 },
+        { "instrument": "snare", "atBeats": 0.0, "velocity": 0.95 },
+        { "instrument": "crash", "atBeats": 0.0, "velocity": 1.0 }
+      ]
+    }
+  ],
+  "humanize": {
+    "timingMs": 1.5,
+    "velocity": 0.04
+  }
+}
