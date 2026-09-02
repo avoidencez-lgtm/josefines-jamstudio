@@ -66,7 +66,7 @@ The project is done when every point below is true and verified, the owner gates
 | M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ✅ | #18 |
 | M5 | Rig orchestration over MIDI | ✅ | #20 |
 | M6 | Sessions: take analysis, LLM review, Logic export, progress | ✅ | #22 |
-| M7 | Polish and distribution | ⏳ | |
+| M7 | Polish and distribution | ✅ | #24 |
 
 Rules for the board: ☐ becomes ⏳ when work starts, and ✅ only when **all** acceptance criteria in [03-build-plan.md](03-build-plan.md) are green, CI is green on both operating systems, and any owner gate the milestone names is ticked (or explicitly recorded as pending owner). Write the PR number or release tag in the last column. Partially done is ⏳ with one line under the board saying what remains.
 
