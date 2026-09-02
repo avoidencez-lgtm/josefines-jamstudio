@@ -54,7 +54,13 @@ fn tone_set(on: bool, hz: f32, state: State<'_, AppState>) {
 
 #[tauri::command]
 fn metronome_set(on: bool, bpm: f64, state: State<'_, AppState>) {
-    state.engine.lock().set_metronome(on, bpm);
+    let eng = state.engine.lock();
+    if on {
+        eng.transport_set_tempo(bpm);
+        eng.transport_play();
+    } else {
+        eng.transport_stop();
+    }
 }
 
 #[tauri::command]
@@ -65,6 +71,57 @@ fn tuner_set(on: bool, state: State<'_, AppState>) {
 #[tauri::command]
 fn audio_get_telemetry(state: State<'_, AppState>) -> EngineTelemetry {
     state.engine.lock().get_telemetry()
+}
+
+#[tauri::command]
+fn transport_play(state: State<'_, AppState>) {
+    state.engine.lock().transport_play();
+}
+
+#[tauri::command]
+fn transport_pause(state: State<'_, AppState>) {
+    state.engine.lock().transport_pause();
+}
+
+#[tauri::command]
+fn transport_stop(state: State<'_, AppState>) {
+    state.engine.lock().transport_stop();
+}
+
+#[tauri::command]
+fn transport_seek_bar(bar: u32, state: State<'_, AppState>) {
+    state.engine.lock().transport_seek_bar(bar);
+}
+
+#[tauri::command]
+fn transport_set_loop(start_bar: u32, end_bar: u32, enabled: bool, state: State<'_, AppState>) {
+    state
+        .engine
+        .lock()
+        .transport_set_loop(start_bar, end_bar, enabled);
+}
+
+#[tauri::command]
+fn transport_set_count_in(bars: u32, state: State<'_, AppState>) {
+    state.engine.lock().transport_set_count_in(bars);
+}
+
+#[tauri::command]
+fn transport_set_tempo(bpm: f64, state: State<'_, AppState>) {
+    state.engine.lock().transport_set_tempo(bpm);
+}
+
+#[tauri::command]
+fn transport_set_time_signature(numerator: u8, denominator: u8, state: State<'_, AppState>) {
+    state
+        .engine
+        .lock()
+        .transport_set_time_signature((numerator, denominator));
+}
+
+#[tauri::command]
+fn transport_set_click_volume(volume: f32, state: State<'_, AppState>) {
+    state.engine.lock().set_click_volume(volume);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -98,6 +155,7 @@ pub fn run() {
                 std::thread::sleep(std::time::Duration::from_millis(33));
                 let tel = eng.lock().get_telemetry();
                 let _ = app_handle.emit("meters", &tel.output_level);
+                let _ = app_handle.emit("transport.state", &tel.transport);
                 if let Some(t) = &tel.tuner {
                     let _ = app_handle.emit("tuner.state", t);
                 }
@@ -116,6 +174,15 @@ pub fn run() {
             metronome_set,
             tuner_set,
             audio_get_telemetry,
+            transport_play,
+            transport_pause,
+            transport_stop,
+            transport_seek_bar,
+            transport_set_loop,
+            transport_set_count_in,
+            transport_set_tempo,
+            transport_set_time_signature,
+            transport_set_click_volume,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

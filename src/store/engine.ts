@@ -6,6 +6,7 @@ import type {
   AudioDevices,
   EngineTelemetry,
   MeterTelemetry,
+  TransportTelemetry,
   TunerTelemetry,
 } from "../ipc/contract";
 
@@ -14,9 +15,8 @@ export interface EngineState {
   activeSource: "none" | "band" | "song" | "lyria";
   toneOn: boolean;
   toneHz: number;
-  metronomeOn: boolean;
-  metronomeBpm: number;
   tunerOn: boolean;
+  clickVolume: number;
   telemetry: EngineTelemetry;
   devices: AudioDevices;
   settings: AppSettings | null;
@@ -26,9 +26,26 @@ export interface EngineState {
     screen: "stage" | "library" | "sessions" | "rig" | "settings",
   ) => void;
   setTone: (on: boolean, hz?: number) => Promise<void>;
-  setMetronome: (on: boolean, bpm?: number) => Promise<void>;
   setTuner: (on: boolean) => Promise<void>;
-  setBpm: (bpm: number) => Promise<void>;
+  setClickVolume: (volume: number) => Promise<void>;
+
+  // Transport actions
+  transportPlay: () => Promise<void>;
+  transportPause: () => Promise<void>;
+  transportStop: () => Promise<void>;
+  transportSeekBar: (bar: number) => Promise<void>;
+  transportSetLoop: (
+    startBar: number,
+    endBar: number,
+    enabled: boolean,
+  ) => Promise<void>;
+  transportSetCountIn: (bars: number) => Promise<void>;
+  transportSetTempo: (bpm: number) => Promise<void>;
+  transportSetTimeSignature: (
+    numerator: number,
+    denominator: number,
+  ) => Promise<void>;
+
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -43,14 +60,24 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   activeSource: "none",
   toneOn: false,
   toneHz: 440,
-  metronomeOn: false,
-  metronomeBpm: 120,
   tunerOn: true,
+  clickVolume: 0.7,
   telemetry: {
     xruns: 0,
     input_level: { peak_db: -180, rms_db: -180 },
     output_level: { peak_db: -180, rms_db: -180 },
     tuner: null,
+    transport: {
+      state: "stopped",
+      bar: 1,
+      beat: 1,
+      bpm: 120,
+      time_signature: [4, 4],
+      loop_enabled: false,
+      loop_start_bar: 1,
+      loop_end_bar: 5,
+      count_in_bars: 1,
+    },
   },
   devices: { inputs: [], outputs: [] },
   settings: null,
@@ -68,16 +95,6 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     }
   },
 
-  setMetronome: async (on, bpm) => {
-    const finalBpm = bpm ?? get().metronomeBpm;
-    set({ metronomeOn: on, metronomeBpm: finalBpm });
-    try {
-      await invoke("metronome_set", { on, bpm: finalBpm });
-    } catch (e) {
-      console.error("Failed to set metronome:", e);
-    }
-  },
-
   setTuner: async (on) => {
     set({ tunerOn: on });
     try {
@@ -87,15 +104,78 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     }
   },
 
-  setBpm: async (bpm) => {
-    const clamped = Math.max(40, Math.min(240, bpm));
-    set({ metronomeBpm: clamped });
-    if (get().metronomeOn) {
-      try {
-        await invoke("metronome_set", { on: true, bpm: clamped });
-      } catch (e) {
-        console.error("Failed to update bpm:", e);
-      }
+  setClickVolume: async (volume) => {
+    const clamped = Math.max(0, Math.min(1, volume));
+    set({ clickVolume: clamped });
+    try {
+      await invoke("transport_set_click_volume", { volume: clamped });
+    } catch (e) {
+      console.error("Failed to set click volume:", e);
+    }
+  },
+
+  transportPlay: async () => {
+    try {
+      await invoke("transport_play");
+    } catch (e) {
+      console.error("Failed to start playback:", e);
+    }
+  },
+
+  transportPause: async () => {
+    try {
+      await invoke("transport_pause");
+    } catch (e) {
+      console.error("Failed to pause playback:", e);
+    }
+  },
+
+  transportStop: async () => {
+    try {
+      await invoke("transport_stop");
+    } catch (e) {
+      console.error("Failed to stop playback:", e);
+    }
+  },
+
+  transportSeekBar: async (bar) => {
+    try {
+      await invoke("transport_seek_bar", { bar });
+    } catch (e) {
+      console.error("Failed to seek bar:", e);
+    }
+  },
+
+  transportSetLoop: async (startBar, endBar, enabled) => {
+    try {
+      await invoke("transport_set_loop", { startBar, endBar, enabled });
+    } catch (e) {
+      console.error("Failed to set loop:", e);
+    }
+  },
+
+  transportSetCountIn: async (bars) => {
+    try {
+      await invoke("transport_set_count_in", { bars });
+    } catch (e) {
+      console.error("Failed to set count in:", e);
+    }
+  },
+
+  transportSetTempo: async (bpm) => {
+    const clamped = Math.max(20, Math.min(300, bpm));
+    try {
+      await invoke("transport_set_tempo", { bpm: clamped });
+    } catch (e) {
+      console.error("Failed to set tempo:", e);
+    }
+  },
+
+  transportSetTimeSignature: async (numerator, denominator) => {
+    try {
+      await invoke("transport_set_time_signature", { numerator, denominator });
+    } catch (e) {
+      console.error("Failed to set time signature:", e);
     }
   },
 
@@ -174,9 +254,22 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       },
     );
 
+    const unlistenTransport = await listen<TransportTelemetry>(
+      "transport.state",
+      (event) => {
+        set((state) => ({
+          telemetry: {
+            ...state.telemetry,
+            transport: event.payload,
+          },
+        }));
+      },
+    );
+
     return () => {
       unlistenMeter();
       unlistenTuner();
+      unlistenTransport();
     };
   },
 }));
