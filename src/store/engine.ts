@@ -11,8 +11,18 @@ import type {
   TunerTelemetry,
 } from "../ipc/contract";
 
+export type ScreenId =
+  | "stage"
+  | "jo"
+  | "songs"
+  | "ai-music"
+  | "sessions"
+  | "rig"
+  | "settings"
+  | "library";
+
 export interface EngineState {
-  currentScreen: "stage" | "library" | "sessions" | "rig" | "settings";
+  currentScreen: ScreenId;
   activeSource: "none" | "band" | "song" | "lyria";
   toneOn: boolean;
   toneHz: number;
@@ -23,9 +33,7 @@ export interface EngineState {
   settings: AppSettings | null;
   keysPresent: Record<string, boolean>;
 
-  setScreen: (
-    screen: "stage" | "library" | "sessions" | "rig" | "settings",
-  ) => void;
+  setScreen: (screen: ScreenId) => void;
   setTone: (on: boolean, hz?: number) => Promise<void>;
   setTuner: (on: boolean) => Promise<void>;
   setClickVolume: (volume: number) => Promise<void>;

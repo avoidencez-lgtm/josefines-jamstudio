@@ -1,6 +1,7 @@
 import {
   Gear,
   Guitar,
+  Microphone,
   MusicNotes,
   Pause,
   Play,
@@ -12,8 +13,12 @@ import {
 } from "@phosphor-icons/react";
 import type React from "react";
 import { useEffect } from "react";
-import { Library, Rig, Sessions } from "./screens/OtherScreens";
+import { AiMusic } from "./screens/AiMusic";
+import { Jo } from "./screens/Jo";
+import { Rig } from "./screens/Rig";
+import { Sessions } from "./screens/Sessions";
 import { Settings } from "./screens/Settings";
+import { Songs } from "./screens/Songs";
 import { Stage } from "./screens/Stage";
 import { SCREENS } from "./screens/registry";
 import { useEngineStore } from "./store/engine";
@@ -99,14 +104,18 @@ export const App: React.FC = () => {
     switch (currentScreen) {
       case "stage":
         return <Stage />;
-      case "settings":
-        return <Settings />;
-      case "library":
-        return <Library />;
+      case "jo":
+        return <Jo />;
+      case "songs":
+        return <Songs />;
+      case "ai-music":
+        return <AiMusic />;
       case "sessions":
         return <Sessions />;
       case "rig":
         return <Rig />;
+      case "settings":
+        return <Settings />;
       default:
         return <Stage />;
     }
@@ -125,6 +134,10 @@ export const App: React.FC = () => {
         return <MusicNotes {...props} />;
       case "Waveform":
         return <Waveform {...props} />;
+      case "Microphone":
+        return <Microphone {...props} />;
+      case "Record":
+        return <Record {...props} />;
       case "Sliders":
         return <Sliders {...props} />;
       case "Gear":
