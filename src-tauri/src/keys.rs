@@ -5,6 +5,7 @@ use std::sync::Mutex;
 
 pub trait SecretStore: Send + Sync {
     fn set(&self, provider: &str, secret: &str) -> Result<(), String>;
+    fn get(&self, provider: &str) -> Result<String, String>;
     fn has(&self, provider: &str) -> bool;
     fn delete(&self, provider: &str) -> Result<(), String>;
 }
@@ -30,6 +31,14 @@ impl SecretStore for KeyringStore {
             .set_password(secret)
             .map_err(|e| format!("Failed to set key for {}: {}", provider, e))?;
         Ok(())
+    }
+
+    fn get(&self, provider: &str) -> Result<String, String> {
+        let entry = keyring::Entry::new(&self.service, provider)
+            .map_err(|e| format!("Keyring entry error: {}", e))?;
+        entry
+            .get_password()
+            .map_err(|_| format!("{provider} is not configured. Set the key in Settings."))
     }
 
     fn has(&self, provider: &str) -> bool {
@@ -59,6 +68,15 @@ impl SecretStore for MemoryStore {
         let mut map = self.secrets.lock().unwrap();
         map.insert(provider.to_string(), secret.to_string());
         Ok(())
+    }
+
+    fn get(&self, provider: &str) -> Result<String, String> {
+        self.secrets
+            .lock()
+            .unwrap()
+            .get(provider)
+            .cloned()
+            .ok_or_else(|| format!("{provider} is not configured. Set the key in Settings."))
     }
 
     fn has(&self, provider: &str) -> bool {

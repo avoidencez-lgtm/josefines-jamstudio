@@ -1,6 +1,7 @@
 //! src-tauri: Tauri application library and command dispatch.
 
 pub mod keys;
+pub mod net;
 pub mod settings;
 pub mod store;
 
@@ -8,6 +9,7 @@ use jam_audio::devices::{list_devices, AudioConfig, AudioDevices};
 use jam_audio::engine::{AudioEngine, EngineTelemetry};
 use jam_band::sequencer::Cue;
 use jam_core::chart::Chart;
+use jam_core::registry::{list_charts, list_styles, load_chart, load_style};
 use jam_core::style::Style;
 use keys::{KeyringStore, MemoryStore, SecretStore};
 use settings::{load_settings, save_settings, AppSettings};
@@ -43,8 +45,24 @@ fn settings_get() -> AppSettings {
 }
 
 #[tauri::command]
-fn settings_set(settings: AppSettings) -> Result<(), String> {
-    save_settings(&settings)
+fn settings_set(settings: AppSettings, state: State<'_, AppState>) -> Result<(), String> {
+    save_settings(&settings)?;
+    let cfg = AudioConfig {
+        input_device: settings.input_device.clone(),
+        output_device: settings.output_device.clone(),
+        input_channel: settings.input_channel,
+        sample_rate: settings.sample_rate,
+        buffer_size: settings.buffer_size,
+    };
+    state.engine.lock().unwrap().apply_config(cfg)
+}
+
+#[tauri::command]
+fn provider_fetch(
+    request: net::ProviderFetchRequest,
+    state: State<'_, AppState>,
+) -> Result<net::ProviderFetchResponse, String> {
+    net::provider_fetch(request, state.secret_store.as_ref())
 }
 
 #[tauri::command]
@@ -122,16 +140,7 @@ fn transport_set_click_volume(volume: f32, state: State<'_, AppState>) {
 
 #[tauri::command]
 fn band_set_style(style_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let style_str = match style_id.as_str() {
-        "blues-shuffle" => include_str!("../../styles/blues-shuffle.json"),
-        "rock-straight" => include_str!("../../styles/rock-straight.json"),
-        "funk-16" => include_str!("../../styles/funk-16.json"),
-        "jazz-swing" => include_str!("../../styles/jazz-swing.json"),
-        "ballad-68" => include_str!("../../styles/ballad-68.json"),
-        "metal-gallop" => include_str!("../../styles/metal-gallop.json"),
-        _ => return Err(format!("Unknown style id: {}", style_id)),
-    };
-    let style: Style = serde_json::from_str(style_str).map_err(|e| e.to_string())?;
+    let style = load_style(&style_id)?;
     state.engine.lock().unwrap().band_set_style(style);
     Ok(())
 }
@@ -207,16 +216,7 @@ fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), Strin
 #[tauri::command]
 fn band_set(args: BandSetArgs, state: State<'_, AppState>) -> Result<(), String> {
     let style = if let Some(ref id) = args.style_id {
-        let style_str = match id.as_str() {
-            "blues-shuffle" => include_str!("../../styles/blues-shuffle.json"),
-            "rock-straight" => include_str!("../../styles/rock-straight.json"),
-            "funk-16" => include_str!("../../styles/funk-16.json"),
-            "jazz-swing" => include_str!("../../styles/jazz-swing.json"),
-            "ballad-68" => include_str!("../../styles/ballad-68.json"),
-            "metal-gallop" => include_str!("../../styles/metal-gallop.json"),
-            _ => return Err(format!("Unknown style id: {}", id)),
-        };
-        Some(serde_json::from_str(style_str).map_err(|e| e.to_string())?)
+        Some(load_style(id)?)
     } else {
         None
     };
@@ -239,30 +239,12 @@ fn band_set(args: BandSetArgs, state: State<'_, AppState>) -> Result<(), String>
 }
 #[tauri::command]
 fn band_list_styles() -> Vec<Style> {
-    vec![
-        serde_json::from_str(include_str!("../../styles/blues-shuffle.json")).unwrap(),
-        serde_json::from_str(include_str!("../../styles/rock-straight.json")).unwrap(),
-        serde_json::from_str(include_str!("../../styles/funk-16.json")).unwrap(),
-        serde_json::from_str(include_str!("../../styles/jazz-swing.json")).unwrap(),
-        serde_json::from_str(include_str!("../../styles/ballad-68.json")).unwrap(),
-        serde_json::from_str(include_str!("../../styles/metal-gallop.json")).unwrap(),
-    ]
+    list_styles()
 }
 
 #[tauri::command]
 fn band_load_chart(chart_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let chart_str = match chart_id.as_str() {
-        "blues-12-bar" => include_str!("../../charts/blues-12-bar.json"),
-        "blues-quick-change" => include_str!("../../charts/blues-quick-change.json"),
-        "blues-8-bar" => include_str!("../../charts/blues-8-bar.json"),
-        "blues-minor" => include_str!("../../charts/blues-minor.json"),
-        "i-v-vi-iv" => include_str!("../../charts/i-v-vi-iv.json"),
-        "ii-v-i" => include_str!("../../charts/ii-v-i.json"),
-        "rock-16-bar" => include_str!("../../charts/rock-16-bar.json"),
-        "one-chord-vamp" => include_str!("../../charts/one-chord-vamp.json"),
-        _ => return Err(format!("Unknown chart id: {}", chart_id)),
-    };
-    let chart: Chart = serde_json::from_str(chart_str).map_err(|e| e.to_string())?;
+    let chart = load_chart(&chart_id)?;
     state
         .engine
         .lock()
@@ -386,16 +368,7 @@ fn ai_music_get_state(
 }
 #[tauri::command]
 fn band_list_charts() -> Vec<Chart> {
-    vec![
-        serde_json::from_str(include_str!("../../charts/blues-12-bar.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/blues-quick-change.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/blues-8-bar.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/blues-minor.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/i-v-vi-iv.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/ii-v-i.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/rock-16-bar.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/one-chord-vamp.json")).unwrap(),
-    ]
+    list_charts()
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -506,9 +479,18 @@ fn takes_export_daw(take_id: String, output_dir: Option<String>) -> Result<Strin
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let config = AudioConfig::default();
+    let settings = load_settings();
+    let config = AudioConfig {
+        input_device: settings.input_device.clone(),
+        output_device: settings.output_device.clone(),
+        input_channel: settings.input_channel,
+        sample_rate: settings.sample_rate,
+        buffer_size: settings.buffer_size,
+    };
     let mut engine = AudioEngine::new(config);
-    let _ = engine.start();
+    if let Err(e) = engine.start() {
+        eprintln!("audio engine failed to start: {e}");
+    }
     let engine_arc = Arc::new(Mutex::new(engine));
 
     let is_test = std::env::var("JAM_HEADLESS").unwrap_or_default() == "1";
@@ -565,6 +547,7 @@ pub fn run() {
             keys_delete,
             settings_get,
             settings_set,
+            provider_fetch,
             audio_list_devices,
             tone_set,
             tuner_set,

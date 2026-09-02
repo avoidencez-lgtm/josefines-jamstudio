@@ -28,7 +28,10 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm lint; corepack pnpm typecheck; corepack pnpm test; corepack pnpm licenses:check
 cargo fmt --all -- --check; cargo clippy --workspace --all-targets -- -D warnings
 $env:JAM_HEADLESS = "1"; cargo test --workspace; cargo deny check
-$env:JAM_HEADLESS = "1"; $env:JAM_FAKE_INPUT = "tests/fixtures/audio/guitar-e-blues-120.wav"; corepack pnpm tauri dev
+# Hear the band: omit JAM_HEADLESS so cpal opens the speakers. Fake DI is optional.
+$env:JAM_FAKE_INPUT = "tests/fixtures/audio/guitar-e-blues-120.wav"; corepack pnpm tauri dev
+# CI / no device:
+$env:JAM_HEADLESS = "1"; cargo test --workspace
 ```
 
 ## Stack locks (v1)

@@ -1,7 +1,7 @@
 //! engine: Lock-free audio engine with render-ahead worker thread, timeline transport, drum sequencer, click, and tuner metering.
 
 use crate::devices::AudioConfig;
-use crate::io::{AudioInput, AudioOutput, FileInput, NullOutput};
+use crate::io::{AudioInput, AudioOutput, CpalInput, CpalOutput, FileInput, NullOutput};
 use jam_band::sequencer::{BandSequencer, Cue};
 use jam_core::chart::ResolvedChart;
 use jam_core::style::Style;
@@ -552,8 +552,12 @@ impl AudioEngine {
 
         self.render_handle = Some(render_handle);
 
-        let mut output_driver: Box<dyn AudioOutput> =
-            Box::new(NullOutput::new(sample_rate, buffer_size));
+        let headless = std::env::var("JAM_HEADLESS").unwrap_or_default() == "1";
+        let mut output_driver: Box<dyn AudioOutput> = if headless {
+            Box::new(NullOutput::new(sample_rate, buffer_size))
+        } else {
+            Box::new(CpalOutput::new(self.config.output_device.clone()))
+        };
 
         output_driver.start(Box::new(move |buffer: &mut [f32]| {
             for sample in buffer.iter_mut() {
@@ -566,22 +570,16 @@ impl AudioEngine {
         let fake_wav = std::env::var("JAM_FAKE_INPUT").ok();
         let mut input_driver: Box<dyn AudioInput> = if let Some(path) = fake_wav {
             Box::new(
-                FileInput::from_wav_file(&path, buffer_size).unwrap_or_else(|_| {
-                    let mut s = Vec::with_capacity(48000);
-                    for i in 0..48000 {
-                        s.push(
-                            (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48000.0).sin() * 0.8,
-                        );
-                    }
-                    FileInput::from_samples(s, buffer_size)
-                }),
+                FileInput::from_wav_file(&path, buffer_size)
+                    .map_err(|e| format!("JAM_FAKE_INPUT={path} failed: {e}"))?,
             )
+        } else if headless {
+            Box::new(FileInput::from_samples(vec![0.0; buffer_size], buffer_size))
         } else {
-            let mut s = Vec::with_capacity(48000);
-            for i in 0..48000 {
-                s.push((2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48000.0).sin() * 0.8);
-            }
-            Box::new(FileInput::from_samples(s, buffer_size))
+            Box::new(CpalInput::new(
+                self.config.input_device.clone(),
+                self.config.input_channel,
+            ))
         };
 
         input_driver.start(Box::new(move |buffer: &[f32]| {
@@ -593,6 +591,12 @@ impl AudioEngine {
         self.input_driver = Some(input_driver);
 
         Ok(())
+    }
+
+    pub fn apply_config(&mut self, config: AudioConfig) -> Result<(), String> {
+        self.stop()?;
+        self.config = config;
+        self.start()
     }
 
     pub fn stop(&mut self) -> Result<(), String> {
