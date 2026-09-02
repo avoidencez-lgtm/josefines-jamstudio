@@ -64,7 +64,7 @@ The project is done when every point below is true and verified, the owner gates
 | M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ✅ | #14 |
 | M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ✅ | #16 |
 | M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ✅ | #18 |
-| M5 | Rig orchestration over MIDI | ⏳ | |
+| M5 | Rig orchestration over MIDI | ✅ | #20 |
 | M6 | Sessions: take analysis, LLM review, Logic export, progress | ☐ | |
 | M7 | Polish and distribution | ☐ | |
 
