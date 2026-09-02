@@ -60,7 +60,7 @@ The project is done when every point below is true and verified, the owner gates
 | M1b | Drums: sampler, style engine, cues, render-ahead worker | ✅ | #6 |
 | M1c | Bass, comp, chart, six styles, chart presets, golden renders | ✅ | #8 |
 | M1d | Live steering and the Stage screen | ✅ | #10 |
-| M1e | Recorder, latency calibration, take browser | ⏳ | |
+| M1e | Recorder, latency calibration, take browser | ✅ | #12 |
 | M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ☐ | |
 | M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ☐ | |
 | M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ☐ | |
