@@ -1,0 +1,41 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+.pnpm-store/
+
+# Rust / Tauri
+target/
+src-tauri/gen/
+src-tauri/target/
+
+# Environment and secrets (keys live in the OS keychain; these must never exist, but never commit them if they do)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+
+# Audio assets and large fixtures are published as release assets, not committed
+assets/packs/
+assets/*.zip
+assets/*.sf2
+assets/**/*.wav
+tests/fixtures/audio/*.wav
+!tests/fixtures/audio/README.md
+docs/spikes/tmp/
+
+# Editors and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs
+logs/
+*.log
