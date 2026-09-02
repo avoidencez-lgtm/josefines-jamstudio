@@ -160,3 +160,11 @@ export interface RigState {
   currentScene: number;
   sectionMappings: Record<string, number>;
 }
+
+export interface TakeAnalysis {
+  timingAccuracyPct: number;
+  dynamicConsistencyPct: number;
+  intonationAccuracyPct: number;
+  detectedTransients: number;
+  summary: string;
+}

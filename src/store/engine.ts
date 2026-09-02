@@ -100,6 +100,13 @@ export interface EngineState {
   setRigSectionMapping: (section: string, sceneIdx: number) => Promise<void>;
   refreshRigState: () => Promise<void>;
 
+  // Take Analysis & DAW Export (M6)
+  takeAnalysis: Record<string, import("../ipc/contract").TakeAnalysis>;
+  analyzeTake: (
+    takeId: string,
+  ) => Promise<import("../ipc/contract").TakeAnalysis | null>;
+  exportTakeDaw: (takeId: string) => Promise<string | null>;
+
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -179,6 +186,7 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   },
   rigState: null,
   availableProfiles: [],
+  takeAnalysis: {},
 
   setScreen: (screen) => set({ currentScreen: screen }),
 
@@ -559,6 +567,32 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       set({ rigState: state });
     } catch (e) {
       console.error("Failed to refresh rig state:", e);
+    }
+  },
+
+  analyzeTake: async (takeId: string) => {
+    try {
+      const analysis = await invoke<import("../ipc/contract").TakeAnalysis>(
+        "takes_analyze",
+        { takeId },
+      );
+      set((state) => ({
+        takeAnalysis: { ...state.takeAnalysis, [takeId]: analysis },
+      }));
+      return analysis;
+    } catch (e) {
+      console.error("Failed to analyze take:", e);
+      return null;
+    }
+  },
+
+  exportTakeDaw: async (takeId: string) => {
+    try {
+      const path = await invoke<string>("takes_export_daw", { takeId });
+      return path;
+    } catch (e) {
+      console.error("Failed to export take for DAW:", e);
+      return null;
     }
   },
 

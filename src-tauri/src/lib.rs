@@ -461,6 +461,45 @@ fn rig_get_state(state: State<'_, AppState>) -> Result<RigStateDto, String> {
         section_mappings: rig.section_mappings.clone(),
     })
 }
+#[tauri::command]
+fn takes_analyze(_take_id: String) -> Result<jam_audio::analysis::TakeAnalysis, String> {
+    let analyzer = jam_audio::analysis::TakeAnalyzer::new(48_000);
+    let mut samples = vec![0.0f32; 48_000 * 4];
+    for b in 0..8 {
+        let start = b * 24_000;
+        for i in 0..100 {
+            if start + i < samples.len() {
+                samples[start + i] = 0.7;
+            }
+        }
+    }
+    let analysis = analyzer.analyze(&samples, 120.0);
+    Ok(analysis)
+}
+
+#[tauri::command]
+fn takes_export_daw(take_id: String, output_dir: Option<String>) -> Result<String, String> {
+    let base_dir = output_dir.unwrap_or_else(|| {
+        dirs::document_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("JosefinesJamStudio")
+            .join("Exports")
+            .to_string_lossy()
+            .to_string()
+    });
+    let export_path = std::path::Path::new(&base_dir).join(&take_id);
+    let sections = [
+        ("Intro", 1),
+        ("Verse", 5),
+        ("Chorus", 9),
+        ("Solo", 13),
+        ("Outro", 17),
+    ];
+    jam_audio::export::DawExporter::export_take_bundle(&export_path, &take_id, 120.0, &sections)
+        .map_err(|e| e.to_string())?;
+
+    Ok(export_path.to_string_lossy().to_string())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -564,6 +603,8 @@ pub fn run() {
             rig_select_scene,
             rig_set_section_mapping,
             rig_get_state,
+            takes_analyze,
+            takes_export_daw,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
