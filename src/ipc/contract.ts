@@ -145,3 +145,18 @@ export interface AiMusicState {
   promptDelta: string;
   mixVolume: number;
 }
+
+export interface RigProfile {
+  id: string;
+  name: string;
+  kind: string;
+  midiChannel: number;
+  sceneCc: number | null;
+  scenes: string[];
+}
+
+export interface RigState {
+  currentProfile: RigProfile;
+  currentScene: number;
+  sectionMappings: Record<string, number>;
+}

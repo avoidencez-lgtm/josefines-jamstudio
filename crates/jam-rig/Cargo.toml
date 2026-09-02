@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "jam-rig"
 version.workspace = true
 edition.workspace = true
@@ -8,4 +8,5 @@ license.workspace = true
 jam-core.workspace = true
 midir.workspace = true
 midly.workspace = true
+serde.workspace = true
 thiserror.workspace = true
