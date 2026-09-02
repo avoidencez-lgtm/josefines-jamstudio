@@ -1,0 +1,58 @@
+:root {
+  /* surfaces, warm near-black, never pure black */
+  --bg-0: #111010; /* window */
+  --bg-1: #171514; /* panels */
+  --bg-2: #1f1c1a; /* raised, inputs */
+  --bg-3: #29251f; /* hover */
+  --line: #332e29; /* hairlines */
+
+  /* text */
+  --fg-0: #f3ede4; /* primary */
+  --fg-1: #b8afa3; /* secondary */
+  --fg-2: #7d7468; /* muted */
+
+  /* accent (amber, saturation under 80 %) */
+  --accent: #e0a24a;
+  --accent-strong: #f0b45c;
+  --accent-soft: rgba(224, 162, 74, 0.16);
+
+  /* semantic */
+  --record: #e0534e;
+  --ok: #58b585;
+
+  /* typography */
+  --font-ui: "Geist", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Cascadia Mono", ui-monospace, monospace;
+
+  /* radii */
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
+
+  /* spacing: 4-point grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* motion */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur: 220ms;
+  --dur-slow: 400ms;
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-0);
+  color: var(--fg-0);
+  font-family: var(--font-ui);
+  user-select: none;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
