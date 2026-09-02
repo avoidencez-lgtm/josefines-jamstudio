@@ -7,11 +7,10 @@ use jam_core::chart::ResolvedChart;
 use jam_core::style::Style;
 use jam_core::timeline::{Timeline, TimelineEvent, TransportState};
 use jam_dsp::{calculate_level, EnergyFollower, PitchTracker};
-use parking_lot::Mutex;
 use rtrb::RingBuffer;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -186,7 +185,7 @@ impl AudioEngine {
 
     pub fn set_tone(&self, on: bool, hz: f32) {
         self.tone_active.store(on, Ordering::SeqCst);
-        *self.tone_hz.lock() = hz;
+        *self.tone_hz.lock().unwrap() = hz;
     }
 
     pub fn set_tuner(&self, on: bool) {
@@ -194,90 +193,96 @@ impl AudioEngine {
     }
 
     pub fn set_click_volume(&self, vol: f32) {
-        *self.click_volume.lock() = vol.clamp(0.0, 1.0);
+        *self.click_volume.lock().unwrap() = vol.clamp(0.0, 1.0);
     }
 
     pub fn transport_play(&self) {
-        self.timeline.lock().play();
+        self.timeline.lock().unwrap().play();
     }
 
     pub fn transport_pause(&self) {
-        self.timeline.lock().pause();
+        self.timeline.lock().unwrap().pause();
     }
 
     pub fn transport_stop(&self) {
-        self.timeline.lock().stop();
+        self.timeline.lock().unwrap().stop();
     }
 
     pub fn transport_seek_bar(&self, bar: u32) {
-        self.timeline.lock().seek_bar(bar);
+        self.timeline.lock().unwrap().seek_bar(bar);
     }
 
     pub fn transport_set_loop(&self, start_bar: u32, end_bar: u32, enabled: bool) {
-        self.timeline.lock().set_loop(start_bar, end_bar, enabled);
+        self.timeline
+            .lock()
+            .unwrap()
+            .set_loop(start_bar, end_bar, enabled);
     }
 
     pub fn transport_set_count_in(&self, bars: u32) {
-        self.timeline.lock().set_count_in(bars);
+        self.timeline.lock().unwrap().set_count_in(bars);
     }
 
     pub fn transport_set_tempo(&self, bpm: f64) {
-        self.timeline.lock().set_bpm(bpm);
+        self.timeline.lock().unwrap().set_bpm(bpm);
     }
 
     pub fn transport_set_time_signature(&self, ts: (u8, u8)) {
-        self.timeline.lock().set_time_signature(ts);
+        self.timeline.lock().unwrap().set_time_signature(ts);
     }
 
     pub fn band_set_style(&self, style: Style) {
-        self.sequencer.lock().set_style(style);
+        self.sequencer.lock().unwrap().set_style(style);
     }
 
     pub fn band_set_intensity(&self, intensity: f32) {
-        self.sequencer.lock().set_intensity(intensity);
+        self.sequencer.lock().unwrap().set_intensity(intensity);
     }
 
     pub fn band_cue(&self, cue: Cue) {
-        self.sequencer.lock().cue(cue);
+        self.sequencer.lock().unwrap().cue(cue);
     }
 
     pub fn band_load_chart(&self, chart: ResolvedChart) {
-        self.sequencer.lock().load_chart(chart);
+        self.sequencer.lock().unwrap().load_chart(chart);
     }
 
     pub fn recorder_start(&self, session_id: String) -> String {
         let (style_id, tempo) = {
-            let seq = self.sequencer.lock();
-            (seq.style.id.clone(), self.timeline.lock().bpm)
+            let seq = self.sequencer.lock().unwrap();
+            (seq.style.id.clone(), self.timeline.lock().unwrap().bpm)
         };
         let chart_id = self
             .sequencer
             .lock()
+            .unwrap()
             .current_chart
             .as_ref()
             .map(|c| c.id.clone())
             .unwrap_or_else(|| "blues-12-bar".into());
         self.recorder
             .lock()
+            .unwrap()
             .start_take(session_id, style_id, chart_id, tempo)
     }
 
     pub fn recorder_stop(&self) -> Result<crate::recorder::TakeMetadata, String> {
-        self.recorder.lock().stop_and_save()
+        self.recorder.lock().unwrap().stop_and_save()
     }
 
     pub fn recorder_set_latency_compensation(&self, offset_samples: usize) {
         self.recorder
             .lock()
+            .unwrap()
             .set_latency_compensation(offset_samples);
     }
 
     pub fn recorder_is_recording(&self) -> bool {
-        self.recorder.lock().is_recording()
+        self.recorder.lock().unwrap().is_recording()
     }
 
     pub fn band_set(&self, patch: BandPatch) {
-        let mut seq = self.sequencer.lock();
+        let mut seq = self.sequencer.lock().unwrap();
         if let Some(st) = patch.style {
             if patch.at_next_bar {
                 seq.queue_style_at_next_bar(st);
@@ -302,7 +307,7 @@ impl AudioEngine {
     }
 
     pub fn get_telemetry(&self) -> EngineTelemetry {
-        self.latest_telemetry.lock().clone()
+        self.latest_telemetry.lock().unwrap().clone()
     }
 
     pub fn start(&mut self) -> Result<(), String> {
@@ -363,7 +368,7 @@ impl AudioEngine {
 
                     // Update energy follower
                     let energy = energy_follower.process_block(&in_samples);
-                    sequencer_arc.lock().update_energy(energy);
+                    sequencer_arc.lock().unwrap().update_energy(energy);
 
                     if tuner_active.load(Ordering::SeqCst) {
                         input_accumulator.extend_from_slice(&in_samples);
@@ -383,7 +388,7 @@ impl AudioEngine {
 
                 // Advance timeline and dispatch events to BandSequencer
                 let (events, transport_telem) = {
-                    let mut tl = timeline_arc.lock();
+                    let mut tl = timeline_arc.lock().unwrap();
                     let evs = tl.advance(block_frames);
                     let pos = tl.current_position();
                     let state_str = match tl.state {
@@ -415,7 +420,7 @@ impl AudioEngine {
 
                 // Forward events to BandSequencer and render band (drums + bass + comp)
                 let band_telem = {
-                    let mut seq = sequencer_arc.lock();
+                    let mut seq = sequencer_arc.lock().unwrap();
                     for ev in &events {
                         seq.handle_timeline_event(ev);
                     }
@@ -464,8 +469,8 @@ impl AudioEngine {
                 block_right.fill(0.0);
 
                 let is_tone = tone_active.load(Ordering::SeqCst);
-                let hz = *tone_hz.lock();
-                let click_vol = *click_vol_arc.lock();
+                let hz = *tone_hz.lock().unwrap();
+                let click_vol = *click_vol_arc.lock().unwrap();
                 let is_counting_in = transport_telem.state == "counting_in";
 
                 for i in 0..block_frames {
@@ -494,13 +499,13 @@ impl AudioEngine {
                 }
 
                 // Stream to take recorder if active
-                if recorder_arc.lock().is_recording() {
+                if recorder_arc.lock().unwrap().is_recording() {
                     let in_block = if in_samples.len() >= block_frames {
                         &in_samples[..block_frames]
                     } else {
                         &block_left[..]
                     };
-                    recorder_arc.lock().push_block(
+                    recorder_arc.lock().unwrap().push_block(
                         in_block,
                         &band_left,
                         &band_right,
@@ -523,7 +528,7 @@ impl AudioEngine {
 
                 // Update telemetry
                 {
-                    let mut tel = telemetry.lock();
+                    let mut tel = telemetry.lock().unwrap();
                     tel.xruns = xruns.load(Ordering::Relaxed);
                     tel.input_level = in_meter;
                     tel.output_level = MeterTelemetry {

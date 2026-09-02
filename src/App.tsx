@@ -34,6 +34,9 @@ export const App: React.FC = () => {
     transportSetLoop,
     transportSetCountIn,
     transportSetTimeSignature,
+    isRecording,
+    startRecording,
+    stopRecording,
     initListeners,
   } = useEngineStore();
 
@@ -85,6 +88,13 @@ export const App: React.FC = () => {
         e.preventDefault();
         const nextCount = (transport.count_in_bars + 1) % 3;
         transportSetCountIn(nextCount);
+      } else if (e.code === "KeyR") {
+        e.preventDefault();
+        if (isRecording) {
+          stopRecording();
+        } else {
+          startRecording();
+        }
       }
     };
 
@@ -98,6 +108,9 @@ export const App: React.FC = () => {
     transportStop,
     transportSetLoop,
     transportSetCountIn,
+    isRecording,
+    startRecording,
+    stopRecording,
   ]);
 
   const renderScreen = () => {
@@ -212,8 +225,16 @@ export const App: React.FC = () => {
               </button>
               <button
                 type="button"
-                className="w-9 h-9 rounded flex items-center justify-center bg-[var(--bg-2)] text-[var(--record)] hover:bg-[var(--bg-3)] cursor-pointer"
-                title="Arm Recording"
+                onClick={() =>
+                  isRecording ? stopRecording() : startRecording()
+                }
+                className={`w-9 h-9 rounded-[var(--radius-m)] flex items-center justify-center cursor-pointer ${
+                  isRecording
+                    ? "bg-[var(--record)] text-[var(--fg-0)]"
+                    : "bg-[var(--bg-2)] text-[var(--record)] hover:bg-[var(--bg-3)]"
+                }`}
+                title={isRecording ? "Stop recording (R)" : "Record (R)"}
+                aria-pressed={isRecording}
               >
                 <Record size={18} weight="fill" />
               </button>
@@ -318,11 +339,12 @@ export const App: React.FC = () => {
           {renderScreen()}
 
           {/* Jo's presence pinned bottom-right */}
-          <aside className="fixed bottom-6 right-6 flex items-center gap-2.5 px-3 py-2 bg-[var(--bg-1)] border border-[var(--line)] rounded-full shadow-[var(--shadow)] z-30">
-            <div className="w-3 h-3 rounded-full bg-[var(--accent)] animate-pulse" />
+          <aside className="fixed bottom-6 right-6 flex items-center gap-2.5 px-3 py-2 bg-[var(--bg-1)] border border-[var(--line)] rounded-full z-30">
+            <div className="w-3 h-3 rounded-full bg-[var(--ok)]" />
             <span className="text-xs font-mono font-medium text-[var(--fg-0)]">
-              Jo (Ready)
+              Jo
             </span>
+            <span className="text-xs font-mono text-[var(--fg-2)]">Hold T</span>
           </aside>
         </main>
       </div>

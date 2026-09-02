@@ -2,13 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AiProviderKind {
-    OfflineSynthetic,
-    LyriaRealtime,
-    ElevenLabsMusic,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiMusicConfig {
@@ -32,7 +25,7 @@ pub struct AiMusicState {
 pub struct AiMusicEngine {
     sample_rate: u32,
     pub active: bool,
-    pub provider: AiProviderKind,
+    pub provider: String,
     pub prompt: String,
     pub prompt_delta: String,
     pub mix_volume: f32,
@@ -45,7 +38,7 @@ impl AiMusicEngine {
         Self {
             sample_rate,
             active: false,
-            provider: AiProviderKind::OfflineSynthetic,
+            provider: "offline-synthetic".into(),
             prompt: "Neo-soul groove with rhodes and pocket drums".into(),
             prompt_delta: "".into(),
             mix_volume: 0.8,
@@ -56,11 +49,7 @@ impl AiMusicEngine {
 
     pub fn start_stream(&mut self, config: AiMusicConfig) {
         self.active = true;
-        self.provider = match config.provider.as_str() {
-            "lyria-realtime" => AiProviderKind::LyriaRealtime,
-            "elevenlabs-music" => AiProviderKind::ElevenLabsMusic,
-            _ => AiProviderKind::OfflineSynthetic,
-        };
+        self.provider = config.provider;
         self.prompt = config.prompt;
         self.mix_volume = config.mix_volume.clamp(0.0, 1.5);
 
@@ -88,11 +77,7 @@ impl AiMusicEngine {
     pub fn get_state(&self) -> AiMusicState {
         AiMusicState {
             active: self.active,
-            provider: match self.provider {
-                AiProviderKind::LyriaRealtime => "lyria-realtime".into(),
-                AiProviderKind::ElevenLabsMusic => "elevenlabs-music".into(),
-                AiProviderKind::OfflineSynthetic => "offline-synthetic".into(),
-            },
+            provider: self.provider.clone(),
             current_prompt: self.prompt.clone(),
             prompt_delta: self.prompt_delta.clone(),
             mix_volume: self.mix_volume,

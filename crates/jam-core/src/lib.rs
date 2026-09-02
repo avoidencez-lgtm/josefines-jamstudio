@@ -1,7 +1,6 @@
-//! jam-core: core data types, timeline math, and seam registries.
+//! jam-core: data types and timeline math.
 
 pub mod chart;
-pub mod registry;
 pub mod style;
 pub mod timeline;
 

@@ -14,7 +14,7 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const base =
-    "inline-flex items-center justify-center font-medium rounded transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center font-medium rounded-[var(--radius-m)] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
 
   const variants = {
     primary:

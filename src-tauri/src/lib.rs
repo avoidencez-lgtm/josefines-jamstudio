@@ -10,9 +10,8 @@ use jam_band::sequencer::Cue;
 use jam_core::chart::Chart;
 use jam_core::style::Style;
 use keys::{KeyringStore, MemoryStore, SecretStore};
-use parking_lot::Mutex;
 use settings::{load_settings, save_settings, AppSettings};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, State};
 
 pub struct AppState {
@@ -55,48 +54,37 @@ fn audio_list_devices() -> AudioDevices {
 
 #[tauri::command]
 fn tone_set(on: bool, hz: f32, state: State<'_, AppState>) {
-    state.engine.lock().set_tone(on, hz);
-}
-
-#[tauri::command]
-fn metronome_set(on: bool, bpm: f64, state: State<'_, AppState>) {
-    let eng = state.engine.lock();
-    if on {
-        eng.transport_set_tempo(bpm);
-        eng.transport_play();
-    } else {
-        eng.transport_stop();
-    }
+    state.engine.lock().unwrap().set_tone(on, hz);
 }
 
 #[tauri::command]
 fn tuner_set(on: bool, state: State<'_, AppState>) {
-    state.engine.lock().set_tuner(on);
+    state.engine.lock().unwrap().set_tuner(on);
 }
 
 #[tauri::command]
 fn audio_get_telemetry(state: State<'_, AppState>) -> EngineTelemetry {
-    state.engine.lock().get_telemetry()
+    state.engine.lock().unwrap().get_telemetry()
 }
 
 #[tauri::command]
 fn transport_play(state: State<'_, AppState>) {
-    state.engine.lock().transport_play();
+    state.engine.lock().unwrap().transport_play();
 }
 
 #[tauri::command]
 fn transport_pause(state: State<'_, AppState>) {
-    state.engine.lock().transport_pause();
+    state.engine.lock().unwrap().transport_pause();
 }
 
 #[tauri::command]
 fn transport_stop(state: State<'_, AppState>) {
-    state.engine.lock().transport_stop();
+    state.engine.lock().unwrap().transport_stop();
 }
 
 #[tauri::command]
 fn transport_seek_bar(bar: u32, state: State<'_, AppState>) {
-    state.engine.lock().transport_seek_bar(bar);
+    state.engine.lock().unwrap().transport_seek_bar(bar);
 }
 
 #[tauri::command]
@@ -104,17 +92,18 @@ fn transport_set_loop(start_bar: u32, end_bar: u32, enabled: bool, state: State<
     state
         .engine
         .lock()
+        .unwrap()
         .transport_set_loop(start_bar, end_bar, enabled);
 }
 
 #[tauri::command]
 fn transport_set_count_in(bars: u32, state: State<'_, AppState>) {
-    state.engine.lock().transport_set_count_in(bars);
+    state.engine.lock().unwrap().transport_set_count_in(bars);
 }
 
 #[tauri::command]
 fn transport_set_tempo(bpm: f64, state: State<'_, AppState>) {
-    state.engine.lock().transport_set_tempo(bpm);
+    state.engine.lock().unwrap().transport_set_tempo(bpm);
 }
 
 #[tauri::command]
@@ -122,12 +111,13 @@ fn transport_set_time_signature(numerator: u8, denominator: u8, state: State<'_,
     state
         .engine
         .lock()
+        .unwrap()
         .transport_set_time_signature((numerator, denominator));
 }
 
 #[tauri::command]
 fn transport_set_click_volume(volume: f32, state: State<'_, AppState>) {
-    state.engine.lock().set_click_volume(volume);
+    state.engine.lock().unwrap().set_click_volume(volume);
 }
 
 #[tauri::command]
@@ -142,13 +132,13 @@ fn band_set_style(style_id: String, state: State<'_, AppState>) -> Result<(), St
         _ => return Err(format!("Unknown style id: {}", style_id)),
     };
     let style: Style = serde_json::from_str(style_str).map_err(|e| e.to_string())?;
-    state.engine.lock().band_set_style(style);
+    state.engine.lock().unwrap().band_set_style(style);
     Ok(())
 }
 
 #[tauri::command]
 fn band_set_intensity(intensity: f32, state: State<'_, AppState>) {
-    state.engine.lock().band_set_intensity(intensity);
+    state.engine.lock().unwrap().band_set_intensity(intensity);
 }
 
 #[tauri::command]
@@ -161,7 +151,7 @@ fn band_cue(cue: String, state: State<'_, AppState>) -> Result<(), String> {
         "none" => Cue::None,
         _ => return Err(format!("Unknown cue: {}", cue)),
     };
-    state.engine.lock().band_cue(c);
+    state.engine.lock().unwrap().band_cue(c);
     Ok(())
 }
 
@@ -179,13 +169,13 @@ struct BandSetArgs {
 
 #[tauri::command]
 fn recorder_start(session_id: String, state: State<'_, AppState>) -> String {
-    state.engine.lock().recorder_start(session_id)
+    state.engine.lock().unwrap().recorder_start(session_id)
 }
 
 #[tauri::command]
 fn recorder_stop(state: State<'_, AppState>) -> Result<jam_audio::recorder::TakeMetadata, String> {
-    let meta = state.engine.lock().recorder_stop()?;
-    let _ = state.store.lock().insert_take(&meta);
+    let meta = state.engine.lock().unwrap().recorder_stop()?;
+    let _ = state.store.lock().unwrap().insert_take(&meta);
     Ok(meta)
 }
 
@@ -198,6 +188,7 @@ fn recorder_calibrate_latency(state: State<'_, AppState>) -> Result<u32, String>
     state
         .engine
         .lock()
+        .unwrap()
         .recorder_set_latency_compensation(samples);
     Ok(samples as u32)
 }
@@ -206,12 +197,12 @@ fn recorder_calibrate_latency(state: State<'_, AppState>) -> Result<u32, String>
 fn takes_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<jam_audio::recorder::TakeMetadata>, String> {
-    state.store.lock().list_takes()
+    state.store.lock().unwrap().list_takes()
 }
 
 #[tauri::command]
 fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    state.store.lock().delete_take(&take_id)
+    state.store.lock().unwrap().delete_take(&take_id)
 }
 #[tauri::command]
 fn band_set(args: BandSetArgs, state: State<'_, AppState>) -> Result<(), String> {
@@ -230,15 +221,19 @@ fn band_set(args: BandSetArgs, state: State<'_, AppState>) -> Result<(), String>
         None
     };
 
-    state.engine.lock().band_set(jam_audio::engine::BandPatch {
-        style,
-        intensity: args.intensity,
-        follow_energy: args.follow_energy,
-        mute_drums: args.mute_drums,
-        mute_bass: args.mute_bass,
-        mute_comp: args.mute_comp,
-        at_next_bar: args.at_next_bar.unwrap_or(false),
-    });
+    state
+        .engine
+        .lock()
+        .unwrap()
+        .band_set(jam_audio::engine::BandPatch {
+            style,
+            intensity: args.intensity,
+            follow_energy: args.follow_energy,
+            mute_drums: args.mute_drums,
+            mute_bass: args.mute_bass,
+            mute_comp: args.mute_comp,
+            at_next_bar: args.at_next_bar.unwrap_or(false),
+        });
 
     Ok(())
 }
@@ -268,7 +263,11 @@ fn band_load_chart(chart_id: String, state: State<'_, AppState>) -> Result<(), S
         _ => return Err(format!("Unknown chart id: {}", chart_id)),
     };
     let chart: Chart = serde_json::from_str(chart_str).map_err(|e| e.to_string())?;
-    state.engine.lock().band_load_chart(chart.resolve());
+    state
+        .engine
+        .lock()
+        .unwrap()
+        .band_load_chart(chart.resolve());
     Ok(())
 }
 
@@ -357,25 +356,25 @@ fn ai_music_start(
     config: jam_audio::ai_music::AiMusicConfig,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    state.ai_music.lock().start_stream(config);
+    state.ai_music.lock().unwrap().start_stream(config);
     Ok(())
 }
 
 #[tauri::command]
 fn ai_music_stop(state: State<'_, AppState>) -> Result<(), String> {
-    state.ai_music.lock().stop_stream();
+    state.ai_music.lock().unwrap().stop_stream();
     Ok(())
 }
 
 #[tauri::command]
 fn ai_music_steer(delta: String, state: State<'_, AppState>) -> Result<(), String> {
-    state.ai_music.lock().steer_prompt(delta);
+    state.ai_music.lock().unwrap().steer_prompt(delta);
     Ok(())
 }
 
 #[tauri::command]
 fn ai_music_set_volume(volume: f32, state: State<'_, AppState>) -> Result<(), String> {
-    state.ai_music.lock().set_mix_volume(volume);
+    state.ai_music.lock().unwrap().set_mix_volume(volume);
     Ok(())
 }
 
@@ -383,7 +382,7 @@ fn ai_music_set_volume(volume: f32, state: State<'_, AppState>) -> Result<(), St
 fn ai_music_get_state(
     state: State<'_, AppState>,
 ) -> Result<jam_audio::ai_music::AiMusicState, String> {
-    Ok(state.ai_music.lock().get_state())
+    Ok(state.ai_music.lock().unwrap().get_state())
 }
 #[tauri::command]
 fn band_list_charts() -> Vec<Chart> {
@@ -431,7 +430,7 @@ fn rig_select_profile(
         "black-spirit" => jam_rig::RigProfile::black_spirit(),
         _ => return Err(format!("Unknown rig profile: {}", profile_id)),
     };
-    let mut rig = state.rig.lock();
+    let mut rig = state.rig.lock().unwrap();
     rig.profile = profile.clone();
     rig.current_scene = 0;
     Ok(profile)
@@ -439,7 +438,7 @@ fn rig_select_profile(
 
 #[tauri::command]
 fn rig_select_scene(scene_idx: usize, state: State<'_, AppState>) -> Result<(), String> {
-    state.rig.lock().select_scene(scene_idx)
+    state.rig.lock().unwrap().select_scene(scene_idx)
 }
 
 #[tauri::command]
@@ -448,13 +447,17 @@ fn rig_set_section_mapping(
     scene_idx: usize,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    state.rig.lock().set_section_mapping(section, scene_idx);
+    state
+        .rig
+        .lock()
+        .unwrap()
+        .set_section_mapping(section, scene_idx);
     Ok(())
 }
 
 #[tauri::command]
 fn rig_get_state(state: State<'_, AppState>) -> Result<RigStateDto, String> {
-    let rig = state.rig.lock();
+    let rig = state.rig.lock().unwrap();
     Ok(RigStateDto {
         current_profile: rig.profile.clone(),
         current_scene: rig.current_scene,
@@ -524,7 +527,7 @@ pub fn run() {
 
     let ai_music_engine = Arc::new(Mutex::new(jam_audio::ai_music::AiMusicEngine::new(48_000)));
 
-    let rig_orchestrator = Arc::new(Mutex::new(jam_rig::RigOrchestrator::with_memory_sink(
+    let rig_orchestrator = Arc::new(Mutex::new(jam_rig::RigOrchestrator::new(
         jam_rig::RigProfile::quad_cortex(),
     )));
 
@@ -537,7 +540,6 @@ pub fn run() {
     };
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_log::Builder::new().build())
         .manage(app_state)
         .setup(move |app| {
             let app_handle = app.handle().clone();
@@ -546,7 +548,7 @@ pub fn run() {
             // Emit telemetry at 30 Hz
             std::thread::spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_millis(33));
-                let tel = eng.lock().get_telemetry();
+                let tel = eng.lock().unwrap().get_telemetry();
                 let _ = app_handle.emit("meters", &tel.output_level);
                 let _ = app_handle.emit("transport.state", &tel.transport);
                 let _ = app_handle.emit("band.state", &tel.band);
@@ -565,7 +567,6 @@ pub fn run() {
             settings_set,
             audio_list_devices,
             tone_set,
-            metronome_set,
             tuner_set,
             audio_get_telemetry,
             transport_play,

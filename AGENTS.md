@@ -33,4 +33,4 @@ $env:JAM_HEADLESS = "1"; $env:JAM_FAKE_INPUT = "tests/fixtures/audio/guitar-e-bl
 
 ## Stack locks (v1)
 
-Tauri 2.11.x; Rust stable (MSRV 1.85, edition 2024) with `cpal`, `rtrb`, `symphonia`, `hound`, `rubato`, `oxisynth`, Signalsmith Stretch bindings, `midir`, `midly`, `pitch-detection`, `rustfft`, `rusqlite`, `keyring`, `tokio`, `reqwest` (rustls), `tokio-tungstenite`, `serde`; React 19, Vite, TypeScript, Tailwind v4, zustand, `tonal`, zod, Vercel AI SDK with `@ai-sdk/google`, `@phosphor-icons/react`, Biome, vitest; corepack pnpm. No Python, no Node sidecar, no plugin framework, no dynamic loading in v1.
+Tauri 2.11.x; Rust stable (MSRV 1.85, edition 2024) with `cpal`, `rtrb`, `hound`, `pitch-detection`, `keyring`, `serde`; React 19, Vite, TypeScript, Tailwind v4, zustand, `@phosphor-icons/react`, Biome, vitest; corepack pnpm. No Python, no Node sidecar, no plugin framework, no dynamic loading in v1.

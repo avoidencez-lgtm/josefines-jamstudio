@@ -11,6 +11,31 @@ import type {
   TunerTelemetry,
 } from "../ipc/contract";
 
+async function cmd(
+  name: string,
+  args?: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    await invoke(name, args);
+    return true;
+  } catch (e) {
+    console.error(name, e);
+    return false;
+  }
+}
+
+async function cmdVal<T>(
+  name: string,
+  args?: Record<string, unknown>,
+): Promise<T | null> {
+  try {
+    return await invoke<T>(name, args);
+  } catch (e) {
+    console.error(name, e);
+    return null;
+  }
+}
+
 export type ScreenId =
   | "stage"
   | "jo"
@@ -34,6 +59,7 @@ export interface EngineState {
   keysPresent: Record<string, boolean>;
 
   setScreen: (screen: ScreenId) => void;
+  setActiveSource: (source: "none" | "band" | "song" | "lyria") => void;
   setTone: (on: boolean, hz?: number) => Promise<void>;
   setTuner: (on: boolean) => Promise<void>;
   setClickVolume: (volume: number) => Promise<void>;
@@ -126,7 +152,7 @@ export interface EngineState {
 
 export const useEngineStore = create<EngineState>((set, get) => ({
   currentScreen: "stage",
-  activeSource: "none",
+  activeSource: "band",
   toneOn: false,
   toneHz: 440,
   tunerOn: true,
@@ -197,140 +223,79 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   takeAnalysis: {},
 
   setScreen: (screen) => set({ currentScreen: screen }),
+  setActiveSource: (source) => set({ activeSource: source }),
 
   setTone: async (on, hz) => {
     const finalHz = hz ?? get().toneHz;
     set({ toneOn: on, toneHz: finalHz });
-    try {
-      await invoke("tone_set", { on, hz: finalHz });
-    } catch (e) {
-      console.error("Failed to set tone:", e);
-    }
+    await cmd("tone_set", { on, hz: finalHz });
   },
 
   setTuner: async (on) => {
     set({ tunerOn: on });
-    try {
-      await invoke("tuner_set", { on });
-    } catch (e) {
-      console.error("Failed to set tuner:", e);
-    }
+    await cmd("tuner_set", { on });
   },
 
   setClickVolume: async (volume) => {
     const clamped = Math.max(0, Math.min(1, volume));
     set({ clickVolume: clamped });
-    try {
-      await invoke("transport_set_click_volume", { volume: clamped });
-    } catch (e) {
-      console.error("Failed to set click volume:", e);
-    }
+    await cmd("transport_set_click_volume", { volume: clamped });
   },
 
   transportPlay: async () => {
-    try {
-      await invoke("transport_play");
-    } catch (e) {
-      console.error("Failed to start playback:", e);
-    }
+    await cmd("transport_play");
   },
 
   transportPause: async () => {
-    try {
-      await invoke("transport_pause");
-    } catch (e) {
-      console.error("Failed to pause playback:", e);
-    }
+    await cmd("transport_pause");
   },
 
   transportStop: async () => {
-    try {
-      await invoke("transport_stop");
-    } catch (e) {
-      console.error("Failed to stop playback:", e);
-    }
+    await cmd("transport_stop");
   },
 
   transportSeekBar: async (bar) => {
-    try {
-      await invoke("transport_seek_bar", { bar });
-    } catch (e) {
-      console.error("Failed to seek bar:", e);
-    }
+    await cmd("transport_seek_bar", { bar });
   },
 
   transportSetLoop: async (startBar, endBar, enabled) => {
-    try {
-      await invoke("transport_set_loop", { startBar, endBar, enabled });
-    } catch (e) {
-      console.error("Failed to set loop:", e);
-    }
+    await cmd("transport_set_loop", { startBar, endBar, enabled });
   },
 
   transportSetCountIn: async (bars) => {
-    try {
-      await invoke("transport_set_count_in", { bars });
-    } catch (e) {
-      console.error("Failed to set count in:", e);
-    }
+    await cmd("transport_set_count_in", { bars });
   },
 
   transportSetTempo: async (bpm) => {
-    const clamped = Math.max(20, Math.min(300, bpm));
-    try {
-      await invoke("transport_set_tempo", { bpm: clamped });
-    } catch (e) {
-      console.error("Failed to set tempo:", e);
-    }
+    await cmd("transport_set_tempo", {
+      bpm: Math.max(20, Math.min(300, bpm)),
+    });
   },
 
   transportSetTimeSignature: async (numerator, denominator) => {
-    try {
-      await invoke("transport_set_time_signature", { numerator, denominator });
-    } catch (e) {
-      console.error("Failed to set time signature:", e);
-    }
+    await cmd("transport_set_time_signature", { numerator, denominator });
   },
 
   bandSetStyle: async (styleId) => {
-    try {
-      await invoke("band_set_style", { styleId });
-    } catch (e) {
-      console.error("Failed to set band style:", e);
-    }
+    await cmd("band_set_style", { styleId });
   },
 
   bandSetIntensity: async (intensity) => {
-    const clamped = Math.max(0, Math.min(1, intensity));
-    try {
-      await invoke("band_set_intensity", { intensity: clamped });
-    } catch (e) {
-      console.error("Failed to set band intensity:", e);
-    }
+    await cmd("band_set_intensity", {
+      intensity: Math.max(0, Math.min(1, intensity)),
+    });
   },
 
   bandCue: async (cue) => {
-    try {
-      await invoke("band_cue", { cue });
-    } catch (e) {
-      console.error("Failed to set band cue:", e);
-    }
+    await cmd("band_cue", { cue });
   },
 
   bandLoadChart: async (chartId: string) => {
-    try {
-      await invoke("band_load_chart", { chartId });
-    } catch (e) {
-      console.error("Failed to load chart:", e);
-    }
+    await cmd("band_load_chart", { chartId });
   },
 
   bandSet: async (patch) => {
-    try {
-      await invoke("band_set", { args: patch });
-    } catch (e) {
-      console.error("Failed to apply band patch:", e);
-    }
+    await cmd("band_set", { args: patch });
   },
 
   togglePart: async (part) => {
@@ -348,106 +313,72 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   },
 
   startRecording: async (sessionId = "default-session") => {
-    try {
-      const takeId = await invoke<string>("recorder_start", { sessionId });
-      set({ isRecording: true });
-      return takeId;
-    } catch (e) {
-      console.error("Failed to start recording:", e);
-      return "";
-    }
+    const takeId = await cmdVal<string>("recorder_start", { sessionId });
+    if (takeId == null) return "";
+    set({ isRecording: true });
+    return takeId;
   },
 
   stopRecording: async () => {
-    try {
-      const meta =
-        await invoke<import("../ipc/contract").TakeMetadata>("recorder_stop");
-      set((state) => ({
-        isRecording: false,
-        takes: [meta, ...state.takes],
-      }));
-      return meta;
-    } catch (e) {
-      console.error("Failed to stop recording:", e);
+    const meta =
+      await cmdVal<import("../ipc/contract").TakeMetadata>("recorder_stop");
+    if (meta == null) {
       set({ isRecording: false });
       return null;
     }
+    set((state) => ({
+      isRecording: false,
+      takes: [meta, ...state.takes],
+    }));
+    return meta;
   },
 
   calibrateLatency: async () => {
-    try {
-      const samples = await invoke<number>("recorder_calibrate_latency");
-      set({ calibratedLatencySamples: samples });
-      return samples;
-    } catch (e) {
-      console.error("Failed to calibrate latency:", e);
-      return 0;
-    }
+    const samples = await cmdVal<number>("recorder_calibrate_latency");
+    if (samples == null) return 0;
+    set({ calibratedLatencySamples: samples });
+    return samples;
   },
 
   loadTakes: async () => {
-    try {
-      const takes =
-        await invoke<import("../ipc/contract").TakeMetadata[]>("takes_list");
-      set({ takes });
-    } catch (e) {
-      console.error("Failed to load takes:", e);
-    }
+    const takes =
+      await cmdVal<import("../ipc/contract").TakeMetadata[]>("takes_list");
+    if (takes) set({ takes });
   },
 
   deleteTake: async (takeId: string) => {
-    try {
-      await invoke("takes_delete", { takeId });
-      set((state) => ({
-        takes: state.takes.filter((t) => t.id !== takeId),
-      }));
-    } catch (e) {
-      console.error("Failed to delete take:", e);
-    }
+    if (!(await cmd("takes_delete", { takeId }))) return;
+    set((state) => ({
+      takes: state.takes.filter((t) => t.id !== takeId),
+    }));
   },
 
   importSong: async (filePath: string) => {
-    try {
-      const song = await invoke<import("../ipc/contract").SongMetadata>(
-        "song_import",
-        { filePath },
-      );
-      set({ currentSong: song });
-      return song;
-    } catch (e) {
-      console.error("Failed to import song:", e);
-      return null;
-    }
+    const song = await cmdVal<import("../ipc/contract").SongMetadata>(
+      "song_import",
+      { filePath },
+    );
+    if (song == null) return null;
+    set({ currentSong: song });
+    return song;
   },
 
   setSongSpeed: async (speed: number) => {
-    try {
-      const clamped = Math.max(0.5, Math.min(1.5, speed));
-      await invoke("song_set_speed", { speed: clamped });
-      set({ songSpeed: clamped });
-    } catch (e) {
-      console.error("Failed to set song speed:", e);
-    }
+    const clamped = Math.max(0.5, Math.min(1.5, speed));
+    if (!(await cmd("song_set_speed", { speed: clamped }))) return;
+    set({ songSpeed: clamped });
   },
 
   setSongTranspose: async (semitones: number) => {
-    try {
-      const clamped = Math.max(-12, Math.min(12, semitones));
-      await invoke("song_set_transpose", { semitones: clamped });
-      set({ songTranspose: clamped });
-    } catch (e) {
-      console.error("Failed to set song transpose:", e);
-    }
+    const clamped = Math.max(-12, Math.min(12, semitones));
+    if (!(await cmd("song_set_transpose", { semitones: clamped }))) return;
+    set({ songTranspose: clamped });
   },
 
   updateStemSettings: async (patch) => {
     const updated = { ...get().stemSettings, ...patch };
-    try {
-      await invoke("song_set_stem_settings", { settings: updated });
-      set({ stemSettings: updated });
-    } catch (e) {
-      console.error("Failed to update stem settings:", e);
-    }
+    if (!(await cmd("song_set_stem_settings", { settings: updated }))) return;
+    set({ stemSettings: updated });
   },
 
   startAiMusic: async (config) => {
@@ -458,189 +389,128 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       key: config?.key ?? "A",
       mixVolume: config?.mixVolume ?? get().aiMusic.mixVolume,
     };
-    try {
-      await invoke("ai_music_start", { config: fullConfig });
-      set((state) => ({
-        aiMusic: {
-          ...state.aiMusic,
-          active: true,
-          provider: fullConfig.provider,
-          currentPrompt: fullConfig.prompt,
-        },
-      }));
-    } catch (e) {
-      console.error("Failed to start AI music stream:", e);
-    }
+    if (!(await cmd("ai_music_start", { config: fullConfig }))) return;
+    set((state) => ({
+      aiMusic: {
+        ...state.aiMusic,
+        active: true,
+        provider: fullConfig.provider,
+        currentPrompt: fullConfig.prompt,
+      },
+    }));
   },
 
   stopAiMusic: async () => {
-    try {
-      await invoke("ai_music_stop");
-      set((state) => ({
-        aiMusic: { ...state.aiMusic, active: false },
-      }));
-    } catch (e) {
-      console.error("Failed to stop AI music stream:", e);
-    }
+    if (!(await cmd("ai_music_stop"))) return;
+    set((state) => ({
+      aiMusic: { ...state.aiMusic, active: false },
+    }));
   },
 
   steerAiMusic: async (delta: string) => {
-    try {
-      await invoke("ai_music_steer", { delta });
-      set((state) => ({
-        aiMusic: { ...state.aiMusic, promptDelta: delta },
-      }));
-    } catch (e) {
-      console.error("Failed to steer AI music stream:", e);
-    }
+    if (!(await cmd("ai_music_steer", { delta }))) return;
+    set((state) => ({
+      aiMusic: { ...state.aiMusic, promptDelta: delta },
+    }));
   },
 
   setAiMusicVolume: async (volume: number) => {
-    try {
-      await invoke("ai_music_set_volume", { volume });
-      set((state) => ({
-        aiMusic: { ...state.aiMusic, mixVolume: volume },
-      }));
-    } catch (e) {
-      console.error("Failed to set AI music volume:", e);
-    }
+    if (!(await cmd("ai_music_set_volume", { volume }))) return;
+    set((state) => ({
+      aiMusic: { ...state.aiMusic, mixVolume: volume },
+    }));
   },
 
   loadRigProfiles: async () => {
-    try {
-      const profiles =
-        await invoke<import("../ipc/contract").RigProfile[]>(
-          "rig_list_profiles",
-        );
-      const state =
-        await invoke<import("../ipc/contract").RigState>("rig_get_state");
+    const profiles =
+      await cmdVal<import("../ipc/contract").RigProfile[]>("rig_list_profiles");
+    const state =
+      await cmdVal<import("../ipc/contract").RigState>("rig_get_state");
+    if (profiles && state)
       set({ availableProfiles: profiles, rigState: state });
-    } catch (e) {
-      console.error("Failed to load rig profiles:", e);
-    }
   },
 
   selectRigProfile: async (id: string) => {
-    try {
-      const profile = await invoke<import("../ipc/contract").RigProfile>(
-        "rig_select_profile",
-        { profileId: id },
-      );
-      set((state) => ({
-        rigState: state.rigState
-          ? { ...state.rigState, currentProfile: profile, currentScene: 0 }
-          : null,
-      }));
-    } catch (e) {
-      console.error("Failed to select rig profile:", e);
-    }
+    const profile = await cmdVal<import("../ipc/contract").RigProfile>(
+      "rig_select_profile",
+      { profileId: id },
+    );
+    if (profile == null) return;
+    set((state) => ({
+      rigState: state.rigState
+        ? { ...state.rigState, currentProfile: profile, currentScene: 0 }
+        : null,
+    }));
   },
 
   selectRigScene: async (sceneIdx: number) => {
-    try {
-      await invoke("rig_select_scene", { sceneIdx });
-      set((state) => ({
-        rigState: state.rigState
-          ? { ...state.rigState, currentScene: sceneIdx }
-          : null,
-      }));
-    } catch (e) {
-      console.error("Failed to select rig scene:", e);
-    }
+    if (!(await cmd("rig_select_scene", { sceneIdx }))) return;
+    set((state) => ({
+      rigState: state.rigState
+        ? { ...state.rigState, currentScene: sceneIdx }
+        : null,
+    }));
   },
 
   setRigSectionMapping: async (section: string, sceneIdx: number) => {
-    try {
-      await invoke("rig_set_section_mapping", { section, sceneIdx });
-      set((state) => ({
-        rigState: state.rigState
-          ? {
-              ...state.rigState,
-              sectionMappings: {
-                ...state.rigState.sectionMappings,
-                [section]: sceneIdx,
-              },
-            }
-          : null,
-      }));
-    } catch (e) {
-      console.error("Failed to set section mapping:", e);
-    }
+    if (!(await cmd("rig_set_section_mapping", { section, sceneIdx }))) return;
+    set((state) => ({
+      rigState: state.rigState
+        ? {
+            ...state.rigState,
+            sectionMappings: {
+              ...state.rigState.sectionMappings,
+              [section]: sceneIdx,
+            },
+          }
+        : null,
+    }));
   },
 
   refreshRigState: async () => {
-    try {
-      const state =
-        await invoke<import("../ipc/contract").RigState>("rig_get_state");
-      set({ rigState: state });
-    } catch (e) {
-      console.error("Failed to refresh rig state:", e);
-    }
+    const state =
+      await cmdVal<import("../ipc/contract").RigState>("rig_get_state");
+    if (state) set({ rigState: state });
   },
 
   analyzeTake: async (takeId: string) => {
-    try {
-      const analysis = await invoke<import("../ipc/contract").TakeAnalysis>(
-        "takes_analyze",
-        { takeId },
-      );
-      set((state) => ({
-        takeAnalysis: { ...state.takeAnalysis, [takeId]: analysis },
-      }));
-      return analysis;
-    } catch (e) {
-      console.error("Failed to analyze take:", e);
-      return null;
-    }
+    const analysis = await cmdVal<import("../ipc/contract").TakeAnalysis>(
+      "takes_analyze",
+      { takeId },
+    );
+    if (analysis == null) return null;
+    set((state) => ({
+      takeAnalysis: { ...state.takeAnalysis, [takeId]: analysis },
+    }));
+    return analysis;
   },
 
   exportTakeDaw: async (takeId: string) => {
-    try {
-      const path = await invoke<string>("takes_export_daw", { takeId });
-      return path;
-    } catch (e) {
-      console.error("Failed to export take for DAW:", e);
-      return null;
-    }
+    return cmdVal<string>("takes_export_daw", { takeId });
   },
 
   refreshDevices: async () => {
-    try {
-      const devs = await invoke<AudioDevices>("audio_list_devices");
-      set({ devices: devs });
-    } catch (e) {
-      console.error("Failed to list audio devices:", e);
-    }
+    const devs = await cmdVal<AudioDevices>("audio_list_devices");
+    if (devs) set({ devices: devs });
   },
 
   loadSettings: async () => {
-    try {
-      const s = await invoke<AppSettings>("settings_get");
-      set({ settings: s });
-    } catch (e) {
-      console.error("Failed to load settings:", e);
-    }
+    const s = await cmdVal<AppSettings>("settings_get");
+    if (s) set({ settings: s });
   },
 
   saveSettings: async (settings) => {
-    try {
-      await invoke("settings_set", { settings });
-      set({ settings });
-    } catch (e) {
-      console.error("Failed to save settings:", e);
-    }
+    if (!(await cmd("settings_set", { settings }))) return;
+    set({ settings });
   },
 
   checkKey: async (provider) => {
-    try {
-      const has = await invoke<boolean>("keys_has", { provider });
-      set((state) => ({
-        keysPresent: { ...state.keysPresent, [provider]: has },
-      }));
-      return has;
-    } catch {
-      return false;
-    }
+    const has = await cmdVal<boolean>("keys_has", { provider });
+    if (has == null) return false;
+    set((state) => ({
+      keysPresent: { ...state.keysPresent, [provider]: has },
+    }));
+    return has;
   },
 
   setKey: async (provider, key) => {

@@ -1,49 +1,74 @@
 import type React from "react";
 import { useEffect, useState } from "react";
-import { BigReadout } from "../components/BigReadout";
+import blues8 from "../../charts/blues-8-bar.json";
+import blues12 from "../../charts/blues-12-bar.json";
+import bluesMinor from "../../charts/blues-minor.json";
+import bluesQuick from "../../charts/blues-quick-change.json";
+import popProg from "../../charts/i-v-vi-iv.json";
+import jazzTurn from "../../charts/ii-v-i.json";
+import vamp from "../../charts/one-chord-vamp.json";
+import rock16 from "../../charts/rock-16-bar.json";
 import { Button } from "../components/Button";
+import { ChartStrip } from "../components/ChartStrip";
 import { Meter } from "../components/Meter";
-import { Panel } from "../components/Panel";
-import { StatusPill } from "../components/States";
 import { Toggle } from "../components/Toggle";
 import { useEngineStore } from "../store/engine";
 
 const PRESET_CHARTS = [
-  { id: "blues-12-bar", label: "12-Bar Blues (Standard)" },
-  { id: "blues-quick-change", label: "12-Bar Blues (Quick Change)" },
+  { id: "blues-12-bar", label: "12-Bar Blues" },
+  { id: "blues-quick-change", label: "Quick Change" },
   { id: "blues-8-bar", label: "8-Bar Blues" },
-  { id: "blues-minor", label: "Minor Blues in Am" },
-  { id: "i-v-vi-iv", label: "I - V - vi - IV Pop" },
-  { id: "ii-v-i", label: "ii - V - I Jazz Turnaround" },
-  { id: "rock-16-bar", label: "16-Bar Rock Anthem" },
-  { id: "one-chord-vamp", label: "One-Chord Groove Vamp" },
+  { id: "blues-minor", label: "Minor Blues" },
+  { id: "i-v-vi-iv", label: "I V vi IV" },
+  { id: "ii-v-i", label: "ii V I" },
+  { id: "rock-16-bar", label: "16-Bar Rock" },
+  { id: "one-chord-vamp", label: "One-Chord Vamp" },
 ];
 
 const PRESET_STYLES = [
   { id: "blues-shuffle", label: "Blues Shuffle" },
-  { id: "rock-straight", label: "Rock Straight 8th" },
-  { id: "funk-16", label: "Funk 16th Groove" },
+  { id: "rock-straight", label: "Rock Straight" },
+  { id: "funk-16", label: "Funk 16th" },
   { id: "jazz-swing", label: "Jazz Swing" },
-  { id: "ballad-68", label: "Slow 6/8 Ballad" },
-  { id: "metal-gallop", label: "Heavy Metal Gallop" },
+  { id: "ballad-68", label: "6/8 Ballad" },
+  { id: "metal-gallop", label: "Metal Gallop" },
 ];
+
+function barsOf(chart: {
+  sections: { bars: { chord: string }[][] }[];
+}): string[] {
+  return chart.sections[0]?.bars.map((b) => b[0]?.chord ?? "") ?? [];
+}
+
+const CHART_BARS: Record<string, string[]> = {
+  "blues-12-bar": barsOf(blues12),
+  "blues-quick-change": barsOf(bluesQuick),
+  "blues-8-bar": barsOf(blues8),
+  "blues-minor": barsOf(bluesMinor),
+  "i-v-vi-iv": barsOf(popProg),
+  "ii-v-i": barsOf(jazzTurn),
+  "rock-16-bar": barsOf(rock16),
+  "one-chord-vamp": barsOf(vamp),
+};
+
+function splitChord(chord: string): { root: string; quality: string } {
+  const m = chord.match(/^([A-G][#b]?)(.*)$/);
+  if (!m) return { root: chord, quality: "" };
+  return { root: m[1], quality: m[2] };
+}
+
+const selectClass =
+  "bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1.5 rounded-[var(--radius-m)] text-sm font-mono cursor-pointer min-h-8";
 
 export const Stage: React.FC = () => {
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [chartId, setChartId] = useState("blues-12-bar");
 
   const {
     tunerOn,
-    toneOn,
-    clickVolume,
     telemetry,
-    setTone,
     setTuner,
-    setClickVolume,
-    transportPlay,
-    transportPause,
-    transportStop,
-    transportSetLoop,
-    transportSetCountIn,
+    transportSeekBar,
     transportSetTempo,
     bandSetStyle,
     bandSetIntensity,
@@ -51,54 +76,42 @@ export const Stage: React.FC = () => {
     bandLoadChart,
     togglePart,
     toggleFollowEnergy,
+    activeSource,
+    setActiveSource,
+    setScreen,
+    currentSong,
+    songSpeed,
+    songTranspose,
+    stemSettings,
+    setSongSpeed,
+    setSongTranspose,
+    updateStemSettings,
+    keysPresent,
   } = useEngineStore();
 
   const tunerData = telemetry.tuner;
   const transport = telemetry.transport;
   const band = telemetry.band;
   const isCountingIn = transport.state === "counting_in";
+  const bars = CHART_BARS[chartId] ?? CHART_BARS["blues-12-bar"];
+  const now = splitChord(band.current_chord || "A7");
+  const next = band.next_chord || "";
+  const pending =
+    band.pending_cue !== "none"
+      ? band.pending_cue
+      : (band.pending_style_id ?? null);
 
-  // Global Keyboard shortcuts per M1d
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input
       if (
         e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLSelectElement
+        e.target instanceof HTMLSelectElement ||
+        e.target instanceof HTMLTextAreaElement
       ) {
         return;
       }
 
       switch (e.key) {
-        case " ":
-          e.preventDefault();
-          if (
-            transport.state === "playing" ||
-            transport.state === "counting_in"
-          ) {
-            transportPause();
-          } else {
-            transportPlay();
-          }
-          break;
-        case "Enter":
-          e.preventDefault();
-          transportStop();
-          break;
-        case "l":
-        case "L":
-          e.preventDefault();
-          transportSetLoop(
-            transport.loop_start_bar,
-            transport.loop_end_bar,
-            !transport.loop_enabled,
-          );
-          break;
-        case "c":
-        case "C":
-          e.preventDefault();
-          transportSetCountIn(transport.count_in_bars > 0 ? 0 : 1);
-          break;
         case "f":
         case "F":
           e.preventDefault();
@@ -160,42 +173,50 @@ export const Stage: React.FC = () => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
-    transport,
     band,
-    transportPlay,
-    transportPause,
-    transportStop,
-    transportSetLoop,
-    transportSetCountIn,
-    transportSetTempo,
+    transport.bpm,
     bandSetIntensity,
     bandCue,
     togglePart,
+    transportSetTempo,
   ]);
 
+  const sourceBtn = (id: "band" | "song" | "lyria", label: string) => {
+    const active = activeSource === id;
+    return (
+      <button
+        type="button"
+        onClick={() => setActiveSource(id)}
+        className={`min-h-8 px-3 rounded-[var(--radius-m)] text-sm cursor-pointer border ${
+          active
+            ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--accent)]"
+            : "bg-transparent border-[var(--line)] text-[var(--fg-1)] hover:bg-[var(--bg-2)]"
+        }`}
+      >
+        {label}
+      </button>
+    );
+  };
+
   return (
-    <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
-      {/* Configuration row: Chart, Style, Intensity, Click, Tuner */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] p-4 rounded-[var(--radius-m)] border border-[var(--line)]">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-mono text-[var(--fg-2)] tracking-wider">
-              Source
-            </span>
-            <StatusPill status="live" label="Jam Band" />
-          </div>
-
-          <div className="h-4 w-px bg-[var(--line)]" />
-
-          {/* Chart selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
-              Chart
-            </span>
+    <div className="flex flex-col gap-8 max-w-[1400px] mx-auto w-full h-full">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-[var(--fg-2)] mr-1">Source</span>
+          {sourceBtn("band", "Band")}
+          {sourceBtn("song", "Song")}
+          {sourceBtn("lyria", "Lyria")}
+        </div>
+        {activeSource === "band" && (
+          <div className="flex items-center gap-3">
             <select
-              defaultValue="blues-12-bar"
-              onChange={(e) => bandLoadChart(e.target.value)}
-              className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1 rounded text-xs font-mono cursor-pointer"
+              value={chartId}
+              onChange={(e) => {
+                setChartId(e.target.value);
+                bandLoadChart(e.target.value);
+              }}
+              className={selectClass}
+              aria-label="Chart"
             >
               {PRESET_CHARTS.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -203,19 +224,11 @@ export const Stage: React.FC = () => {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="h-4 w-px bg-[var(--line)]" />
-
-          {/* Style selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
-              Style
-            </span>
             <select
               value={band.style_id}
               onChange={(e) => bandSetStyle(e.target.value)}
-              className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1 rounded text-xs font-mono cursor-pointer"
+              className={selectClass}
+              aria-label="Style"
             >
               {PRESET_STYLES.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -224,14 +237,60 @@ export const Stage: React.FC = () => {
               ))}
             </select>
           </div>
+        )}
+      </div>
 
-          <div className="h-4 w-px bg-[var(--line)]" />
-
-          {/* Intensity control */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
-              Intensity
+      <div className="flex items-end gap-12 min-h-[160px]">
+        <div className="leading-none">
+          {isCountingIn ? (
+            <span
+              className="font-semibold tabular-nums text-[var(--accent)]"
+              style={{
+                fontSize: "clamp(96px, 12vw, 144px)",
+                opacity: transport.beat % 2 === 0 ? 1 : 0.45,
+              }}
+            >
+              {transport.beat}
             </span>
+          ) : (
+            <span
+              className="font-semibold tabular-nums tracking-tight text-[var(--fg-0)]"
+              style={{ fontSize: "clamp(96px, 12vw, 144px)" }}
+            >
+              {now.root}
+              {now.quality && (
+                <span
+                  className="text-[var(--fg-1)]"
+                  style={{ fontSize: "0.45em" }}
+                >
+                  {now.quality}
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+        {next && !isCountingIn && (
+          <div className="pb-3" aria-live="polite">
+            <div className="text-sm text-[var(--fg-2)] mb-1">next</div>
+            <div
+              className="font-medium tabular-nums text-[var(--fg-1)]"
+              style={{ fontSize: "clamp(32px, 5vw, 56px)", lineHeight: 1 }}
+            >
+              {next}
+            </div>
+          </div>
+        )}
+        {pending && (
+          <div className="pb-4 px-3 py-1 rounded-full border border-[var(--accent)] text-[var(--accent)] text-sm font-mono">
+            at next bar {pending}
+          </div>
+        )}
+      </div>
+
+      {activeSource === "band" && (
+        <div className="flex flex-wrap items-center gap-6">
+          <label className="flex items-center gap-2 text-sm text-[var(--fg-1)]">
+            Intensity
             <input
               type="range"
               min={0}
@@ -241,312 +300,219 @@ export const Stage: React.FC = () => {
               onChange={(e) =>
                 bandSetIntensity(Number.parseFloat(e.target.value))
               }
-              className="w-20 accent-[var(--accent)] cursor-pointer"
+              className="w-28 accent-[var(--accent)] cursor-pointer"
             />
-            <span className="text-xs font-mono tabular-nums text-[var(--fg-1)]">
-              {(band.intensity * 100).toFixed(0)}%
+            <span className="font-mono tabular-nums text-[var(--fg-0)] w-10">
+              {Math.round(band.intensity * 100)}
             </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
-              Click
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={clickVolume}
-              onChange={(e) =>
-                setClickVolume(Number.parseFloat(e.target.value))
-              }
-              className="w-16 accent-[var(--accent)] cursor-pointer"
-            />
-          </div>
-          <Toggle checked={tunerOn} onChange={setTuner} label="Tuner" />
+          </label>
           <Toggle
-            checked={toneOn}
-            onChange={(c) => setTone(c, 440)}
-            label="Tone"
+            checked={!band.mute_drums}
+            onChange={() => togglePart("drums")}
+            label="Drums"
           />
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setShowShortcuts(true)}
-          >
-            ?
-          </Button>
-        </div>
-      </div>
-
-      {/* Live Steering Row: Parts Muting, Energy Following, Cues, Next-Bar Indicator */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] px-4 py-2.5 rounded-[var(--radius-m)] border border-[var(--line)]">
-        {/* Parts Muting */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs uppercase font-mono text-[var(--fg-2)] tracking-wider mr-1">
-            Parts
-          </span>
-          <Button
-            size="sm"
-            variant={band.mute_drums ? "secondary" : "primary"}
-            onClick={() => togglePart("drums")}
-          >
-            {band.mute_drums ? "Drums [Muted]" : "Drums"}
-          </Button>
-          <Button
-            size="sm"
-            variant={band.mute_bass ? "secondary" : "primary"}
-            onClick={() => togglePart("bass")}
-          >
-            {band.mute_bass ? "Bass [Muted]" : "Bass"}
-          </Button>
-          <Button
-            size="sm"
-            variant={band.mute_comp ? "secondary" : "primary"}
-            onClick={() => togglePart("comp")}
-          >
-            {band.mute_comp ? "Comp [Muted]" : "Comp"}
-          </Button>
-        </div>
-
-        <div className="h-4 w-px bg-[var(--line)]" />
-
-        {/* Energy Following */}
-        <div className="flex items-center gap-3">
-          <Button
-            size="sm"
-            variant={band.follow_energy ? "primary" : "secondary"}
-            onClick={toggleFollowEnergy}
-          >
-            {band.follow_energy
-              ? "Energy Following: ON"
-              : "Energy Following: OFF"}
-          </Button>
-          {band.follow_energy && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] uppercase font-mono text-[var(--fg-2)]">
-                DI Dynamics
-              </span>
-              <div className="w-16 h-2 bg-[var(--bg-2)] rounded overflow-hidden border border-[var(--line)]">
-                <div
-                  className="h-full bg-[var(--accent)] transition-all duration-150"
-                  style={{ width: `${Math.round(band.current_energy * 100)}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="h-4 w-px bg-[var(--line)]" />
-
-        {/* Cues Bar */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs uppercase font-mono text-[var(--fg-2)] tracking-wider mr-1">
-            Cues
-          </span>
-          <Button
-            size="sm"
-            variant={
-              band.pending_cue === "fill" || band.active_cue === "fill"
-                ? "primary"
-                : "secondary"
-            }
-            onClick={() => bandCue("fill")}
-          >
-            Fill
-          </Button>
-          <Button
-            size="sm"
-            variant={
-              band.pending_cue === "crash" || band.active_cue === "crash"
-                ? "primary"
-                : "secondary"
-            }
-            onClick={() => bandCue("crash")}
-          >
-            Crash
-          </Button>
-          <Button
-            size="sm"
-            variant={
-              band.pending_cue === "stop" || band.active_cue === "stop"
-                ? "danger"
-                : "secondary"
-            }
-            onClick={() => bandCue("stop")}
-          >
-            Stop
-          </Button>
-          <Button
-            size="sm"
-            variant={
-              band.pending_cue === "ending" || band.active_cue === "ending"
-                ? "primary"
-                : "secondary"
-            }
-            onClick={() => bandCue("ending")}
-          >
-            Ending
-          </Button>
-        </div>
-
-        {/* At Next Bar Indicator Badge */}
-        {(band.pending_cue !== "none" || band.pending_style_id != null) && (
+          <Toggle
+            checked={!band.mute_bass}
+            onChange={() => togglePart("bass")}
+            label="Bass"
+          />
+          <Toggle
+            checked={!band.mute_comp}
+            onChange={() => togglePart("comp")}
+            label="Comp"
+          />
+          <Toggle
+            checked={band.follow_energy}
+            onChange={() => toggleFollowEnergy()}
+            label="Follow"
+          />
           <div className="flex items-center gap-2 ml-auto">
-            <span className="text-xs font-mono text-[var(--accent)] animate-pulse bg-[var(--bg-2)] px-2 py-0.5 rounded border border-[var(--accent)]">
-              Next bar:{" "}
-              <strong className="uppercase">
-                {band.pending_cue !== "none"
-                  ? band.pending_cue
-                  : band.pending_style_id}
-              </strong>
-            </span>
+            {(["fill", "crash", "stop", "ending"] as const).map((cue) => (
+              <Button
+                key={cue}
+                size="sm"
+                variant={
+                  band.pending_cue === cue || band.active_cue === cue
+                    ? cue === "stop"
+                      ? "danger"
+                      : "primary"
+                    : "secondary"
+                }
+                onClick={() => bandCue(cue)}
+                className="min-h-8 capitalize"
+              >
+                {cue}
+              </Button>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Main stage readouts: Chord Now/Next & Tuner/Tempo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Chord Now & Next readout */}
-        <Panel className="flex flex-col items-center justify-center min-h-[260px]">
-          {isCountingIn ? (
-            <BigReadout
-              value={`${transport.bar} : ${transport.beat}`}
-              label="Count-In (Get Ready)"
-              highlight={true}
-            />
-          ) : (
-            <BigReadout
-              value={band.current_chord || "A7"}
-              subValue={band.next_chord ? `Next: ${band.next_chord}` : ""}
-              label="Active Chord"
-              highlight={true}
-            />
-          )}
-        </Panel>
-
-        {/* Guitar Tuner or Tempo */}
-        <Panel className="flex flex-col items-center justify-center min-h-[260px]">
-          {tunerOn ? (
-            <BigReadout
-              value={tunerData?.note ?? "--"}
-              label="Guitar Tuner (DI Input)"
-              cents={tunerData?.cents}
-              subValue={tunerData ? `${tunerData.hz.toFixed(1)} Hz` : ""}
-              highlight={tunerData ? Math.abs(tunerData.cents) < 5 : false}
-            />
-          ) : (
-            <>
-              <BigReadout
-                value={`${transport.bpm.toFixed(0)}`}
-                subValue="BPM"
-                label="Tempo"
+      {activeSource === "song" &&
+        (currentSong ? (
+          <div className="flex flex-wrap items-center gap-6">
+            <label className="flex items-center gap-2 text-sm text-[var(--fg-1)]">
+              Speed
+              <input
+                type="range"
+                min={0.5}
+                max={1.5}
+                step={0.05}
+                value={songSpeed}
+                onChange={(e) =>
+                  setSongSpeed(Number.parseFloat(e.target.value))
+                }
+                className="w-28 accent-[var(--accent)] cursor-pointer"
               />
-              <div className="flex items-center gap-2 mt-4">
-                <Button
-                  size="sm"
-                  onClick={() => transportSetTempo(transport.bpm - 5)}
-                >
-                  -5
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => transportSetTempo(transport.bpm - 1)}
-                >
-                  -1
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => transportSetTempo(transport.bpm + 1)}
-                >
-                  +1
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => transportSetTempo(transport.bpm + 5)}
-                >
-                  +5
-                </Button>
-              </div>
+              <span className="font-mono tabular-nums">
+                {Math.round(songSpeed * 100)}%
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-[var(--fg-1)]">
+              Transpose
+              <input
+                type="range"
+                min={-6}
+                max={6}
+                step={1}
+                value={songTranspose}
+                onChange={(e) =>
+                  setSongTranspose(Number.parseInt(e.target.value, 10))
+                }
+                className="w-28 accent-[var(--accent)] cursor-pointer"
+              />
+              <span className="font-mono tabular-nums">
+                {songTranspose > 0 ? `+${songTranspose}` : songTranspose}
+              </span>
+            </label>
+            {(
+              [
+                ["vocalsMute", "Vocals"],
+                ["drumsMute", "Drums"],
+                ["bassMute", "Bass"],
+                ["otherMute", "Other"],
+              ] as const
+            ).map(([key, label]) => (
+              <Toggle
+                key={key}
+                checked={!stemSettings[key]}
+                onChange={() =>
+                  updateStemSettings({ [key]: !stemSettings[key] })
+                }
+                label={label}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-[var(--fg-1)] text-sm">
+            Drop an audio file in Songs.{" "}
+            <button
+              type="button"
+              className="text-[var(--accent)] cursor-pointer underline"
+              onClick={() => setScreen("songs")}
+            >
+              Open Songs
+            </button>
+          </div>
+        ))}
+
+      {activeSource === "lyria" && (
+        <p className="text-sm text-[var(--fg-1)]">
+          {keysPresent.gemini
+            ? "Lyria RealTime is not wired yet. The offline generator in AI Music is the stand-in."
+            : "Lyria needs a Gemini key in Settings. Until then the band stays on this Stage."}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-end gap-8">
+        <Meter
+          label="Guitar"
+          peakDb={telemetry.input_level.peak_db}
+          rmsDb={telemetry.input_level.rms_db}
+        />
+        <Meter
+          label="Band"
+          peakDb={telemetry.output_level.peak_db}
+          rmsDb={telemetry.output_level.rms_db}
+        />
+        <div className="flex items-baseline gap-3 font-mono tabular-nums">
+          <Toggle checked={tunerOn} onChange={setTuner} label="Tuner" />
+          {tunerOn && (
+            <>
+              <span className="text-[48px] font-medium leading-none text-[var(--fg-0)]">
+                {tunerData?.note ?? "--"}
+              </span>
+              <span
+                className={`text-sm ${
+                  tunerData && Math.abs(tunerData.cents) < 5
+                    ? "text-[var(--ok)]"
+                    : "text-[var(--fg-1)]"
+                }`}
+              >
+                {tunerData
+                  ? `${tunerData.cents > 0 ? "+" : ""}${tunerData.cents.toFixed(0)} c`
+                  : ""}
+              </span>
             </>
           )}
-        </Panel>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowShortcuts(true)}
+          className="ml-auto min-h-8 px-3 text-sm text-[var(--fg-2)] hover:text-[var(--fg-0)] cursor-pointer"
+          aria-label="Keyboard shortcuts"
+        >
+          ?
+        </button>
       </div>
 
-      {/* Realtime Signal Telemetry */}
-      <Panel title="Signal Telemetry">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-          <Meter
-            label="Input (Guitar DI)"
-            peakDb={telemetry.input_level.peak_db}
-            rmsDb={telemetry.input_level.rms_db}
-            width="w-full"
-          />
-          <Meter
-            label="Master Output"
-            peakDb={telemetry.output_level.peak_db}
-            rmsDb={telemetry.output_level.rms_db}
-            width="w-full"
-          />
-        </div>
-      </Panel>
+      {activeSource === "band" && (
+        <ChartStrip
+          bars={bars}
+          currentBar={transport.bar}
+          loopEnabled={transport.loop_enabled}
+          loopStart={transport.loop_start_bar}
+          loopEnd={transport.loop_end_bar}
+          onSeek={transportSeekBar}
+        />
+      )}
 
-      {/* Shortcuts Help Modal */}
       {showShortcuts && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[var(--bg-1)] border border-[var(--line)] rounded-[var(--radius-l)] max-w-md w-full p-6 shadow-2xl">
+        <div className="fixed inset-0 bg-[var(--bg-0)]/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--bg-1)] border border-[var(--line)] rounded-[var(--radius-l)] max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold tracking-wide uppercase font-mono text-[var(--fg-0)]">
-                Keyboard Shortcuts
+              <h2 className="text-sm font-medium text-[var(--fg-0)]">
+                Shortcuts
               </h2>
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={() => setShowShortcuts(false)}
               >
-                ✕
+                Close
               </Button>
             </div>
-            <div className="space-y-2 text-xs font-mono text-[var(--fg-1)]">
-              <div className="flex justify-between py-1 border-b border-[var(--line)]">
-                <span className="text-[var(--fg-0)]">Space</span>
-                <span>Play / Pause</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[var(--line)]">
-                <span className="text-[var(--fg-0)]">Enter</span>
-                <span>Stop</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[var(--line)]">
-                <span className="text-[var(--fg-0)]">L</span>
-                <span>Toggle Loop</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[var(--line)]">
-                <span className="text-[var(--fg-0)]">C</span>
-                <span>Toggle Count-In</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[var(--line)]">
-                <span className="text-[var(--fg-0)]">F / K / S / E</span>
-                <span>Cue: Fill / Crash / Stop / End</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[var(--line)]">
-                <span className="text-[var(--fg-0)]">M / B / P</span>
-                <span>Mute: Drums / Bass / Comp</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[var(--line)]">
-                <span className="text-[var(--fg-0)]">↑ / ↓</span>
-                <span>Intensity ±5%</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[var(--line)]">
-                <span className="text-[var(--fg-0)]">← / →</span>
-                <span>Tempo ±1 BPM</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-[var(--fg-0)]">?</span>
-                <span>Toggle this help</span>
-              </div>
+            <div className="space-y-2 text-sm font-mono text-[var(--fg-1)]">
+              {[
+                ["Space", "Play / Pause"],
+                ["Enter", "Stop"],
+                ["R", "Record"],
+                ["L", "Loop"],
+                ["C", "Count-in"],
+                ["T", "Talk to Jo"],
+                ["F K S E", "Fill / Crash / Stop / End"],
+                ["M B P", "Drums / Bass / Comp"],
+                ["Up / Down", "Intensity"],
+                ["Left / Right", "Tempo"],
+              ].map(([key, action]) => (
+                <div
+                  key={key}
+                  className="flex justify-between py-1 border-b border-[var(--line)]"
+                >
+                  <span className="text-[var(--fg-0)]">{key}</span>
+                  <span>{action}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

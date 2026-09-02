@@ -6,7 +6,7 @@ export interface ScreenDescriptor {
 
 export const SCREENS: ScreenDescriptor[] = [
   { id: "stage", label: "Stage", iconName: "Guitar" },
-  { id: "jo", label: "Jo AI", iconName: "Microphone" },
+  { id: "jo", label: "Jo", iconName: "Microphone" },
   { id: "songs", label: "Songs", iconName: "MusicNotes" },
   { id: "ai-music", label: "AI Music", iconName: "Waveform" },
   { id: "sessions", label: "Sessions", iconName: "Record" },

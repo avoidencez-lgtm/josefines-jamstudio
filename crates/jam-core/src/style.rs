@@ -97,28 +97,3 @@ pub struct Style {
     pub endings: Vec<DrumPattern>,
     pub humanize: StyleHumanize,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VelocityLayer {
-    pub velocity: (f32, f32),
-    pub files: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KitInstrument {
-    pub name: String,
-    #[serde(default)]
-    pub choke_group: Option<String>,
-    pub layers: Vec<VelocityLayer>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Kit {
-    pub schema_version: u32,
-    pub id: String,
-    pub name: String,
-    pub instruments: Vec<KitInstrument>,
-}

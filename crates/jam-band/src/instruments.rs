@@ -1,5 +1,4 @@
-//! instruments: Synthesizers and sampled instruments for bass and comping.
-//! Implements Sf2Synth with pure Rust fallback and rustysynth integration.
+//! instruments: bass and comp synthesizers.
 
 use jam_core::timeline::SAMPLE_RATE;
 

@@ -1,12 +1,8 @@
 # Josefines Jamstudio
 
-A premium desktop AI jam studio for one guitarist and his rig: a virtual band that reads a chord chart, a voice bandleader called **Jo** who changes the band while his hands stay on the guitar, real songs with the guitar removed and the chords on screen, Google Lyria's live generative band, MIDI control of the real amp and pedalboard, and every jam recorded, reviewed and exportable to Logic Pro.
+A desktop AI jam studio for one guitarist and his rig: a virtual band that reads a chord chart, a voice bandleader called **Jo**, real songs with guitar-out stems, MIDI control of the amp and pedalboard, and every jam recorded for review and Logic Pro export.
 
-> **Status: planning complete, no application code yet.** The architecture, the build plan and the repository skeleton were written on 2026-09-02. The app is being built milestone by milestone by Gemini 3.8 Flash in Google Antigravity; the status board in [docs/plan/00-README.md](docs/plan/00-README.md) is the truth about what works.
-
-## The idea
-
-The guitar's tone is always made by hardware: HeadRush Pedalboard → Hughes & Kettner Black Spirit 200 → Vox 4x12, zero latency. The app **listens and plays**: it takes the dry DI and the processed signal the HeadRush already sends over USB, plays the band back on the HeadRush's return channels so guitar and band meet in the headphones, and never sits in the monitoring path.
+The guitar's tone is always hardware. The app listens and plays. It is never in the monitoring path.
 
 ```
 Guitar ─► HeadRush ─► Black Spirit 200 ─► Vox 4x12
@@ -16,34 +12,41 @@ Guitar ─► HeadRush ─► Black Spirit 200 ─► Vox 4x12
         Band · Song · Lyria · Jo · Recorder · Logic export
 ```
 
-## What it does (the four pillars)
+> **Status: v0.1.0 on `main`.** Milestones M0–M7 are merged. The offline band, transport, recorder, MIDI rig profiles and Stage UI run without cloud keys. Lyria RealTime, ElevenLabs Music and neural stem separation still need provider wiring; until then the app stays offline and says so.
 
-1. **Virtual band.** Drums, bass and comp from a chord chart in a style (blues shuffle, straight rock, funk, swing, 6/8 ballad, metal), any key, 40 to 240 bpm, count-in, fills and endings on command, intensity that follows how hard he plays.
-2. **Jo, the voice bandleader.** Hold a pedal or a key, say "blues in A, ninety, shuffle", release. Jo confirms in her own voice and counts it in. She explains, loops sections, and coaches from the recorded take.
-3. **Real songs.** Drop an audio file; get stems (guitar removed), chords, beats, key and sections; slow it down, transpose it, loop the solo.
-4. **AI music.** Lyria RealTime as an endless, steerable band; Lyria 3 and ElevenLabs Music for full tracks that land in the library already analysed.
+## What works offline
 
-Plus rig scenes over MIDI, session recording with an LLM review, and export to Logic Pro 12 (stems + tempo map + markers).
+1. **Virtual band.** Six styles, preset charts, count-in, cues, intensity, part mutes.
+2. **Jo.** Push-to-talk (`T`) with an offline intent parser. Cloud STT/TTS when keys are in Settings.
+3. **Recorder.** Multi-track takes, latency calibration, DAW export (stems + tempo map).
+4. **Rig.** Profile/scene MIDI maps for HeadRush, Black Spirit 200 and common modelers.
 
 ## Stack
 
-Tauri 2 · Rust engine (`cpal`, lock-free render-ahead, `midir`) · React + TypeScript + Tailwind · Google Gemini (LLM, Lyria) · ElevenLabs (voice, music, stems) · Music.ai (analysis). Bring your own keys; they live in the OS keychain. Public repository under Apache-2.0.
+Tauri 2 · Rust (`cpal`, lock-free render-ahead, `midir`) · React + TypeScript + Tailwind · keys in the OS keychain. Apache-2.0.
+
+## Run
+
+```powershell
+corepack pnpm install --frozen-lockfile
+$env:JAM_HEADLESS = "1"
+$env:JAM_FAKE_INPUT = "tests/fixtures/audio/guitar-e-blues-120.wav"
+corepack pnpm tauri dev
+```
+
+Gates and invariants: [AGENTS.md](AGENTS.md). Hardware setup: [docs/QUICKSTART.md](docs/QUICKSTART.md).
 
 ## Documents
 
 | | |
 |---|---|
-| [AGENTS.md](AGENTS.md) | The invariants every change obeys |
-| [docs/plan/](docs/plan/00-README.md) | Goal, Definition of Done, status board, build plan M0 to M7, research, kickoff, owner gates |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Process model, buses, clock, IPC contract, data model, seams |
-| [docs/EXTENDING.md](docs/EXTENDING.md) | How to add a style, chart, rig profile, control map, Jo tool, provider, instrument, screen |
-| [docs/DESIGN.md](docs/DESIGN.md) | The dark stage design system |
-| [docs/adr/](docs/adr/0001-tauri-rust-not-juce.md) | Decisions and why |
-| [docs/hardware/](docs/hardware/cabling.md) | HeadRush, Black Spirit 200, Scarlett 2i2, cabling, shopping list |
-
-## Building
-
-From M0 onward: see the commands in [AGENTS.md](AGENTS.md) and the prerequisites in [docs/plan/05-kickoff.md](docs/plan/05-kickoff.md). Releases (macOS Apple Silicon `.dmg`, Windows installer) appear under GitHub Releases from M7.
+| [AGENTS.md](AGENTS.md) | Invariants |
+| [docs/plan/](docs/plan/00-README.md) | Goal, Definition of Done, status board M0–M7 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Process model, clock, IPC, seams |
+| [docs/EXTENDING.md](docs/EXTENDING.md) | Add a style, chart, rig, tool, provider, screen |
+| [docs/DESIGN.md](docs/DESIGN.md) | Dark stage design system |
+| [docs/adr/](docs/adr/0001-tauri-rust-not-juce.md) | Decisions |
+| [docs/hardware/](docs/hardware/cabling.md) | HeadRush, Black Spirit 200, Scarlett 2i2 |
 
 ## Licence
 
