@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { FootControls } from "../components/FootControls";
+import { SongLab } from "../components/SongLab";
 import { ipc, isPreview } from "../ipc/client";
 import { transposeChart } from "../lib/chart/transpose";
 import {
@@ -143,6 +144,7 @@ export function Originals() {
         </div>
       </section>
       <FootControls />
+      <SongLab />
       {w.message && <output className="song-message">{w.message}</output>}
       {isPreview && (
         <p className="song-help">

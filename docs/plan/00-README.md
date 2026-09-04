@@ -102,3 +102,10 @@ section markers and editable band MIDI; Logic export remains available.
 See [the user guide and owner acceptance session](../guide/songwriting.md).
 This does not complete the broader M3/M4 provider work or the hardware/Logic gates.
 Verification results belong in the associated PR; owner acceptance remains pending.
+
+The API follow-up connects OpenAI Responses, Claude Messages and OpenRouter
+alongside Gemini, with shared editable model/limit settings and a Song Lab for
+reviewable chords, bridges, lyric seeds and arrangement advice. This is text-only;
+M3/M4 cloud audio remains unimplemented. Live provider/account acceptance is
+pending; documented synthetic fixtures are not live API evidence.
+See [the current API guide](../guide/api-options.md).

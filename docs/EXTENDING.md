@@ -151,3 +151,20 @@ stem roles and actual MIDI. Run `cargo test -p jam-audio reaper_bundle` for pack
 and `lua tests/reaper-import.lua` for script behavior against the API boundary.
 The Lua check is a standalone test, not an application runtime dependency. Both
 checks complement the real Mac/REAPER owner acceptance session in the guide.
+
+## Current text-provider extension recipe (2026-09-04)
+
+This implemented slice supersedes the planned LLM recipe above. Add a request
+builder/response reader to `src/lib/jo/providers.ts`'s `BRAINS` registry, plus the
+fixed HTTPS origin/auth row in `src-tauri/src/net.rs`'s `PROVIDERS` allowlist for a
+new service. Reuse `JO_TOOLS` and `validateToolCall`; never dispatch raw responses.
+Settings and Song Lab consume the registry directly. A different model on an
+existing service needs only a model ID change in Settings, not a package or code.
+
+Add a documented synthetic response to `tests/fixtures/providers/brains.json`
+and extend `tests/invariants/providers.test.ts` to prove the same tool call and
+malformed/truncated-response refusal. Do not label synthetic fixtures as recorded
+calls. Run the frontend tests and Rust `net::tests`; leave the core snapshot
+unchanged. No additional SDK is needed for these non-streaming text requests.
+Settings persist versioned `ai` preferences through existing settings IPC,
+retaining unknown fields. See [setup, limits and audio API options](guide/api-options.md).

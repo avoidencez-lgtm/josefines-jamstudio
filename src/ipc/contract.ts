@@ -308,6 +308,8 @@ export interface ProviderFetchRequest {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   headers?: Record<string, string>;
   body?: string | null;
+  model?: string;
+  estimatedCostUsd?: number | null;
 }
 
 export interface ProviderFetchResponse {
@@ -332,6 +334,8 @@ export interface CostEntry {
   bytesOut: number;
   bytesIn: number;
   error?: string | null;
+  model?: string | null;
+  estimatedCostUsd?: number | null;
 }
 
 export interface CostTotal {

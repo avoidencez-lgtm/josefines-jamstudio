@@ -4,11 +4,8 @@
  * the request and reading the reply are exported so they can be tested offline.
  */
 
-import { providerJson } from "../net/providerFetch";
 import { JO_SYSTEM_PROMPT, type JoMessage, type JoToolCall } from "./persona";
 import { JO_TOOLS } from "./tools";
-
-export const JO_MODEL = "gemini-2.5-flash";
 
 /** What Jo needs to know about the room right now. */
 export interface JoContext {
@@ -133,17 +130,4 @@ export function readResponse(res: GeminiResponse): {
       ? "On it."
       : "I didn't catch that. Try 'faster', 'play some funk' or 'drop the bass'.");
   return { reply, toolCalls };
-}
-
-export async function askGemini(
-  history: JoMessage[],
-  userText: string,
-  ctx: JoContext,
-): Promise<{ reply: string; toolCalls: JoToolCall[] }> {
-  const res = await providerJson<GeminiResponse>(
-    "gemini",
-    `/v1beta/models/${JO_MODEL}:generateContent`,
-    buildRequest(history, userText, ctx),
-  );
-  return readResponse(res);
 }

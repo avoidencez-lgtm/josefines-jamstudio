@@ -1,5 +1,6 @@
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
+import { AiSettings } from "../components/AiSettings";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
@@ -107,28 +108,20 @@ export const Settings: React.FC = () => {
     settings,
     engineStatus,
     isPreview,
-    keysPresent,
     refreshDevices,
     loadSettings,
     applyAudioConfig,
     refreshEngineStatus,
     restartEngine,
-    checkKey,
-    setKey,
-    deleteKey,
   } = useEngineStore();
 
-  const [geminiKeyInput, setGeminiKeyInput] = useState("");
-  const [elevenKeyInput, setElevenKeyInput] = useState("");
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     refreshDevices();
     loadSettings();
     refreshEngineStatus();
-    checkKey("gemini");
-    checkKey("elevenlabs");
-  }, [refreshDevices, loadSettings, refreshEngineStatus, checkKey]);
+  }, [refreshDevices, loadSettings, refreshEngineStatus]);
 
   const applyAudio = async (patch: Partial<AudioConfig>) => {
     if (!settings) return;
@@ -294,102 +287,7 @@ export const Settings: React.FC = () => {
         </div>
       </Panel>
 
-      <Panel title="API Credentials (Stored in OS Keychain)">
-        <div className="flex flex-col gap-6">
-          {/* Gemini */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-[var(--fg-0)]">
-                Google Gemini
-              </span>
-              <StatusPill
-                status={keysPresent.gemini ? "ok" : "idle"}
-                label={keysPresent.gemini ? "Configured" : "Missing"}
-              />
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                placeholder={
-                  keysPresent.gemini
-                    ? "••••••••••••••••"
-                    : "Paste Gemini API Key"
-                }
-                value={geminiKeyInput}
-                onChange={(e) => setGeminiKeyInput(e.target.value)}
-                className="flex-1 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
-              />
-              <Button
-                variant="primary"
-                onClick={async () => {
-                  if (geminiKeyInput) {
-                    await setKey("gemini", geminiKeyInput);
-                    setGeminiKeyInput("");
-                  }
-                }}
-              >
-                Save
-              </Button>
-              {keysPresent.gemini && (
-                <Button variant="danger" onClick={() => deleteKey("gemini")}>
-                  Delete
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* ElevenLabs */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-[var(--fg-0)]">
-                ElevenLabs
-              </span>
-              <StatusPill
-                status={keysPresent.elevenlabs ? "ok" : "idle"}
-                label={keysPresent.elevenlabs ? "Configured" : "Missing"}
-              />
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                placeholder={
-                  keysPresent.elevenlabs
-                    ? "••••••••••••••••"
-                    : "Paste ElevenLabs API Key"
-                }
-                value={elevenKeyInput}
-                onChange={(e) => setElevenKeyInput(e.target.value)}
-                className="flex-1 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
-              />
-              <Button
-                variant="primary"
-                onClick={async () => {
-                  if (elevenKeyInput) {
-                    await setKey("elevenlabs", elevenKeyInput);
-                    setElevenKeyInput("");
-                  }
-                }}
-              >
-                Save
-              </Button>
-              {keysPresent.elevenlabs && (
-                <Button
-                  variant="danger"
-                  onClick={() => deleteKey("elevenlabs")}
-                >
-                  Delete
-                </Button>
-              )}
-            </div>
-          </div>
-          <p className="text-xs font-mono text-[var(--fg-2)]">
-            Keys never reach the UI. Every request goes through the Rust{" "}
-            <code>provider_fetch</code> proxy, which only talks to allow-listed
-            hosts and writes one line per call to the usage log below (no
-            request bodies).
-          </p>
-        </div>
-      </Panel>
+      <AiSettings />
 
       <UsageLog />
     </div>
@@ -461,7 +359,7 @@ const UsageLog: React.FC = () => {
           {[...entries].reverse().map((e) => (
             <li
               key={`${e.atMs}-${e.provider}-${e.path}`}
-              className="py-1.5 flex items-center gap-3"
+              className="py-1.5 flex flex-wrap items-center gap-3"
             >
               <span className="text-[var(--fg-2)] w-36 shrink-0 tabular-nums">
                 {new Date(e.atMs).toLocaleString([], {
@@ -490,6 +388,14 @@ const UsageLog: React.FC = () => {
               >
                 {e.method} {e.path}
               </span>
+              {e.model && (
+                <span className="text-[var(--fg-1)] break-all">
+                  {e.model} ·{" "}
+                  {e.estimatedCostUsd == null
+                    ? "cost unknown"
+                    : `est. $${e.estimatedCostUsd.toFixed(4)}`}
+                </span>
+              )}
               <span className="ml-auto text-[var(--fg-2)] tabular-nums shrink-0">
                 {e.durationMs} ms · {formatBytes(e.bytesOut)}↑{" "}
                 {formatBytes(e.bytesIn)}↓

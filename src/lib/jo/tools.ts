@@ -20,6 +20,36 @@ export interface JoToolDeclaration {
   };
 }
 
+/** Validate at the shared execution boundary, including offline and cloud callers. */
+export function validateToolCall(call: {
+  name: string;
+  arguments: Record<string, unknown>;
+}): void {
+  const tool = JO_TOOLS.find((t) => t.name === call.name);
+  if (
+    !tool ||
+    !call.arguments ||
+    typeof call.arguments !== "object" ||
+    Array.isArray(call.arguments)
+  )
+    throw new Error("Unknown or malformed Jo action.");
+  for (const name of tool.parameters.required ?? []) {
+    if (!(name in call.arguments))
+      throw new Error(`Missing ${name} for ${call.name}.`);
+  }
+  for (const [name, value] of Object.entries(call.arguments)) {
+    const property = tool.parameters.properties[name];
+    const actualType = typeof value;
+    if (
+      !property ||
+      actualType !== property.type ||
+      (typeof value === "number" && !Number.isFinite(value)) ||
+      (property.enum && !property.enum.includes(String(value)))
+    )
+      throw new Error(`Invalid ${name} for ${call.name}.`);
+  }
+}
+
 export const JO_TOOLS: JoToolDeclaration[] = [
   {
     name: "songwriting",

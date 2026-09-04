@@ -464,3 +464,27 @@ Reference mixes and MIDI alternatives start muted. Relative file references allo
 moving the export folder between Windows and Mac. Import never opens a network,
 modifies the original audio, or saves over a project. Logic-compatible WAV/MIDI
 exports remain available. This is a one-way performance handoff, not a hosted DAW.
+
+## Implemented text providers and Song Lab (2026-09-04)
+
+This supersedes the planned LLM mechanism in section 6.2 for current Jo requests.
+`src/lib/jo/providers.ts` is the shared registry for Gemini, OpenAI Responses,
+Claude Messages and OpenRouter Chat Completions. It reuses Jo declarations and
+context, normalizes replies and validates every action before dispatch. One user
+request makes one proxy call; there is no automatic paid retry or fallback.
+`settings.ai` stores schemaVersion 1, selected provider and per-provider model,
+output limit and optional prices. It contains no credentials and preserves unknown
+fields through the existing settings commands.
+
+Rust's existing `net.rs` allowlist and keychain inject authentication. Requests
+are bounded to 128 KiB, responses to 2 MiB and time to 90 seconds. Redirects are
+refused so credentials cannot be forwarded to another endpoint. Usage entries
+add optional model/estimatedCostUsd while retaining compatibility with old logs.
+Estimates are approximate metadata, not provider invoices or spending caps.
+
+Song Lab sends text context only, without take/clip audio. It parses bounded
+proposals, validates chords and checks song identity plus the original body before
+applying. The existing version/edit operations preserve the original; recording
+and version/bar limits prevent unsafe application. Generated chords and notes
+remain editable. This does not implement audio generation, analysis uploads,
+cloud speech or DAW hosting. [Current API guide](guide/api-options.md).

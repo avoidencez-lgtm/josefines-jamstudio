@@ -4,9 +4,10 @@ import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
 import { dispatchJoToolCall, speakJoReply } from "../lib/jo/dispatcher";
-import { JO_MODEL, type JoContext, askGemini } from "../lib/jo/gemini";
+import type { JoContext } from "../lib/jo/gemini";
 import { parseNaturalIntent } from "../lib/jo/intent";
 import type { JoMessage, JoToolCall } from "../lib/jo/persona";
+import { BRAINS, askBrain, joRequest, useAi } from "../lib/jo/providers";
 import { useWriting } from "../lib/originals";
 import { useEngineStore } from "../store/engine";
 
@@ -46,8 +47,10 @@ export const Jo: React.FC = () => {
   messagesRef.current = messages;
 
   const { keysPresent, isPreview, notify } = useEngineStore();
-  const useLlm = Boolean(keysPresent.gemini) && !isPreview;
-  const [lastBrain, setLastBrain] = useState<"gemini" | "offline" | null>(null);
+  const { preferences, loaded } = useAi();
+  const useLlm =
+    loaded && Boolean(keysPresent[preferences.selected]) && !isPreview;
+  const [lastBrain, setLastBrain] = useState<string | null>(null);
 
   const snapshotContext = (): JoContext => {
     const s = useEngineStore.getState();
@@ -85,18 +88,27 @@ export const Jo: React.FC = () => {
     };
   };
 
-  /** Gemini when there is a key, the offline parser otherwise (or if Gemini fails). */
+  /** Only the selected provider is contacted; failures fall back to local commands. */
   const think = async (
     history: JoMessage[],
     query: string,
   ): Promise<{ reply: string; toolCalls: JoToolCall[] }> => {
-    if (useLlm) {
+    const current = useAi.getState();
+    const selected = current.preferences.selected;
+    const engine = useEngineStore.getState();
+    if (current.loaded && engine.keysPresent[selected] && !engine.isPreview) {
       try {
-        const out = await askGemini(history, query, snapshotContext());
-        setLastBrain("gemini");
+        const out = await askBrain(
+          joRequest(history, query, snapshotContext()),
+          current.preferences,
+        );
+        setLastBrain(BRAINS[selected].name);
         return out;
       } catch (e) {
-        notify("error", `Jo (Gemini): ${String(e)}. Using the offline parser.`);
+        notify(
+          "error",
+          `Jo (${BRAINS[selected].name}): ${String(e)}. Using the offline parser.`,
+        );
       }
     }
     setLastBrain("offline");
@@ -291,15 +303,15 @@ export const Jo: React.FC = () => {
           <span>
             Brain:{" "}
             {useLlm
-              ? `${JO_MODEL} via provider_fetch`
+              ? `${BRAINS[preferences.selected].name} · ${preferences.models[preferences.selected].model}`
               : isPreview
                 ? "offline intent parser (browser preview)"
-                : "offline intent parser (add a Gemini key in Settings)"}
+                : "offline intent parser (configure your selected provider in Settings)"}
           </span>
           {lastBrain && (
             <span className="text-[10px]">
               last answer:{" "}
-              {lastBrain === "gemini" ? "Gemini" : "offline parser"}
+              {lastBrain === "offline" ? "offline parser" : lastBrain}
             </span>
           )}
         </div>

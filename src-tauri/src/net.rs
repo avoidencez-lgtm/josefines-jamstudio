@@ -54,6 +54,12 @@ pub const PROVIDERS: &[ProviderEntry] = &[
         auth: AuthScheme::HeaderKey("x-api-key"),
         description: "Anthropic Claude (alternative LLM)",
     },
+    ProviderEntry {
+        id: "openrouter",
+        base_url: "https://openrouter.ai",
+        auth: AuthScheme::Bearer,
+        description: "OpenRouter (choose a text model for Jo and Song Lab)",
+    },
 ];
 
 pub fn provider(id: &str) -> Option<&'static ProviderEntry> {
@@ -91,6 +97,10 @@ pub struct FetchRequest {
     pub headers: HashMap<String, String>,
     #[serde(default)]
     pub body: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub estimated_cost_usd: Option<f64>,
 }
 
 fn default_method() -> String {
@@ -118,6 +128,17 @@ const RESERVED_HEADERS: &[&str] = &[
 /// Everything that can be checked without touching the network. Returns the
 /// provider and the full URL.
 pub fn validate(req: &FetchRequest) -> Result<(&'static ProviderEntry, String), String> {
+    if req.body.as_ref().is_some_and(|b| b.len() > 128 * 1024)
+        || req
+            .model
+            .as_ref()
+            .is_some_and(|m| m.len() > 160 || m.chars().any(|c| c.is_control()))
+        || req
+            .estimated_cost_usd
+            .is_some_and(|v| !v.is_finite() || v < 0.0)
+    {
+        return Err("Provider request exceeds the text limit or has invalid cost metadata.".into());
+    }
     let entry = provider(&req.provider)
         .ok_or_else(|| format!("provider \"{}\" is not on the allow-list", req.provider))?;
     let path = req.path.as_str();
@@ -146,7 +167,7 @@ pub fn validate(req: &FetchRequest) -> Result<(&'static ProviderEntry, String), 
 
 /// One line of the usage log. Estimated cost is left to the UI (it knows the model);
 /// the log records what is measurable.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CostEntry {
     /// Unix time in milliseconds.
@@ -161,6 +182,10 @@ pub struct CostEntry {
     pub bytes_in: u64,
     #[serde(default)]
     pub error: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub estimated_cost_usd: Option<f64>,
 }
 
 pub struct CostLog {
@@ -222,7 +247,7 @@ impl CostLog {
             t.calls += 1;
             t.bytes_in += e.bytes_in;
             t.bytes_out += e.bytes_out;
-            if e.status >= 400 || e.error.is_some() {
+            if !(200..300).contains(&e.status) || e.error.is_some() {
                 t.failures += 1;
             }
         }
@@ -253,6 +278,13 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn provider_client() -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(90))
+        .user_agent("josefines-jamstudio/0.1")
+}
+
 /// Performs the request. The key never leaves this function.
 pub async fn provider_fetch(
     req: FetchRequest,
@@ -267,11 +299,7 @@ pub async fn provider_fetch(
         )
     })?;
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(90))
-        .user_agent("josefines-jamstudio/0.1")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = provider_client().build().map_err(|e| e.to_string())?;
     let method = reqwest::Method::from_bytes(req.method.to_ascii_uppercase().as_bytes())
         .map_err(|e| e.to_string())?;
     let mut builder = client.request(method, &url);
@@ -305,10 +333,12 @@ pub async fn provider_fetch(
         bytes_out,
         bytes_in: 0,
         error: None,
+        model: req.model,
+        estimated_cost_usd: req.estimated_cost_usd,
     };
 
     let result = async {
-        let resp = builder
+        let mut resp = builder
             .send()
             .await
             .map_err(|e| format!("{}: {e}", entry.id))?;
@@ -319,10 +349,19 @@ pub async fn provider_fetch(
             .filter(|(k, _)| !k.as_str().eq_ignore_ascii_case("set-cookie"))
             .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.to_string(), v.to_string())))
             .collect();
-        let body = resp
-            .text()
+        let mut bytes = Vec::new();
+        while let Some(chunk) = resp
+            .chunk()
             .await
-            .map_err(|e| format!("{}: {e}", entry.id))?;
+            .map_err(|e| format!("{}: {e}", entry.id))?
+        {
+            if bytes.len() + chunk.len() > 2 * 1024 * 1024 {
+                return Err("Provider response exceeds the 2 MB text limit.".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let body =
+            String::from_utf8(bytes).map_err(|_| "Provider returned non-text data.".to_string())?;
         Ok::<FetchResponse, String>(FetchResponse {
             status,
             headers,
@@ -357,11 +396,19 @@ mod tests {
             method: "POST".into(),
             headers: HashMap::new(),
             body: Some("{}".into()),
+            model: None,
+            estimated_cost_usd: None,
         }
     }
 
     #[test]
     fn only_allow_listed_providers_and_relative_paths() {
+        let (router, url) = validate(&req("openrouter", "/api/v1/chat/completions")).unwrap();
+        assert_eq!(router.auth, AuthScheme::Bearer);
+        assert_eq!(url, "https://openrouter.ai/api/v1/chat/completions");
+        let mut oversized = req("openai", "/v1/responses");
+        oversized.body = Some("x".repeat(128 * 1024 + 1));
+        assert!(validate(&oversized).is_err());
         assert!(validate(&req("gemini", "/v1beta/models")).is_ok());
         let (_, url) = validate(&req("gemini", "/v1beta/models?x=1")).unwrap();
         assert_eq!(
@@ -398,6 +445,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn provider_client_never_follows_a_redirect_with_credentials() {
+        use std::io::Read;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut request = [0; 4096];
+            let _ = stream.read(&mut request).unwrap();
+            write!(stream, "HTTP/1.1 302 Found\r\nLocation: http://{address}/other\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+        });
+        let response = provider_client()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap()
+            .get(format!("http://{address}/test"))
+            .header("x-api-key", "test-only")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
     async fn missing_key_fails_before_any_network() {
         let store = MemoryStore::default();
         let dir = std::env::temp_dir().join(format!("jam-net-{}", std::process::id()));
@@ -429,6 +503,8 @@ mod tests {
                 bytes_out: 100,
                 bytes_in: 200,
                 error: None,
+                model: Some("test-model".into()),
+                estimated_cost_usd: Some(0.01),
             })
             .unwrap();
         }
@@ -444,6 +520,8 @@ mod tests {
         assert_eq!(last2.len(), 2);
         assert_eq!(last2[1].at_ms, 1004);
         assert_eq!(last2[1].path, "/v1/x");
+        assert_eq!(last2[1].model.as_deref(), Some("test-model"));
+        assert_eq!(last2[1].estimated_cost_usd, Some(0.01));
         assert!(!std::fs::read_to_string(log.path())
             .unwrap()
             .contains("SECRET"));

@@ -1,8 +1,10 @@
 import { useEngineStore } from "../../store/engine";
 import { PARTS, changeGroove, useWriting } from "../originals";
 import type { JoToolCall } from "./persona";
+import { validateToolCall } from "./tools";
 
 export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
+  validateToolCall(call);
   const store = useEngineStore.getState();
 
   switch (call.name) {

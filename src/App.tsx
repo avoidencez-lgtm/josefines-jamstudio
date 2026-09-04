@@ -18,6 +18,7 @@ import { EngineStatusPill } from "./components/EngineStatusPill";
 import { Notices } from "./components/Notices";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { listenToController } from "./lib/controller";
+import { useAi } from "./lib/jo/providers";
 import { handleShortcut } from "./lib/shortcuts";
 import { AiMusic } from "./screens/AiMusic";
 import { Jo } from "./screens/Jo";
@@ -51,6 +52,12 @@ export const App: React.FC = () => {
   } = useEngineStore();
 
   const [showHelp, setShowHelp] = useState(false);
+  useEffect(() => {
+    void useAi
+      .getState()
+      .load()
+      .catch((e) => useEngineStore.getState().notify("error", String(e)));
+  }, []);
   useEffect(() => {
     let closed = false;
     let off: (() => void) | undefined;

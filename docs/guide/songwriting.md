@@ -164,3 +164,11 @@ are owner checks, not things a passing software test proves.
    muted reference mixes, editable band notes and save/reopen without missing media.
 
 Record the build commit, device settings, measured offset and any drift. These checks remain pending until performed with the friend.
+
+## Explore another direction
+
+Song Lab adds editable chord alternatives, bridges, lyric seeds and arrangement
+feedback to Write. Jo and Song Lab share a configurable Gemini, OpenAI, Claude or
+OpenRouter connection. See [API setup and creative examples](api-options.md).
+Suggestions use song text, never recorded audio, and wait for explicit application;
+the previous song version is kept before a change. Save to persist it.

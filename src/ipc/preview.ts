@@ -496,6 +496,7 @@ export function createPreviewEngine(
   const originals: Original[] = [];
   const commands: Record<string, (args: Record<string, unknown>) => unknown> = {
     settings_get: () => ({
+      ...config,
       schemaVersion: 1,
       input_device: config.input_device,
       output_device: config.output_device,
@@ -517,6 +518,9 @@ export function createPreviewEngine(
     providers_list: () => [
       { id: "gemini", description: "Google Gemini", hasKey: false },
       { id: "elevenlabs", description: "ElevenLabs", hasKey: false },
+      { id: "openai", description: "OpenAI", hasKey: false },
+      { id: "anthropic", description: "Anthropic Claude", hasKey: false },
+      { id: "openrouter", description: "OpenRouter", hasKey: false },
     ],
     cost_log_list: () => [],
     cost_log_totals: () => [],
