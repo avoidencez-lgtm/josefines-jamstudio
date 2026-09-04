@@ -167,7 +167,9 @@ export function SongLab() {
                 ? "Add bridge & keep original version"
                 : proposal.kind === "chords"
                   ? "Apply chords & keep original version"
-                  : "Keep in song notes"}
+                  : proposal.kind === "lyrics"
+                    ? "Add to section lyrics"
+                    : "Keep in song notes"}
             </Button>
             <Button disabled={busy} onClick={() => setProposal(null)}>
               Dismiss

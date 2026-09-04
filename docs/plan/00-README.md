@@ -127,3 +127,11 @@ streaming, separation and broader M3/M4 work remain incomplete. Paid model acces
 GPU generation and native Mac preview/playback remain owner gates. The local
 synthetic MP4 test passed with duration and AAC signal tolerances. See the
 [music-video guide](../guide/music-video.md) and [ADR 0008](../adr/0008-music-video-workspace.md).
+
+
+The Write redesign puts the song map and beat-aware chord grid first, with local
+harmony exploration, independent section variations, phrase transforms, locked-part
+energy controls and durable section lyrics. AI lyric proposals target the section
+sheet after review. Capture, pedals, layers and versions remain available in focused
+views. See [prior art and limits](../research/write-workspace.md). This UI/text slice
+does not complete native audio, transcription or Mac owner acceptance gates.

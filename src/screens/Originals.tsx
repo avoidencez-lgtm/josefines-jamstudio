@@ -2,16 +2,15 @@ import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { FootControls } from "../components/FootControls";
 import { SongLab } from "../components/SongLab";
+import {
+  ArrangementDesk,
+  EnergyDesk,
+  HarmonyDesk,
+  LyricsDesk,
+} from "../components/WritingDesk";
 import { ipc, isPreview } from "../ipc/client";
 import { transposeChart } from "../lib/chart/transpose";
-import {
-  PARTS,
-  changeGroove,
-  defaultSection,
-  fitTempo,
-  sectionBars,
-  useWriting,
-} from "../lib/originals";
+import { PARTS, changeGroove, fitTempo, useWriting } from "../lib/originals";
 import { useEngineStore } from "../store/engine";
 import "./originals.css";
 
@@ -29,8 +28,6 @@ export function Originals() {
     loadRigProfiles,
   } = useEngineStore();
   const [versionName, setVersionName] = useState("");
-  const [chords, setChords] = useState("");
-  const [chordError, setChordError] = useState("");
   const [captureLength, setCaptureLength] = useState(30);
   const [fitBars, setFitBars] = useState(4);
   const song = w.song;
@@ -38,10 +35,9 @@ export function Originals() {
     song?.body.chart.sections.find((s) => s.id === w.selected) ??
     song?.body.chart.sections[0];
   const band = section && song?.body.sections[section.id];
-  const savedChords =
-    section?.bars
-      .map((b) => b.map((c) => `${c.chord}:${c.beats}`).join(" "))
-      .join(" | ") ?? "";
+  useEffect(() => {
+    if (section && section.id !== w.selected) w.select(section.id);
+  }, [section, w.selected, w.select]);
   useEffect(() => {
     void w.action(async () => {
       await w.refresh();
@@ -50,22 +46,7 @@ export function Originals() {
       await loadRigProfiles();
     });
   }, [w.action, w.refresh, loadTakes, loadLibrary, loadRigProfiles]);
-  useEffect(() => {
-    setChords(savedChords);
-    setChordError("");
-  }, [savedChords]);
-  const run = (fn: () => Promise<void>) =>
-    w.action(async () => {
-      // Commit valid chord text at the same boundary as save/play, so it cannot be silently omitted.
-      if (section && chords !== savedChords) {
-        const bars = sectionBars(chords);
-        w.edit((b) => {
-          const target = b.chart.sections.find((s) => s.id === section.id);
-          if (target) target.bars = bars;
-        });
-      }
-      await fn();
-    });
+  const run = (fn: () => Promise<void>) => w.action(fn);
   const favourite = async (id: string, on: boolean) => {
     await ipc.invoke("takes_favourite", { takeId: id, favourite: on });
     await loadTakes();
@@ -74,9 +55,23 @@ export function Originals() {
   return (
     <div className="song-editor">
       <header className="song-heading">
-        <div>
-          <h1>Write a song</h1>
-          <p>Keep the idea. Shape the band. Make it yours.</p>
+        <div className="write-identity">
+          <h1>Write</h1>
+          {song && (
+            <label className="song-title">
+              Song name
+              <input
+                value={song.body.chart.name}
+                maxLength={120}
+                disabled={w.busy || isRecording}
+                onChange={(e) =>
+                  w.edit((b) => {
+                    b.chart.name = e.target.value;
+                  })
+                }
+              />
+            </label>
+          )}
         </div>
         <div className="song-actions">
           <label>
@@ -103,61 +98,17 @@ export function Originals() {
           </Button>
         </div>
       </header>
-      <section className="capture-strip" aria-label="Retrospective capture">
-        <div>
-          <strong>Keep what you just played</strong>
-          <p>
-            {w.captureSeconds
-              ? `Capture armed: last ${w.captureSeconds} seconds. Audio stays on this computer.`
-              : "Arm capture before playing. Nothing is retained while it is off."}
-          </p>
-        </div>
-        <div className="song-actions">
-          <label>
-            History
-            <select
-              aria-label="Capture length"
-              disabled={w.captureSeconds > 0 || w.busy}
-              value={captureLength}
-              onChange={(e) => setCaptureLength(Number(e.target.value))}
-            >
-              <option value={15}>15 seconds</option>
-              <option value={30}>30 seconds</option>
-              <option value={60}>60 seconds</option>
-            </select>
-          </label>
-          <Button
-            disabled={w.busy || isPreview}
-            onClick={() =>
-              run(() => w.arm(w.captureSeconds ? 0 : captureLength))
-            }
-          >
-            {w.captureSeconds ? "Disarm capture" : "Arm capture"}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!w.captureSeconds || w.busy || isPreview}
-            onClick={() => run(w.keep)}
-          >
-            Keep that (H)
-          </Button>
-        </div>
-      </section>
-      <FootControls />
-      <SongLab />
-      {w.message && <output className="song-message">{w.message}</output>}
-      {isPreview && (
-        <p className="song-help">
-          Preview lets you edit and compare song ideas. Audio capture, playback,
-          recording and export require the desktop app.
-        </p>
+      {w.message && (
+        <output aria-live="polite" className="song-message">
+          {w.message}
+        </output>
       )}
       {!song ? (
         <section className="song-empty">
           <h2>Start with your own idea</h2>
           <p>
-            Create a song, or arm capture and play. You can add a recorded riff
-            whenever you are ready.
+            Create a song, then use Record & layers to capture a riff. You can
+            add a recorded idea whenever you are ready.
           </p>
           <Button variant="primary" onClick={w.createSong}>
             Create a song
@@ -166,24 +117,12 @@ export function Originals() {
       ) : (
         <>
           <div className="song-toolbar">
-            <label className="song-title">
-              Song name
-              <input
-                value={song.body.chart.name}
-                maxLength={120}
-                disabled={w.busy || isRecording}
-                onChange={(e) =>
-                  w.edit((b) => {
-                    b.chart.name = e.target.value;
-                  })
-                }
-              />
-            </label>
             <span className="song-save-state">
               {w.dirty ? "Unsaved changes" : "Saved"}
             </span>
             <Button
               disabled={w.busy || isRecording}
+              hidden={w.view !== "versions"}
               onClick={() => run(w.saveCopy)}
             >
               Save copy
@@ -209,9 +148,10 @@ export function Originals() {
             <Button
               variant="primary"
               disabled={w.busy || isRecording || isPreview}
+              title="Load the current song edits and play from the beginning"
               onClick={() => run(w.play)}
             >
-              Play / hear changes
+              Play song
             </Button>
             <Button
               disabled={w.busy || isRecording || isPreview}
@@ -221,6 +161,7 @@ export function Originals() {
             </Button>
             <Button
               disabled={w.busy || isRecording || isPreview}
+              hidden={w.view !== "record"}
               onClick={() => run(() => w.rehearse(true))}
             >
               Next section
@@ -234,19 +175,37 @@ export function Originals() {
             <Button
               variant={isRecording ? "danger" : "secondary"}
               disabled={w.busy || isPreview}
+              title="Starts at bar 1, playing guitar layers while recording a new take"
               onClick={() => run(w.record)}
             >
-              {isRecording ? "Save take" : "Record / overdub"}
+              {isRecording ? "Save take" : "Record"}
             </Button>
           </div>
-          <p className="song-help">
-            Edits are heard when you press Play. Record starts at bar 1 and
-            plays your guitar layers while capturing a new take. Stop recording
-            before editing.
-          </p>
-          <fieldset disabled={w.busy || isRecording} className="song-workspace">
-            <legend className="sr-only">Song settings</legend>
-            <div className="song-controls">
+          <div className="write-navigation">
+            <nav className="write-views" aria-label="Writing views">
+              {(
+                [
+                  ["compose", "Compose"],
+                  ["lyrics", "Lyrics"],
+                  ["record", "Record & layers"],
+                  ["versions", "Versions"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  type="button"
+                  key={id}
+                  aria-current={w.view === id ? "page" : undefined}
+                  onClick={() => useWriting.setState({ view: id })}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>{" "}
+            <fieldset
+              title="Key transposes chords. Mode changes only the harmony palette. Recorded guitar retains pitch and speed."
+              className="write-key-settings"
+              disabled={w.busy || isRecording}
+            >
               <NumberField
                 label="Tempo (BPM)"
                 value={song.body.chart.defaultBpm}
@@ -306,169 +265,23 @@ export function Originals() {
                   <option value="major">Major</option>
                 </select>
               </label>
-              <p className="song-help">
-                4/4. Key transposes the band; recorded guitar stays at its
-                original pitch and speed.
-              </p>
+            </fieldset>
+          </div>
+          <fieldset disabled={w.busy || isRecording} className="song-workspace">
+            <legend className="sr-only">Song settings</legend>
+            <ArrangementDesk />
+            <div hidden={w.view !== "lyrics"}>
+              <LyricsDesk />
             </div>
-            <section className="song-form">
-              <div className="song-controls">
-                <label className="song-check">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(song.body.toneProfileId)}
-                    disabled={!rigState?.currentProfile}
-                    onChange={(e) =>
-                      w.edit((b) => {
-                        b.toneProfileId = e.target.checked
-                          ? rigState?.currentProfile.id
-                          : null;
-                      })
-                    }
-                  />
-                  Let this song change my rig tones
-                </label>
-                <span className="song-help">
-                  {song.body.toneProfileId ||
-                    rigState?.currentProfile.name ||
-                    "Choose a rig profile"}{" "}
-                  · MIDI output is selected in Rig.
-                </span>
-              </div>
-              <div className="song-section-heading">
-                <h2>Song form</h2>
-                <Button
-                  onClick={() =>
-                    w.edit((b) => {
-                      const id = `section-${crypto.randomUUID()}`;
-                      b.chart.sections.push({
-                        id,
-                        name: "New section",
-                        bars: structuredClone(
-                          section?.bars ?? [[{ chord: "Am", beats: 4 }]],
-                        ),
-                      });
-                      b.chart.arrangement.push({ sectionId: id, repeats: 1 });
-                      b.sections[id] = defaultSection();
-                      w.select(id);
-                    })
-                  }
-                >
-                  Add section
-                </Button>
-              </div>
-              <div className="song-arrangement">
-                {song.body.chart.arrangement.map((a, i) => {
-                  const s = song.body.chart.sections.find(
-                    (s) => s.id === a.sectionId,
-                  );
-                  return (
-                    <div
-                      className={`song-section ${section?.id === a.sectionId ? "selected" : ""}`}
-                      key={`${a.sectionId}-${i}`}
-                    >
-                      <button
-                        type="button"
-                        className="section-select"
-                        aria-pressed={section?.id === a.sectionId}
-                        onClick={() => run(async () => w.select(a.sectionId))}
-                      >
-                        <strong>{s?.name}</strong>
-                        <span>{s?.bars.length} bars</span>
-                      </button>
-                      <NumberField
-                        label={`Repeats: ${s?.name}`}
-                        value={a.repeats}
-                        min={1}
-                        max={16}
-                        change={(v) =>
-                          w.edit((b) => {
-                            b.chart.arrangement[i].repeats = v;
-                          })
-                        }
-                      />
-                      <div className="song-actions">
-                        <button
-                          type="button"
-                          disabled={i === 0}
-                          aria-label={`Move ${s?.name} earlier`}
-                          onClick={() =>
-                            w.edit((b) => {
-                              [
-                                b.chart.arrangement[i - 1],
-                                b.chart.arrangement[i],
-                              ] = [
-                                b.chart.arrangement[i],
-                                b.chart.arrangement[i - 1],
-                              ];
-                            })
-                          }
-                        >
-                          Earlier
-                        </button>
-                        <button
-                          type="button"
-                          disabled={
-                            i === song.body.chart.arrangement.length - 1
-                          }
-                          aria-label={`Move ${s?.name} later`}
-                          onClick={() =>
-                            w.edit((b) => {
-                              [
-                                b.chart.arrangement[i + 1],
-                                b.chart.arrangement[i],
-                              ] = [
-                                b.chart.arrangement[i],
-                                b.chart.arrangement[i + 1],
-                              ];
-                            })
-                          }
-                        >
-                          Later
-                        </button>
-                        <button
-                          type="button"
-                          disabled={song.body.chart.arrangement.length === 1}
-                          aria-label={`Remove ${s?.name} from form`}
-                          onClick={() =>
-                            w.edit((b) => {
-                              b.chart.arrangement.splice(i, 1);
-                            })
-                          }
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <label>
-                Add existing section
-                <select
-                  aria-label="Add existing section"
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value)
-                      w.edit((b) => {
-                        b.chart.arrangement.push({
-                          sectionId: e.target.value,
-                          repeats: 1,
-                        });
-                      });
-                  }}
-                >
-                  <option value="">Choose section</option>
-                  {song.body.chart.sections.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </section>
+            <div hidden={w.view !== "compose"}>
+              <HarmonyDesk key={`${song.id}-${section?.id}`} />
+            </div>
             {section && band && (
-              <section className="song-detail">
+              <details
+                className="song-detail write-disclosure"
+                hidden={w.view !== "compose"}
+              >
+                <summary>Band, groove and section settings</summary>
                 <div className="song-section-heading">
                   <h2>Edit section</h2>
                   <label>
@@ -487,16 +300,29 @@ export function Originals() {
                     />
                   </label>
                 </div>
-                <label>
-                  Chords, separated by bars
-                  <textarea
-                    rows={2}
-                    value={chords}
-                    onChange={(e) => setChords(e.target.value)}
-                    aria-invalid={Boolean(chordError)}
-                    aria-describedby="chord-help"
-                  />
-                </label>
+                <div className="song-controls">
+                  <label className="song-check">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(song.body.toneProfileId)}
+                      disabled={!rigState?.currentProfile}
+                      onChange={(e) =>
+                        w.edit((b) => {
+                          b.toneProfileId = e.target.checked
+                            ? rigState?.currentProfile.id
+                            : null;
+                        })
+                      }
+                    />
+                    Let this song change my rig tones
+                  </label>
+                  <span className="song-help">
+                    {song.body.toneProfileId ||
+                      rigState?.currentProfile.name ||
+                      "Choose a rig profile"}{" "}
+                    · MIDI output is selected in Rig.
+                  </span>
+                </div>
                 {song.body.toneProfileId && (
                   <label>
                     Tone on section entry
@@ -524,36 +350,7 @@ export function Originals() {
                     </select>
                   </label>
                 )}
-                <div className="song-actions">
-                  <Button
-                    onClick={() => {
-                      try {
-                        const bars = sectionBars(chords);
-                        w.edit((b) => {
-                          const s = b.chart.sections.find(
-                            (s) => s.id === section.id,
-                          );
-                          if (s) s.bars = bars;
-                        });
-                        setChordError("");
-                      } catch (e) {
-                        setChordError(String(e));
-                      }
-                    }}
-                  >
-                    Apply chords
-                  </Button>
-                  <p id="chord-help" className="song-help">
-                    Example: Am | F | C G | Am. Two chords share a bar. Use Dm:3
-                    G:1 for unequal beats. Apply chords before saving or
-                    switching sections.
-                  </p>
-                </div>
-                {chordError && (
-                  <p role="alert" className="song-error">
-                    {chordError}
-                  </p>
-                )}
+                <EnergyDesk />
                 <div className="song-controls">
                   <label>
                     Try a groove
@@ -679,9 +476,55 @@ export function Originals() {
                   edit it directly. Intensity selects sparse, medium or full
                   patterns.
                 </p>
-              </section>
+              </details>
             )}
-            <section>
+            <div hidden={w.view !== "record"}>
+              <section
+                className="capture-strip"
+                aria-label="Retrospective capture"
+              >
+                <div>
+                  <strong>Keep what you just played</strong>
+                  <p>
+                    {w.captureSeconds
+                      ? `Capture armed: last ${w.captureSeconds} seconds. Audio stays on this computer.`
+                      : "Arm capture before playing. Nothing is retained while it is off."}
+                  </p>
+                </div>
+                <div className="song-actions">
+                  <label>
+                    History
+                    <select
+                      aria-label="Capture length"
+                      disabled={w.captureSeconds > 0 || w.busy}
+                      value={captureLength}
+                      onChange={(e) => setCaptureLength(Number(e.target.value))}
+                    >
+                      <option value={15}>15 seconds</option>
+                      <option value={30}>30 seconds</option>
+                      <option value={60}>60 seconds</option>
+                    </select>
+                  </label>
+                  <Button
+                    disabled={w.busy || isPreview}
+                    onClick={() =>
+                      run(() => w.arm(w.captureSeconds ? 0 : captureLength))
+                    }
+                  >
+                    {w.captureSeconds ? "Disarm capture" : "Arm capture"}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={!w.captureSeconds || w.busy || isPreview}
+                    onClick={() => run(w.keep)}
+                  >
+                    Keep that (H)
+                  </Button>
+                </div>
+              </section>
+              <FootControls />
+            </div>
+            <section hidden={w.view !== "record"}>
               <div className="song-section-heading">
                 <h2>Guitar layers</h2>
                 <NumberField
@@ -822,7 +665,7 @@ export function Originals() {
                 Takes.
               </p>
             </section>
-            <section>
+            <section hidden={w.view !== "versions"}>
               <div className="song-section-heading">
                 <h2>Versions</h2>
                 <div className="song-actions">
@@ -887,9 +730,15 @@ export function Originals() {
               </label>
             </section>
           </fieldset>
+          <div hidden={w.view !== "compose" && w.view !== "lyrics"}>
+            <SongLab />
+          </div>
         </>
       )}
-      <section className="song-takes">
+      <section
+        className="song-takes"
+        hidden={Boolean(song) && w.view !== "record"}
+      >
         <div className="song-section-heading">
           <h2>Takes and ideas</h2>
           <Button disabled={w.busy} onClick={() => run(loadTakes)}>

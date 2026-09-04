@@ -5,7 +5,7 @@ you can immediately change. Audio operations require the desktop app; browser pr
 
 ## Capture an idea
 
-Choose 15, 30 or 60 seconds and press **Arm capture** before playing.
+Open **Record & layers**. Choose 15, 30 or 60 seconds and press **Arm capture** before playing.
 Press **H**, **Keep that**, or tell Jo “keep that” to save the recent audio.
 Capture stays local. Disarming clears only the unsaved buffer; saved takes remain.
 
@@ -15,29 +15,39 @@ the guitar is never silently retuned or stretched. Choose the first bar and repe
 
 ## Shape the song
 
-Select a section. Edit its name and chords, then **Apply chords**. For example:
+Choose a section in the **Song map**. In **Compose**, click a chord cell, then use
+**Find the next colour** to replace it with an in-key chord, a chord borrowed from
+the parallel key, or a dominant with a suggested destination. Suggestions are
+local theory calculations, not cloud predictions. The selected chord keeps its
+beat length. Shared counts show notes in common with the preceding chord.
 
-```text
-Am | F | C G | Am
-```
+The bar field accepts `Am:3 G:1` or `Dm G`. Press Enter or leave the field to apply;
+Escape cancels. Invalid input shows an error and the unchanged bar. **Add bar**
+copies the selected bar. **Transform phrase** rotates, reverses or repeats the
+section's bars. Use Undo to compare. **Make variation** copies chords, band
+settings and lyrics into an independent section beside the original.
 
-Use `Dm:3 G:1` for unequal beats. The current writing mode is 4/4, 40–240 BPM.
-Add sections, repeat them, and move them earlier or later. Adding an existing section
-reuses it: editing that section updates all its appearances.
+Expand **Edit order and repeats** to rearrange the form or add an existing
+section. Existing sections stay linked across repeats; editing one changes every
+appearance. Guitar layers remain at their numbered bars, so check alignment after
+reordering. The current writing mode is 4/4, 40–240 BPM.
+
+Expand **Band, groove and section settings** to rename the section and adjust its
+players or rig scene. **Section energy** moves unlocked part intensities together.
 
 Each section has independent drums, bass and comp settings: groove, intensity,
 volume, mute, and groove lock. “Try a groove” changes only unlocked parts.
 Locks do not block deliberate edits to a part's own controls. Intensity selects the
 style's sparse, medium or full pattern. Swing is shared by the section.
 
-Press **Play / hear changes** to audition from bar 1. Editing does not unexpectedly
+Press **Play song** to audition from bar 1. Editing does not unexpectedly
 change the performance while you are playing. **Undo** and **Redo** cover the last 50 edits.
 Keep a named version before experimenting; restore a version and press Play to compare.
 Save the song to persist versions. Up to 20 versions, 256 arranged bars and 16 guitar layers are supported.
 
 ## Play without reaching for the mouse
 
-Expand **Hands-free controls** in Write. Choose the physical MIDI input, click
+Expand **Hands-free controls** under **Record & layers**. Choose the physical MIDI input, click
 **Learn** beside an action, then press a pedal once. Learning saves the assignment
 without executing it. Enable pedal actions when ready. Reassigning a press removes
 its old action; **Clear** removes a binding. Bindings survive restart, while the
@@ -78,7 +88,7 @@ the song again. This slice controls one selected rig profile/output at a time.
 
 ## Record and continue in Logic or REAPER
 
-**Record / overdub** saves the song, starts from bar 1, and captures a new guitar take
+**Record** saves the song, starts from bar 1, and captures a new guitar take
 while the band and existing guitar layers play. **Save take** finishes it. Recording
 currently starts without a count-in. Stop recording before changing the song.
 
@@ -172,3 +182,17 @@ feedback to Write. Jo and Song Lab share a configurable Gemini, OpenAI, Claude o
 OpenRouter connection. See [API setup and creative examples](api-options.md).
 Suggestions use song text, never recorded audio, and wait for explicit application;
 the previous song version is kept before a change. Save to persist it.
+
+## Lyrics and creative alternatives
+
+Open **Lyrics** and choose a section in the song map. Its words sit beside the
+chord reference and song notebook. Lyrics persist with Save song and are included
+in Undo and named versions. Repeated sections share lyrics; Make variation keeps
+a separate draft. **Versions** holds named checkpoints and restore controls.
+
+Song Lab is below Compose and Lyrics. A lyric seed can be edited before **Add to
+section lyrics**; existing words are kept. The in-app assistant can append section
+lyrics through `write_notes` with a section ID. Both paths retain a previous version
+and reject stale proposals. No recorded audio is sent by these writing tools.
+
+The research and boundaries are recorded in [Write prior art](../research/write-workspace.md).

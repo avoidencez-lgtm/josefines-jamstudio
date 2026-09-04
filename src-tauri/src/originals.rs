@@ -45,6 +45,8 @@ struct SongBody {
     clips: Vec<ClipSpec>,
     #[serde(default)]
     tone_profile_id: Option<String>,
+    #[serde(default)]
+    lyrics: BTreeMap<String, String>,
 }
 
 fn song_dir() -> PathBuf {
@@ -116,6 +118,13 @@ fn body(doc: &Value) -> Result<SongBody, String> {
         return Err("Keep the song within 256 bars.".into());
     }
     validate_chart(&b.chart)?;
+    if b.lyrics.iter().any(|(id, text)| {
+        !b.chart.sections.iter().any(|s| &s.id == id) || text.encode_utf16().count() > 12_000
+    }) {
+        return Err(
+            "Lyrics must belong to a song section and stay within 12,000 characters.".into(),
+        );
+    }
     for s in &b.chart.sections {
         let set = b
             .sections
@@ -384,9 +393,16 @@ mod tests {
     fn song_roundtrip_preserves_unknown_fields_and_rejects_conflicting_save() {
         let root = std::env::temp_dir().join(format!("jam-originals-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
-        let doc: Value =
+        let mut doc: Value =
             serde_json::from_str(include_str!("../../tests/fixtures/seams/original.json")).unwrap();
+        doc["body"]["lyrics"] = serde_json::json!({"verse": "An original first line"});
         let saved = write_document(&root, doc.clone()).unwrap();
+        assert_eq!(saved["body"]["lyrics"]["verse"], "An original first line");
+        let mut invalid = saved.clone();
+        invalid["body"]["lyrics"]["missing"] = serde_json::json!("Unknown section");
+        assert!(body(&invalid).is_err());
+        invalid["body"]["lyrics"] = serde_json::json!({"verse": "x".repeat(12_001)});
+        assert!(body(&invalid).is_err());
         assert_eq!(saved["customNote"], "keep me");
         assert_eq!(saved["revision"], 1);
         assert!(write_document(&root, doc)

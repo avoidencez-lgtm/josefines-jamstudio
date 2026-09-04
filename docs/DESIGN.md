@@ -149,3 +149,19 @@ Full keyboard navigation with visible focus rings (accent, 2 px, offset 2 px); e
 - [ ] Contrast pairs checked; focus rings visible; hit targets ≥ 32 px
 - [ ] Meters and playhead at 60 fps on the PC with the fixture running
 - [ ] Copy self-audit: every visible string re-read for sense and length
+
+## Write workspace (Operate)
+
+Write uses the existing warm dark tokens and standard controls. Its composition
+is a song map followed by a selected-section chord grid and a 300 px harmony
+inspector. Song title, explicit Save and Undo sit above the Compose / Lyrics /
+Record & layers / Versions navigation. Capture and pedal setup live with recording;
+band details use native disclosure. First-screen priority is the editable music.
+
+Chord widths represent beat duration. Song-map widths represent arranged bars,
+subject to a readable minimum; long maps scroll horizontally. Amber marks selection
+and actions. Intensity bars reflect actual section settings, never invented audio
+waveforms. Section lyrics are a plain readable text sheet with a chord reference.
+At narrow widths the inspector stacks below the grid. Desktop target remains
+1100 x 700 minimum; controls remain keyboard reachable. Only data changes animate,
+and reduced motion disables that transition. No new fonts, icons or raster assets.

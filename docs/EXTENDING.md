@@ -209,3 +209,16 @@ is durable before a paid request; unknown outcomes must never auto-retry.
 `edit_video_shot` uses the shared Jo declaration/dispatcher and the Film draft's
 Undo store. A new agent media action must validate state/IDs and stay separate from
 paid generation. See [the workflow and acceptance guide](guide/music-video.md).
+
+## Write composition tools
+
+`src/lib/writingTools.ts` owns the local theory choices and phrase edits;
+`WritingDesk.tsx` renders them through the existing song store and chart syntax.
+Apply edits to a clone through `useWriting.edit`; the shared form check rejects
+invalid structure before adding Undo. No new playback clock is introduced.
+`SongBody.lyrics` is an optional section-ID-to-text map in version 1 documents;
+missing means empty, Rust validates IDs and 12,000-character limits, and JSON
+rewrites preserve unknown fields. No schema migration is required for this additive
+annotation. AI `write_notes` accepts an optional `sectionId`; omission keeps its
+original song-notebook behavior. Extend `writing-desk.test.ts` for transforms,
+lyrics, limits and Undo, and the Rust round-trip test for stored fields.

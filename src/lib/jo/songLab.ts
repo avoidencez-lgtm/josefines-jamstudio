@@ -6,6 +6,7 @@ import {
   sectionBars,
   useWriting,
 } from "../originals";
+import { checkWritingForm } from "../writingTools";
 import type { BrainRequest } from "./providers";
 
 export const LAB_IDEAS = {
@@ -42,6 +43,7 @@ export function labRequest(
     chart: song.body.chart,
     parts: song.body.sections,
     notes: song.body.notes,
+    lyrics: song.body.lyrics ?? {},
     selected,
     rig: useEngineStore.getState().rigState?.currentProfile.name,
   };
@@ -100,45 +102,34 @@ export function applyProposal(proposal: Proposal): void {
     (s) => s.id === proposal.sectionId,
   );
   if (!section) throw new Error("The selected section is no longer available.");
-  const arranged = w.song.body.chart.arrangement.reduce(
-    (sum, a) =>
-      sum +
-      a.repeats *
-        (w.song?.body.chart.sections.find((s) => s.id === a.sectionId)?.bars
-          .length ?? 0),
-    0,
-  );
-  const extra =
-    proposal.kind === "bridge"
-      ? bars.length
-      : proposal.kind === "chords"
-        ? w.song.body.chart.arrangement
-            .filter((a) => a.sectionId === section.id)
-            .reduce(
-              (sum, a) => sum + a.repeats * (bars.length - section.bars.length),
-              0,
-            )
-        : 0;
-  if (arranged + extra > 256)
-    throw new Error("This idea would exceed 256 arranged bars.");
+  const b = structuredClone(w.song.body);
+  if (proposal.kind === "bridge") {
+    const id = `section-${crypto.randomUUID()}`;
+    b.chart.sections.push({
+      id,
+      name: `${idea.title} ${b.chart.sections.length + 1}`,
+      bars,
+    });
+    b.sections[id] = defaultSection();
+    b.chart.arrangement.push({ sectionId: id, repeats: 1 });
+  } else if (proposal.kind === "chords") {
+    const current = b.chart.sections.find((s) => s.id === section.id);
+    if (current) current.bars = bars;
+  }
+  if (proposal.kind === "lyrics") {
+    b.lyrics ??= {};
+    const next = `${b.lyrics[section.id] ?? ""}\n\n${idea.notes}`.trim();
+    if (next.length > 12000)
+      throw new Error(
+        "Section lyrics exceed 12,000 characters. Shorten them first.",
+      );
+    b.lyrics[section.id] = next;
+  }
+  b.notes =
+    `${b.notes}\n\n${idea.title} (${proposal.source})\n${idea.summary}\n${idea.notes}`.trim();
+  checkWritingForm(b);
   w.version(`Before ${idea.title}`);
-  w.edit((b) => {
-    if (proposal.kind === "bridge") {
-      const id = `section-${crypto.randomUUID()}`;
-      b.chart.sections.push({
-        id,
-        name: `${idea.title} ${b.chart.sections.length + 1}`,
-        bars,
-      });
-      b.sections[id] = defaultSection();
-      b.chart.arrangement.push({ sectionId: id, repeats: 1 });
-    } else if (proposal.kind === "chords") {
-      const current = b.chart.sections.find((s) => s.id === section.id);
-      if (current) current.bars = bars;
-    }
-    b.notes =
-      `${b.notes}\n\n${idea.title} (${proposal.source})\n${idea.summary}\n${idea.notes}`.trim();
-  });
+  w.edit((body) => Object.assign(body, b));
   useWriting.setState({
     message:
       "Idea applied; the previous version is kept. Save the song, then press Play to compare.",

@@ -7,6 +7,7 @@ import {
   sectionBars,
   useWriting,
 } from "../originals";
+import { checkWritingForm } from "../writingTools";
 import type { JoToolCall } from "./persona";
 import type { JoToolDeclaration } from "./tools";
 
@@ -181,18 +182,29 @@ export const STUDIO_TOOLS: Record<string, StudioTool> = {
     declaration: {
       name: "write_notes",
       description:
-        "Append original lyrics, a practice plan, production notes or a recording checklist to the song notes. Never erase existing notes.",
+        "Append text to song notes, or supply sectionId to append original lyrics to that section's lyric sheet. Never erase existing writing.",
       parameters: {
         type: "object",
-        properties: { text: { type: "string" } },
+        properties: { text: { type: "string" }, sectionId: { type: "string" } },
         required: ["text"],
       },
     },
     edit: (b, raw) => {
       const a = z
-        .object({ text: text(6000) })
+        .object({ text: text(6000), sectionId: text(100).optional() })
         .strict()
         .parse(raw);
+      if (a.sectionId) {
+        sectionOf(b, a.sectionId);
+        b.lyrics ??= {};
+        const next = `${b.lyrics[a.sectionId] ?? ""}\n\n${a.text}`.trim();
+        if (next.length > 12000)
+          throw new Error(
+            "Section lyrics exceed 12,000 characters. Shorten them first.",
+          );
+        b.lyrics[a.sectionId] = next;
+        return;
+      }
       b.notes = `${b.notes}\n\n${a.text}`.trim();
       if (b.notes.length > 32000)
         throw new Error(
@@ -229,12 +241,7 @@ export function applyStudioEdits(
       throw new Error("Unknown studio edit.");
     STUDIO_TOOLS[c.name].edit(body, c.arguments);
   }
-  const bars = body.chart.arrangement.reduce(
-    (sum, a) => sum + sectionOf(body, a.sectionId).bars.length * a.repeats,
-    0,
-  );
-  if (bars < 1 || bars > 256)
-    throw new Error("The song form must contain 1–256 bars.");
+  checkWritingForm(body);
   w.version("Before assistant edits");
   w.edit((b) => Object.assign(b, body));
   return "Song updated; previous version kept. Save to keep it, Play to hear it. Guitar layers keep their bar positions and recorded pitch.";

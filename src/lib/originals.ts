@@ -3,6 +3,7 @@ import { ipc } from "../ipc/client";
 import type { Chart, TakeMetadata } from "../ipc/contract";
 import { useEngineStore } from "../store/engine";
 import { parseChartText } from "./chart/text";
+import { checkWritingForm } from "./writingTools";
 
 export const PARTS = ["Drums", "Bass", "Comp"] as const;
 export interface PartSettings {
@@ -32,6 +33,7 @@ export interface SongBody {
   sections: Record<string, SectionSettings>;
   clips: GuitarClip[];
   notes: string;
+  lyrics?: Record<string, string>;
   toneProfileId?: string | null;
 }
 
@@ -124,6 +126,7 @@ interface WritingState {
   message: string;
   captureSeconds: number;
   rehearsalIndex: number;
+  view: "compose" | "lyrics" | "record" | "versions";
   rehearse: (next?: boolean) => Promise<void>;
   edit: (fn: (body: SongBody) => void) => void;
   createSong: () => void;
@@ -155,6 +158,7 @@ export const useWriting = create<WritingState>((set, get) => ({
   message: "",
   captureSeconds: 0,
   rehearsalIndex: -1,
+  view: "compose",
   action: async (fn) => {
     if (get().busy) return;
     set({ busy: true, message: "" });
@@ -175,7 +179,14 @@ export const useWriting = create<WritingState>((set, get) => ({
       return;
     }
     const body = structuredClone(song.body);
-    fn(body);
+    try {
+      fn(body);
+      checkWritingForm(body);
+    } catch (e) {
+      set({ message: String(e) });
+      return;
+    }
+    if (JSON.stringify(body) === JSON.stringify(song.body)) return;
     set({
       song: { ...song, body },
       past: [...get().past, song.body].slice(-50),
@@ -260,7 +271,12 @@ export const useWriting = create<WritingState>((set, get) => ({
   },
   restore: (id) => {
     const v = get().song?.versions.find((v) => v.id === id);
-    if (v) get().edit((b) => Object.assign(b, structuredClone(v.body)));
+    if (v)
+      get().edit((b) => {
+        for (const key of Object.keys(b))
+          delete (b as unknown as Record<string, unknown>)[key];
+        Object.assign(b, structuredClone(v.body));
+      });
   },
   refresh: async () => {
     const saved = await ipc.invoke<Original[]>("originals_list");
