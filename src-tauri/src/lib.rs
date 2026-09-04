@@ -4,6 +4,7 @@ pub mod agents;
 pub mod controller;
 pub mod keys;
 pub mod library;
+pub mod media;
 pub mod net;
 pub mod originals;
 pub mod platform;
@@ -996,6 +997,11 @@ pub fn run() {
         .manage(app_state)
         .setup(move |app| {
             use tauri::Manager;
+            for folder in ["assets", "exports"] {
+                let path = media::root().join(folder);
+                std::fs::create_dir_all(&path)?;
+                app.asset_protocol_scope().allow_directory(path, true)?;
+            }
             let controller = Arc::clone(&app.state::<AppState>().controller);
             let app_handle = app.handle().clone();
             let eng = Arc::clone(&engine_arc);
@@ -1049,6 +1055,16 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            media::media_list,
+            media::media_save,
+            media::media_import,
+            media::media_from_take,
+            media::media_generate,
+            media::media_refresh,
+            media::media_tools,
+            media::media_render,
+            media::media_cancel,
+            media::media_open,
             agent_status,
             agent_request,
             agent_cancel,

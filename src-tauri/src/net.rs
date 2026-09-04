@@ -5,6 +5,7 @@
 //! body, never a key).
 
 use crate::keys::SecretStore;
+pub mod media;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
@@ -30,6 +31,18 @@ pub struct ProviderEntry {
 /// Hosts the app is allowed to talk to. Adding a provider is one line here plus a
 /// key in Settings; nothing else in the app can reach the network.
 pub const PROVIDERS: &[ProviderEntry] = &[
+    ProviderEntry {
+        id: "minimax",
+        base_url: "https://api.minimax.io",
+        auth: AuthScheme::Bearer,
+        description: "MiniMax Music (existing paid API accounts only)",
+    },
+    ProviderEntry {
+        id: "runway",
+        base_url: "https://api.dev.runwayml.com",
+        auth: AuthScheme::Bearer,
+        description: "Runway (Gen-4.5 and Veo music-video shots)",
+    },
     ProviderEntry {
         id: "gemini",
         base_url: "https://generativelanguage.googleapis.com",

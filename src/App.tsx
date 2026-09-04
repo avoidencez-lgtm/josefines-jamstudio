@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  FilmStrip,
   Gear,
   Guitar,
   Microphone,
@@ -24,6 +25,7 @@ import { handleShortcut } from "./lib/shortcuts";
 import { AiMusic } from "./screens/AiMusic";
 import { Jo } from "./screens/Jo";
 import { Library } from "./screens/Library";
+import { MusicVideo } from "./screens/MusicVideo";
 import { Originals } from "./screens/Originals";
 import { Rig } from "./screens/Rig";
 import { Sessions } from "./screens/Sessions";
@@ -118,6 +120,8 @@ export const App: React.FC = () => {
         return <Songs />;
       case "ai-music":
         return <AiMusic />;
+      case "music-video":
+        return <MusicVideo />;
       case "sessions":
         return <Sessions />;
       case "rig":
@@ -142,6 +146,8 @@ export const App: React.FC = () => {
         return <BookOpen {...props} />;
       case "MusicNotes":
         return <MusicNotes {...props} />;
+      case "FilmStrip":
+        return <FilmStrip {...props} />;
       case "Waveform":
         return <Waveform {...props} />;
       case "Microphone":
@@ -159,7 +165,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen bg-[var(--bg-0)] text-[var(--fg-0)] overflow-hidden">
-      <nav className="w-[72px] bg-[var(--bg-1)] border-r border-[var(--line)] flex flex-col items-center py-4 gap-6 shrink-0 z-20">
+      <nav className="w-[72px] bg-[var(--bg-1)] border-r border-[var(--line)] flex flex-col items-center py-4 gap-4 shrink-0 z-20 overflow-y-auto">
         <div className="w-10 h-10 rounded-[var(--radius-m)] bg-[var(--accent)] flex items-center justify-center text-[var(--bg-0)] font-bold text-xl mb-2">
           J
         </div>

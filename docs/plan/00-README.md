@@ -106,7 +106,7 @@ Verification results belong in the associated PR; owner acceptance remains pendi
 The API follow-up connects OpenAI Responses, Claude Messages and OpenRouter
 alongside Gemini, with shared editable model/limit settings and a Song Lab for
 reviewable chords, bridges, lyric seeds and arrangement advice. This is text-only;
-M3/M4 cloud audio remains unimplemented. Live provider/account acceptance is
+At that stage cloud audio was unimplemented. Live provider/account acceptance is
 pending; documented synthetic fixtures are not live API evidence.
 See [the current API guide](../guide/api-options.md).
 
@@ -115,4 +115,15 @@ catalogs, Codex/Claude Code CLI connections and six practical studio tools. A li
 Codex structured-reply check passed with this host's saved ChatGPT login. Claude
 Code was unavailable locally; live Claude and Mac owner acceptance remain pending.
 Studio action groups preserve versions and reject stale/invalid/locked edits.
-This does not implement cloud audio, an embedded terminal or external MCP control.
+The installed-agent slice does not implement an embedded terminal or external MCP control.
+
+The music-video slice adds Film projects, retained media jobs, imported or recorded
+soundtracks, editable section-based cuts and local FFmpeg MP4 rendering. The shared
+catalog includes Lyria 3.5, Eleven Music, MiniMax Music 3, Omni, Runway Gen-4.5,
+Veo 3.1, Hailuo 3, Seedance 2.5, Wan 3 and configurable ComfyUI workflows for local
+Wan, ACE-Step and MiniMax Music. Agent shot edits use Undo and never generate media.
+This replaces the AI Music placeholder with an actual generation workflow; live
+streaming, separation and broader M3/M4 work remain incomplete. Paid model access,
+GPU generation and native Mac preview/playback remain owner gates. The local
+synthetic MP4 test passed with duration and AAC signal tolerances. See the
+[music-video guide](../guide/music-video.md) and [ADR 0008](../adr/0008-music-video-workspace.md).

@@ -1,0 +1,27 @@
+{
+  "note": "Synthetic contract examples, checked against official REST docs and Runway SDK on 2026-09-04. No paid provider call recorded.",
+  "interaction": {
+    "status": "completed",
+    "steps": [
+      {
+        "type": "user_input",
+        "content": [{ "type": "audio", "data": "ignore" }]
+      },
+      {
+        "type": "model_output",
+        "content": [
+          { "type": "text", "text": "Original chorus" },
+          { "type": "audio", "mime_type": "audio/mpeg", "data": "SUQz" }
+        ]
+      }
+    ]
+  },
+  "runwayStart": { "id": "test-task", "estimatedCost": { "credits": 60 } },
+  "runwayPending": { "id": "test-task", "status": "RUNNING" },
+  "runwayComplete": {
+    "id": "test-task",
+    "status": "SUCCEEDED",
+    "output": ["https://example.cloudfront.net/generated.mp4"],
+    "cost": { "credits": 60 }
+  }
+}

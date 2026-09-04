@@ -34,6 +34,7 @@ export type ScreenId =
   | "jo"
   | "songs"
   | "ai-music"
+  | "music-video"
   | "sessions"
   | "rig"
   | "settings";

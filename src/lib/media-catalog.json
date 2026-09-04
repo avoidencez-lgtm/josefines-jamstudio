@@ -1,0 +1,122 @@
+[
+  {
+    "id": "comfy-minimax",
+    "name": "MiniMax Music 3 · local ComfyUI",
+    "provider": "comfyui",
+    "model": "MiniMaxAI/MiniMax-Music3",
+    "kind": "audio",
+    "protocol": "comfy",
+    "description": "Open-model workflow adapter. Requires an installed compatible ComfyUI workflow; the model card currently requires CUDA, so this is not a native Mac GPU option. Check the model licence before use.",
+    "source": "https://huggingface.co/MiniMaxAI/MiniMax-Music3"
+  },
+  {
+    "id": "minimax-music",
+    "name": "MiniMax Music 3.0 · existing API accounts",
+    "provider": "minimax",
+    "model": "music-3.0",
+    "kind": "audio",
+    "protocol": "minimax-music",
+    "description": "Chinese music model with vocals or instrumentals. MiniMax closed music API access to new customers on August 20, 2026; existing paying accounts only. Requested duration is prompt guidance.",
+    "source": "https://platform.minimax.io/docs/api-reference/music-generation"
+  },
+  {
+    "id": "hailuo",
+    "name": "MiniMax Hailuo 3 · via Runway",
+    "provider": "runway",
+    "model": "hailuo3",
+    "kind": "video",
+    "protocol": "runway-hailuo",
+    "description": "Chinese hosted video model, using Runway credits. Local open-weight checkpoints require their own compatible workflow and licence review.",
+    "source": "https://docs.dev.runwayml.com/guides/models/"
+  },
+  {
+    "id": "seedance",
+    "name": "ByteDance Seedance 2.5 · via Runway",
+    "provider": "runway",
+    "model": "seedance2_5",
+    "kind": "video",
+    "protocol": "runway-china",
+    "description": "Chinese hosted video model. Runway credits; not an open-source or local model.",
+    "source": "https://docs.dev.runwayml.com/guides/models/"
+  },
+  {
+    "id": "wan",
+    "name": "Alibaba Wan 3 · via Runway",
+    "provider": "runway",
+    "model": "wan3",
+    "kind": "video",
+    "protocol": "runway-china",
+    "description": "Chinese hosted video model. Runway credits; separate from the downloadable Wan 2.2 models.",
+    "source": "https://docs.dev.runwayml.com/guides/models/"
+  },
+  {
+    "id": "comfy-wan",
+    "name": "Wan 2.2 / local video · ComfyUI",
+    "provider": "comfyui",
+    "model": "Wan2.2",
+    "kind": "video",
+    "protocol": "comfy",
+    "description": "Local workflow adapter for open-weight video models. Bring an installed ComfyUI workflow and suitable GPU; Wan 2.2 uses Apache-2.0. No model weights are bundled.",
+    "source": "https://github.com/Wan-Video/Wan2.2"
+  },
+  {
+    "id": "comfy-audio",
+    "name": "ACE-Step / local music · ComfyUI",
+    "provider": "comfyui",
+    "model": "ACE-Step",
+    "kind": "audio",
+    "protocol": "comfy",
+    "description": "Local workflow adapter for open-weight music generation. ACE-Step code and weights are Apache-2.0; other workflow checkpoints have their own licences.",
+    "source": "https://docs.comfy.org/tutorials/audio/ace-step/ace-step-v1"
+  },
+  {
+    "id": "omni",
+    "name": "Gemini Omni Flash 1.1",
+    "provider": "gemini",
+    "model": "gemini-omni-1.1-flash",
+    "kind": "video",
+    "protocol": "interaction",
+    "description": "Cinematic shots and prompt-driven visual storytelling. Duration is a request.",
+    "source": "https://ai.google.dev/gemini-api/docs/omni"
+  },
+  {
+    "id": "runway",
+    "name": "Runway Gen-4.5",
+    "provider": "runway",
+    "model": "gen4.5",
+    "kind": "video",
+    "protocol": "runway",
+    "description": "2–10 second shots, queued generation with resumable task IDs.",
+    "source": "https://docs.dev.runwayml.com/guides/models/"
+  },
+  {
+    "id": "veo",
+    "name": "Veo 3.1 · via Runway",
+    "provider": "runway",
+    "model": "veo3.1",
+    "kind": "video",
+    "protocol": "runway-veo",
+    "description": "4, 6 or 8 second cinematic shots. Uses your Runway API account.",
+    "source": "https://docs.dev.runwayml.com/guides/models/"
+  },
+  {
+    "id": "lyria",
+    "name": "Lyria 3.5",
+    "provider": "gemini",
+    "model": "lyria-3.5",
+    "kind": "audio",
+    "protocol": "interaction",
+    "description": "Original songs with lyrics and vocals, or instrumental ideas. Up to about 3 minutes; prompt timing is approximate.",
+    "source": "https://ai.google.dev/gemini-api/docs/music-generation"
+  },
+  {
+    "id": "eleven",
+    "name": "Eleven Music",
+    "provider": "elevenlabs",
+    "model": "music_v2",
+    "kind": "audio",
+    "protocol": "eleven",
+    "description": "Prompt-to-song generation with a requested duration and an instrumental switch.",
+    "source": "https://elevenlabs.io/docs/api-reference/music/compose"
+  }
+]

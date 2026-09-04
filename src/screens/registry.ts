@@ -13,6 +13,7 @@ export const SCREENS: ScreenDescriptor[] = [
   { id: "jo", label: "Jo AI", iconName: "Microphone" },
   { id: "songs", label: "Songs", iconName: "MusicNotes" },
   { id: "ai-music", label: "AI Music", iconName: "Waveform" },
+  { id: "music-video", label: "Film", iconName: "FilmStrip" },
   { id: "sessions", label: "Sessions", iconName: "Record" },
   { id: "rig", label: "Rig", iconName: "Sliders" },
   { id: "settings", label: "Settings", iconName: "Gear" },

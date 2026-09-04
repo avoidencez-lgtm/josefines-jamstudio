@@ -1,4 +1,5 @@
 import { useEngineStore } from "../../store/engine";
+import { useMedia } from "../media";
 import { PARTS, changeGroove, useWriting } from "../originals";
 import type { JoToolCall } from "./persona";
 import { STUDIO_TOOLS, applyStudioEdits } from "./studioTools";
@@ -8,6 +9,43 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
   validateToolCall(call);
   if (Object.hasOwn(STUDIO_TOOLS, call.name)) return applyStudioEdits([call]);
   const store = useEngineStore.getState();
+  if (call.name === "edit_video_shot") {
+    const media = useMedia.getState();
+    const a = call.arguments;
+    if (store.isRecording || media.busy)
+      throw new Error("Finish the recording or media operation first.");
+    if (
+      media.project.id !== a.projectId ||
+      !media.project.shots.some((s) => s.id === a.shotId)
+    )
+      throw new Error("The video project or shot changed. Ask again.");
+    if (
+      (a.title !== undefined &&
+        (String(a.title).trim().length < 1 || String(a.title).length > 100)) ||
+      (a.prompt !== undefined &&
+        (String(a.prompt).trim().length < 1 ||
+          String(a.prompt).length > 3000)) ||
+      (a.seconds !== undefined &&
+        (Number(a.seconds) < 0.1 || Number(a.seconds) > 120))
+    )
+      throw new Error(
+        "Check shot title, prompt and duration (0.1–120 seconds).",
+      );
+    const shots = media.project.shots.map((s) =>
+      s.id === a.shotId
+        ? {
+            ...s,
+            ...(a.title !== undefined ? { title: String(a.title) } : {}),
+            ...(a.prompt !== undefined ? { prompt: String(a.prompt) } : {}),
+            ...(a.seconds !== undefined ? { seconds: Number(a.seconds) } : {}),
+          }
+        : s,
+    );
+    if (shots.reduce((n, s) => n + s.seconds, 0) > 600)
+      throw new Error("Keep the film within 10 minutes.");
+    media.edit({ shots });
+    return "Shot updated. Undo edit is available in Film; save the video to keep the change.";
+  }
   if (call.name === "analyze_take") {
     const id = String(call.arguments.takeId);
     if (!store.takes.some((t) => t.id === id))

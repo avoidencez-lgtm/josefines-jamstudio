@@ -516,6 +516,12 @@ export function createPreviewEngine(
       );
     },
     providers_list: () => [
+      {
+        id: "minimax",
+        description: "MiniMax Music · existing API accounts",
+        hasKey: false,
+      },
+      { id: "runway", description: "Runway · video", hasKey: false },
       { id: "gemini", description: "Google Gemini", hasKey: false },
       { id: "elevenlabs", description: "ElevenLabs", hasKey: false },
       { id: "openai", description: "OpenAI", hasKey: false },

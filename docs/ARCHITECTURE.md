@@ -2,6 +2,17 @@
 
 This document is the contract between the milestones. Names here (crates, modules, commands, events, types) are the names the code uses. A change to a contract is a change to this file in the same PR.
 
+The music-video extension is governed by [ADR 0008](adr/0008-music-video-workspace.md).
+`media_list`, `media_save`, `media_import`, `media_from_take`, `media_generate`,
+`media_refresh`, `media_tools`, `media_render`, `media_cancel` and `media_open` are
+additive IPC commands. They exchange JSON project/job/asset metadata and paths,
+never binary audio/video. Projects use schemaVersion 1 and revision conflict checks.
+The shared media catalog defines cloud and fixed-loopback ComfyUI protocols;
+all HTTP remains under `net/media.rs`. Tauri asset access is limited to media
+assets and exports, excluding generation receipts. Native preview is silent;
+FFmpeg and the user's external media player own exported audiovisual playback.
+See [music-video setup and acceptance](guide/music-video.md).
+
 ## 1. The governing rule
 
 > **JS owns text and UI. Rust owns bytes and time. The WebView never produces sound and never holds a key.**

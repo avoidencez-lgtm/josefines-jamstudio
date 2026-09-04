@@ -57,23 +57,9 @@ stale and prevents applying it to the wrong arrangement. Invalid/truncated repli
 and invalid chord edits do not alter the song. Chord ideas are limited to 16 bars;
 the existing 256-bar song and 20-version limits still apply.
 
-## Next audio options, researched but not connected
+## Audio and music video
 
-1. **Hear an arrangement sketch:** ElevenLabs Music accepts a prompt or structured
-   composition plan and returns generated audio. A useful next slice would turn
-   an approved song outline into a reference demo for the guitarist to react to.
-   This needs a Rust audio download/decode path, explicit generation controls and
-   actual timing/quality checks; it must not promise an exact playable MIDI score.
-   [Compose API](https://elevenlabs.io/docs/api-reference/music/compose).
-2. **Rescue a rough demo:** Music.ai exposes asynchronous workflows for stem
-   separation, transcription and beat detection. A useful next slice would let
-   him explicitly select one recording, separate it, then bring chosen stems back
-   as editable layers. This needs upload consent, job progress, bounded downloads
-   and alignment checks. Workflow availability depends on the configured account.
-   [Workflow API](https://music.ai/docs/api/reference/).
-
-ElevenLabs currently has credential storage only. Neither option above is enabled
-by saving a key, and neither is advertised as a completed audio feature.
+The **AI Music** and **Film** screens now connect Lyria, Eleven Music, MiniMax, Runway and local ComfyUI workflows. They share editable storyboards, retained generation jobs and local MP4 rendering. See [the music-video guide](music-video.md) for model access, setup and verified limits. Music.ai separation/transcription remains researched but unimplemented.
 
 ## Contract evidence and acceptance
 

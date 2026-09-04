@@ -52,6 +52,22 @@ export function validateToolCall(call: {
 }
 
 export const JO_TOOLS: JoToolDeclaration[] = [
+  {
+    name: "edit_video_shot",
+    description:
+      "Edit one existing music-video shot in the open Film project. Changes text and timing only; never generates media or spends API credits. User can Undo and Save video.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        shotId: { type: "string" },
+        title: { type: "string" },
+        prompt: { type: "string" },
+        seconds: { type: "number" },
+      },
+      required: ["projectId", "shotId"],
+    },
+  },
   ...Object.values(STUDIO_TOOLS).map((t) => t.declaration),
   {
     name: "analyze_take",

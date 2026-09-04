@@ -1,6 +1,22 @@
 //! Native child-process behavior is isolated from the agent protocol.
 use std::path::PathBuf;
 
+pub async fn open_media(path: &std::path::Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let mut opener = command(std::path::Path::new("/usr/bin/open"));
+    #[cfg(windows)]
+    let mut opener = command(std::path::Path::new("explorer.exe"));
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let mut opener = command(std::path::Path::new("xdg-open"));
+    // The user's explicit Play action opens their default media player.
+    opener
+        .kill_on_drop(false)
+        .arg(path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn command(executable: &std::path::Path) -> tokio::process::Command {
     let mut command = tokio::process::Command::new(executable);
     command.kill_on_drop(true);

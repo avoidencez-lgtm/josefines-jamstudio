@@ -188,3 +188,24 @@ must leave the original and version count intact. Schemas and catalogs are in
 `tests/fixtures/providers/agents.json`. Core seam snapshots remain unchanged.
 The model catalog URL/parser belongs to its provider registry entry. Reuse the
 Rust proxy and native datalist; do not ship a model-list package or stale price table.
+
+## Music/video model recipe
+
+Add the model descriptor to `src/lib/media-catalog.json`. Both TypeScript and Rust
+consume this file. A model using an existing protocol needs no new UI or storage
+code. A new wire protocol belongs in `src-tauri/src/net/media.rs`: validate request
+parameters, perform bounded Rust-only downloads, normalize pending/inline/download
+results and enforce the provider's output hosts. Add cloud origin/auth in
+`net.rs` only when needed; local ComfyUI uses the fixed loopback seam in ADR 0008.
+
+Record the official contract and a synthetic example under
+`tests/fixtures/providers/media.json`; extend the Rust `media_contracts_and_host_boundaries`
+check and `tests/invariants/media.test.ts`. Never claim fixture results establish
+paid API access. No SDK, plugin loader, bundled model or binary is required.
+`media_generate` submits once; `media_refresh` may only poll/recover existing work.
+Generation returns metadata/asset IDs, never binary media over IPC. Every receipt
+is durable before a paid request; unknown outcomes must never auto-retry.
+
+`edit_video_shot` uses the shared Jo declaration/dispatcher and the Film draft's
+Undo store. A new agent media action must validate state/IDs and stay separate from
+paid generation. See [the workflow and acceptance guide](guide/music-video.md).
