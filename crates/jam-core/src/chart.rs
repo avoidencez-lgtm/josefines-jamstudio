@@ -101,28 +101,73 @@ impl Chart {
 }
 
 impl ResolvedChart {
-    /// Returns the active chord and the next upcoming chord for the given bar and beat.
-    pub fn chord_at(&self, bar: u32, _beat: u32) -> (String, Option<String>) {
+    /// Returns the active chord and the next upcoming chord for the given bar and beat
+    /// (1-indexed beat, whole beats). The chart repeats when the bar runs past its end.
+    pub fn chord_at(&self, bar: u32, beat: u32) -> (String, Option<String>) {
+        let beat_pos = beat.max(1) as f64 - 1.0;
+        self.chord_at_position(bar, beat_pos)
+    }
+
+    /// Returns the active chord and the next chord for a bar and a fractional position
+    /// inside that bar (0.0 = downbeat). Bars holding several chords resolve by their
+    /// `beats` durations, so "A7 D7" over two beats each gives D7 from beat 3.
+    pub fn chord_at_position(&self, bar: u32, beat_pos: f64) -> (String, Option<String>) {
         if self.bars.is_empty() {
             return ("A7".into(), None);
         }
 
-        let total_bars = self.bars.len() as u32;
-        let zero_idx = if bar == 0 { 0 } else { (bar - 1) % total_bars };
-        let next_idx = (zero_idx + 1) % total_bars;
+        let total_bars = self.bars.len();
+        let zero_idx = if bar == 0 {
+            0
+        } else {
+            ((bar - 1) as usize) % total_bars
+        };
+        let this_bar = &self.bars[zero_idx];
 
-        let current = self.bars[zero_idx as usize]
+        let mut chord_idx = 0usize;
+        let mut acc = 0.0;
+        for (i, c) in this_bar.chords.iter().enumerate() {
+            acc += c.beats.max(0.0);
+            chord_idx = i;
+            if beat_pos < acc - 1e-9 {
+                break;
+            }
+        }
+
+        let current = this_bar
             .chords
-            .first()
+            .get(chord_idx)
             .map(|c| c.chord.clone())
             .unwrap_or_else(|| "A7".into());
 
-        let next = self.bars[next_idx as usize]
-            .chords
-            .first()
-            .map(|c| c.chord.clone());
+        let next = if chord_idx + 1 < this_bar.chords.len() {
+            this_bar.chords.get(chord_idx + 1).map(|c| c.chord.clone())
+        } else {
+            self.bars[(zero_idx + 1) % total_bars]
+                .chords
+                .first()
+                .map(|c| c.chord.clone())
+        };
 
         (current, next)
+    }
+
+    /// Number of bars in one pass of the arrangement.
+    pub fn len_bars(&self) -> u32 {
+        self.bars.len() as u32
+    }
+
+    /// The section a (1-indexed, wrapping) bar belongs to.
+    pub fn section_at(&self, bar: u32) -> Option<&ResolvedBar> {
+        if self.bars.is_empty() {
+            return None;
+        }
+        let idx = if bar == 0 {
+            0
+        } else {
+            ((bar - 1) as usize) % self.bars.len()
+        };
+        self.bars.get(idx)
     }
 }
 
@@ -217,5 +262,52 @@ mod tests {
         let (c9, n9) = resolved.chord_at(9, 1);
         assert_eq!(c9, "E7");
         assert_eq!(n9, Some("D7".into()));
+    }
+
+    #[test]
+    fn split_bars_resolve_by_beat_position() {
+        let chart = Chart {
+            schema_version: 1,
+            id: "turnaround".into(),
+            name: "Turnaround".into(),
+            key_tonic: 9,
+            mode: "major".into(),
+            time_sig: (4, 4),
+            default_bpm: 100.0,
+            default_style_id: None,
+            sections: vec![ChartSection {
+                id: "a".into(),
+                name: "A".into(),
+                bars: vec![
+                    vec![
+                        BarChord {
+                            chord: "A7".into(),
+                            beats: 2.0,
+                        },
+                        BarChord {
+                            chord: "D7".into(),
+                            beats: 2.0,
+                        },
+                    ],
+                    vec![BarChord {
+                        chord: "E7".into(),
+                        beats: 4.0,
+                    }],
+                ],
+                style_override_id: None,
+            }],
+            arrangement: vec![ArrangementItem {
+                section_id: "a".into(),
+                repeats: 1,
+            }],
+        };
+        let r = chart.resolve();
+        assert_eq!(r.chord_at(1, 1), ("A7".into(), Some("D7".into())));
+        assert_eq!(r.chord_at(1, 2), ("A7".into(), Some("D7".into())));
+        assert_eq!(r.chord_at(1, 3), ("D7".into(), Some("E7".into())));
+        assert_eq!(r.chord_at_position(1, 3.9), ("D7".into(), Some("E7".into())));
+        assert_eq!(r.chord_at(2, 1), ("E7".into(), Some("A7".into())));
+        // Wraps around the arrangement.
+        assert_eq!(r.chord_at(3, 1).0, "A7");
     }
 }

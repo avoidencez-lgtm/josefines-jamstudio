@@ -66,6 +66,22 @@ impl TakeRecorder {
         self.latency_offset_samples = offset_samples;
     }
 
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    /// Follows a device-rate change. Ignored while a take is in progress so the
+    /// WAV header always matches the recorded data.
+    pub fn set_sample_rate(&mut self, sample_rate: u32) -> Result<(), String> {
+        if self.is_recording() {
+            return Err("cannot change sample rate while recording".into());
+        }
+        if sample_rate > 0 {
+            self.sample_rate = sample_rate;
+        }
+        Ok(())
+    }
+
     pub fn is_recording(&self) -> bool {
         self.is_recording.load(Ordering::SeqCst)
     }

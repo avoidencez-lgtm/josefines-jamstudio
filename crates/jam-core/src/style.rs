@@ -53,7 +53,7 @@ pub struct CompPattern {
     pub strums: Vec<CompStrum>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PatternEntry {
     pub intensity: (f32, f32),
