@@ -85,3 +85,9 @@ the 0.9 master was excluded). A real Windows WM_CLOSE request showed the native
 unsaved-work dialog, and Keep editing preserved the chart draft. Native take-to-
 media import also passed. The full workspace test run still encounters Windows
 Application Control on the unchanged jam-dsp test executable; CI verifies it.
+
+Mac packaging also declares the recording-purpose string in Info.plist and the
+audio-input entitlement. Mac CI builds the actual .app and reads its privacy
+key with PlistBuddy. The permission prompt and real recording remain owner checks.
+Configuration follows [Tauri's native bundle guidance](https://v2.tauri.app/distribute/macos-application-bundle/)
+and [Apple's audio-input entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.device.audio-input).

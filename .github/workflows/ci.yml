@@ -81,7 +81,13 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
-      - name: Compile desktop with embedded frontend
+      - name: Compile Windows desktop with embedded frontend
+        if: runner.os == 'Windows'
         run: pnpm tauri build --debug --no-bundle
+      - name: Build Mac app and verify recording privacy metadata
+        if: runner.os == 'macOS'
+        run: |
+          pnpm tauri build --debug --bundles app
+          /usr/libexec/PlistBuddy -c "Print :NSMicrophoneUsageDescription" "target/debug/bundle/macos/Josefines Jamstudio.app/Contents/Info.plist"
       - name: License and advisory check (cargo deny)
         run: cargo deny check
