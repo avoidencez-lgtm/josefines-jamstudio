@@ -26,8 +26,48 @@ pub struct AppSettings {
     pub sample_rate: u32,
     #[serde(default = "default_buffer_size")]
     pub buffer_size: u32,
+    #[serde(default)]
+    pub rig: RigSettings,
+    #[serde(default)]
+    pub recorder: RecorderSettings,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct RecorderSettings {
+    /// Round-trip offset trimmed from the guitar stem, in samples at the engine rate.
+    #[serde(default)]
+    pub latency_samples: u32,
+}
+
+/// What the Rig screen remembers between launches.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RigSettings {
+    #[serde(default)]
+    pub profile_id: Option<String>,
+    #[serde(default)]
+    pub midi_port: Option<String>,
+    #[serde(default = "yes")]
+    pub follow_sections: bool,
+    /// Section name -> scene index, per profile id.
+    #[serde(default)]
+    pub section_mappings: HashMap<String, HashMap<String, usize>>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for RigSettings {
+    fn default() -> Self {
+        Self {
+            profile_id: None,
+            midi_port: None,
+            follow_sections: true,
+            section_mappings: HashMap::new(),
+        }
+    }
 }
 
 fn default_input_channel() -> u16 {
@@ -51,6 +91,8 @@ impl Default for AppSettings {
             input_channel: default_input_channel(),
             sample_rate: default_sample_rate(),
             buffer_size: default_buffer_size(),
+            rig: RigSettings::default(),
+            recorder: RecorderSettings::default(),
             extra: HashMap::new(),
         }
     }

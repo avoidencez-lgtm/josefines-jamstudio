@@ -1,0 +1,459 @@
+//! net: the only road from the WebView to an AI provider. TypeScript hands over a
+//! provider *name*, a path and a body; Rust checks the provider against an
+//! allow-list, injects the key from the keychain, performs the request and writes
+//! one line to a local usage log (provider, path, status, bytes, duration; never a
+//! body, never a key).
+
+use crate::keys::SecretStore;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::io::{BufRead, Write};
+use std::path::PathBuf;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthScheme {
+    /// The key goes in this header verbatim.
+    HeaderKey(&'static str),
+    /// `Authorization: Bearer <key>`.
+    Bearer,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ProviderEntry {
+    pub id: &'static str,
+    pub base_url: &'static str,
+    pub auth: AuthScheme,
+    pub description: &'static str,
+}
+
+/// Hosts the app is allowed to talk to. Adding a provider is one line here plus a
+/// key in Settings; nothing else in the app can reach the network.
+pub const PROVIDERS: &[ProviderEntry] = &[
+    ProviderEntry {
+        id: "gemini",
+        base_url: "https://generativelanguage.googleapis.com",
+        auth: AuthScheme::HeaderKey("x-goog-api-key"),
+        description: "Google Gemini (Jo's brain, Lyria RealTime)",
+    },
+    ProviderEntry {
+        id: "elevenlabs",
+        base_url: "https://api.elevenlabs.io",
+        auth: AuthScheme::HeaderKey("xi-api-key"),
+        description: "ElevenLabs (Jo's voice, speech to text)",
+    },
+    ProviderEntry {
+        id: "openai",
+        base_url: "https://api.openai.com",
+        auth: AuthScheme::Bearer,
+        description: "OpenAI (alternative LLM)",
+    },
+    ProviderEntry {
+        id: "anthropic",
+        base_url: "https://api.anthropic.com",
+        auth: AuthScheme::HeaderKey("x-api-key"),
+        description: "Anthropic Claude (alternative LLM)",
+    },
+];
+
+pub fn provider(id: &str) -> Option<&'static ProviderEntry> {
+    PROVIDERS.iter().find(|p| p.id == id)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderInfo {
+    pub id: String,
+    pub description: String,
+    pub has_key: bool,
+}
+
+pub fn providers_info(store: &dyn SecretStore) -> Vec<ProviderInfo> {
+    PROVIDERS
+        .iter()
+        .map(|p| ProviderInfo {
+            id: p.id.to_string(),
+            description: p.description.to_string(),
+            has_key: store.has(p.id),
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FetchRequest {
+    pub provider: String,
+    /// Path and query relative to the provider base URL, starting with `/`.
+    pub path: String,
+    #[serde(default = "default_method")]
+    pub method: String,
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+    #[serde(default)]
+    pub body: Option<String>,
+}
+
+fn default_method() -> String {
+    "POST".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FetchResponse {
+    pub status: u16,
+    pub headers: HashMap<String, String>,
+    pub body: String,
+}
+
+/// Headers the WebView may not set: authentication is Rust's job.
+const RESERVED_HEADERS: &[&str] = &[
+    "authorization",
+    "x-goog-api-key",
+    "xi-api-key",
+    "x-api-key",
+    "cookie",
+    "host",
+];
+
+/// Everything that can be checked without touching the network. Returns the
+/// provider and the full URL.
+pub fn validate(req: &FetchRequest) -> Result<(&'static ProviderEntry, String), String> {
+    let entry = provider(&req.provider)
+        .ok_or_else(|| format!("provider \"{}\" is not on the allow-list", req.provider))?;
+    let path = req.path.as_str();
+    if !path.starts_with('/') || path.starts_with("//") {
+        return Err(format!("path must start with a single '/': {path:?}"));
+    }
+    if path.contains("://") || path.contains('@') || path.contains("..") || path.contains('\\') {
+        return Err(format!("path may not point outside the provider: {path:?}"));
+    }
+    if path.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("path contains whitespace or control characters".into());
+    }
+    match req.method.to_ascii_uppercase().as_str() {
+        "GET" | "POST" | "PUT" | "PATCH" | "DELETE" => {}
+        m => return Err(format!("method {m} is not allowed")),
+    }
+    for k in req.headers.keys() {
+        if RESERVED_HEADERS.contains(&k.to_ascii_lowercase().as_str()) {
+            return Err(format!(
+                "header \"{k}\" is set by the app, not by the caller"
+            ));
+        }
+    }
+    Ok((entry, format!("{}{}", entry.base_url, path)))
+}
+
+/// One line of the usage log. Estimated cost is left to the UI (it knows the model);
+/// the log records what is measurable.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CostEntry {
+    /// Unix time in milliseconds.
+    pub at_ms: u64,
+    pub provider: String,
+    pub method: String,
+    /// Path without the query string.
+    pub path: String,
+    pub status: u16,
+    pub duration_ms: u64,
+    pub bytes_out: u64,
+    pub bytes_in: u64,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+pub struct CostLog {
+    path: PathBuf,
+}
+
+impl CostLog {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    pub fn default_path() -> PathBuf {
+        let mut dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        dir.push("JosefinesJamstudio");
+        dir.push("usage-log.jsonl");
+        dir
+    }
+
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+
+    pub fn append(&self, entry: &CostEntry) -> Result<(), String> {
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .map_err(|e| format!("{}: {e}", self.path.display()))?;
+        let line = serde_json::to_string(entry).map_err(|e| e.to_string())?;
+        writeln!(f, "{line}").map_err(|e| e.to_string())
+    }
+
+    /// Newest last. Lines that do not parse are skipped (a half-written line after
+    /// a crash must not hide the rest).
+    pub fn list(&self, limit: usize) -> Vec<CostEntry> {
+        let Ok(f) = std::fs::File::open(&self.path) else {
+            return Vec::new();
+        };
+        let entries: Vec<CostEntry> = std::io::BufReader::new(f)
+            .lines()
+            .map_while(Result::ok)
+            .filter_map(|l| serde_json::from_str(&l).ok())
+            .collect();
+        let skip = entries.len().saturating_sub(limit);
+        entries.into_iter().skip(skip).collect()
+    }
+
+    /// Totals per provider for the summary line in Settings.
+    pub fn totals(&self) -> Vec<CostTotal> {
+        let mut by: HashMap<String, CostTotal> = HashMap::new();
+        for e in self.list(usize::MAX) {
+            let t = by.entry(e.provider.clone()).or_insert_with(|| CostTotal {
+                provider: e.provider.clone(),
+                ..CostTotal::default()
+            });
+            t.calls += 1;
+            t.bytes_in += e.bytes_in;
+            t.bytes_out += e.bytes_out;
+            if e.status >= 400 || e.error.is_some() {
+                t.failures += 1;
+            }
+        }
+        let mut v: Vec<CostTotal> = by.into_values().collect();
+        v.sort_by(|a, b| a.provider.cmp(&b.provider));
+        v
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CostTotal {
+    pub provider: String,
+    pub calls: u64,
+    pub failures: u64,
+    pub bytes_in: u64,
+    pub bytes_out: u64,
+}
+
+fn strip_query(path: &str) -> String {
+    path.split('?').next().unwrap_or(path).to_string()
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Performs the request. The key never leaves this function.
+pub async fn provider_fetch(
+    req: FetchRequest,
+    store: &dyn SecretStore,
+    log: &CostLog,
+) -> Result<FetchResponse, String> {
+    let (entry, url) = validate(&req)?;
+    let key = store.get(entry.id).ok_or_else(|| {
+        format!(
+            "no API key for \"{}\": add it under Settings → API credentials",
+            entry.id
+        )
+    })?;
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(90))
+        .user_agent("josefines-jamstudio/0.1")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let method = reqwest::Method::from_bytes(req.method.to_ascii_uppercase().as_bytes())
+        .map_err(|e| e.to_string())?;
+    let mut builder = client.request(method, &url);
+    for (k, v) in &req.headers {
+        builder = builder.header(k, v);
+    }
+    builder = match entry.auth {
+        AuthScheme::HeaderKey(h) => builder.header(h, key),
+        AuthScheme::Bearer => builder.bearer_auth(key),
+    };
+    let bytes_out = req.body.as_ref().map(|b| b.len() as u64).unwrap_or(0);
+    if let Some(body) = req.body {
+        if !req
+            .headers
+            .keys()
+            .any(|k| k.eq_ignore_ascii_case("content-type"))
+        {
+            builder = builder.header("content-type", "application/json");
+        }
+        builder = builder.body(body);
+    }
+
+    let started = Instant::now();
+    let mut cost = CostEntry {
+        at_ms: now_ms(),
+        provider: entry.id.to_string(),
+        method: req.method.to_ascii_uppercase(),
+        path: strip_query(&req.path),
+        status: 0,
+        duration_ms: 0,
+        bytes_out,
+        bytes_in: 0,
+        error: None,
+    };
+
+    let result = async {
+        let resp = builder
+            .send()
+            .await
+            .map_err(|e| format!("{}: {e}", entry.id))?;
+        let status = resp.status().as_u16();
+        let headers: HashMap<String, String> = resp
+            .headers()
+            .iter()
+            .filter(|(k, _)| !k.as_str().eq_ignore_ascii_case("set-cookie"))
+            .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.to_string(), v.to_string())))
+            .collect();
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| format!("{}: {e}", entry.id))?;
+        Ok::<FetchResponse, String>(FetchResponse {
+            status,
+            headers,
+            body,
+        })
+    }
+    .await;
+
+    cost.duration_ms = started.elapsed().as_millis() as u64;
+    match &result {
+        Ok(r) => {
+            cost.status = r.status;
+            cost.bytes_in = r.body.len() as u64;
+        }
+        Err(e) => cost.error = Some(e.clone()),
+    }
+    if let Err(e) = log.append(&cost) {
+        tracing::warn!("usage log: {e}");
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::keys::MemoryStore;
+
+    fn req(provider: &str, path: &str) -> FetchRequest {
+        FetchRequest {
+            provider: provider.into(),
+            path: path.into(),
+            method: "POST".into(),
+            headers: HashMap::new(),
+            body: Some("{}".into()),
+        }
+    }
+
+    #[test]
+    fn only_allow_listed_providers_and_relative_paths() {
+        assert!(validate(&req("gemini", "/v1beta/models")).is_ok());
+        let (_, url) = validate(&req("gemini", "/v1beta/models?x=1")).unwrap();
+        assert_eq!(
+            url,
+            "https://generativelanguage.googleapis.com/v1beta/models?x=1"
+        );
+
+        assert!(validate(&req("evil", "/x"))
+            .unwrap_err()
+            .contains("allow-list"));
+        assert!(validate(&req("gemini", "https://evil.example/x")).is_err());
+        assert!(validate(&req("gemini", "//evil.example/x")).is_err());
+        assert!(validate(&req("gemini", "/a/../b")).is_err());
+        assert!(validate(&req("gemini", "/x@y")).is_err());
+        assert!(validate(&req("gemini", "/with space")).is_err());
+        let mut r = req("gemini", "/x");
+        r.method = "TRACE".into();
+        assert!(validate(&r).is_err());
+    }
+
+    #[test]
+    fn callers_cannot_inject_auth_headers() {
+        let mut r = req("openai", "/v1/chat/completions");
+        r.headers
+            .insert("Authorization".into(), "Bearer stolen".into());
+        assert!(validate(&r).unwrap_err().contains("Authorization"));
+        let mut r = req("gemini", "/v1beta/x");
+        r.headers.insert("X-GOOG-API-KEY".into(), "k".into());
+        assert!(validate(&r).is_err());
+        let mut r = req("gemini", "/v1beta/x");
+        r.headers
+            .insert("content-type".into(), "application/json".into());
+        assert!(validate(&r).is_ok());
+    }
+
+    #[tokio::test]
+    async fn missing_key_fails_before_any_network() {
+        let store = MemoryStore::default();
+        let dir = std::env::temp_dir().join(format!("jam-net-{}", std::process::id()));
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        let err = provider_fetch(req("gemini", "/v1beta/models"), &store, &log)
+            .await
+            .unwrap_err();
+        assert!(err.contains("no API key"), "{err}");
+        assert!(
+            log.list(10).is_empty(),
+            "nothing is logged when nothing was sent"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cost_log_round_trips_and_strips_queries() {
+        let dir = std::env::temp_dir().join(format!("jam-costlog-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        for i in 0..5u16 {
+            log.append(&CostEntry {
+                at_ms: 1000 + u64::from(i),
+                provider: if i % 2 == 0 { "gemini" } else { "elevenlabs" }.into(),
+                method: "POST".into(),
+                path: strip_query("/v1/x?key=SECRET"),
+                status: if i == 4 { 500 } else { 200 },
+                duration_ms: 10,
+                bytes_out: 100,
+                bytes_in: 200,
+                error: None,
+            })
+            .unwrap();
+        }
+        // A torn line must not break reading.
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(log.path())
+            .unwrap()
+            .write_all(b"{ torn")
+            .unwrap();
+
+        let last2 = log.list(2);
+        assert_eq!(last2.len(), 2);
+        assert_eq!(last2[1].at_ms, 1004);
+        assert_eq!(last2[1].path, "/v1/x");
+        assert!(!std::fs::read_to_string(log.path())
+            .unwrap()
+            .contains("SECRET"));
+
+        let totals = log.totals();
+        assert_eq!(totals.len(), 2);
+        let g = totals.iter().find(|t| t.provider == "gemini").unwrap();
+        assert_eq!(g.calls, 3);
+        assert_eq!(g.failures, 1);
+        assert_eq!(g.bytes_in, 600);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

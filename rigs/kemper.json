@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "kemper",
+  "name": "Kemper Profiler",
+  "targetDevice": "Kemper Profiler / Stage (5-pin MIDI, channel 1)",
+  "kind": "Kemper",
+  "midiChannel": 0,
+  "sceneCc": null,
+  "supports": {
+    "programChange": true,
+    "controlChange": true,
+    "midiClock": false
+  },
+  "notes": "In Performance mode, CC 50-54 select slots 1-5 of the current performance; Program Change selects performances/rigs. Scenes here use the slot CCs.",
+  "programs": [],
+  "controls": [
+    {
+      "cc": 31,
+      "name": "Tuner",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    },
+    {
+      "cc": 30,
+      "name": "Tap tempo",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    },
+    { "cc": 7, "name": "Volume", "min": 0, "max": 127, "default": 100 }
+  ],
+  "scenes": [
+    {
+      "name": "Slot 1",
+      "commands": [{ "type": "controlChange", "cc": 50, "value": 1 }]
+    },
+    {
+      "name": "Slot 2",
+      "commands": [{ "type": "controlChange", "cc": 51, "value": 1 }]
+    },
+    {
+      "name": "Slot 3",
+      "commands": [{ "type": "controlChange", "cc": 52, "value": 1 }]
+    },
+    {
+      "name": "Slot 4",
+      "commands": [{ "type": "controlChange", "cc": 53, "value": 1 }]
+    },
+    {
+      "name": "Slot 5",
+      "commands": [{ "type": "controlChange", "cc": 54, "value": 1 }]
+    }
+  ]
+}

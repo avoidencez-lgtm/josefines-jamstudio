@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "helix",
+  "name": "Line 6 Helix",
+  "targetDevice": "Helix Floor / LT / Rack (5-pin or USB-MIDI, channel 1)",
+  "kind": "Helix",
+  "midiChannel": 0,
+  "sceneCc": 69,
+  "supports": {
+    "programChange": true,
+    "controlChange": true,
+    "midiClock": true
+  },
+  "notes": "Snapshots 1-8 are selected with CC 69 (value 0-7). Presets are selected with Program Change (Bank Select CC 0/32 for banks above 128 is not sent).",
+  "programs": [],
+  "controls": [
+    { "cc": 69, "name": "Snapshot (1-8)", "min": 0, "max": 7, "default": 0 },
+    {
+      "cc": 68,
+      "name": "Tuner",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    },
+    {
+      "cc": 64,
+      "name": "Tap tempo",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    }
+  ],
+  "scenes": [
+    { "name": "Snapshot 1" },
+    { "name": "Snapshot 2" },
+    { "name": "Snapshot 3" },
+    { "name": "Snapshot 4" },
+    { "name": "Snapshot 5" },
+    { "name": "Snapshot 6" },
+    { "name": "Snapshot 7" },
+    { "name": "Snapshot 8" }
+  ]
+}

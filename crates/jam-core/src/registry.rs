@@ -74,6 +74,7 @@ pub struct RigManifest {
     pub schema_version: u32,
     pub id: String,
     pub name: String,
+    #[serde(default, alias = "targetDevice")]
     pub target_device: String,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,

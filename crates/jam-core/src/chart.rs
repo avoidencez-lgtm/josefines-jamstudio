@@ -305,7 +305,10 @@ mod tests {
         assert_eq!(r.chord_at(1, 1), ("A7".into(), Some("D7".into())));
         assert_eq!(r.chord_at(1, 2), ("A7".into(), Some("D7".into())));
         assert_eq!(r.chord_at(1, 3), ("D7".into(), Some("E7".into())));
-        assert_eq!(r.chord_at_position(1, 3.9), ("D7".into(), Some("E7".into())));
+        assert_eq!(
+            r.chord_at_position(1, 3.9),
+            ("D7".into(), Some("E7".into()))
+        );
         assert_eq!(r.chord_at(2, 1), ("E7".into(), Some("A7".into())));
         // Wraps around the arrangement.
         assert_eq!(r.chord_at(3, 1).0, "A7");

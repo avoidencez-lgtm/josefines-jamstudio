@@ -7,6 +7,9 @@ pub trait SecretStore: Send + Sync {
     fn set(&self, provider: &str, secret: &str) -> Result<(), String>;
     fn has(&self, provider: &str) -> bool;
     fn delete(&self, provider: &str) -> Result<(), String>;
+    /// The secret itself. Only `net::provider_fetch` may call this; no IPC command
+    /// returns a key to the WebView.
+    fn get(&self, provider: &str) -> Option<String>;
 }
 
 /// KeyringStore: Production implementation using OS Keychain via keyring crate.
@@ -46,6 +49,12 @@ impl SecretStore for KeyringStore {
         }
         Ok(())
     }
+
+    fn get(&self, provider: &str) -> Option<String> {
+        keyring::Entry::new(&self.service, provider)
+            .ok()
+            .and_then(|e| e.get_password().ok())
+    }
 }
 
 /// MemoryStore: In-memory store for headless testing without touching OS keychain.
@@ -70,6 +79,10 @@ impl SecretStore for MemoryStore {
         let mut map = self.secrets.lock().unwrap();
         map.remove(provider);
         Ok(())
+    }
+
+    fn get(&self, provider: &str) -> Option<String> {
+        self.secrets.lock().unwrap().get(provider).cloned()
     }
 }
 

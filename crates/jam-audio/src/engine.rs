@@ -151,7 +151,7 @@ pub enum EngineMode {
     Headless,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct EngineStatus {
     pub mode: EngineMode,
     pub running: bool,
@@ -208,8 +208,8 @@ pub struct AudioEngine {
 }
 
 fn default_style() -> Style {
-    serde_json::from_str(include_str!("../../../styles/blues-shuffle.json")).unwrap_or_else(
-        |_| Style {
+    serde_json::from_str(include_str!("../../../styles/blues-shuffle.json")).unwrap_or_else(|_| {
+        Style {
             schema_version: 1,
             id: "blues-shuffle".into(),
             name: "Blues Shuffle".into(),
@@ -229,12 +229,14 @@ fn default_style() -> Style {
                 timing_ms: 2.0,
                 velocity: 0.05,
             },
-        },
-    )
+        }
+    })
 }
 
 fn headless_requested() -> bool {
-    std::env::var("JAM_HEADLESS").map(|v| v == "1").unwrap_or(false)
+    std::env::var("JAM_HEADLESS")
+        .map(|v| v == "1")
+        .unwrap_or(false)
 }
 
 impl AudioEngine {
@@ -420,6 +422,11 @@ impl AudioEngine {
         self.recorder.lock().is_recording()
     }
 
+    /// The rate the recorder (and the running stream) currently uses.
+    pub fn sample_rate(&self) -> u32 {
+        self.recorder.lock().sample_rate()
+    }
+
     pub fn get_telemetry(&self) -> EngineTelemetry {
         let mut tel = self.latest_telemetry.lock().clone();
         tel.status = self.status.lock().clone();
@@ -544,7 +551,10 @@ impl AudioEngine {
                 Ok(f) => Box::new(f),
                 Err(e) => {
                     problems.push(format!("JAM_FAKE_INPUT {path}: {e}; using 440 Hz sine"));
-                    Box::new(FileInput::sine_440(requested_buffer as usize, effective_rate))
+                    Box::new(FileInput::sine_440(
+                        requested_buffer as usize,
+                        effective_rate,
+                    ))
                 }
             },
             (None, true) => Box::new(FileInput::sine_440(

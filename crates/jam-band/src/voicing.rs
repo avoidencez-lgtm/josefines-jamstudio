@@ -62,9 +62,8 @@ fn classify_quality(suffix: &str) -> ChordQuality {
     if q.is_empty() {
         return ChordQuality::Major;
     }
-    let has_seventh_ext = |s: &str| {
-        s.contains('7') || s.contains('9') || s.contains("11") || s.contains("13")
-    };
+    let has_seventh_ext =
+        |s: &str| s.contains('7') || s.contains('9') || s.contains("11") || s.contains("13");
 
     if q.starts_with("m7b5") || q.starts_with('ø') || q.starts_with("min7b5") {
         return ChordQuality::HalfDiminished;
@@ -101,7 +100,10 @@ fn classify_quality(suffix: &str) -> ChordQuality {
     if q == "5" || q.starts_with("power") {
         return ChordQuality::Power5;
     }
-    if q.starts_with("dom") || q.starts_with('7') || q.starts_with('9') || q.starts_with("11")
+    if q.starts_with("dom")
+        || q.starts_with('7')
+        || q.starts_with('9')
+        || q.starts_with("11")
         || q.starts_with("13")
     {
         return ChordQuality::Dominant7;
@@ -125,9 +127,7 @@ pub fn voice_chord(chord_symbol: &str, voicing_kind: &str) -> Vec<u8> {
         ("shell", ChordQuality::Sus4) => &[0, 5, 7],
         ("power", _) => &[0, 7, 12], // Root, 5, 8ve
         ("triad", ChordQuality::Minor) | ("triad", ChordQuality::Minor7) => &[0, 3, 7],
-        ("triad", ChordQuality::Diminished) | ("triad", ChordQuality::HalfDiminished) => {
-            &[0, 3, 6]
-        }
+        ("triad", ChordQuality::Diminished) | ("triad", ChordQuality::HalfDiminished) => &[0, 3, 6],
         ("triad", ChordQuality::Sus4) => &[0, 5, 7],
         ("triad", _) => &[0, 4, 7],
         ("drop2", ChordQuality::Dominant7) => &[0, 10, 16, 19], // Root, b7, 3, 5
@@ -171,7 +171,12 @@ pub fn voice_chord(chord_symbol: &str, voicing_kind: &str) -> Vec<u8> {
 /// Computes a bass note from chord root semitone, degree (1..=7), and octave.
 /// Strictly constrained within E1 (28) to G3 (55). Assumes a dominant-flavoured chord.
 pub fn bass_note_for_degree(root_semitone: i32, degree: i32, octave_offset: i32) -> u8 {
-    bass_note_for_chord(root_semitone, ChordQuality::Dominant7, degree, octave_offset)
+    bass_note_for_chord(
+        root_semitone,
+        ChordQuality::Dominant7,
+        degree,
+        octave_offset,
+    )
 }
 
 /// Like [`bass_note_for_degree`] but the third, fifth and seventh follow the chord

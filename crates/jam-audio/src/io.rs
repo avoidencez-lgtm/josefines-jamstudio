@@ -207,7 +207,9 @@ impl FileInput {
     pub fn sine_440(buffer_size: usize, sample_rate: u32) -> Self {
         let n = sample_rate as usize;
         let s: Vec<f32> = (0..n)
-            .map(|i| (2.0 * std::f32::consts::PI * 440.0 * i as f32 / sample_rate as f32).sin() * 0.8)
+            .map(|i| {
+                (2.0 * std::f32::consts::PI * 440.0 * i as f32 / sample_rate as f32).sin() * 0.8
+            })
             .collect();
         Self::from_samples_at(s, buffer_size, sample_rate)
     }
@@ -598,7 +600,12 @@ pub struct CpalInput {
 }
 
 impl CpalInput {
-    pub fn new(device_name: Option<String>, channel: u16, sample_rate: u32, buffer_size: u32) -> Self {
+    pub fn new(
+        device_name: Option<String>,
+        channel: u16,
+        sample_rate: u32,
+        buffer_size: u32,
+    ) -> Self {
         Self {
             device_name,
             channel,

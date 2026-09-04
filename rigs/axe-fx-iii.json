@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "axe-fx",
+  "name": "Fractal Axe-Fx III",
+  "targetDevice": "Axe-Fx III / FM3 / FM9 (5-pin or USB-MIDI, channel 1)",
+  "kind": "AxeFx",
+  "midiChannel": 0,
+  "sceneCc": 34,
+  "supports": {
+    "programChange": true,
+    "controlChange": true,
+    "midiClock": true
+  },
+  "notes": "Scenes 1-8 are selected with CC 34 (value 0-7, the default Scene Select CC). Presets by Program Change.",
+  "programs": [],
+  "controls": [
+    { "cc": 34, "name": "Scene (1-8)", "min": 0, "max": 7, "default": 0 },
+    {
+      "cc": 15,
+      "name": "Tuner",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    },
+    {
+      "cc": 14,
+      "name": "Tap tempo",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    }
+  ],
+  "scenes": [
+    { "name": "Scene 1" },
+    { "name": "Scene 2" },
+    { "name": "Scene 3" },
+    { "name": "Scene 4" },
+    { "name": "Scene 5" },
+    { "name": "Scene 6" },
+    { "name": "Scene 7" },
+    { "name": "Scene 8" }
+  ]
+}

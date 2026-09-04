@@ -26,15 +26,32 @@
       "bass": {
         "lengthBeats": 4.0,
         "notes": [
-          { "degree": 1, "octave": 0, "atBeats": 0.0, "durBeats": 1.9, "velocity": 0.85 },
-          { "degree": 1, "octave": 0, "atBeats": 2.0, "durBeats": 1.9, "velocity": 0.8 }
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.0,
+            "durBeats": 1.9,
+            "velocity": 0.85
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 2.0,
+            "durBeats": 1.9,
+            "velocity": 0.8
+          }
         ]
       },
       "comp": {
         "lengthBeats": 4.0,
         "voicing": "power",
         "strums": [
-          { "atBeats": 0.0, "durBeats": 3.9, "velocity": 0.7, "direction": "down" }
+          {
+            "atBeats": 0.0,
+            "durBeats": 3.9,
+            "velocity": 0.7,
+            "direction": "down"
+          }
         ]
       }
     },
@@ -64,32 +81,144 @@
       "bass": {
         "lengthBeats": 4.0,
         "notes": [
-          { "degree": 1, "octave": 0, "atBeats": 0.0, "durBeats": 0.4, "velocity": 0.9 },
-          { "degree": 1, "octave": 0, "atBeats": 0.5, "durBeats": 0.2, "velocity": 0.8 },
-          { "degree": 1, "octave": 0, "atBeats": 0.75, "durBeats": 0.2, "velocity": 0.85 },
-          { "degree": 1, "octave": 0, "atBeats": 1.0, "durBeats": 0.4, "velocity": 0.9 },
-          { "degree": 1, "octave": 0, "atBeats": 1.5, "durBeats": 0.2, "velocity": 0.8 },
-          { "degree": 1, "octave": 0, "atBeats": 1.75, "durBeats": 0.2, "velocity": 0.85 },
-          { "degree": 1, "octave": 0, "atBeats": 2.0, "durBeats": 0.4, "velocity": 0.9 },
-          { "degree": 1, "octave": 0, "atBeats": 2.5, "durBeats": 0.2, "velocity": 0.8 },
-          { "degree": 1, "octave": 0, "atBeats": 2.75, "durBeats": 0.2, "velocity": 0.85 },
-          { "degree": 1, "octave": 0, "atBeats": 3.0, "durBeats": 0.4, "velocity": 0.9 },
-          { "degree": 1, "octave": 0, "atBeats": 3.5, "durBeats": 0.2, "velocity": 0.8 },
-          { "degree": 1, "octave": 0, "atBeats": 3.75, "durBeats": 0.2, "velocity": 0.85 }
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.0,
+            "durBeats": 0.4,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.5,
+            "durBeats": 0.2,
+            "velocity": 0.8
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.75,
+            "durBeats": 0.2,
+            "velocity": 0.85
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 1.0,
+            "durBeats": 0.4,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 1.5,
+            "durBeats": 0.2,
+            "velocity": 0.8
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 1.75,
+            "durBeats": 0.2,
+            "velocity": 0.85
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 2.0,
+            "durBeats": 0.4,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 2.5,
+            "durBeats": 0.2,
+            "velocity": 0.8
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 2.75,
+            "durBeats": 0.2,
+            "velocity": 0.85
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 3.0,
+            "durBeats": 0.4,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 3.5,
+            "durBeats": 0.2,
+            "velocity": 0.8
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 3.75,
+            "durBeats": 0.2,
+            "velocity": 0.85
+          }
         ]
       },
       "comp": {
         "lengthBeats": 4.0,
         "voicing": "power",
         "strums": [
-          { "atBeats": 0.0, "durBeats": 0.45, "velocity": 0.9, "direction": "down" },
-          { "atBeats": 0.5, "durBeats": 0.2, "velocity": 0.75, "direction": "down" },
-          { "atBeats": 0.75, "durBeats": 0.2, "velocity": 0.8, "direction": "down" },
-          { "atBeats": 1.0, "durBeats": 0.9, "velocity": 0.85, "direction": "down" },
-          { "atBeats": 2.0, "durBeats": 0.45, "velocity": 0.9, "direction": "down" },
-          { "atBeats": 2.5, "durBeats": 0.2, "velocity": 0.75, "direction": "down" },
-          { "atBeats": 2.75, "durBeats": 0.2, "velocity": 0.8, "direction": "down" },
-          { "atBeats": 3.0, "durBeats": 0.9, "velocity": 0.85, "direction": "down" }
+          {
+            "atBeats": 0.0,
+            "durBeats": 0.45,
+            "velocity": 0.9,
+            "direction": "down"
+          },
+          {
+            "atBeats": 0.5,
+            "durBeats": 0.2,
+            "velocity": 0.75,
+            "direction": "down"
+          },
+          {
+            "atBeats": 0.75,
+            "durBeats": 0.2,
+            "velocity": 0.8,
+            "direction": "down"
+          },
+          {
+            "atBeats": 1.0,
+            "durBeats": 0.9,
+            "velocity": 0.85,
+            "direction": "down"
+          },
+          {
+            "atBeats": 2.0,
+            "durBeats": 0.45,
+            "velocity": 0.9,
+            "direction": "down"
+          },
+          {
+            "atBeats": 2.5,
+            "durBeats": 0.2,
+            "velocity": 0.75,
+            "direction": "down"
+          },
+          {
+            "atBeats": 2.75,
+            "durBeats": 0.2,
+            "velocity": 0.8,
+            "direction": "down"
+          },
+          {
+            "atBeats": 3.0,
+            "durBeats": 0.9,
+            "velocity": 0.85,
+            "direction": "down"
+          }
         ]
       }
     },
@@ -113,43 +242,180 @@
           { "instrument": "snare", "atBeats": 3.0, "velocity": 1.0 },
           { "instrument": "hihat_open", "atBeats": 3.0, "velocity": 0.7 },
           { "instrument": "kick", "atBeats": 3.5, "velocity": 0.9 },
-          { "instrument": "snare", "atBeats": 3.5, "velocity": 0.6, "prob": 0.4 },
+          {
+            "instrument": "snare",
+            "atBeats": 3.5,
+            "velocity": 0.6,
+            "prob": 0.4
+          },
           { "instrument": "kick", "atBeats": 3.75, "velocity": 0.95 }
         ]
       },
       "bass": {
         "lengthBeats": 4.0,
         "notes": [
-          { "degree": 1, "octave": 0, "atBeats": 0.0, "durBeats": 0.4, "velocity": 1.0 },
-          { "degree": 1, "octave": 0, "atBeats": 0.5, "durBeats": 0.2, "velocity": 0.9 },
-          { "degree": 1, "octave": 0, "atBeats": 0.75, "durBeats": 0.2, "velocity": 0.95 },
-          { "degree": 1, "octave": 0, "atBeats": 1.0, "durBeats": 0.4, "velocity": 1.0 },
-          { "degree": 1, "octave": 0, "atBeats": 1.5, "durBeats": 0.2, "velocity": 0.9 },
-          { "degree": 1, "octave": 0, "atBeats": 1.75, "durBeats": 0.2, "velocity": 0.95 },
-          { "degree": 1, "octave": 0, "atBeats": 2.0, "durBeats": 0.4, "velocity": 1.0 },
-          { "degree": 1, "octave": 0, "atBeats": 2.5, "durBeats": 0.2, "velocity": 0.9 },
-          { "degree": 1, "octave": 0, "atBeats": 2.75, "durBeats": 0.2, "velocity": 0.95 },
-          { "degree": 5, "octave": 0, "atBeats": 3.0, "durBeats": 0.4, "velocity": 1.0 },
-          { "degree": 1, "octave": 0, "atBeats": 3.5, "durBeats": 0.2, "velocity": 0.9 },
-          { "degree": 1, "octave": 0, "atBeats": 3.75, "durBeats": 0.2, "velocity": 0.95 }
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.0,
+            "durBeats": 0.4,
+            "velocity": 1.0
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.5,
+            "durBeats": 0.2,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.75,
+            "durBeats": 0.2,
+            "velocity": 0.95
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 1.0,
+            "durBeats": 0.4,
+            "velocity": 1.0
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 1.5,
+            "durBeats": 0.2,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 1.75,
+            "durBeats": 0.2,
+            "velocity": 0.95
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 2.0,
+            "durBeats": 0.4,
+            "velocity": 1.0
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 2.5,
+            "durBeats": 0.2,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 2.75,
+            "durBeats": 0.2,
+            "velocity": 0.95
+          },
+          {
+            "degree": 5,
+            "octave": 0,
+            "atBeats": 3.0,
+            "durBeats": 0.4,
+            "velocity": 1.0
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 3.5,
+            "durBeats": 0.2,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 3.75,
+            "durBeats": 0.2,
+            "velocity": 0.95
+          }
         ]
       },
       "comp": {
         "lengthBeats": 4.0,
         "voicing": "power",
         "strums": [
-          { "atBeats": 0.0, "durBeats": 0.45, "velocity": 1.0, "direction": "down" },
-          { "atBeats": 0.5, "durBeats": 0.2, "velocity": 0.85, "direction": "down" },
-          { "atBeats": 0.75, "durBeats": 0.2, "velocity": 0.9, "direction": "down" },
-          { "atBeats": 1.0, "durBeats": 0.45, "velocity": 1.0, "direction": "down" },
-          { "atBeats": 1.5, "durBeats": 0.2, "velocity": 0.85, "direction": "down" },
-          { "atBeats": 1.75, "durBeats": 0.2, "velocity": 0.9, "direction": "down" },
-          { "atBeats": 2.0, "durBeats": 0.45, "velocity": 1.0, "direction": "down" },
-          { "atBeats": 2.5, "durBeats": 0.2, "velocity": 0.85, "direction": "down" },
-          { "atBeats": 2.75, "durBeats": 0.2, "velocity": 0.9, "direction": "down" },
-          { "atBeats": 3.0, "durBeats": 0.45, "velocity": 1.0, "direction": "down" },
-          { "atBeats": 3.5, "durBeats": 0.2, "velocity": 0.85, "direction": "down" },
-          { "atBeats": 3.75, "durBeats": 0.2, "velocity": 0.9, "direction": "down" }
+          {
+            "atBeats": 0.0,
+            "durBeats": 0.45,
+            "velocity": 1.0,
+            "direction": "down"
+          },
+          {
+            "atBeats": 0.5,
+            "durBeats": 0.2,
+            "velocity": 0.85,
+            "direction": "down"
+          },
+          {
+            "atBeats": 0.75,
+            "durBeats": 0.2,
+            "velocity": 0.9,
+            "direction": "down"
+          },
+          {
+            "atBeats": 1.0,
+            "durBeats": 0.45,
+            "velocity": 1.0,
+            "direction": "down"
+          },
+          {
+            "atBeats": 1.5,
+            "durBeats": 0.2,
+            "velocity": 0.85,
+            "direction": "down"
+          },
+          {
+            "atBeats": 1.75,
+            "durBeats": 0.2,
+            "velocity": 0.9,
+            "direction": "down"
+          },
+          {
+            "atBeats": 2.0,
+            "durBeats": 0.45,
+            "velocity": 1.0,
+            "direction": "down"
+          },
+          {
+            "atBeats": 2.5,
+            "durBeats": 0.2,
+            "velocity": 0.85,
+            "direction": "down"
+          },
+          {
+            "atBeats": 2.75,
+            "durBeats": 0.2,
+            "velocity": 0.9,
+            "direction": "down"
+          },
+          {
+            "atBeats": 3.0,
+            "durBeats": 0.45,
+            "velocity": 1.0,
+            "direction": "down"
+          },
+          {
+            "atBeats": 3.5,
+            "durBeats": 0.2,
+            "velocity": 0.85,
+            "direction": "down"
+          },
+          {
+            "atBeats": 3.75,
+            "durBeats": 0.2,
+            "velocity": 0.9,
+            "direction": "down"
+          }
         ]
       }
     }

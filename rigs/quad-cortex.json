@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "quad-cortex",
+  "name": "Neural DSP Quad Cortex",
+  "targetDevice": "Quad Cortex (5-pin or USB-MIDI, channel 1)",
+  "kind": "QuadCortex",
+  "midiChannel": 0,
+  "sceneCc": 43,
+  "supports": {
+    "programChange": true,
+    "controlChange": true,
+    "midiClock": true
+  },
+  "notes": "Scenes A-H are selected with CC 43 (value 0-7) inside the current preset. Presets are selected with Program Change.",
+  "programs": [],
+  "controls": [
+    { "cc": 43, "name": "Scene (A-H)", "min": 0, "max": 7, "default": 0 },
+    {
+      "cc": 44,
+      "name": "Tuner",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    },
+    {
+      "cc": 45,
+      "name": "Gig View",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    }
+  ],
+  "scenes": [
+    { "name": "Scene A" },
+    { "name": "Scene B" },
+    { "name": "Scene C" },
+    { "name": "Scene D" },
+    { "name": "Scene E" },
+    { "name": "Scene F" },
+    { "name": "Scene G" },
+    { "name": "Scene H" }
+  ]
+}

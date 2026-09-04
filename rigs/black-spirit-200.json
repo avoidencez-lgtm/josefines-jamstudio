@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "id": "black-spirit-200",
+  "name": "Hughes & Kettner Black Spirit 200",
+  "targetDevice": "Black Spirit 200 head (7-pin MIDI In, channel 2, Omni Off)",
+  "kind": "BlackSpirit",
+  "midiChannel": 1,
+  "sceneCc": null,
+  "supports": {
+    "programChange": true,
+    "controlChange": true,
+    "midiClock": false
+  },
+  "notes": "On the amp: MIDI channel 2 and Omni OFF, otherwise it also reacts to the HeadRush's channel-1 messages when daisy-chained. Presets are recalled by Program Change (0-127); save your sounds to the preset numbers used by the scenes. The CC numbers follow the Black Spirit 200 manual (p. 10) and are to be confirmed on the real amp (owner gate 5).",
+  "programs": [
+    { "number": 0, "name": "Preset 1 (Clean)" },
+    { "number": 1, "name": "Preset 2 (Crunch)" },
+    { "number": 2, "name": "Preset 3 (Lead)" },
+    { "number": 3, "name": "Preset 4 (Ultra)" }
+  ],
+  "controls": [
+    { "cc": 20, "name": "Gain", "min": 0, "max": 127, "default": 64 },
+    { "cc": 7, "name": "Volume", "min": 0, "max": 127, "default": 90 },
+    { "cc": 21, "name": "Bass", "min": 0, "max": 127, "default": 64 },
+    { "cc": 22, "name": "Mid", "min": 0, "max": 127, "default": 64 },
+    { "cc": 23, "name": "Treble", "min": 0, "max": 127, "default": 64 },
+    { "cc": 25, "name": "Presence", "min": 0, "max": 127, "default": 64 },
+    { "cc": 24, "name": "Resonance", "min": 0, "max": 127, "default": 64 },
+    { "cc": 59, "name": "Sagging", "min": 0, "max": 127, "default": 32 },
+    {
+      "cc": 31,
+      "name": "Channel (Clean/Crunch/Lead/Ultra)",
+      "min": 0,
+      "max": 127,
+      "default": 0
+    },
+    {
+      "cc": 64,
+      "name": "Boost",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    },
+    {
+      "cc": 52,
+      "name": "Mod FX",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    },
+    {
+      "cc": 53,
+      "name": "Delay",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    },
+    {
+      "cc": 54,
+      "name": "Reverb",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    },
+    { "cc": 28, "name": "Delay volume", "min": 0, "max": 127, "default": 40 },
+    { "cc": 29, "name": "Reverb volume", "min": 0, "max": 127, "default": 40 },
+    {
+      "cc": 63,
+      "name": "Noise gate",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    },
+    {
+      "cc": 9,
+      "name": "Mute",
+      "min": 0,
+      "max": 127,
+      "default": 0,
+      "toggle": true
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Clean",
+      "commands": [
+        { "type": "programChange", "program": 0 },
+        { "type": "wait", "ms": 20 },
+        { "type": "controlChange", "cc": 64, "value": 0 }
+      ]
+    },
+    {
+      "name": "Crunch",
+      "commands": [
+        { "type": "programChange", "program": 1 },
+        { "type": "wait", "ms": 20 },
+        { "type": "controlChange", "cc": 64, "value": 0 }
+      ]
+    },
+    {
+      "name": "Lead",
+      "commands": [
+        { "type": "programChange", "program": 2 },
+        { "type": "wait", "ms": 20 },
+        { "type": "controlChange", "cc": 20, "value": 100 },
+        { "type": "controlChange", "cc": 64, "value": 127 }
+      ]
+    },
+    {
+      "name": "Ultra",
+      "commands": [
+        { "type": "programChange", "program": 3 },
+        { "type": "wait", "ms": 20 },
+        { "type": "controlChange", "cc": 64, "value": 127 }
+      ]
+    },
+    {
+      "name": "Mute",
+      "commands": [{ "type": "controlChange", "cc": 9, "value": 127 }]
+    }
+  ]
+}

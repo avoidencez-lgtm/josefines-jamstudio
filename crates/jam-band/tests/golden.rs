@@ -90,12 +90,24 @@ fn render_part_only(style_json: &str, drums: bool, bass: bool, comp: bool) -> f3
 #[test]
 fn every_style_has_audible_drums_bass_and_comp() {
     let styles = [
-        ("blues-shuffle", include_str!("../../../styles/blues-shuffle.json")),
-        ("rock-straight", include_str!("../../../styles/rock-straight.json")),
+        (
+            "blues-shuffle",
+            include_str!("../../../styles/blues-shuffle.json"),
+        ),
+        (
+            "rock-straight",
+            include_str!("../../../styles/rock-straight.json"),
+        ),
         ("funk-16", include_str!("../../../styles/funk-16.json")),
-        ("jazz-swing", include_str!("../../../styles/jazz-swing.json")),
+        (
+            "jazz-swing",
+            include_str!("../../../styles/jazz-swing.json"),
+        ),
         ("ballad-68", include_str!("../../../styles/ballad-68.json")),
-        ("metal-gallop", include_str!("../../../styles/metal-gallop.json")),
+        (
+            "metal-gallop",
+            include_str!("../../../styles/metal-gallop.json"),
+        ),
     ];
     for (id, json) in styles {
         let d = render_part_only(json, true, false, false);

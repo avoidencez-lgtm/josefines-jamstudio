@@ -40,14 +40,20 @@ const CONTINUITY_EPS: f64 = 1e-6;
 
 #[derive(Debug, Clone)]
 enum SpanEventKind {
-    Drum { instrument: String, velocity: f32 },
+    Drum {
+        instrument: String,
+        velocity: f32,
+    },
     NoteOn {
         channel: u8,
         key: u8,
         velocity: f32,
         off_at_beats: f64,
     },
-    NoteOff { channel: u8, key: u8 },
+    NoteOff {
+        channel: u8,
+        key: u8,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -420,7 +426,10 @@ impl BandSequencer {
         for ev in events {
             let off = ev.offset.min(frames);
             if off > cursor {
-                self.render_tails(&mut output_left[cursor..off], &mut output_right[cursor..off]);
+                self.render_tails(
+                    &mut output_left[cursor..off],
+                    &mut output_right[cursor..off],
+                );
                 cursor = off;
             }
             self.fire(ev.kind);
@@ -470,8 +479,7 @@ impl BandSequencer {
     }
 
     fn humanize_offset(&mut self, nominal: f64, frames: usize) -> usize {
-        let jitter_samples =
-            self.style.humanize.timing_ms as f64 * 1e-3 * self.sample_rate as f64;
+        let jitter_samples = self.style.humanize.timing_ms as f64 * 1e-3 * self.sample_rate as f64;
         let jitter = if jitter_samples > 0.0 {
             (self.rng.gen::<f64>() - 0.5) * 2.0 * jitter_samples
         } else {
@@ -793,7 +801,10 @@ mod tests {
             "expected swung onset near {swung}, got {found:?}"
         );
         let straight = (1.5 * 24_000.0) as usize;
-        assert!(!near(&found, straight), "straight eighth must not also fire");
+        assert!(
+            !near(&found, straight),
+            "straight eighth must not also fire"
+        );
     }
 
     #[test]
@@ -803,7 +814,11 @@ mod tests {
         let found = onsets(&l, 0.1);
         assert_eq!(found.len(), 4, "one kick per bar, got {found:?}");
         for i in 0..4 {
-            assert!(near(&found, i * 96_000), "bar {} downbeat: {found:?}", i + 1);
+            assert!(
+                near(&found, i * 96_000),
+                "bar {} downbeat: {found:?}",
+                i + 1
+            );
         }
     }
 
@@ -911,7 +926,11 @@ mod tests {
             })
             .collect();
         assert_eq!(keys.len(), 2);
-        assert_eq!((keys[1] as i32 - keys[0] as i32).rem_euclid(12), 7, "C then G");
+        assert_eq!(
+            (keys[1] as i32 - keys[0] as i32).rem_euclid(12),
+            7,
+            "C then G"
+        );
     }
 
     #[test]
