@@ -51,7 +51,7 @@ On this Windows machine, in a clean worktree at `8af35ac`:
 | `lua tests/reaper-import.lua` | not run here (no Lua); CI runs it |
 
 GitHub CI on #26, #27 and #28 is green. On #29 the two Rust jobs were still
-running when this review was written; the TypeScript, gitleaks and link jobs
+running when this review was written and finished green before it was filed; the TypeScript, gitleaks and link jobs
 had passed.
 
 Not run: the real Tauri app (`pnpm tauri dev`). F1 was established from the
