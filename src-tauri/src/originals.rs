@@ -205,25 +205,36 @@ pub fn originals_list() -> Result<Vec<Value>, String> {
     Ok(docs)
 }
 
-pub fn file_takes() -> Result<Vec<TakeMetadata>, String> {
+pub fn file_takes() -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
     let root = std::env::var("JAM_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| Library::default_user_root())
         .join("takes");
+    scan_takes(&root)
+}
+
+fn scan_takes(root: &Path) -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
     if !root.exists() {
-        return Ok(vec![]);
+        return Ok((vec![], vec![]));
     }
     let mut takes = Vec::new();
+    let mut warnings = Vec::new();
     for entry in fs::read_dir(root).map_err(|e| e.to_string())? {
         let p = entry.map_err(|e| e.to_string())?.path().join("take.json");
         if p.exists() {
-            takes.push(
-                serde_json::from_str(&fs::read_to_string(&p).map_err(|e| e.to_string())?)
-                    .map_err(|e| format!("{}: {e}", p.display()))?,
-            );
+            match fs::read(&p)
+                .map_err(|e| e.to_string())
+                .and_then(|s| serde_json::from_slice(&s).map_err(|e| e.to_string()))
+            {
+                Ok(take) => takes.push(take),
+                Err(e) => warnings.push(format!(
+                    "Cannot read {}: {e}. Other takes remain available; this file was left intact.",
+                    p.display()
+                )),
+            }
         }
     }
-    Ok(takes)
+    Ok((takes, warnings))
 }
 
 pub fn read_clip(spec: ClipSpec, state: &AppState) -> Result<Clip, String> {
@@ -259,6 +270,12 @@ pub fn originals_load(document: Value, state: State<'_, AppState>) -> Result<(),
                 lib.style(&s.parts[1].style_id)?,
                 lib.style(&s.parts[2].style_id)?,
             ];
+            if styles
+                .iter()
+                .any(|s| s.feel.time_sig != song.chart.time_sig)
+            {
+                return Err("Choose 4/4 styles for this original song.".into());
+            }
             sections.insert(
                 id.clone(),
                 SectionBand {
@@ -369,6 +386,34 @@ pub fn takes_favourite(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn corrupt_manifest_does_not_hide_other_takes() {
+        let root = std::env::temp_dir().join(format!("jam-take-scan-{}", std::process::id()));
+        for id in ["good", "bad"] {
+            std::fs::create_dir_all(root.join(id)).unwrap();
+        }
+        let take = jam_audio::recorder::TakeMetadata {
+            id: "good".into(),
+            ..Default::default()
+        };
+        std::fs::write(
+            root.join("good/take.json"),
+            serde_json::to_vec(&take).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(root.join("bad/take.json"), b"broken").unwrap();
+        let (takes, warnings) = super::scan_takes(&root).unwrap();
+        assert_eq!(takes.len(), 1);
+        assert_eq!(takes[0].id, "good");
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("bad"));
+        assert_eq!(
+            std::fs::read(root.join("bad/take.json")).unwrap(),
+            b"broken"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     use super::*;
     #[test]
     fn song_tones_require_the_selected_live_rig_and_valid_unique_sections() {

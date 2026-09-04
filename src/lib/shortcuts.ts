@@ -166,8 +166,7 @@ export function handleShortcut(
   store: EngineState,
   ctx: ShortcutContext,
 ): boolean {
-  if (e.defaultPrevented || (store.currentScreen === "jo" && e.code === "KeyT"))
-    return false;
+  if (e.defaultPrevented) return false;
   const target = e.target as HTMLElement | null;
   if (
     target?.closest("button, summary") &&

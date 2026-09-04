@@ -368,11 +368,16 @@ export function Originals() {
                       }}
                     >
                       <option value="">Change unlocked parts</option>
-                      {styles.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
+                      {styles
+                        .filter(
+                          (s) =>
+                            s.feel.timeSig[0] === 4 && s.feel.timeSig[1] === 4,
+                        )
+                        .map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
                     </select>
                   </label>
                   <NumberField
@@ -404,11 +409,17 @@ export function Originals() {
                               })
                             }
                           >
-                            {styles.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
+                            {styles
+                              .filter(
+                                (s) =>
+                                  s.feel.timeSig[0] === 4 &&
+                                  s.feel.timeSig[1] === 4,
+                              )
+                              .map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
                           </select>
                         </label>
                         <label>

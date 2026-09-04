@@ -1,12 +1,11 @@
-import { Microphone } from "@phosphor-icons/react";
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
 import { WorkspaceHeader } from "../components/Workspace";
-import { dispatchJoToolCall, speakJoReply } from "../lib/jo/dispatcher";
+import { dispatchJoToolCall } from "../lib/jo/dispatcher";
 import type { JoContext } from "../lib/jo/gemini";
 import { parseNaturalIntent } from "../lib/jo/intent";
 import type { JoMessage, JoToolCall } from "../lib/jo/persona";
@@ -20,21 +19,6 @@ import { useMedia } from "../lib/media";
 import { useWriting } from "../lib/originals";
 import { useEngineStore } from "../store/engine";
 import { openAiSettings } from "./Settings";
-
-interface SpeechResultEvent {
-  results: Array<Array<{ transcript: string }>>;
-}
-
-interface BrowserSpeechRecognition {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  onresult: (event: SpeechResultEvent) => void;
-  onend: () => void;
-  onerror: (error: unknown) => void;
-}
 
 export function joNeedsReview(call: JoToolCall): boolean {
   return (
@@ -77,12 +61,6 @@ const setLastBrain = (lastBrain: string) =>
 export const Jo: React.FC = () => {
   const { messages, inputValue, busy, pending, lastBrain } =
     useJoConversation();
-  const [voiceAvailable, setVoiceAvailable] = useState(false);
-  const [joState, setJoState] = useState<
-    "idle" | "listening" | "thinking" | "speaking"
-  >("idle");
-  const [isHoldingPtt, setIsHoldingPtt] = useState(false);
-  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const { keysPresent, isPreview, notify } = useEngineStore();
   const { preferences, loaded } = useAi();
@@ -167,131 +145,7 @@ export const Jo: React.FC = () => {
   useEffect(() => {
     const list = messagesEndRef.current?.parentElement;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [messages, joState]);
-
-  // Setup Web Speech API if supported
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const win = window as unknown as {
-        SpeechRecognition?: new () => BrowserSpeechRecognition;
-        webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
-      };
-      const RecognitionCtor =
-        win.SpeechRecognition || win.webkitSpeechRecognition;
-
-      setVoiceAvailable(Boolean(RecognitionCtor));
-      if (RecognitionCtor) {
-        const rec = new RecognitionCtor();
-        rec.continuous = false;
-        rec.interimResults = false;
-        rec.lang = "en-US";
-
-        rec.onresult = (event: SpeechResultEvent) => {
-          const transcript = event.results[0]?.[0]?.transcript;
-          if (transcript) {
-            handleUserQuery(transcript);
-          }
-        };
-
-        rec.onend = () => {
-          setIsHoldingPtt(false);
-          setJoState("idle");
-        };
-
-        rec.onerror = () => {
-          setIsHoldingPtt(false);
-          setJoState("idle");
-        };
-
-        recognitionRef.current = rec;
-        return () => {
-          rec.onresult = () => {};
-          rec.onend = () => {};
-          rec.onerror = () => {};
-          try {
-            rec.stop();
-          } catch {
-            /* Some WebViews reject stop before start. */
-          }
-          recognitionRef.current = null;
-        };
-      }
-    }
-  }, []);
-
-  // Global Push-to-Talk shortcut ('t' key)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLSelectElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target instanceof HTMLElement && e.target.isContentEditable) ||
-        e.ctrlKey ||
-        e.metaKey ||
-        e.altKey
-      )
-        return;
-      if ((e.key === "t" || e.key === "T") && !isHoldingPtt && !e.repeat) {
-        e.preventDefault();
-        startListening();
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLSelectElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target instanceof HTMLElement && e.target.isContentEditable) ||
-        e.ctrlKey ||
-        e.metaKey ||
-        e.altKey
-      )
-        return;
-      if (e.key === "t" || e.key === "T") {
-        e.preventDefault();
-        stopListening();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [isHoldingPtt]);
-
-  const startListening = () => {
-    if (
-      !recognitionRef.current ||
-      useJoConversation.getState().busy ||
-      useJoConversation.getState().pending
-    )
-      return;
-    setIsHoldingPtt(true);
-    setJoState("listening");
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-      } catch {
-        setIsHoldingPtt(false);
-        setJoState("idle");
-      }
-    }
-  };
-
-  const stopListening = () => {
-    setIsHoldingPtt(false);
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        // ignored
-      }
-    }
-  };
+  }, [messages, busy]);
 
   const handleUserQuery = async (query: string) => {
     if (
@@ -315,7 +169,6 @@ export const Jo: React.FC = () => {
       const history = useJoConversation.getState().messages;
       setMessages((prev) => [...prev, userMsg]);
       setInputValue("");
-      setJoState("thinking");
 
       const expectedSong = documentFingerprint();
       const { reply, toolCalls } = await think(history, query);
@@ -348,12 +201,10 @@ export const Jo: React.FC = () => {
       };
 
       setMessages((prev) => [...prev, joMsg]);
-      speakJoReply(reply);
     } catch (e) {
       notify("error", String(e));
     } finally {
       useJoConversation.setState({ busy: false });
-      setJoState("idle");
     }
   };
 
@@ -361,14 +212,12 @@ export const Jo: React.FC = () => {
     <div className="jo-workspace flex flex-col gap-4 max-w-5xl mx-auto w-full">
       <WorkspaceHeader
         screen="jo"
-        title="A bandmate you can talk to."
+        title="Your bandmate, in plain language."
         description="Direct the band in plain language, or work on your original song together."
       >
         <StatusPill
-          status={busy || joState === "listening" ? "live" : "idle"}
-          label={
-            busy ? "Thinking" : joState === "listening" ? "Listening" : "Ready"
-          }
+          status={busy ? "live" : "idle"}
+          label={busy ? "Thinking" : "Ready"}
         />
         <Button onClick={openAiSettings}>Choose AI & model</Button>
       </WorkspaceHeader>
@@ -382,11 +231,7 @@ export const Jo: React.FC = () => {
             : "Tempo, cues, styles & recording"}
         </span>
         {lastBrain && <span>Last reply: {lastBrain}</span>}
-        <span>
-          {voiceAvailable
-            ? "Voice available · hold T outside text fields"
-            : "Voice unavailable here · type below"}
-        </span>
+        <span>Text commands · native voice is not available in this build</span>
       </div>
       <div className="jo-suggestions" aria-label="Suggested prompts">
         {[
@@ -523,37 +368,6 @@ export const Jo: React.FC = () => {
         )}
         {/* Push-to-Talk & Input Bar */}
         <div className="jo-composer">
-          {/* Push-to-talk button */}
-          <Button
-            variant={isHoldingPtt ? "danger" : "primary"}
-            size="md"
-            disabled={!voiceAvailable || busy || Boolean(pending)}
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              startListening();
-            }}
-            onPointerUp={stopListening}
-            onPointerCancel={stopListening}
-            onKeyDown={(e) => {
-              if ((e.key === " " || e.key === "Enter") && !e.repeat) {
-                e.preventDefault();
-                startListening();
-              }
-            }}
-            onKeyUp={(e) => {
-              if (e.key === " " || e.key === "Enter") {
-                e.preventDefault();
-                stopListening();
-              }
-            }}
-            onBlur={stopListening}
-            className="select-none min-w-[140px]"
-          >
-            <Microphone size={18} aria-hidden="true" />
-            {isHoldingPtt ? "Listening…" : "Hold to talk"}
-          </Button>
-
-          {/* Text input fallback */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -565,7 +379,7 @@ export const Jo: React.FC = () => {
               type="text"
               aria-label="Message Jo"
               disabled={busy || Boolean(pending)}
-              placeholder="Or type a command (e.g. 'faster', 'drop the bass', 'record a take')..."
+              placeholder="Type a command (e.g. 'faster', 'drop the bass', 'record a take')..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               className="flex-1 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-3 py-2 rounded-[var(--radius-m)] text-xs font-mono focus:outline-none focus:border-[var(--accent)]"

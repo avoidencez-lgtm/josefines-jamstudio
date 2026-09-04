@@ -90,11 +90,18 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
-    initListeners().then((c) => {
-      cleanup = c;
-    });
+    let disposed = false;
+    initListeners()
+      .then((c) => {
+        if (disposed) c();
+        else cleanup = c;
+      })
+      .catch((e) =>
+        useEngineStore.getState().notify("error", `Startup: ${String(e)}`),
+      );
     return () => {
-      if (cleanup) cleanup();
+      disposed = true;
+      cleanup?.();
     };
   }, [initListeners]);
 

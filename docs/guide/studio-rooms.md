@@ -9,7 +9,7 @@ also explains the task; on compact windows the labels remain. The transport and
 | Write — pencil | Original songs, chords, lyrics and guitar layers | Create or open a song |
 | Stage — stage microphone | Playing with the band | Play; use Practice to loop a section |
 | Library — folder | Chord charts and band grooves | Search, open a chart, edit and Play this |
-| Jo AI — conversation | Direct band commands and reviewed song edits | Type a request or hold the microphone button |
+| Jo AI — conversation | Direct band commands and reviewed song edits | Type a request, then review any song edits |
 | Songs — record | Finished mixes, references and generated songs | Import a local audio file or select an existing one |
 | AI Music — waveform | Generate a musical idea | Choose a model, edit a prompt, then Generate |
 | Film — clapperboard | Storyboard and render a music video | Choose the soundtrack, assign footage, fit the cuts |
@@ -39,9 +39,10 @@ is not guaranteed across restarts. The browser preview does not write files.
 
 Jo's suggestion buttons fill the input; Send executes a live band command.
 Song changes appear as a proposal with Apply and Dismiss. If you change the song
-before applying, the stale proposal is refused. Voice availability depends on the
-WebView and microphone permission; typing is always available. Hold T only while
-in Jo and outside an editor. It does not also tap the tempo.
+before applying, the stale proposal is refused. Native voice is not available in
+this build. T taps the tempo outside text fields, including in Jo. Audio capture
+and playback belong to Rust and the selected hardware devices.
+
 
 Use AI & models in Settings for the selected text assistant, installed agent or
 API key. AI Music and Film have their own media-model choices. A ChatGPT or Claude

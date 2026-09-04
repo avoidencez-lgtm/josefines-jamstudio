@@ -60,7 +60,7 @@ impl DawExporter {
         track_data.extend_from_slice(&[0x00, 0xFF, 0x58, 0x04, num, den_pow, 0x18, 0x08]);
 
         // 2. Set Tempo: delta 0, FF 51 03 [24-bit microsec/quarter]
-        let us_per_quarter = (60_000_000.0 / tempo.max(20.0)).round() as u32;
+        let us_per_quarter = (60_000_000.0 / (tempo.max(20.0) * 4.0 / den as f64)).round() as u32;
         let t_bytes = us_per_quarter.to_be_bytes();
         track_data.extend_from_slice(&[0x00, 0xFF, 0x51, 0x03, t_bytes[1], t_bytes[2], t_bytes[3]]);
 
@@ -118,6 +118,8 @@ impl DawExporter {
         let info = serde_json::json!({
             "takeId": job.take_id,
             "tempo": job.tempo,
+            "quarterNoteBpm": job.tempo * 4.0 / job.time_sig.1 as f64,
+            "beatUnit": "time-signature denominator",
             "timeSignature": format!("{}/{}", job.time_sig.0, job.time_sig.1),
             "sampleRate": job.sample_rate,
             "sections": job.sections.iter().map(|(n, b)| serde_json::json!({"name": n, "bar": b})).collect::<Vec<_>>(),
@@ -205,7 +207,10 @@ pub fn write_reaper_import(
         .fold(0.0, f64::max);
     let mut data = format!(
         "local session = {{tempo={}, numerator={}, denominator={}, length={}, files={{\n",
-        job.tempo, job.time_sig.0, job.time_sig.1, length
+        job.tempo * 4.0 / job.time_sig.1 as f64,
+        job.time_sig.0,
+        job.time_sig.1,
+        length
     );
     for (name, role, duration) in files {
         let muted = role == "master"
@@ -221,10 +226,7 @@ pub fn write_reaper_import(
     }
     data.push_str("}, markers={\n");
     for (name, bar) in job.sections {
-        let seconds = bar.saturating_sub(1) as f64 * job.time_sig.0 as f64 * 4.0
-            / job.time_sig.1 as f64
-            * 60.0
-            / job.tempo;
+        let seconds = bar.saturating_sub(1) as f64 * job.time_sig.0 as f64 * 60.0 / job.tempo;
         if seconds < length {
             data.push_str(&format!(
                 "{{name={}, time={}}},\n",
@@ -275,22 +277,25 @@ fn write_var_len(buf: &mut Vec<u8>, mut val: u32) {
 pub fn write_performance_midi(
     path: &Path,
     take: &crate::recorder::TakeMetadata,
+    time_sig: (u8, u8),
 ) -> std::io::Result<()> {
     let mut notes = take.midi.clone();
     notes.sort_by_key(|n| (n.frame, n.bytes[0]));
     let mut track = vec![0, 0xff, 0x51, 3];
-    let tempo = (60_000_000.0 / take.tempo.max(20.0)).round() as u32;
+    let quarter_bpm = take.tempo.max(20.0) * 4.0 / time_sig.1.max(1) as f64;
+    let tempo = (60_000_000.0 / quarter_bpm).round() as u32;
     track.extend_from_slice(&tempo.to_be_bytes()[1..]);
     let mut previous = 0;
     let rate = take.sample_rate.max(1) as f64;
     for n in notes {
-        let tick = (n.frame.min(take.sample_count as u64) as f64 / rate * take.tempo / 60.0 * 480.0)
+        let tick = (n.frame.min(take.sample_count as u64) as f64 / rate * quarter_bpm / 60.0
+            * 480.0)
             .round() as u32;
         write_var_len(&mut track, tick.saturating_sub(previous));
         track.extend_from_slice(&n.bytes);
         previous = tick;
     }
-    let end = (take.sample_count as f64 / rate * take.tempo / 60.0 * 480.0).round() as u32;
+    let end = (take.sample_count as f64 / rate * quarter_bpm / 60.0 * 480.0).round() as u32;
     write_var_len(&mut track, end.saturating_sub(previous));
     track.extend_from_slice(&[
         0xb0, 123, 0, 0, 0xb1, 123, 0, 0, 0xb9, 123, 0, 0, 0xff, 0x2f, 0,
@@ -410,6 +415,16 @@ mod tests {
         assert!(text.contains("time=0.5, status=144, pitch=45, velocity=100"));
         assert!(text.contains("Verse \\\"one\\\"\\010ø"));
         assert!(!text.contains(&report.dir)); // relative media paths survive moving Windows -> Mac
+        let compound = ExportJob {
+            tempo: 240.0,
+            time_sig: (6, 8),
+            sections: &[("Next", 2)],
+            ..job
+        };
+        write_reaper_import(&dir, &compound, &report, &[]).unwrap();
+        let compound_text = std::fs::read_to_string(&script).unwrap();
+        assert!(compound_text.contains("tempo=120, numerator=6, denominator=8"));
+        assert!(compound_text.contains("{name=\"Next\", time=1.5}"));
         report.copied_stems.retain(|p| !p.ends_with("-drums.wav"));
         write_reaper_import(&dir, &job, &report, &[]).unwrap();
         assert!(std::fs::read_to_string(&script)
@@ -454,6 +469,20 @@ mod tests {
         // Var-len 5760 = 0xAD 0x00
         assert_eq!(&midi[37..39], &[0xAD, 0x00]);
         assert_eq!(&midi[39..41], &[0xFF, 0x06]);
+        for meter in [(6, 8), (12, 8), (4, 4)] {
+            let midi = DawExporter::build_tempo_map_midi_with_meter(60.0, meter, &[("B", 9)]);
+            let micros = u32::from_be_bytes([0, midi[34], midi[35], midi[36]]);
+            let mut tick = 0_u32;
+            for byte in &midi[37..] {
+                tick = (tick << 7) | u32::from(byte & 127);
+                if byte & 128 == 0 {
+                    break;
+                }
+            }
+            let seconds = tick as f64 / 480.0 * micros as f64 / 1_000_000.0;
+            let timeline = jam_core::timeline::Timeline::new(48_000, 60.0, meter);
+            assert!((seconds - 8.0 * timeline.samples_per_bar() as f64 / 48_000.0).abs() < 1e-6);
+        }
     }
 
     #[test]

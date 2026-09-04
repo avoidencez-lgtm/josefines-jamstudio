@@ -129,6 +129,25 @@ impl Library {
             .ok_or_else(|| format!("unknown style \"{id}\""))
     }
 
+    pub fn style_for_chart(&self, chart: &Chart) -> Result<Style, String> {
+        let style = match &chart.default_style_id {
+            Some(id) => self.style(id)?,
+            None => self
+                .styles
+                .list()
+                .into_iter()
+                .find(|s| s.feel.time_sig == chart.time_sig)
+                .cloned()
+                .ok_or("No style matches this chart's meter.")?,
+        };
+        if style.feel.time_sig != chart.time_sig {
+            return Err(
+                "The chart's default style has a different meter. Choose a matching style.".into(),
+            );
+        }
+        Ok(style)
+    }
+
     pub fn chart(&self, id: &str) -> Result<Chart, String> {
         self.charts
             .get(id)

@@ -39,7 +39,7 @@ What "better than the manufacturers" means, concretely (from the competitive res
 
 ## Definition of Done for the project
 
-The project is done when every point below is true and verified, the owner gates in [06-owner-verification.md](06-owner-verification.md) are ticked, and the status board shows every milestone ✅.
+These are the original full-product targets, not claims about the current preview. The project is done when every point below is true and verified, the owner gates in [06-owner-verification.md](06-owner-verification.md) are ticked, and the status board shows every milestone ✅.
 
 1. **Installs and runs on the guitarist's Apple Silicon Mac** from a GitHub Release. Onboarding completes with the HeadRush Pedalboard selected as a 4-channel input (dry DI on channel 3) and the HeadRush USB return as output. Latency calibration returns a stable offset within ±2 samples across 5 runs.
 2. **Band.** At least 6 styles, any key, 40 to 240 bpm, chart editor with presets, count-in, cues (fill, crash, stop, ending), intensity following the guitarist's energy.
@@ -71,8 +71,8 @@ The project is done when every point below is true and verified, the owner gates
 What remains, per open milestone:
 
 - **M1e**: takes record as 24-bit WAV stems and the take browser works. Latency compensation is a manual offset; the automatic loopback measurement is not built.
-- **M2**: Jo hears through the browser Web Speech API and speaks through browser speech synthesis; with a Gemini key she uses Gemini function calling, otherwise a local intent parser. ElevenLabs STT/TTS, the 30-utterance script in `tests/fixtures/jo/` and the 2.5 s latency gate are outstanding.
-- **M3**, **M4**: not started beyond UI layout. `song_*` and `ai_music_start` commands refuse with a clear message so nothing pretends to work.
+- **M2**: typed Jo, configurable providers, offline intents and installed-agent proposals are available. Native STT/TTS, the voice bus, the planned 30-utterance fixture and the Mac latency gate remain outstanding. Browser speech has been removed.
+- **M3**, **M4**: local media import/reference playback, music/video generation, ComfyUI workflows and Film rendering exist in #29. Automatic stems/analysis/stretch and Lyria RealTime remain unbuilt. Model/GPU acceptance is pending owner.
 - **M5**: six rig profiles, real MIDI out, section-bound scenes and a monitor are in and tested against a memory sink. Owner gate 5 (the real HeadRush and Black Spirit) is pending owner.
 - **M6**: analysis reads the recorded DI (timing, dynamics, McLeod-based intonation) and export writes stems, a tempo map with the chart's markers and a sidecar. The LLM review of a take and the Logic Pro drift measurement (owner gate) are outstanding.
 - **M7**: CI is green on Windows and macOS; `release.yml` builds bundles on a tag. Signing, notarisation, onboarding and the `tests/invariants/` extensibility proofs are outstanding.
@@ -146,3 +146,10 @@ work. See [room guide](../guide/studio-rooms.md) and [research](../research/stud
 Frontend checks, headless Rust gates and multi-size browser checks pass locally;
 Windows/macOS CI and owner acceptance are tracked in #29. No milestones are marked
 complete by this UI slice alone.
+
+## Build integration
+
+The current build is stabilised separately from the unbuilt roadmap above. See
+[build closeout](../reviews/build-closeout.md) for native IPC, persistence, meter
+export and installer validation. Owner hardware/provider gates remain open;
+no milestone is marked complete by a headless or browser-only check.

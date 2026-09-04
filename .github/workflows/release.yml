@@ -55,7 +55,23 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Build preview installers
+        if: github.event_name == 'workflow_dispatch'
+        run: pnpm tauri build ${{ matrix.args }}
+
+      - name: Upload preview installers
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jamstudio-${{ matrix.name }}
+          path: |
+            target/**/bundle/**/*.dmg
+            target/**/bundle/**/*.msi
+            target/**/bundle/**/*.exe
+          if-no-files-found: error
+
       - name: Build and upload bundles
+        if: github.event_name == 'push'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -63,7 +79,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Josefines Jamstudio ${{ github.ref_name }}"
           releaseBody: |
-            Unsigned preview build. See the README for what works and what is still a placeholder.
+            Unsigned preview build. See the README for supported workflows and pending owner checks.
             macOS: right-click the app and choose Open the first time. Windows: choose "More info", then "Run anyway".
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-') }}

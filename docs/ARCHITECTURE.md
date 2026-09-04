@@ -21,7 +21,7 @@ Corollaries that resolve most design questions:
 
 - All audio devices, capture, mixing, playback, recording and MIDI live in Rust. The WebView has no `<audio>` element and no Web Audio output.
 - All realtime network streams that carry audio or need a key (Lyria, ElevenLabs TTS and STT, Music.ai jobs, stem jobs, asset downloads) live in Rust.
-- The LLM conversation (text in, tool calls out) lives in TypeScript with the Vercel AI SDK, but its HTTP goes through the Rust `provider_fetch` proxy that injects the key.
+- The LLM conversation (text in, tool calls out) lives in the TypeScript provider registry, but its HTTP goes through the Rust `provider_fetch` proxy that injects the key.
 - Music theory (chord parsing, transposition, scales) lives in TypeScript (`tonal`); Rust receives fully resolved numeric charts and owns only voicing templates.
 - 48 kHz internally, always. Devices that run at another rate are resampled at the edge.
 - One clock: the output audio callback's frame counter. Everything musical derives from it.
@@ -518,3 +518,30 @@ are deliberately single-action requests. New tools reuse the same declarations
 for Jo, API models and installed agents. Dynamic API model catalogs are explicit
 GET requests through the existing proxy. User-entered model IDs remain available.
 See [ADR 0007](adr/0007-installed-studio-agents.md) and [setup guide](guide/api-options.md).
+
+## Preview build boundary (2026-09-05)
+
+The sections above retain the target design, including unbuilt voice, analysis,
+resampling and extension-proof work. Current support is recorded in
+[build closeout](reviews/build-closeout.md), the README and the milestone board.
+
+Logical UI event names use `domain.state`; `src/ipc/client.ts` translates dots to
+colons for Tauri (`transport:state`, `input:meters`, etc.). Rust emits these colon
+names because Tauri rejects dots. The local `main` capability grants only event
+listen/unlisten. Production CSP permits local IPC, bundled assets and scoped
+silent video; external scripts, frames and browser networking are blocked.
+
+A transport beat is the denominator unit: 6/8 at 60 means six seconds per bar.
+Exports use quarter-note BPM = engine BPM × 4 / denominator, for both MIDI files
+and REAPER. Recordings snapshot the meter; timing edits are refused during a take.
+Charts and styles with different meters are refused before playback changes.
+
+Settings writes flush a temporary file, retain the previous valid `.bak`, then
+rename. Corrupt settings are reported and are never overwritten by defaults.
+Take scanning reports damaged manifests individually; complete cached manifests
+retain stems, MIDI, snapshots and flags. New code uses the native Mac Keychain
+and Windows credential store. Browser speech APIs are not part of this build.
+
+CPAL conversion uses bounded stack blocks and one callback owner, with no resize,
+mutex or logging in the callback. A rejected requested buffer is reported to the
+user; the engine's headless fallback still keeps the editor usable.

@@ -360,6 +360,23 @@ impl AudioEngine {
 
     // ----- band ------------------------------------------------------------
 
+    pub fn validate_style_meter(&self, style: &Style) -> Result<(), String> {
+        if style.feel.time_sig != self.timeline.lock().time_signature {
+            return Err(
+                "Style and transport meters differ. Load a chart with a matching style and meter."
+                    .into(),
+            );
+        }
+        Ok(())
+    }
+
+    pub fn validate_transport_meter(&self, meter: (u8, u8)) -> Result<(), String> {
+        if meter != self.sequencer.lock().style.feel.time_sig {
+            return Err("Load a chart with a matching style to change meter.".into());
+        }
+        Ok(())
+    }
+
     pub fn band_set_style(&self, style: Style) {
         self.sequencer.lock().set_style(style);
     }
@@ -422,14 +439,21 @@ impl AudioEngine {
                     .unwrap_or_else(|| "blues-12-bar".into()),
             )
         };
-        let tempo = self.timeline.lock().bpm;
+        let (tempo, meter) = {
+            let tl = self.timeline.lock();
+            (tl.bpm, tl.time_signature)
+        };
         let mut recorder = self.recorder.lock();
         recorder.snapshot = self.song_snapshot.clone();
+        if recorder.snapshot.is_null() {
+            recorder.snapshot = serde_json::json!({});
+        }
+        recorder.snapshot["timeSignature"] = serde_json::json!(meter);
         recorder.start_take(session_id, style_id, chart_id, tempo)
     }
 
     pub fn ensure_timing_editable(&self) -> Result<(), String> {
-        if !self.song_snapshot.is_null() && self.recorder_is_recording() {
+        if self.recorder_is_recording() {
             return Err("Save the take before changing playback or timing.".into());
         }
         Ok(())
@@ -1199,6 +1223,19 @@ fn dirs_base() -> std::path::PathBuf {
 mod tests {
     use super::*;
 
+    #[test]
+    fn incompatible_meter_is_refused_before_groove_change() {
+        let engine = AudioEngine::new(AudioConfig::default());
+        let ballad: Style =
+            serde_json::from_str(include_str!("../../../styles/ballad-68.json")).unwrap();
+        assert!(engine.validate_style_meter(&ballad).is_err());
+        assert!(engine.validate_transport_meter((6, 8)).is_err());
+        engine.transport_set_time_signature((6, 8));
+        assert!(engine.validate_style_meter(&ballad).is_ok());
+        engine.band_set_style(ballad);
+        assert!(engine.validate_transport_meter((6, 8)).is_ok());
+    }
+
     fn headless_engine() -> AudioEngine {
         std::env::set_var("JAM_HEADLESS", "1");
         AudioEngine::new(AudioConfig::default())
@@ -1238,7 +1275,9 @@ mod tests {
         thread::sleep(Duration::from_millis(220));
         let take = engine.recorder_stop().unwrap();
         engine.stop().unwrap();
-        assert_eq!(take.snapshot, doc);
+        let mut recorded = doc.clone();
+        recorded["timeSignature"] = serde_json::json!([4, 4]);
+        assert_eq!(take.snapshot, recorded);
         assert!(take.sample_count > 1000);
         assert!(take.midi.iter().any(|n| n.bytes[0] == 0x99));
         assert!(take.midi.iter().any(|n| n.bytes[0] == 0x90));
@@ -1253,7 +1292,7 @@ mod tests {
             );
         }
         let midi_path = root.join("notes.mid");
-        crate::export::write_performance_midi(&midi_path, &take).unwrap();
+        crate::export::write_performance_midi(&midi_path, &take, (4, 4)).unwrap();
         let bytes = std::fs::read(midi_path).unwrap();
         assert_eq!(&bytes[..4], b"MThd");
         assert!(bytes

@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import chart from "../../charts/blues-12-bar.json";
 import type { Chart } from "../../src/ipc/contract";
-import { handleShortcut } from "../../src/lib/shortcuts";
+import { SHORTCUTS, handleShortcut } from "../../src/lib/shortcuts";
 import { joNeedsReview } from "../../src/screens/Jo";
 import { sectionPassages } from "../../src/screens/Stage";
 import { SCREENS, SCREEN_ICONS } from "../../src/screens/registry";
@@ -32,12 +32,16 @@ describe("Studio workspaces", () => {
       joNeedsReview({ name: "songwriting", arguments: { action: "save" } }),
     ).toBe(false);
   });
-  it("leaves Jo push-to-talk and focused controls to their own handlers", () => {
+  it("uses one tap-tempo handler on Jo and preserves focused controls", () => {
     const ctx = { toggleHelp: () => {} };
-    const store = { currentScreen: "jo" } as EngineState;
-    expect(handleShortcut({ code: "KeyT" } as KeyboardEvent, store, ctx)).toBe(
-      false,
+    const tapTempo = vi.fn();
+    const store = { currentScreen: "jo", tapTempo } as unknown as EngineState;
+    const handlers = SHORTCUTS.filter((s) =>
+      s.matches({ code: "KeyT" } as KeyboardEvent),
     );
+    expect(handlers).toHaveLength(1);
+    handlers[0].run(store);
+    expect(tapTempo).toHaveBeenCalledTimes(1);
     expect(
       handleShortcut({ defaultPrevented: true } as KeyboardEvent, store, ctx),
     ).toBe(false);

@@ -76,5 +76,12 @@ jobs:
         run: cargo test --workspace
         env:
           JAM_HEADLESS: "1"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Compile desktop with embedded frontend
+        run: pnpm tauri build --debug --no-bundle
       - name: License and advisory check (cargo deny)
         run: cargo deny check
