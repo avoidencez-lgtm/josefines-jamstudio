@@ -156,38 +156,51 @@ pub fn media_save(document: Value) -> Result<Value, String> {
 }
 #[tauri::command]
 pub fn media_list() -> Result<Value, String> {
-    let mut result = json!({"projects":[],"assets":[],"jobs":[]});
+    list_media(&root())
+}
+
+fn list_media(base: &Path) -> Result<Value, String> {
+    let mut result = json!({"projects":[],"assets":[],"jobs":[],"warnings":[]});
     for kind in ["projects", "assets", "jobs"] {
-        let dir = root().join(kind);
+        let dir = base.join(kind);
         if !dir.exists() {
             continue;
         }
         for e in fs::read_dir(dir).map_err(|e| e.to_string())? {
             let p = e.map_err(|e| e.to_string())?.path();
-            if p.extension().is_some_and(|e| e == "json") {
-                let value = read(&p)?;
+            if !p.extension().is_some_and(|e| e == "json") {
+                continue;
+            }
+            let checked = read(&p).and_then(|value| {
                 if value["schemaVersion"] != 1 {
-                    return Err(format!(
-                        "Unsupported media document version: {}. Update the app before opening it.",
-                        p.display()
-                    ));
+                    return Err(
+                        "Unsupported version; update the app before opening this file.".into(),
+                    );
                 }
                 if kind == "projects" {
                     project(&value)?;
                 }
-                result[kind]
+                if kind == "assets" {
+                    serde_json::from_value::<Asset>(value.clone()).map_err(|e| e.to_string())?;
+                }
+                Ok(if kind == "jobs" {
+                    public_job(value)
+                } else {
+                    value
+                })
+            });
+            match checked {
+                Ok(value) => result[kind].as_array_mut().unwrap().push(value),
+                Err(e) => result["warnings"]
                     .as_array_mut()
                     .unwrap()
-                    .push(if kind == "jobs" {
-                        public_job(value)
-                    } else {
-                        value
-                    });
+                    .push(json!(format!("{}: {e} File left intact.", p.display()))),
             }
         }
     }
     Ok(result)
 }
+
 fn asset(base: &Path, id: &str) -> Result<Asset, String> {
     valid_id(id)?;
     let a: Asset = serde_json::from_value(read(&base.join("assets").join(format!("{id}.json")))?)
@@ -337,14 +350,90 @@ pub async fn media_from_take(take_id: String, state: State<'_, AppState>) -> Res
         .map_err(|_| "Another media operation is running")?;
     CANCEL.store(false, Ordering::Relaxed);
     let take = crate::find_take(&state, &take_id)?;
-    import(
-        &root(),
-        Path::new(&take.path_master),
-        "audio",
-        &format!("Recorded song · {}", take.timestamp),
-    )
-    .await
+    let rate = if take.sample_rate > 0 {
+        take.sample_rate
+    } else {
+        jam_audio::recorder::wav_sample_rate(Path::new(&take.path_band))?
+    };
+    if take.sample_count == 0 || take.sample_count as u64 > u64::from(rate) * 600 {
+        return Err("Choose a take between one frame and ten minutes.".into());
+    }
+    let work = root().join(format!("mix-{}", id()));
+    fs::create_dir_all(&work).map_err(|e| e.to_string())?;
+    let result = async {
+        let mut files = clean_take_stems(&take);
+        if let Some(value) = take.snapshot["body"].get("clips") {
+            let clips: Vec<jam_audio::workstation::ClipSpec> =
+                serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+            if clips.len() > 16 {
+                return Err("A take supports at most 16 guitar layers.".into());
+            }
+            for (i, spec) in clips.into_iter().enumerate() {
+                if spec.muted {
+                    continue;
+                }
+                let clip = crate::originals::read_clip(spec, &state)?;
+                let path = work.join(format!("layer-{i}.wav"));
+                jam_audio::export::write_clip_stem(
+                    &path,
+                    &clip,
+                    take.sample_count,
+                    rate,
+                    take.tempo,
+                )
+                .map_err(|e| e.to_string())?;
+                files.push(path);
+            }
+        }
+        let mixed = work.join("soundtrack.wav");
+        mix_soundtrack(&files, &mixed).await?;
+        import(
+            &root(),
+            &mixed,
+            "audio",
+            &format!("Clean take mix · {}", take.timestamp),
+        )
+        .await
+    }
+    .await;
+    let _ = fs::remove_dir_all(work);
+    result
 }
+// The monitor/master contains click and test tone; it must never feed a soundtrack.
+fn clean_take_stems(take: &jam_audio::recorder::TakeMetadata) -> Vec<PathBuf> {
+    vec![
+        PathBuf::from(take.stems.get("band").unwrap_or(&take.path_band)),
+        PathBuf::from(take.stems.get("guitar-di").unwrap_or(&take.path_input)),
+    ]
+}
+
+async fn mix_soundtrack(files: &[PathBuf], output: &Path) -> Result<(), String> {
+    let exe = platform::find_agent("ffmpeg", "")?;
+    let mut args: Vec<String> = ["-nostdin", "-y", "-v", "error"]
+        .into_iter()
+        .map(String::from)
+        .collect();
+    for file in files {
+        args.extend(["-i".into(), file.to_string_lossy().into_owned()]);
+    }
+    args.extend([
+        "-filter_complex".into(),
+        format!(
+            "amix=inputs={}:duration=longest:dropout_transition=0:normalize=1",
+            files.len()
+        ),
+        "-ac".into(),
+        "2".into(),
+        "-ar".into(),
+        "48000".into(),
+        "-c:a".into(),
+        "pcm_s24le".into(),
+        output.to_string_lossy().into_owned(),
+    ]);
+    run(&exe, &args, 180).await?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn media_tools() -> Value {
     let ffmpeg = platform::find_agent("ffmpeg", "");
@@ -625,6 +714,32 @@ pub async fn media_open(path: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn media_scan_keeps_good_documents_and_clean_mix_excludes_monitor() {
+        let root = std::env::temp_dir().join(format!("jam-media-scan-{}", super::id()));
+        std::fs::create_dir_all(root.join("projects")).unwrap();
+        let doc = serde_json::json!({"schemaVersion":1,"id":"good","revision":0,"title":"Good","ratio":"16:9","shots":[]});
+        super::save_project(&root, doc).unwrap();
+        std::fs::write(root.join("projects/bad.json"), b"broken").unwrap();
+        let result = super::list_media(&root).unwrap();
+        assert_eq!(result["projects"].as_array().unwrap().len(), 1);
+        assert_eq!(result["warnings"].as_array().unwrap().len(), 1);
+        let take = jam_audio::recorder::TakeMetadata {
+            path_input: "di.wav".into(),
+            path_band: "band.wav".into(),
+            path_master: "click.wav".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::clean_take_stems(&take),
+            [
+                std::path::PathBuf::from("band.wav"),
+                std::path::PathBuf::from("di.wav")
+            ]
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     use super::*;
     #[test]
     fn player_accepts_import_formats_but_not_outside_files_or_programs() {
@@ -656,6 +771,49 @@ mod tests {
         let mut invalid = saved;
         invalid["shots"] = json!([{"id":"a","seconds":0,"trimStart":0,"assetId":null}]);
         assert!(project(&invalid).is_err());
+        fs::remove_dir_all(base).unwrap();
+    }
+    #[tokio::test]
+    #[ignore = "requires user-installed FFmpeg; run with JAM_MEDIA_TEST=1"]
+    async fn clean_soundtrack_uses_stems_not_click_master() {
+        assert_eq!(std::env::var("JAM_MEDIA_TEST").as_deref(), Ok("1"));
+        let base = std::env::temp_dir().join(format!("jam-clean-mix-{}", id()));
+        fs::create_dir_all(&base).unwrap();
+        let exe = platform::find_agent("ffmpeg", "").unwrap();
+        for (name, value) in [("band", 0.2), ("di", 0.4), ("master", 0.9)] {
+            run(
+                &exe,
+                &[
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    &format!("aevalsrc={value}|{value}:s=48000:d=1"),
+                    "-c:a",
+                    "pcm_s24le",
+                    base.join(format!("{name}.wav")).to_str().unwrap(),
+                ]
+                .map(String::from),
+                20,
+            )
+            .await
+            .unwrap();
+        }
+        let take = jam_audio::recorder::TakeMetadata {
+            path_input: base.join("di.wav").to_string_lossy().into_owned(),
+            path_band: base.join("band.wav").to_string_lossy().into_owned(),
+            path_master: base.join("master.wav").to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+        let output = base.join("mix.wav");
+        mix_soundtrack(&clean_take_stems(&take), &output)
+            .await
+            .unwrap();
+        let (audio, rate) = jam_audio::recorder::read_wav_mono(&output).unwrap();
+        assert_eq!(rate, 48000);
+        assert_eq!(audio.len(), 48000);
+        assert!(audio.iter().all(|s| (*s - 0.3).abs() < 0.0001));
         fs::remove_dir_all(base).unwrap();
     }
     #[tokio::test]

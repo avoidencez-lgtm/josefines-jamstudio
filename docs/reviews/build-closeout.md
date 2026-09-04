@@ -63,3 +63,25 @@ Windows Application Control (OS error 4551), not counted as passes. The merge
 requires the full Windows/macOS CI checks, including embedded native builds.
 Ponytail review retained existing patterns and removed unused dependencies;
 no new library or service was introduced.
+
+## Follow-up review on #29
+
+V1/V2 are fixed: Film builds a clean soundtrack from the band, guitar DI and
+unmuted guitar layers, excluding the click/test-tone master; unreadable media
+files produce per-file warnings while healthy documents remain available.
+The clean mix averages its inputs to retain headroom; it is a starting mix,
+not a mastered release. V4 double accidentals now preserve pitch and quality.
+V8 director inputs trim existing prompts; V9 hardcoded media backgrounds use
+the theme token. S1 stale voice copy is removed. S2 adds a native close-request
+listener and a discard/keep-editing dialog; recording/active operations block close.
+
+V7 slider Undo grouping, S3 fast-refresh module separation, S4 chunk splitting
+and S5 proposal conversation flow remain non-blocking refinements. No work on
+these is implied by completing the preview build.
+
+Follow-up local verification: full Clippy passed; 25 Tauri unit tests and the
+opt-in FFmpeg clean-soundtrack test passed (constant stems 0.2 + 0.4 produced 0.3;
+the 0.9 master was excluded). A real Windows WM_CLOSE request showed the native
+unsaved-work dialog, and Keep editing preserved the chart draft. Native take-to-
+media import also passed. The full workspace test run still encounters Windows
+Application Control on the unchanged jam-dsp test executable; CI verifies it.

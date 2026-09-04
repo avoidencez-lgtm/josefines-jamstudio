@@ -101,3 +101,12 @@ refresh it, assign the output and render against a known recording. Verify Mac
 preview/native playback and 16:9/9:16 export. Run the chosen local model workflow
 on its real GPU. Check recognizable subjects and clip consistency by listening
 and viewing the actual outputs; no quality claim is inferred from passing fixtures.
+
+## Take soundtracks and recovery
+
+Use take builds a clean starting mix from band + guitar DI + unmuted guitar
+layers. It excludes the monitor/master recording, which can contain metronome
+clicks and a test tone. Inputs are averaged for headroom. Import a mastered mix
+from Songs when you want a finished release mix. Damaged media JSON files are
+left intact and reported individually; healthy projects remain available.
+A paid generation cannot be recalled once submitted; Cancel stops local rendering.

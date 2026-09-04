@@ -226,7 +226,15 @@ export const useMedia = create<MediaState>((set, get) => ({
       message: "",
     }),
   refresh: async () => {
-    if (!isPreview) set(await ipc.invoke<MediaLibrary>("media_list"));
+    if (!isPreview) {
+      const library = await ipc.invoke<MediaLibrary & { warnings?: string[] }>(
+        "media_list",
+      );
+      set({
+        ...library,
+        message: library.warnings?.join("\n") || get().message,
+      });
+    }
   },
   save: async () => {
     if (isPreview)
@@ -267,7 +275,7 @@ export const useMedia = create<MediaState>((set, get) => ({
               id,
               title,
               seconds,
-              prompt,
+              prompt: prompt.slice(0, 200),
             })),
           }),
         },

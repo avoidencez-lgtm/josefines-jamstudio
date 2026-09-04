@@ -7,7 +7,8 @@ import {
   Stop,
 } from "@phosphor-icons/react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "./components/Button";
 import { EngineStatusPill } from "./components/EngineStatusPill";
 import { Notices } from "./components/Notices";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
@@ -31,6 +32,15 @@ import { SCREENS, SCREEN_ICONS } from "./screens/registry";
 import { useEngineStore } from "./store/engine";
 import "./screens/studio.css";
 
+const hasUnsavedWork = () =>
+  useLibraryDraft.getState().dirty ||
+  useMedia.getState().dirty ||
+  useWriting.getState().dirty;
+const hasActiveWork = () =>
+  useEngineStore.getState().isRecording ||
+  useWriting.getState().busy ||
+  Boolean(useMedia.getState().busy);
+
 export const App: React.FC = () => {
   const {
     currentScreen,
@@ -52,16 +62,47 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (
-        useLibraryDraft.getState().dirty ||
-        useMedia.getState().dirty ||
-        useWriting.getState().dirty
-      )
-        e.preventDefault();
+      if (hasUnsavedWork() || hasActiveWork()) e.preventDefault();
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
+  const [showClose, setShowClose] = useState(false);
+  const closeDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (showClose) closeDialog.current?.showModal();
+  }, [showClose]);
+  useEffect(() => {
+    if (isPreview) return;
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
+    void import("@tauri-apps/api/window")
+      .then(async ({ getCurrentWindow }) => {
+        const off = await getCurrentWindow().onCloseRequested((event) => {
+          if (hasActiveWork()) {
+            event.preventDefault();
+            useEngineStore
+              .getState()
+              .notify(
+                "error",
+                "Finish the recording or current operation before closing.",
+              );
+          } else if (hasUnsavedWork()) {
+            event.preventDefault();
+            setShowClose(true);
+          }
+        });
+        if (disposed) off();
+        else cleanup = off;
+      })
+      .catch((e) =>
+        useEngineStore.getState().notify("error", `Close guard: ${String(e)}`),
+      );
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
+  }, [isPreview]);
   const [showHelp, setShowHelp] = useState(false);
   useEffect(() => {
     void useAi
@@ -108,6 +149,7 @@ export const App: React.FC = () => {
   // One global key handler for the whole app (see lib/shortcuts.ts for the list).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (showClose) return;
       if (showHelp && e.key === "Escape") {
         setShowHelp(false);
         return;
@@ -119,7 +161,7 @@ export const App: React.FC = () => {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showHelp]);
+  }, [showHelp, showClose]);
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -347,6 +389,41 @@ export const App: React.FC = () => {
         </main>
       </div>
 
+      {showClose && (
+        <dialog
+          ref={closeDialog}
+          aria-labelledby="close-title"
+          onCancel={() => setShowClose(false)}
+          className="bg-[var(--bg-1)] text-[var(--fg-0)] border border-[var(--line)] rounded-xl p-6 max-w-md m-auto backdrop:bg-black/70"
+        >
+          <h2 id="close-title" className="text-lg font-semibold mb-2">
+            Keep your unsaved work?
+          </h2>
+          <p className="mb-5 text-sm">
+            Your song, chart or film has unsaved changes. Keep editing to save
+            them before closing.
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={() => setShowClose(false)}>Keep editing</Button>
+            <Button
+              variant="danger"
+              onClick={async () => {
+                if (hasActiveWork()) return;
+                try {
+                  const { getCurrentWindow } = await import(
+                    "@tauri-apps/api/window"
+                  );
+                  await getCurrentWindow().destroy();
+                } catch (e) {
+                  useEngineStore.getState().notify("error", String(e));
+                }
+              }}
+            >
+              Discard and close
+            </Button>
+          </div>
+        </dialog>
+      )}
       <Notices />
       <ShortcutsHelp open={showHelp} onClose={() => setShowHelp(false)} />
     </div>

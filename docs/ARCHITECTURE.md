@@ -527,8 +527,8 @@ resampling and extension-proof work. Current support is recorded in
 
 Logical UI event names use `domain.state`; `src/ipc/client.ts` translates dots to
 colons for Tauri (`transport:state`, `input:meters`, etc.). Rust emits these colon
-names because Tauri rejects dots. The local `main` capability grants only event
-listen/unlisten. Production CSP permits local IPC, bundled assets and scoped
+names because Tauri rejects dots. The local `main` capability grants event
+listen/unlisten and window destruction after the close guard. Production CSP permits local IPC, bundled assets and scoped
 silent video; external scripts, frames and browser networking are blocked.
 
 A transport beat is the denominator unit: 6/8 at 60 means six seconds per bar.
@@ -545,3 +545,7 @@ and Windows credential store. Browser speech APIs are not part of this build.
 CPAL conversion uses bounded stack blocks and one callback owner, with no resize,
 mutex or logging in the callback. A rejected requested buffer is reported to the
 user; the engine's headless fallback still keeps the editor usable.
+
+Native close requests are guarded for unsaved documents and active work. Film's
+Use take sums band, guitar DI and unmuted guitar layers through FFmpeg with
+normalisation for headroom; master/monitor click and test tone are excluded.

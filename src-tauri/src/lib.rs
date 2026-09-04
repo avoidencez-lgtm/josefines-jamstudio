@@ -1186,7 +1186,7 @@ pub fn run() {
 #[cfg(test)]
 mod desktop_permissions {
     #[test]
-    fn generated_acl_grants_local_main_event_subscriptions_only() {
+    fn generated_acl_grants_local_main_subscriptions_and_close_only() {
         let acl: serde_json::Value =
             serde_json::from_str(include_str!("../gen/schemas/capabilities.json")).unwrap();
         let cap = &acl["default"];
@@ -1195,7 +1195,11 @@ mod desktop_permissions {
         assert!(cap.get("remote").is_none());
         assert_eq!(
             cap["permissions"],
-            serde_json::json!(["core:event:allow-listen", "core:event:allow-unlisten"])
+            serde_json::json!([
+                "core:event:allow-listen",
+                "core:event:allow-unlisten",
+                "core:window:allow-destroy"
+            ])
         );
     }
 }

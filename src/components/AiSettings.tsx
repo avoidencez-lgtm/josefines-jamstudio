@@ -355,8 +355,8 @@ export function AiSettings() {
                 </div>
                 {p.id === "elevenlabs" && (
                   <p className="text-sm text-[var(--fg-1)]">
-                    Eleven Music uses this connection in AI Music. Jo’s spoken
-                    replies use the available system voice.
+                    Eleven Music uses this connection in AI Music. Native voice
+                    input and spoken Jo replies are not available in this build.
                   </p>
                 )}
               </div>

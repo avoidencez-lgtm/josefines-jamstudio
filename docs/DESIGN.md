@@ -184,3 +184,10 @@ its page header. Active-page and pressed semantics accompany colour, while text
 names disconnected MIDI, pending AI proposals and missing media. The assistant
 launcher occupies real toolbar space so it cannot hide Stage cues.
 See [research](research/studio-workspaces.md) and [room guide](guide/studio-rooms.md).
+
+### Current preview voice and close behaviour
+
+Jo is text-only in the current preview; browser speech and push-to-talk are not
+implemented product controls. Native voice is a pending M2 task. T taps tempo
+outside editors. Native window close prompts for unsaved song/chart/film work
+and refuses to close during recording or an active save/render.
