@@ -5,40 +5,100 @@ import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
 import { useEngineStore } from "../store/engine";
 
+/** Take timestamps are either ISO strings or Rust's `secs.millis` epoch form. */
+function takeDate(timestamp: string): Date | null {
+  const epoch = /^\d+(\.\d+)?$/.test(timestamp)
+    ? new Date(Number.parseFloat(timestamp) * 1000)
+    : new Date(timestamp);
+  return Number.isNaN(epoch.getTime()) ? null : epoch;
+}
+
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/** Consecutive calendar days with at least one take, ending today or yesterday. */
+export function practiceStreakDays(
+  takes: { timestamp: string }[],
+  now = new Date(),
+): number {
+  const days = new Set<string>();
+  for (const t of takes) {
+    const d = takeDate(t.timestamp);
+    if (d) days.add(dayKey(d));
+  }
+  const cursor = new Date(now);
+  if (!days.has(dayKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (days.has(dayKey(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+export function formatJamTime(totalSecs: number): string {
+  if (totalSecs < 60) return `${Math.round(totalSecs)} s`;
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.round((totalSecs % 3600) / 60);
+  return h > 0 ? `${h} h ${m} min` : `${m} min`;
+}
+
 export const Sessions: React.FC = () => {
   const {
     takes,
     isRecording,
-    calibratedLatencySamples,
+    latencySamples,
     startRecording,
     stopRecording,
-    calibrateLatency,
+    setLatencySamples,
     loadTakes,
     deleteTake,
     takeAnalysis,
     analyzeTake,
     exportTakeDaw,
+    engineStatus,
   } = useEngineStore();
 
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [latencyDraft, setLatencyDraft] = useState<string>("");
 
   useEffect(() => {
     loadTakes();
   }, [loadTakes]);
 
+  useEffect(() => {
+    setLatencyDraft(String(latencySamples));
+  }, [latencySamples]);
+
+  const sampleRate = engineStatus?.sample_rate || 48_000;
+  const totalSecs = takes.reduce((acc, t) => acc + t.durationSecs, 0);
+  const streak = practiceStreakDays(takes);
+
   const handleExport = async (takeId: string) => {
-    const path = await exportTakeDaw(takeId);
-    if (path) {
+    const report = await exportTakeDaw(takeId);
+    if (report) {
+      const missing = report.missingStems.length
+        ? ` (${report.missingStems.length} stem file(s) could not be found on disk)`
+        : "";
       setExportMessage(
-        `Exported take bundle (WAV stems + MIDI tempo map) to: ${path}`,
+        `Wrote ${report.copiedStems.length} stem(s) and a tempo map to ${report.dir}${missing}`,
       );
-      setTimeout(() => setExportMessage(null), 5000);
+      setTimeout(() => setExportMessage(null), 8000);
     }
+  };
+
+  const commitLatency = () => {
+    const n = Number.parseInt(latencyDraft, 10);
+    if (Number.isNaN(n)) {
+      setLatencyDraft(String(latencySamples));
+      return;
+    }
+    void setLatencySamples(n);
   };
 
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
-      {/* Top Header Row with Practice Streak & Jam Hours */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] p-4 rounded-[var(--radius-m)] border border-[var(--line)]">
         <div>
           <div className="flex items-center gap-3">
@@ -52,33 +112,43 @@ export const Sessions: React.FC = () => {
           </div>
           <div className="flex items-center gap-4 text-xs font-mono text-[var(--fg-2)] mt-1">
             <span>
-              Practice Streak:{" "}
-              <strong className="text-amber-400">7 Days 🔥</strong>
+              Practice streak:{" "}
+              <strong className="text-amber-400">
+                {streak === 0
+                  ? "none yet"
+                  : `${streak} day${streak === 1 ? "" : "s"}`}
+              </strong>
             </span>
             <span>•</span>
             <span>
-              Total Jam Time:{" "}
-              <strong className="text-[var(--fg-0)]">14.2 Hours</strong>
+              Recorded jam time:{" "}
+              <strong className="text-[var(--fg-0)]">
+                {formatJamTime(totalSecs)}
+              </strong>
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs font-mono text-[var(--fg-2)]">
-            <span>Latency:</span>
-            <span className="text-[var(--accent)] font-semibold">
-              {calibratedLatencySamples} samples (
-              {((calibratedLatencySamples * 1000) / 48000).toFixed(1)} ms)
-            </span>
-          </div>
-
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => calibrateLatency()}
+        <div className="flex flex-wrap items-center gap-3">
+          <label
+            className="flex items-center gap-2 text-xs font-mono text-[var(--fg-2)]"
+            title="Samples trimmed from the start of the guitar stem so it lines up with the band. Automatic loopback measurement is not built yet; measure once in your DAW and type it here."
           >
-            Calibrate Latency
-          </Button>
+            <span>Guitar offset</span>
+            <input
+              className="w-20 bg-[var(--bg-2)] border border-[var(--line)] rounded px-2 py-1 text-[var(--fg-0)] text-right"
+              inputMode="numeric"
+              value={latencyDraft}
+              onChange={(e) => setLatencyDraft(e.target.value)}
+              onBlur={commitLatency}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitLatency();
+              }}
+            />
+            <span className="text-[var(--accent)] font-semibold">
+              smp · {((latencySamples * 1000) / sampleRate).toFixed(1)} ms
+            </span>
+          </label>
 
           {isRecording ? (
             <Button size="sm" variant="danger" onClick={() => stopRecording()}>
@@ -262,19 +332,41 @@ const TakeRow: React.FC<TakeRowProps> = ({
           <div className="flex items-center gap-2 font-bold text-[var(--accent)]">
             <span>Jo's Take Feedback</span>
           </div>
-          <p className="text-[var(--fg-1)]">
-            "Your groove is locking in really well on the rhythm parts (
-            {analysis.timingAccuracyPct}% pocket accuracy)! On the dynamic side,
-            watch your pick attack on the turnaround in bar 8 — keeping the
-            right-hand velocity even will give the comp track more punch."
-          </p>
+          <p className="text-[var(--fg-1)]">{analysis.summary}</p>
           <div className="text-[11px] text-[var(--fg-2)] bg-[var(--bg-2)] p-2 rounded">
-            <strong>Target Drill for Next Session:</strong> 5-minute metronome
-            displacement drill at {take.tempo} BPM, playing 16th-note triplets
-            with accented upstrokes.
+            <strong>Suggested drill:</strong>{" "}
+            {drillFor(analysis, Math.round(take.tempo))}
           </div>
+          <p className="text-[10px] text-[var(--fg-2)]">
+            Measured from the recorded DI stem against the take's tempo grid.
+            Timing and dynamics come from pick transients; intonation is still a
+            rough estimate.
+          </p>
         </div>
       )}
     </div>
   );
 };
+
+/** Picks one drill from the weakest of the three measured scores. */
+export function drillFor(
+  a: import("../ipc/contract").TakeAnalysis,
+  tempo: number,
+): string {
+  if (a.detectedTransients < 8) {
+    return "Too few pick attacks were detected to judge this take. Record at least a full chorus with the DI channel selected.";
+  }
+  const slow = Math.max(40, tempo - 20);
+  const weakest = Math.min(
+    a.timingAccuracyPct,
+    a.dynamicConsistencyPct,
+    a.intonationAccuracyPct,
+  );
+  if (weakest === a.timingAccuracyPct) {
+    return `Five minutes with only the click at ${slow} BPM, muting the band, landing every downbeat before bringing the tempo back to ${tempo}.`;
+  }
+  if (weakest === a.dynamicConsistencyPct) {
+    return `Play the form once at ${tempo} BPM at a single, even pick attack, then once accenting only beats 2 and 4, listening back to the DI stem for evenness.`;
+  }
+  return `Loop the section with the most bends at ${slow} BPM and check every bend against the tuner before releasing it.`;
+}

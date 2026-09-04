@@ -52,12 +52,12 @@ export const AiMusic: React.FC = () => {
             </h1>
             <StatusPill
               status={aiMusic.active ? "live" : "idle"}
-              label={aiMusic.active ? "Streaming Audio" : "Standby"}
+              label={aiMusic.active ? "Streaming Audio" : "Not built yet"}
             />
           </div>
           <p className="text-xs font-mono text-[var(--fg-2)] mt-0.5">
-            Real-time prompt steering over Google Lyria RealTime, ElevenLabs
-            Music, and offline synthesis
+            Planned: prompt-steered backing over Google Lyria RealTime or
+            ElevenLabs Music, mixed under the band.
           </p>
         </div>
 
@@ -74,8 +74,19 @@ export const AiMusic: React.FC = () => {
         </div>
       </div>
 
-      {/* Stream Controls & Provider Selection */}
-      <Panel title="Stream Configuration">
+      <div className="p-4 rounded-[var(--radius-m)] border border-amber-500/40 bg-amber-950/20 text-xs font-mono text-amber-200 space-y-1">
+        <p className="font-semibold">
+          This screen is a placeholder for milestone M4.
+        </p>
+        <p className="text-amber-200/80">
+          No provider is connected and nothing here reaches the speakers yet.
+          Starting a stream returns an honest error. The API-key plumbing and
+          the allow-listed network proxy on the Settings screen are real and are
+          what this screen will use once the Lyria RealTime websocket is built.
+        </p>
+      </div>
+
+      <Panel title="Stream Configuration (intended layout)">
         <div className="space-y-4">
           <div>
             <div className="text-xs font-mono text-[var(--fg-2)] uppercase block mb-1.5">

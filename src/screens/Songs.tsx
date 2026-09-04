@@ -17,50 +17,70 @@ export const Songs: React.FC = () => {
     updateStemSettings,
   } = useEngineStore();
 
-  const [fakeFilePath, setFakeFilePath] = useState("");
+  const [filePath, setFilePath] = useState("");
+  const loaded = currentSong !== null;
 
   const handleImport = async () => {
-    const path = fakeFilePath.trim() || "song-take.wav";
+    const path = filePath.trim();
+    if (!path) return;
     await importSong(path);
   };
 
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
-      {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] p-4 rounded-[var(--radius-m)] border border-[var(--line)]">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-sm font-semibold tracking-wide uppercase font-mono text-[var(--fg-0)]">
-              Real Songs & Stem Separation
+              Real Songs
             </h1>
             <StatusPill
-              status={currentSong ? "ok" : "idle"}
-              label={currentSong ? "Stem Separated" : "No Song Loaded"}
+              status={loaded ? "ok" : "idle"}
+              label={loaded ? "Song loaded" : "Not built yet"}
             />
           </div>
           <p className="text-xs font-mono text-[var(--fg-2)] mt-0.5">
-            4-stem demucs separation, pitch-preserving time stretch, and chord
-            detection
+            Planned: import a local track, separate stems, detect beats and
+            chords, stretch and transpose, loop sections.
           </p>
         </div>
 
-        {/* Quick Import Form */}
         <div className="flex items-center gap-2">
           <input
             type="text"
-            placeholder="Audio path or song name..."
-            value={fakeFilePath}
-            onChange={(e) => setFakeFilePath(e.target.value)}
-            className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2.5 py-1.5 rounded text-xs font-mono w-52 focus:outline-none focus:border-[var(--accent)]"
+            placeholder="Full path to a local audio file"
+            value={filePath}
+            onChange={(e) => setFilePath(e.target.value)}
+            className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2.5 py-1.5 rounded text-xs font-mono w-64 focus:outline-none focus:border-[var(--accent)]"
           />
-          <Button size="sm" variant="primary" onClick={handleImport}>
-            Import Audio
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={handleImport}
+            disabled={!filePath.trim()}
+          >
+            Import
           </Button>
         </div>
       </div>
 
-      {/* Speed & Pitch Transpose Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] p-4 rounded-[var(--radius-m)] border border-[var(--line)]">
+      <div className="p-4 rounded-[var(--radius-m)] border border-amber-500/40 bg-amber-950/20 text-xs font-mono text-amber-200 space-y-1">
+        <p className="font-semibold">
+          This screen is a placeholder for milestone M3.
+        </p>
+        <p className="text-amber-200/80">
+          The engine does not yet decode songs, separate stems, track beats or
+          stretch audio. Importing a file returns an honest error rather than
+          invented chords. The controls below are the intended layout and stay
+          inactive until a song is actually loaded. The virtual band, Jo, the
+          recorder, the rig and the chart library on the other screens are real.
+        </p>
+      </div>
+
+      <fieldset
+        disabled={!loaded}
+        className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] p-4 rounded-[var(--radius-m)] border border-[var(--line)] disabled:opacity-50"
+      >
         {/* Speed Control */}
         <div className="flex items-center gap-3">
           <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
@@ -144,11 +164,13 @@ export const Songs: React.FC = () => {
             </Button>
           )}
         </div>
-      </div>
+      </fieldset>
 
-      {/* 4-Track Stem Mixer */}
-      <Panel title="Stem Mixer (Multi-Track Separation)">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <Panel title="Stem Mixer (inactive until a song is loaded)">
+        <fieldset
+          disabled={!loaded}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 disabled:opacity-50"
+        >
           {/* Vocals */}
           <StemFader
             title="Vocals"
@@ -212,10 +234,9 @@ export const Songs: React.FC = () => {
               updateStemSettings({ otherSolo: !stemSettings.otherSolo })
             }
           />
-        </div>
+        </fieldset>
       </Panel>
 
-      {/* Extracted Chord Timeline */}
       <Panel title="Detected Chord Timeline">
         {currentSong ? (
           <div className="space-y-3">
@@ -242,8 +263,8 @@ export const Songs: React.FC = () => {
           </div>
         ) : (
           <div className="py-8 text-center text-xs font-mono text-[var(--fg-2)]">
-            Import an audio track above to view detected chord harmony and loop
-            sections.
+            Chords detected from an imported song will appear here once M3
+            lands. Until then, use the Library to write or edit a chart by hand.
           </div>
         )}
       </Panel>

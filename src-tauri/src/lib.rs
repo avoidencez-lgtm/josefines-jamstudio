@@ -1,26 +1,129 @@
 //! src-tauri: Tauri application library and command dispatch.
 
 pub mod keys;
+pub mod library;
+pub mod net;
 pub mod settings;
 pub mod store;
 
 use jam_audio::devices::{list_devices, AudioConfig, AudioDevices};
-use jam_audio::engine::{AudioEngine, EngineTelemetry};
+use jam_audio::engine::{AudioEngine, EngineStatus, EngineTelemetry};
 use jam_band::sequencer::Cue;
 use jam_core::chart::Chart;
 use jam_core::style::Style;
 use keys::{KeyringStore, MemoryStore, SecretStore};
+use library::Library;
 use parking_lot::Mutex;
 use settings::{load_settings, save_settings, AppSettings};
 use std::sync::Arc;
 use tauri::{Emitter, State};
 
 pub struct AppState {
-    pub secret_store: Box<dyn SecretStore>,
+    pub secret_store: Arc<dyn SecretStore>,
     pub engine: Arc<Mutex<AudioEngine>>,
+    pub library: Arc<Mutex<Library>>,
     pub store: Arc<Mutex<store::IndexStore>>,
     pub ai_music: Arc<Mutex<jam_audio::ai_music::AiMusicEngine>>,
     pub rig: Arc<Mutex<jam_rig::RigOrchestrator>>,
+    pub cost_log: Arc<net::CostLog>,
+}
+
+/// The only network command. The WebView names a provider; Rust adds the key.
+#[tauri::command]
+async fn provider_fetch(
+    request: net::FetchRequest,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<net::FetchResponse, String> {
+    let store = Arc::clone(&state.secret_store);
+    let log = Arc::clone(&state.cost_log);
+    let result = net::provider_fetch(request, store.as_ref(), &log).await;
+    let _ = app.emit("cost.state", &log.totals());
+    result
+}
+
+#[tauri::command]
+fn providers_list(state: State<'_, AppState>) -> Vec<net::ProviderInfo> {
+    net::providers_info(state.secret_store.as_ref())
+}
+
+#[tauri::command]
+fn cost_log_list(limit: Option<usize>, state: State<'_, AppState>) -> Vec<net::CostEntry> {
+    state.cost_log.list(limit.unwrap_or(50))
+}
+
+#[tauri::command]
+fn cost_log_totals(state: State<'_, AppState>) -> Vec<net::CostTotal> {
+    state.cost_log.totals()
+}
+
+impl AppSettings {
+    pub fn audio_config(&self) -> AudioConfig {
+        AudioConfig {
+            input_device: self.input_device.clone(),
+            output_device: self.output_device.clone(),
+            input_channel: self.input_channel,
+            sample_rate: self.sample_rate,
+            buffer_size: self.buffer_size,
+        }
+    }
+
+    pub fn set_audio_config(&mut self, cfg: &AudioConfig) {
+        self.input_device = cfg.input_device.clone();
+        self.output_device = cfg.output_device.clone();
+        self.input_channel = cfg.input_channel;
+        self.sample_rate = cfg.sample_rate;
+        self.buffer_size = cfg.buffer_size;
+    }
+}
+
+#[tauri::command]
+fn audio_get_config(state: State<'_, AppState>) -> AudioConfig {
+    state.engine.lock().config().clone()
+}
+
+/// Applies a new device configuration live (the engine restarts on the new devices)
+/// and persists it. Returns the resulting status so the UI can show what actually
+/// happened, including a headless fallback.
+#[tauri::command]
+fn audio_set_config(
+    config: AudioConfig,
+    state: State<'_, AppState>,
+) -> Result<EngineStatus, String> {
+    let mut settings = load_settings();
+    settings.set_audio_config(&config);
+    save_settings(&settings)?;
+    let mut eng = state.engine.lock();
+    let result = eng.apply_config(config);
+    let status = eng.status();
+    result.map(|_| status)
+}
+
+#[tauri::command]
+fn engine_status(state: State<'_, AppState>) -> EngineStatus {
+    let eng = state.engine.lock();
+    eng.poll_stream_errors();
+    eng.status()
+}
+
+/// Restart the engine on the current configuration (after plugging a device back in).
+#[tauri::command]
+fn engine_restart(state: State<'_, AppState>) -> Result<EngineStatus, String> {
+    let mut eng = state.engine.lock();
+    let cfg = eng.config().clone();
+    let result = eng.apply_config(cfg);
+    let status = eng.status();
+    result.map(|_| status)
+}
+
+#[tauri::command]
+fn audio_set_band_volume(volume: f32, state: State<'_, AppState>) {
+    state.engine.lock().set_band_volume(volume);
+}
+
+#[tauri::command]
+fn audio_set_input_monitor(gain: f32, state: State<'_, AppState>) {
+    state.engine.lock().set_input_monitor(gain);
 }
 
 #[tauri::command]
@@ -82,6 +185,8 @@ fn audio_get_telemetry(state: State<'_, AppState>) -> EngineTelemetry {
 #[tauri::command]
 fn transport_play(state: State<'_, AppState>) {
     state.engine.lock().transport_play();
+    // A fresh run should fire the first section's scene again.
+    state.rig.lock().reset_section_tracking();
 }
 
 #[tauri::command]
@@ -132,16 +237,7 @@ fn transport_set_click_volume(volume: f32, state: State<'_, AppState>) {
 
 #[tauri::command]
 fn band_set_style(style_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let style_str = match style_id.as_str() {
-        "blues-shuffle" => include_str!("../../styles/blues-shuffle.json"),
-        "rock-straight" => include_str!("../../styles/rock-straight.json"),
-        "funk-16" => include_str!("../../styles/funk-16.json"),
-        "jazz-swing" => include_str!("../../styles/jazz-swing.json"),
-        "ballad-68" => include_str!("../../styles/ballad-68.json"),
-        "metal-gallop" => include_str!("../../styles/metal-gallop.json"),
-        _ => return Err(format!("Unknown style id: {}", style_id)),
-    };
-    let style: Style = serde_json::from_str(style_str).map_err(|e| e.to_string())?;
+    let style = state.library.lock().style(&style_id)?;
     state.engine.lock().band_set_style(style);
     Ok(())
 }
@@ -189,17 +285,25 @@ fn recorder_stop(state: State<'_, AppState>) -> Result<jam_audio::recorder::Take
     Ok(meta)
 }
 
+/// Sets the round-trip offset (in samples) trimmed from the start of the guitar stem so
+/// it lines up with the band. Automatic loopback measurement is not built yet, so this
+/// is the honest manual knob; the value is remembered in settings.
 #[tauri::command]
-fn recorder_calibrate_latency(state: State<'_, AppState>) -> Result<u32, String> {
-    let calib = jam_audio::calibration::LatencyCalibrator::new(48_000);
-    let mut fake_recorded = calib.generate_impulse_buffer(1024);
-    fake_recorded[256 + 128] = 0.9;
-    let samples = calib.measure_latency_samples(&fake_recorded).unwrap_or(0);
+fn recorder_set_latency(samples: u32, state: State<'_, AppState>) -> Result<u32, String> {
+    let samples = samples.min(48_000);
     state
         .engine
         .lock()
-        .recorder_set_latency_compensation(samples);
-    Ok(samples as u32)
+        .recorder_set_latency_compensation(samples as usize);
+    let mut settings = load_settings();
+    settings.recorder.latency_samples = samples;
+    save_settings(&settings)?;
+    Ok(samples)
+}
+
+#[tauri::command]
+fn recorder_get_latency() -> u32 {
+    load_settings().recorder.latency_samples
 }
 
 #[tauri::command]
@@ -215,19 +319,9 @@ fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), Strin
 }
 #[tauri::command]
 fn band_set(args: BandSetArgs, state: State<'_, AppState>) -> Result<(), String> {
-    let style = if let Some(ref id) = args.style_id {
-        let style_str = match id.as_str() {
-            "blues-shuffle" => include_str!("../../styles/blues-shuffle.json"),
-            "rock-straight" => include_str!("../../styles/rock-straight.json"),
-            "funk-16" => include_str!("../../styles/funk-16.json"),
-            "jazz-swing" => include_str!("../../styles/jazz-swing.json"),
-            "ballad-68" => include_str!("../../styles/ballad-68.json"),
-            "metal-gallop" => include_str!("../../styles/metal-gallop.json"),
-            _ => return Err(format!("Unknown style id: {}", id)),
-        };
-        Some(serde_json::from_str(style_str).map_err(|e| e.to_string())?)
-    } else {
-        None
+    let style = match &args.style_id {
+        Some(id) => Some(state.library.lock().style(id)?),
+        None => None,
     };
 
     state.engine.lock().band_set(jam_audio::engine::BandPatch {
@@ -243,33 +337,83 @@ fn band_set(args: BandSetArgs, state: State<'_, AppState>) -> Result<(), String>
     Ok(())
 }
 #[tauri::command]
-fn band_list_styles() -> Vec<Style> {
-    vec![
-        serde_json::from_str(include_str!("../../styles/blues-shuffle.json")).unwrap(),
-        serde_json::from_str(include_str!("../../styles/rock-straight.json")).unwrap(),
-        serde_json::from_str(include_str!("../../styles/funk-16.json")).unwrap(),
-        serde_json::from_str(include_str!("../../styles/jazz-swing.json")).unwrap(),
-        serde_json::from_str(include_str!("../../styles/ballad-68.json")).unwrap(),
-        serde_json::from_str(include_str!("../../styles/metal-gallop.json")).unwrap(),
-    ]
+fn band_list_styles(state: State<'_, AppState>) -> Vec<Style> {
+    state.library.lock().styles()
+}
+
+/// Loads a chart into the band and, when `follow_chart` is set, also adopts its time
+/// signature, default tempo and default style so one click sets up the whole jam.
+#[tauri::command]
+fn band_load_chart(
+    chart_id: String,
+    follow_chart: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<Chart, String> {
+    let chart = state.library.lock().chart(&chart_id)?;
+    let eng = state.engine.lock();
+    if follow_chart.unwrap_or(true) {
+        eng.transport_set_time_signature(chart.time_sig);
+        if chart.default_bpm > 0.0 {
+            eng.transport_set_tempo(chart.default_bpm);
+        }
+        if let Some(style_id) = &chart.default_style_id {
+            if let Ok(style) = state.library.lock().style(style_id) {
+                eng.band_set_style(style);
+            }
+        }
+    }
+    eng.band_load_chart(chart.resolve());
+    Ok(chart)
+}
+
+/// Loads a chart directly from a JSON value (chart editor) without saving it.
+#[tauri::command]
+fn band_load_chart_inline(chart: Chart, state: State<'_, AppState>) -> Result<(), String> {
+    library::validate_chart(&chart)?;
+    let eng = state.engine.lock();
+    eng.transport_set_time_signature(chart.time_sig);
+    eng.band_load_chart(chart.resolve());
+    Ok(())
 }
 
 #[tauri::command]
-fn band_load_chart(chart_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let chart_str = match chart_id.as_str() {
-        "blues-12-bar" => include_str!("../../charts/blues-12-bar.json"),
-        "blues-quick-change" => include_str!("../../charts/blues-quick-change.json"),
-        "blues-8-bar" => include_str!("../../charts/blues-8-bar.json"),
-        "blues-minor" => include_str!("../../charts/blues-minor.json"),
-        "i-v-vi-iv" => include_str!("../../charts/i-v-vi-iv.json"),
-        "ii-v-i" => include_str!("../../charts/ii-v-i.json"),
-        "rock-16-bar" => include_str!("../../charts/rock-16-bar.json"),
-        "one-chord-vamp" => include_str!("../../charts/one-chord-vamp.json"),
-        _ => return Err(format!("Unknown chart id: {}", chart_id)),
-    };
-    let chart: Chart = serde_json::from_str(chart_str).map_err(|e| e.to_string())?;
-    state.engine.lock().band_load_chart(chart.resolve());
-    Ok(())
+fn charts_save(chart: Chart, state: State<'_, AppState>) -> Result<String, String> {
+    let path = state.library.lock().save_chart(&chart)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn charts_import_file(path: String, state: State<'_, AppState>) -> Result<Chart, String> {
+    state
+        .library
+        .lock()
+        .import_chart_file(std::path::Path::new(&path))
+}
+
+#[tauri::command]
+fn charts_delete_user(chart_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    state.library.lock().delete_user_chart(&chart_id)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryInfo {
+    styles_dir: String,
+    charts_dir: String,
+    user_chart_ids: Vec<String>,
+    load_errors: Vec<String>,
+}
+
+#[tauri::command]
+fn library_reload(state: State<'_, AppState>) -> LibraryInfo {
+    let mut lib = state.library.lock();
+    lib.reload();
+    LibraryInfo {
+        styles_dir: lib.styles_dir().to_string_lossy().into_owned(),
+        charts_dir: lib.charts_dir().to_string_lossy().into_owned(),
+        user_chart_ids: lib.user_chart_ids().to_vec(),
+        load_errors: lib.load_errors().to_vec(),
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -300,65 +444,47 @@ pub struct StemSettings {
     pub other_solo: bool,
 }
 
+const SONGS_NOT_BUILT: &str = "Real-song playback (stem separation, beat and chord analysis, \
+time-stretch) is not built yet; this is milestone M3 on the plan. Nothing was imported.";
+
+/// M3 is open. Until the analysis pipeline exists this refuses honestly instead of
+/// returning invented tempo, chords and stems.
 #[tauri::command]
 fn song_import(file_path: String) -> Result<SongMetadata, String> {
     let path = std::path::Path::new(&file_path);
-    let file_stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Imported Song");
-
-    let sample_rate = 48_000;
-    let detector = jam_dsp::ChordDetector::new(sample_rate);
-    let dummy_block = vec![0.1f32; 2048];
-    let detected_first = detector.detect_chord(&dummy_block);
-
-    Ok(SongMetadata {
-        id: format!(
-            "song-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis()
-        ),
-        title: file_stem.to_string(),
-        duration_secs: 180.0,
-        tempo: 120.0,
-        detected_chords: vec![detected_first, "D7".into(), "E7".into(), "A7".into()],
-        stems: vec![
-            "vocals".into(),
-            "drums".into(),
-            "bass".into(),
-            "other".into(),
-        ],
-    })
+    if !path.is_file() {
+        return Err(format!("{file_path} is not a file. {SONGS_NOT_BUILT}"));
+    }
+    Err(SONGS_NOT_BUILT.to_string())
 }
 
 #[tauri::command]
-fn song_set_speed(speed: f32) -> Result<(), String> {
-    let mut stretcher = jam_dsp::TimeStretcher::new(48_000);
-    stretcher.set_speed(speed);
-    Ok(())
+fn song_set_speed(_speed: f32) -> Result<(), String> {
+    Err(SONGS_NOT_BUILT.to_string())
 }
 
 #[tauri::command]
-fn song_set_transpose(semitones: i32) -> Result<(), String> {
-    let mut stretcher = jam_dsp::TimeStretcher::new(48_000);
-    stretcher.set_transpose(semitones);
-    Ok(())
+fn song_set_transpose(_semitones: i32) -> Result<(), String> {
+    Err(SONGS_NOT_BUILT.to_string())
 }
 
 #[tauri::command]
 fn song_set_stem_settings(_settings: StemSettings) -> Result<(), String> {
-    Ok(())
+    Err(SONGS_NOT_BUILT.to_string())
 }
+const AI_MUSIC_NOT_BUILT: &str = "Generative AI music is not connected yet; this is milestone M4 \
+on the plan. Neither Lyria RealTime, ElevenLabs Music nor the offline generator is wired into the \
+audio engine, so nothing would be heard. The stream was not started.";
+
+/// M4 is open. The generator exists as a stub but is not mixed into the output, so
+/// starting it would only flip a status light; refuse honestly instead.
 #[tauri::command]
 fn ai_music_start(
     config: jam_audio::ai_music::AiMusicConfig,
-    state: State<'_, AppState>,
+    _state: State<'_, AppState>,
 ) -> Result<(), String> {
-    state.ai_music.lock().start_stream(config);
-    Ok(())
+    let _ = config;
+    Err(AI_MUSIC_NOT_BUILT.to_string())
 }
 
 #[tauri::command]
@@ -386,17 +512,8 @@ fn ai_music_get_state(
     Ok(state.ai_music.lock().get_state())
 }
 #[tauri::command]
-fn band_list_charts() -> Vec<Chart> {
-    vec![
-        serde_json::from_str(include_str!("../../charts/blues-12-bar.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/blues-quick-change.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/blues-8-bar.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/blues-minor.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/i-v-vi-iv.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/ii-v-i.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/rock-16-bar.json")).unwrap(),
-        serde_json::from_str(include_str!("../../charts/one-chord-vamp.json")).unwrap(),
-    ]
+fn band_list_charts(state: State<'_, AppState>) -> Vec<Chart> {
+    state.library.lock().charts()
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -405,115 +522,298 @@ pub struct RigStateDto {
     pub current_profile: jam_rig::RigProfile,
     pub current_scene: usize,
     pub section_mappings: std::collections::HashMap<String, usize>,
+    pub control_values: std::collections::HashMap<u8, u8>,
+    pub follow_sections: bool,
+    /// Port name when a real port is open, otherwise `None`.
+    pub port: Option<String>,
+    pub port_description: String,
+    pub live: bool,
+    pub monitor: Vec<jam_rig::SentMessage>,
+}
+
+fn rig_state_dto(rig: &jam_rig::RigOrchestrator) -> RigStateDto {
+    RigStateDto {
+        current_profile: rig.profile.clone(),
+        current_scene: rig.current_scene,
+        section_mappings: rig.section_mappings.clone(),
+        control_values: rig.control_values.clone(),
+        follow_sections: rig.follow_sections,
+        port: rig.is_live().then(|| rig.port_description()),
+        port_description: rig.port_description(),
+        live: rig.is_live(),
+        monitor: rig.monitor(),
+    }
+}
+
+/// Persists the parts of the rig state worth remembering (profile, port, mappings).
+fn persist_rig(rig: &jam_rig::RigOrchestrator) {
+    let mut settings = load_settings();
+    settings.rig.profile_id = Some(rig.profile.id.clone());
+    settings.rig.midi_port = rig.is_live().then(|| rig.port_description());
+    settings.rig.follow_sections = rig.follow_sections;
+    settings
+        .rig
+        .section_mappings
+        .insert(rig.profile.id.clone(), rig.section_mappings.clone());
+    if let Err(e) = save_settings(&settings) {
+        tracing::warn!("could not save rig settings: {e}");
+    }
 }
 
 #[tauri::command]
-fn rig_list_profiles() -> Vec<jam_rig::RigProfile> {
-    vec![
-        jam_rig::RigProfile::quad_cortex(),
-        jam_rig::RigProfile::helix(),
-        jam_rig::RigProfile::kemper(),
-        jam_rig::RigProfile::axe_fx(),
-        jam_rig::RigProfile::black_spirit(),
-    ]
+fn rig_list_profiles(state: State<'_, AppState>) -> Vec<jam_rig::RigProfile> {
+    state.library.lock().rigs()
 }
 
 #[tauri::command]
 fn rig_select_profile(
     profile_id: String,
     state: State<'_, AppState>,
-) -> Result<jam_rig::RigProfile, String> {
-    let profile = match profile_id.as_str() {
-        "quad-cortex" => jam_rig::RigProfile::quad_cortex(),
-        "helix" => jam_rig::RigProfile::helix(),
-        "kemper" => jam_rig::RigProfile::kemper(),
-        "axe-fx" => jam_rig::RigProfile::axe_fx(),
-        "black-spirit" => jam_rig::RigProfile::black_spirit(),
-        _ => return Err(format!("Unknown rig profile: {}", profile_id)),
-    };
+) -> Result<RigStateDto, String> {
+    let profile = state.library.lock().rig(&profile_id)?;
+    let saved = load_settings()
+        .rig
+        .section_mappings
+        .remove(&profile_id)
+        .unwrap_or_default();
     let mut rig = state.rig.lock();
-    rig.profile = profile.clone();
-    rig.current_scene = 0;
-    Ok(profile)
+    rig.set_profile(profile);
+    for (section, idx) in saved {
+        if idx < rig.profile.scenes.len() {
+            rig.set_section_mapping(section, idx);
+        }
+    }
+    persist_rig(&rig);
+    Ok(rig_state_dto(&rig))
 }
 
 #[tauri::command]
-fn rig_select_scene(scene_idx: usize, state: State<'_, AppState>) -> Result<(), String> {
-    state.rig.lock().select_scene(scene_idx)
+fn rig_select_scene(scene_idx: usize, state: State<'_, AppState>) -> Result<RigStateDto, String> {
+    let mut rig = state.rig.lock();
+    rig.select_scene(scene_idx)?;
+    Ok(rig_state_dto(&rig))
 }
 
 #[tauri::command]
 fn rig_set_section_mapping(
     section: String,
-    scene_idx: usize,
+    scene_idx: Option<usize>,
     state: State<'_, AppState>,
-) -> Result<(), String> {
-    state.rig.lock().set_section_mapping(section, scene_idx);
-    Ok(())
+) -> Result<RigStateDto, String> {
+    let mut rig = state.rig.lock();
+    match scene_idx {
+        Some(idx) => {
+            if idx >= rig.profile.scenes.len() {
+                return Err(format!(
+                    "scene {idx} does not exist on {}",
+                    rig.profile.name
+                ));
+            }
+            rig.set_section_mapping(section, idx);
+        }
+        None => rig.clear_section_mapping(&section),
+    }
+    persist_rig(&rig);
+    Ok(rig_state_dto(&rig))
 }
 
 #[tauri::command]
-fn rig_get_state(state: State<'_, AppState>) -> Result<RigStateDto, String> {
-    let rig = state.rig.lock();
-    Ok(RigStateDto {
-        current_profile: rig.profile.clone(),
-        current_scene: rig.current_scene,
-        section_mappings: rig.section_mappings.clone(),
-    })
+fn rig_set_follow_sections(enabled: bool, state: State<'_, AppState>) -> RigStateDto {
+    let mut rig = state.rig.lock();
+    rig.follow_sections = enabled;
+    persist_rig(&rig);
+    rig_state_dto(&rig)
+}
+
+#[tauri::command]
+fn rig_get_state(state: State<'_, AppState>) -> RigStateDto {
+    rig_state_dto(&state.rig.lock())
+}
+
+#[tauri::command]
+fn rig_list_ports() -> Result<Vec<jam_rig::MidiPortInfo>, String> {
+    jam_rig::list_output_ports()
+}
+
+/// Opens a MIDI output port (or closes the current one when `port` is `None`).
+#[tauri::command]
+fn rig_open_port(port: Option<String>, state: State<'_, AppState>) -> Result<RigStateDto, String> {
+    let mut rig = state.rig.lock();
+    match port {
+        Some(name) => {
+            rig.open_port(&name)?;
+        }
+        None => rig.close_port(),
+    }
+    persist_rig(&rig);
+    Ok(rig_state_dto(&rig))
+}
+
+#[tauri::command]
+fn rig_set_control(cc: u8, value: u8, state: State<'_, AppState>) -> Result<RigStateDto, String> {
+    let mut rig = state.rig.lock();
+    rig.set_control(cc, value)?;
+    Ok(rig_state_dto(&rig))
+}
+
+#[tauri::command]
+fn rig_send_program(program: u8, state: State<'_, AppState>) -> Result<RigStateDto, String> {
+    let mut rig = state.rig.lock();
+    rig.send_program(program)?;
+    Ok(rig_state_dto(&rig))
+}
+
+#[tauri::command]
+fn rig_clear_monitor(state: State<'_, AppState>) -> RigStateDto {
+    let mut rig = state.rig.lock();
+    rig.clear_monitor();
+    rig_state_dto(&rig)
 }
 #[tauri::command]
-fn takes_analyze(_take_id: String) -> Result<jam_audio::analysis::TakeAnalysis, String> {
-    let analyzer = jam_audio::analysis::TakeAnalyzer::new(48_000);
-    let mut samples = vec![0.0f32; 48_000 * 4];
-    for b in 0..8 {
-        let start = b * 24_000;
-        for i in 0..100 {
-            if start + i < samples.len() {
-                samples[start + i] = 0.7;
+fn find_take(state: &AppState, take_id: &str) -> Result<jam_audio::recorder::TakeMetadata, String> {
+    state
+        .store
+        .lock()
+        .list_takes()?
+        .into_iter()
+        .find(|t| t.id == take_id)
+        .ok_or_else(|| format!("take {take_id} is not in the library"))
+}
+
+/// Analyses the guitarist's recorded DI stem against the tempo the take was played at.
+#[tauri::command]
+fn takes_analyze(
+    take_id: String,
+    state: State<'_, AppState>,
+) -> Result<jam_audio::analysis::TakeAnalysis, String> {
+    let take = find_take(&state, &take_id)?;
+    let (samples, sample_rate) =
+        jam_audio::recorder::read_wav_mono(std::path::Path::new(&take.path_input))?;
+    let analyzer = jam_audio::analysis::TakeAnalyzer::new(sample_rate);
+    Ok(analyzer.analyze(&samples, take.tempo))
+}
+
+/// Section markers for a chart in playing order: `(name, first bar)`.
+fn chart_sections(chart: &Chart) -> Vec<(String, u32)> {
+    let resolved = chart.resolve();
+    let mut out: Vec<(String, u32)> = Vec::new();
+    for bar in &resolved.bars {
+        if out
+            .last()
+            .map(|(name, _)| name != &bar.section_name)
+            .unwrap_or(true)
+        {
+            out.push((bar.section_name.clone(), bar.bar_index));
+        }
+    }
+    out
+}
+
+/// Bundles a take for a DAW: its three stems, an SMF tempo map at the tempo it was
+/// recorded at with markers from the chart it was played against, and a JSON sidecar.
+#[tauri::command]
+fn takes_export_daw(
+    take_id: String,
+    output_dir: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<jam_audio::export::ExportReport, String> {
+    let take = find_take(&state, &take_id)?;
+    let base_dir = output_dir.map(std::path::PathBuf::from).unwrap_or_else(|| {
+        dirs::document_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("JosefinesJamstudio")
+            .join("Exports")
+    });
+    let export_path = base_dir.join(&take_id);
+
+    let chart = state.library.lock().chart(&take.chart_id).ok();
+    let sections_owned = chart.as_ref().map(chart_sections).unwrap_or_default();
+    let sections: Vec<(&str, u32)> = sections_owned
+        .iter()
+        .map(|(n, b)| (n.as_str(), *b))
+        .collect();
+    let time_sig = chart.as_ref().map(|c| c.time_sig).unwrap_or((4, 4));
+    let sample_rate = jam_audio::recorder::read_wav_mono(std::path::Path::new(&take.path_master))
+        .map(|(_, rate)| rate)
+        .unwrap_or_else(|_| state.engine.lock().sample_rate());
+
+    let stems = [
+        ("guitar-di", std::path::Path::new(&take.path_input)),
+        ("band", std::path::Path::new(&take.path_band)),
+        ("master", std::path::Path::new(&take.path_master)),
+    ];
+    let job = jam_audio::export::ExportJob {
+        take_id: &take.id,
+        tempo: take.tempo,
+        time_sig,
+        sample_rate,
+        sections: &sections,
+        stems: &stems,
+    };
+    jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
+        .map_err(|e| e.to_string())
+}
+
+/// Restores the rig from settings: the saved profile (HeadRush by default, since that
+/// is the hardware this app is built around), its section mappings, and the MIDI
+/// port if it is still present. A missing port is logged, never fatal.
+fn build_rig(settings: &AppSettings, library: &Library) -> jam_rig::RigOrchestrator {
+    let wanted = settings
+        .rig
+        .profile_id
+        .clone()
+        .unwrap_or_else(|| "headrush-pedalboard".to_string());
+    let profile = library
+        .rig(&wanted)
+        .or_else(|_| library.rig("headrush-pedalboard"))
+        .unwrap_or_else(|_| jam_rig::RigProfile::generic());
+    let mut rig = jam_rig::RigOrchestrator::with_memory_sink(profile);
+    rig.follow_sections = settings.rig.follow_sections;
+    if let Some(map) = settings.rig.section_mappings.get(&rig.profile.id) {
+        let n = rig.profile.scenes.len();
+        for (section, idx) in map {
+            if *idx < n {
+                rig.set_section_mapping(section.clone(), *idx);
             }
         }
     }
-    let analysis = analyzer.analyze(&samples, 120.0);
-    Ok(analysis)
-}
-
-#[tauri::command]
-fn takes_export_daw(take_id: String, output_dir: Option<String>) -> Result<String, String> {
-    let base_dir = output_dir.unwrap_or_else(|| {
-        dirs::document_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("JosefinesJamStudio")
-            .join("Exports")
-            .to_string_lossy()
-            .to_string()
-    });
-    let export_path = std::path::Path::new(&base_dir).join(&take_id);
-    let sections = [
-        ("Intro", 1),
-        ("Verse", 5),
-        ("Chorus", 9),
-        ("Solo", 13),
-        ("Outro", 17),
-    ];
-    jam_audio::export::DawExporter::export_take_bundle(&export_path, &take_id, 120.0, &sections)
-        .map_err(|e| e.to_string())?;
-
-    Ok(export_path.to_string_lossy().to_string())
+    if let Some(port) = &settings.rig.midi_port {
+        if let Err(e) = rig.open_port(port) {
+            tracing::warn!("rig: saved MIDI port not opened: {e}");
+        }
+    }
+    rig
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let config = AudioConfig::default();
-    let mut engine = AudioEngine::new(config);
-    let _ = engine.start();
+    let settings = load_settings();
+    let mut engine = AudioEngine::new(settings.audio_config());
+    if let Err(e) = engine.start() {
+        // Never fail to launch because of audio: the status screen shows the reason and
+        // offers a retry. The UI stays usable for chart editing and settings.
+        tracing::error!("audio engine started degraded: {e}");
+    }
+    engine.recorder_set_latency_compensation(settings.recorder.latency_samples as usize);
     let engine_arc = Arc::new(Mutex::new(engine));
 
+    let library = Library::load();
+    for e in library.load_errors() {
+        tracing::warn!("library: {e}");
+    }
+    let library_arc = Arc::new(Mutex::new(library));
+
     let is_test = std::env::var("JAM_HEADLESS").unwrap_or_default() == "1";
-    let secret_store: Box<dyn SecretStore> = if is_test {
-        Box::new(MemoryStore::default())
+    let secret_store: Arc<dyn SecretStore> = if is_test {
+        Arc::new(MemoryStore::default())
     } else {
-        Box::new(KeyringStore::default())
+        Arc::new(KeyringStore::default())
     };
+    let cost_log = Arc::new(net::CostLog::new(if is_test {
+        std::env::temp_dir().join("jam-usage-log-test.jsonl")
+    } else {
+        net::CostLog::default_path()
+    }));
 
     let index_store = if is_test {
         store::IndexStore::open_in_memory().unwrap()
@@ -524,16 +824,16 @@ pub fn run() {
 
     let ai_music_engine = Arc::new(Mutex::new(jam_audio::ai_music::AiMusicEngine::new(48_000)));
 
-    let rig_orchestrator = Arc::new(Mutex::new(jam_rig::RigOrchestrator::with_memory_sink(
-        jam_rig::RigProfile::quad_cortex(),
-    )));
+    let rig_orchestrator = Arc::new(Mutex::new(build_rig(&settings, &library_arc.lock())));
 
     let app_state = AppState {
         secret_store,
         engine: Arc::clone(&engine_arc),
+        library: Arc::clone(&library_arc),
         store: Arc::clone(&store_arc),
         ai_music: Arc::clone(&ai_music_engine),
         rig: Arc::clone(&rig_orchestrator),
+        cost_log,
     };
 
     tauri::Builder::default()
@@ -542,16 +842,43 @@ pub fn run() {
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let eng = Arc::clone(&engine_arc);
+            let rig = Arc::clone(&rig_orchestrator);
 
-            // Emit telemetry at 30 Hz
-            std::thread::spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_millis(33));
-                let tel = eng.lock().get_telemetry();
-                let _ = app_handle.emit("meters", &tel.output_level);
-                let _ = app_handle.emit("transport.state", &tel.transport);
-                let _ = app_handle.emit("band.state", &tel.band);
-                if let Some(t) = &tel.tuner {
-                    let _ = app_handle.emit("tuner.state", t);
+            // Emit telemetry at 30 Hz; engine status only when it changes.
+            std::thread::spawn(move || {
+                let mut last_status: Option<EngineStatus> = None;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(33));
+                    let (tel, status) = {
+                        let eng = eng.lock();
+                        eng.poll_stream_errors();
+                        (eng.get_telemetry(), eng.status())
+                    };
+                    // Section-bound rig scenes: the orchestrator de-duplicates, so
+                    // calling it every tick is cheap and only sends on a change.
+                    if tel.transport.state == "playing" && !tel.band.current_section.is_empty() {
+                        let mut rig = rig.lock();
+                        match rig.on_section_change(&tel.band.current_section) {
+                            Ok(Some(_)) => {
+                                let _ = app_handle.emit("rig.state", &rig_state_dto(&rig));
+                            }
+                            Ok(None) => {}
+                            Err(e) => {
+                                let _ = app_handle.emit("rig.error", &e);
+                            }
+                        }
+                    }
+                    let _ = app_handle.emit("meters", &tel.output_level);
+                    let _ = app_handle.emit("input.meters", &tel.input_level);
+                    let _ = app_handle.emit("transport.state", &tel.transport);
+                    let _ = app_handle.emit("band.state", &tel.band);
+                    if let Some(t) = &tel.tuner {
+                        let _ = app_handle.emit("tuner.state", t);
+                    }
+                    if last_status.as_ref() != Some(&status) {
+                        let _ = app_handle.emit("engine.status", &status);
+                        last_status = Some(status);
+                    }
                 }
             });
 
@@ -561,9 +888,24 @@ pub fn run() {
             keys_set,
             keys_has,
             keys_delete,
+            provider_fetch,
+            providers_list,
+            cost_log_list,
+            cost_log_totals,
             settings_get,
             settings_set,
             audio_list_devices,
+            audio_get_config,
+            audio_set_config,
+            audio_set_band_volume,
+            audio_set_input_monitor,
+            engine_status,
+            engine_restart,
+            library_reload,
+            charts_save,
+            charts_import_file,
+            charts_delete_user,
+            band_load_chart_inline,
             tone_set,
             metronome_set,
             tuner_set,
@@ -586,7 +928,8 @@ pub fn run() {
             band_set,
             recorder_start,
             recorder_stop,
-            recorder_calibrate_latency,
+            recorder_set_latency,
+            recorder_get_latency,
             takes_list,
             takes_delete,
             song_import,
@@ -602,7 +945,13 @@ pub fn run() {
             rig_select_profile,
             rig_select_scene,
             rig_set_section_mapping,
+            rig_set_follow_sections,
             rig_get_state,
+            rig_list_ports,
+            rig_open_port,
+            rig_set_control,
+            rig_send_program,
+            rig_clear_monitor,
             takes_analyze,
             takes_export_daw,
         ])

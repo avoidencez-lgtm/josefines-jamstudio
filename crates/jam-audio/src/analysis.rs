@@ -89,14 +89,24 @@ impl TakeAnalyzer {
             92.0
         };
 
-        // 4. Intonation consistency
-        let intonation_score = 95.5f32;
+        // 4. Intonation: how far confident, pitched frames sit from the nearest semitone.
+        let intonation = self.intonation(di_samples);
+        let intonation_score = intonation
+            .map(|(mean_cents, _)| ((1.0 - (mean_cents / 50.0).min(1.0)) * 100.0).round())
+            .unwrap_or(0.0);
 
+        let intonation_text = match intonation {
+            Some((cents, frames)) => format!(
+                " Pitch sat {cents:.0} cents from the nearest note on average across {frames} pitched frames."
+            ),
+            None => " No sustained pitched notes were found to judge intonation.".to_string(),
+        };
         let summary = format!(
-            "Recorded {} pick transients. Timing locked at {:.1}%, dynamics consistency at {:.1}%.",
+            "Recorded {} pick transients. Timing locked at {:.1}%, dynamics consistency at {:.1}%.{}",
             transients.len(),
             timing_score,
-            dynamic_score
+            dynamic_score,
+            intonation_text
         );
 
         TakeAnalysis {
@@ -106,6 +116,30 @@ impl TakeAnalyzer {
             detected_transients: transients.len(),
             summary,
         }
+    }
+
+    /// Mean absolute cents deviation and the number of frames it was measured on, or
+    /// `None` when nothing pitched and confident was found (silence, noise, chords).
+    fn intonation(&self, samples: &[f32]) -> Option<(f32, usize)> {
+        const WINDOW: usize = 2048;
+        let hop = WINDOW / 2;
+        if samples.len() < WINDOW {
+            return None;
+        }
+        let mut tracker = jam_dsp::pitch::PitchTracker::new(WINDOW, self.sample_rate);
+        let mut total_cents = 0.0f32;
+        let mut frames = 0usize;
+        let mut start = 0;
+        while start + WINDOW <= samples.len() {
+            if let Some(p) = tracker.detect(&samples[start..start + WINDOW]) {
+                if p.confidence >= 0.8 && p.hz >= 70.0 && p.hz <= 1400.0 {
+                    total_cents += p.cents.abs();
+                    frames += 1;
+                }
+            }
+            start += hop;
+        }
+        (frames > 0).then(|| (total_cents / frames as f32, frames))
     }
 }
 
@@ -134,5 +168,30 @@ mod tests {
         assert_eq!(analysis.detected_transients, 4);
         assert!(analysis.timing_accuracy_pct >= 80.0);
         assert!(analysis.dynamic_consistency_pct >= 80.0);
+        // Square pulses are not pitched notes: intonation must say so instead of inventing a score.
+        assert_eq!(analysis.intonation_accuracy_pct, 0.0);
+        assert!(analysis.summary.contains("No sustained pitched notes"));
+    }
+
+    fn tone(hz: f32, secs: f32, rate: u32) -> Vec<f32> {
+        (0..(secs * rate as f32) as usize)
+            .map(|i| 0.5 * (2.0 * std::f32::consts::PI * hz * i as f32 / rate as f32).sin())
+            .collect()
+    }
+
+    #[test]
+    fn in_tune_note_scores_high_and_sharp_note_scores_low() {
+        let analyzer = TakeAnalyzer::new(48_000);
+        let in_tune = analyzer.analyze(&tone(220.0, 1.0, 48_000), 120.0);
+        assert!(
+            in_tune.intonation_accuracy_pct >= 90.0,
+            "{}",
+            in_tune.summary
+        );
+
+        // A quarter-tone sharp (50 cents) is as far out as it gets.
+        let sharp_hz = 220.0 * 2f32.powf(50.0 / 1200.0);
+        let sharp = analyzer.analyze(&tone(sharp_hz, 1.0, 48_000), 120.0);
+        assert!(sharp.intonation_accuracy_pct <= 15.0, "{}", sharp.summary);
     }
 }

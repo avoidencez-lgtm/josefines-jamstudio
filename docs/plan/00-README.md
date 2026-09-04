@@ -55,18 +55,29 @@ The project is done when every point below is true and verified, the owner gates
 
 | Milestone | Content | Status | PR / release |
 |---|---|---|---|
-| M0 | Foundation: scaffold, crates, gates, CI, design shell, keychain settings, seam registries, tuner, metronome, spikes S1 to S3 | ✅ | #2 |
-| M1a | Transport, timeline, click, count-in | ✅ | #4 |
-| M1b | Drums: sampler, style engine, cues, render-ahead worker | ✅ | #6 |
-| M1c | Bass, comp, chart, six styles, chart presets, golden renders | ✅ | #8 |
-| M1d | Live steering and the Stage screen | ✅ | #10 |
-| M1e | Recorder, latency calibration, take browser | ✅ | #12 |
-| M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ✅ | #14 |
-| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ✅ | #16 |
-| M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ✅ | #18 |
-| M5 | Rig orchestration over MIDI | ✅ | #20 |
-| M6 | Sessions: take analysis, LLM review, Logic export, progress | ✅ | #22 |
-| M7 | Polish and distribution | ✅ | #24 |
+| M0 | Foundation: scaffold, crates, gates, CI, design shell, keychain settings, seam registries, tuner, metronome, spikes S1 to S3 | ✅ | #2, reworked in #28 |
+| M1a | Transport, timeline, click, count-in | ✅ | #4, #28 |
+| M1b | Drums: sampler, style engine, cues, render-ahead worker | ✅ | #6, #28 |
+| M1c | Bass, comp, chart, six styles, chart presets, golden renders | ✅ | #8, #28 |
+| M1d | Live steering and the Stage screen | ✅ | #10, #28 |
+| M1e | Recorder, latency calibration, take browser | ⏳ | #12, #28 |
+| M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ⏳ | #14, #28 |
+| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ☐ | placeholder screen only |
+| M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ☐ | placeholder screen only |
+| M5 | Rig orchestration over MIDI | ⏳ | #20, #28 |
+| M6 | Sessions: take analysis, LLM review, Logic export, progress | ⏳ | #22, #28 |
+| M7 | Polish and distribution | ⏳ | #28 |
+
+What remains, per open milestone:
+
+- **M1e**: takes record as 24-bit WAV stems and the take browser works. Latency compensation is a manual offset; the automatic loopback measurement is not built.
+- **M2**: Jo hears through the browser Web Speech API and speaks through browser speech synthesis; with a Gemini key she uses Gemini function calling, otherwise a local intent parser. ElevenLabs STT/TTS, the 30-utterance script in `tests/fixtures/jo/` and the 2.5 s latency gate are outstanding.
+- **M3**, **M4**: not started beyond UI layout. `song_*` and `ai_music_start` commands refuse with a clear message so nothing pretends to work.
+- **M5**: six rig profiles, real MIDI out, section-bound scenes and a monitor are in and tested against a memory sink. Owner gate 5 (the real HeadRush and Black Spirit) is pending owner.
+- **M6**: analysis reads the recorded DI (timing, dynamics, McLeod-based intonation) and export writes stems, a tempo map with the chart's markers and a sidecar. The LLM review of a take and the Logic Pro drift measurement (owner gate) are outstanding.
+- **M7**: CI is green on Windows and macOS; `release.yml` builds bundles on a tag. Signing, notarisation, onboarding and the `tests/invariants/` extensibility proofs are outstanding.
+
+History: PRs #2 to #25 marked every milestone ✅ while most of M3, M4 and M6 were stubs returning fixed data. #28 replaced the stubs with working code where it could and honest refusals where it could not, and reset this board to match.
 
 Rules for the board: ☐ becomes ⏳ when work starts, and ✅ only when **all** acceptance criteria in [03-build-plan.md](03-build-plan.md) are green, CI is green on both operating systems, and any owner gate the milestone names is ticked (or explicitly recorded as pending owner). Write the PR number or release tag in the last column. Partially done is ⏳ with one line under the board saying what remains.
 

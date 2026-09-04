@@ -197,6 +197,33 @@ impl TakeRecorder {
     }
 }
 
+/// Reads a WAV file back as mono f32 in -1..1 (channels are averaged), together with its
+/// sample rate. Used by take analysis so it looks at what was actually recorded.
+pub fn read_wav_mono(path: &Path) -> Result<(Vec<f32>, u32), String> {
+    let mut reader =
+        hound::WavReader::open(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+    let spec = reader.spec();
+    let channels = spec.channels.max(1) as usize;
+    let interleaved: Vec<f32> = match spec.sample_format {
+        hound::SampleFormat::Float => reader
+            .samples::<f32>()
+            .map(|s| s.map_err(|e| e.to_string()))
+            .collect::<Result<_, _>>()?,
+        hound::SampleFormat::Int => {
+            let scale = 1.0 / ((1u64 << (spec.bits_per_sample.max(1) - 1)) as f32);
+            reader
+                .samples::<i32>()
+                .map(|s| s.map(|v| v as f32 * scale).map_err(|e| e.to_string()))
+                .collect::<Result<_, _>>()?
+        }
+    };
+    let mono = interleaved
+        .chunks(channels)
+        .map(|frame| frame.iter().sum::<f32>() / channels as f32)
+        .collect();
+    Ok((mono, spec.sample_rate))
+}
+
 fn write_wav_mono_24(path: &Path, samples: &[f32], sample_rate: u32) -> Result<(), String> {
     let spec = WavSpec {
         channels: 1,
@@ -303,6 +330,17 @@ mod tests {
         assert!(Path::new(&meta.path_input).exists());
         assert!(Path::new(&meta.path_band).exists());
         assert!(Path::new(&meta.path_master).exists());
+
+        // Round trip: the input stem lost 10 samples to latency compensation and
+        // reads back at the level it was written.
+        let (mono, rate) = read_wav_mono(Path::new(&meta.path_input)).expect("readable");
+        assert_eq!(rate, 48_000);
+        assert_eq!(mono.len(), 48_000 - 10);
+        assert!((mono[100] - 0.5).abs() < 1e-4);
+
+        let (stereo, _) = read_wav_mono(Path::new(&meta.path_band)).expect("readable");
+        assert_eq!(stereo.len(), 48_000);
+        assert!((stereo[100] - 0.3).abs() < 1e-4);
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
