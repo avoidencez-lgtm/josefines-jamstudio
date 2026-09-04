@@ -47,4 +47,3 @@ Local frontend: 85 tests in 18 files, lint, types, JavaScript licence allowlist 
 The production bundle still produces Vite's non-fatal large-chunk advisory. No dependency was added. The design check's new preview-border warning was resolved; existing tokens, spacing and room layout remain in use. Ponytail review removed a redundant engine-state write; no new abstraction was needed.
 
 Cross-platform GitHub CI must pass on the submitted head before merge. Installer signing/notarisation, Apple hardware acceptance, real MIDI, live paid providers and installed-agent login are not claimed as verified by this pass. The intentionally unbuilt voice, stem/stretch and realtime-generation milestones remain open in the status board.
-
