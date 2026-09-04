@@ -87,7 +87,7 @@ Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, 
 ## Add a screen
 
 1. Create `src/screens/<name>/<Name>Screen.tsx` using the design primitives (no new colours, no new radii; see DESIGN.md).
-2. Add one line to `src/screens/registry.ts` (id, label, icon from the one icon family, component, shortcut).
+2. Add the screen ID to `ScreenId` in `src/store/engine.ts`, its component route in `src/App.tsx`, and one `SCREENS` entry in `src/screens/registry.ts` with `id`, `label`, `description` and a distinct `iconName` from `SCREEN_ICONS`. That mapping supplies both the sidebar and `WorkspaceHeader`; there is no second icon switch.
 3. Empty, loading and error states are part of the screen from the first commit.
 
 ## Add an IPC domain
@@ -104,3 +104,136 @@ Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, 
 ## Future directions (backlog, not promises)
 
 User-installable style and rig packs from a folder, a community styles repository, WASM instruments and tools behind the same traits, more voice sessions (ElevenLabs Agents, Gemini Live), local models. Each will be a seam added by this document's rules, not a rewrite.
+# Tweak the implemented songwriting workflow
+
+Start in **Write**: sections, chords, tempo, key, repeats, instrument grooves,
+intensity, gain, mute, swing, guitar trims and versions are ordinary controls.
+The step-by-step guide is [songwriting.md](guide/songwriting.md).
+
+- Song defaults live together in `newOriginal()` and `defaultSection()` in
+  `src/lib/originals.ts`. Keep the starter chart and section IDs consistent.
+- A new groove is an existing style JSON, shared with Stage. Put a compatible
+  style under the user folder's `styles/` directory and restart the app. No new
+  engine branch is needed. Writing uses three style choices per section.
+- Saved originals are ordinary JSON under `~/JosefinesJamstudio/originals/`.
+  `body.chart` uses the chart format; `body.sections[id]` holds swing and the
+  drums/bass/comp settings; `body.clips` references take IDs, trim times and bars.
+  Keep audio under `takes/`; back up the whole user folder. Unknown fields survive.
+  Do not hand-edit a song while it is open; revisions reject competing saves.
+- The `songwriting` Jo declaration is in `src/lib/jo/tools.ts`, its dispatcher in
+  `dispatcher.ts`, and local phrases in `intent.ts`. It uses the same editor state.
+  H works with keyboard-emulating foot pedals. Raw MIDI input is learned in Write;
+  `controller.json` stores the same action and press data illustrated in
+  `tests/fixtures/seams/controller.json`. The Rust press filter accepts PC, CC and
+  notes; the frontend action registry lives in `src/lib/controller.ts`.
+- Song tones use `body.toneProfileId` and `body.sections[id].rigScene` (a scene index
+  in the existing rig profile). To rename or change available hardware scenes,
+  copy the rig's JSON into the user `rigs/` folder and edit its `scenes` commands;
+  restart to reload the registry. MIDI values remain validated by that profile.
+- `tests/fixtures/seams/original.json` demonstrates the document. Run
+  `pnpm test -- originals` and `cargo test -p src-tauri originals` for its round trip.
+
+The older recipes below describe the broader architecture plan; use the actual
+module paths above for the implemented songwriting slice.
+
+## Extend the REAPER handoff
+
+`crates/jam-audio/src/export.rs::write_reaper_import` derives session data from the
+completed export and actual scheduled MIDI. `reaper_import.lua` is the single
+consumer of that data, using the official ReaScript API. It is included in complete
+DAW bundles, not a second recorder or a live audio bridge. Add supported changes
+there; do not write REAPER's internal project format or add an extension framework.
+Keep text Lua-escaped, file references relative, reference mixes muted, and import
+into an empty project with one undo step. The exporter does not save user projects.
+
+`tests/fixtures/seams/reaper-export.json` covers meter, Unicode/quoted section names,
+stem roles and actual MIDI. Run `cargo test -p jam-audio reaper_bundle` for packaging
+and `lua tests/reaper-import.lua` for script behavior against the API boundary.
+The Lua check is a standalone test, not an application runtime dependency. Both
+checks complement the real Mac/REAPER owner acceptance session in the guide.
+
+## Current text-provider extension recipe (2026-09-04)
+
+This implemented slice supersedes the planned LLM recipe above. Add a request
+builder/response reader to `src/lib/jo/providers.ts`'s `BRAINS` registry, plus the
+fixed HTTPS origin/auth row in `src-tauri/src/net.rs`'s `PROVIDERS` allowlist for a
+new service. Reuse `JO_TOOLS` and `validateToolCall`; never dispatch raw responses.
+Settings and Song Lab consume the registry directly. A different model on an
+existing service needs only a model ID change in Settings, not a package or code.
+
+Add a documented synthetic response to `tests/fixtures/providers/brains.json`
+and extend `tests/invariants/providers.test.ts` to prove the same tool call and
+malformed/truncated-response refusal. Do not label synthetic fixtures as recorded
+calls. Run the frontend tests and Rust `net::tests`; leave the core snapshot
+unchanged. No additional SDK is needed for these non-streaming text requests.
+Settings persist versioned `ai` preferences through existing settings IPC,
+retaining unknown fields. See [setup, limits and audio API options](guide/api-options.md).
+
+## Installed agent and studio-tool extension recipe
+
+`src/lib/jo/providers.ts` defines local-agent entries alongside API connections.
+`src-tauri/src/agents.rs` owns the CLI argument/envelope registry, bounded process
+execution, cancellation and metadata logging. Native executable lookup and hidden
+Windows processes live under `src-tauri/src/platform/`. Adding an agent requires
+its official non-interactive contract, a registry entry and a synthetic envelope;
+never implement subscription token extraction. See ADR 0007 for the narrow
+exception allowing installed agents to own their provider connections.
+
+For an original-song edit, add a declaration and pure-on-clone edit to
+`STUDIO_TOOLS` in `src/lib/jo/studioTools.ts`. Existing consumers collect declarations
+and dispatch them without another provider-specific implementation. The shared
+`applyStudioEdits` checks state/limits, validates the whole group and keeps one
+version. Add a case to `tests/invariants/agents.test.ts`; malformed later actions
+must leave the original and version count intact. Schemas and catalogs are in
+`tests/fixtures/providers/agents.json`. Core seam snapshots remain unchanged.
+The model catalog URL/parser belongs to its provider registry entry. Reuse the
+Rust proxy and native datalist; do not ship a model-list package or stale price table.
+
+## Music/video model recipe
+
+Add the model descriptor to `src/lib/media-catalog.json`. Both TypeScript and Rust
+consume this file. A model using an existing protocol needs no new UI or storage
+code. A new wire protocol belongs in `src-tauri/src/net/media.rs`: validate request
+parameters, perform bounded Rust-only downloads, normalize pending/inline/download
+results and enforce the provider's output hosts. Add cloud origin/auth in
+`net.rs` only when needed; local ComfyUI uses the fixed loopback seam in ADR 0008.
+
+Record the official contract and a synthetic example under
+`tests/fixtures/providers/media.json`; extend the Rust `media_contracts_and_host_boundaries`
+check and `tests/invariants/media.test.ts`. Never claim fixture results establish
+paid API access. No SDK, plugin loader, bundled model or binary is required.
+`media_generate` submits once; `media_refresh` may only poll/recover existing work.
+Generation returns metadata/asset IDs, never binary media over IPC. Every receipt
+is durable before a paid request; unknown outcomes must never auto-retry.
+
+`edit_video_shot` uses the shared Jo declaration/dispatcher and the Film draft's
+Undo store. A new agent media action must validate state/IDs and stay separate from
+paid generation. See [the workflow and acceptance guide](guide/music-video.md).
+
+## Write composition tools
+
+`src/lib/writingTools.ts` owns the local theory choices and phrase edits;
+`WritingDesk.tsx` renders them through the existing song store and chart syntax.
+Apply edits to a clone through `useWriting.edit`; the shared form check rejects
+invalid structure before adding Undo. No new playback clock is introduced.
+`SongBody.lyrics` is an optional section-ID-to-text map in version 1 documents;
+missing means empty, Rust validates IDs and 12,000-character limits, and JSON
+rewrites preserve unknown fields. No schema migration is required for this additive
+annotation. AI `write_notes` accepts an optional `sectionId`; omission keeps its
+original song-notebook behavior. Extend `writing-desk.test.ts` for transforms,
+lyrics, limits and Undo, and the Rust round-trip test for stored fields.
+
+
+## Studio navigation and view state
+
+Use `WorkspaceHeader` and `WorkspaceViews` for the established room pattern. Keep
+live performance controls first and use native disclosures for setup. Shared
+icons are existing Phosphor components. `tests/invariants/studio-workspaces.test.ts`
+checks unique icon assignments and arranged rehearsal boundaries. Do not change
+core snapshot fixtures to add a navigation label.
+
+Library and Jo keep session state in their exported Zustand stores; they do not
+write drafts or conversation to browser storage. Durable files still use the
+existing Rust save commands. `openAiSettings` selects the AI category before
+navigation. Imported audio and generated audio share `useMedia` assets; native
+playback must pass `media::playable_file` and its canonical-library boundary.

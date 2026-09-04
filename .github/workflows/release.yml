@@ -1,0 +1,86 @@
+name: release
+
+# Builds installers when a version tag is pushed (v0.1.0, v0.2.0-rc1, ...) and attaches
+# them to a draft GitHub Release for the owner to check and publish.
+#
+# Not set up yet: Apple code signing and notarisation, Windows Authenticode. Until those
+# secrets exist the bundles are unsigned, so first launch needs the usual right-click
+# Open (macOS) or "More info, run anyway" (Windows) step. The status board records this.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: bundle (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-apple-silicon
+            os: macos-latest
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          - name: macos-intel
+            os: macos-latest
+            target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
+          - name: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: corepack enable
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build preview installers
+        if: github.event_name == 'workflow_dispatch'
+        run: pnpm tauri build ${{ matrix.args }}
+
+      - name: Upload preview installers
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jamstudio-${{ matrix.name }}
+          path: |
+            target/**/bundle/**/*.dmg
+            target/**/bundle/**/*.msi
+            target/**/bundle/**/*.exe
+          if-no-files-found: error
+
+      - name: Build and upload bundles
+        if: github.event_name == 'push'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Josefines Jamstudio ${{ github.ref_name }}"
+          releaseBody: |
+            Unsigned preview build. See the README for supported workflows and pending owner checks.
+            macOS: right-click the app and choose Open the first time. Windows: choose "More info", then "Run anyway".
+          releaseDraft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          args: ${{ matrix.args }}

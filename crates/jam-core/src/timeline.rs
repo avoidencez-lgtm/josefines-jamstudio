@@ -43,10 +43,13 @@ pub enum TransportState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TimelineEvent {
+    /// A beat boundary. `offset` is the frame inside the current render block at
+    /// which the beat lands, so clicks and cues can be placed sample-accurately.
     Beat {
         bar: u32,
         beat: u32,
         is_count_in: bool,
+        offset: usize,
     },
     Bar {
         bar: u32,
@@ -57,6 +60,19 @@ pub enum TimelineEvent {
         from_sample: u64,
         to_sample: u64,
     },
+}
+
+/// A contiguous stretch of playing time inside one render block.
+///
+/// `offset` and `frames` address the output block; `start_beats` is the absolute
+/// song position (in beats from bar 1) at `offset`. A block that crosses a loop
+/// boundary yields two spans; a block that finishes a count-in yields one span
+/// covering only the surplus after the count-in.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Span {
+    pub offset: usize,
+    pub frames: usize,
+    pub start_beats: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,8 +111,18 @@ impl Timeline {
         }
     }
 
+    /// Changes tempo while keeping the musical position (bar and beat) fixed, so a
+    /// live tempo nudge never makes the band jump to a different place in the chart.
     pub fn set_bpm(&mut self, bpm: f64) {
-        self.bpm = bpm.clamp(20.0, 300.0);
+        let new_bpm = bpm.clamp(20.0, 300.0);
+        if (new_bpm - self.bpm).abs() < f64::EPSILON {
+            return;
+        }
+        let beats = samples_to_beats(self.current_sample, self.bpm, self.sample_rate);
+        let count_in_beats = samples_to_beats(self.count_in_sample, self.bpm, self.sample_rate);
+        self.bpm = new_bpm;
+        self.current_sample = beats_to_samples(beats, self.bpm, self.sample_rate);
+        self.count_in_sample = beats_to_samples(count_in_beats, self.bpm, self.sample_rate);
     }
 
     pub fn set_time_signature(&mut self, ts: (u8, u8)) {
@@ -185,25 +211,29 @@ impl Timeline {
 
     /// Advance the timeline by `frames`. Returns any triggered timeline events (beats, bars, loop wrap).
     pub fn advance(&mut self, frames: usize) -> Vec<TimelineEvent> {
+        self.advance_with_spans(frames).0
+    }
+
+    /// Advance the timeline by `frames`, returning both the beat-level events and the
+    /// sample-accurate playing spans the band must render for this block.
+    ///
+    /// Beat boundaries are detected on the half-open sample range `[start, end)`, so the
+    /// very first downbeat (sample 0) and the downbeat right after a loop wrap are both
+    /// reported exactly once.
+    pub fn advance_with_spans(&mut self, frames: usize) -> (Vec<TimelineEvent>, Vec<Span>) {
         let mut events = Vec::new();
-        let spb = self.samples_per_beat();
-        let beats_per_bar = self.time_signature.0 as u32;
+        let mut spans = Vec::new();
 
         match self.state {
-            TransportState::CountingIn {
-                bar: _,
-                beat: _,
-                total_bars,
-            } => {
+            TransportState::CountingIn { total_bars, .. } => {
+                let beats_per_bar = self.time_signature.0 as u32;
                 let start_sample = self.count_in_sample;
                 let end_sample = start_sample + frames as u64;
                 let total_count_in_samples = self.samples_per_bar() * total_bars as u64;
+                let clipped_end = end_sample.min(total_count_in_samples);
 
-                // Check for beat boundaries crossed during count-in
-                let prev_beat_idx = (start_sample as f64 / spb).floor() as u32;
-                let next_beat_idx = (end_sample as f64 / spb).floor() as u32;
-
-                for b_idx in (prev_beat_idx + 1)..=next_beat_idx {
+                let spb = self.samples_per_beat();
+                for b_idx in self.beat_indices_in(start_sample, clipped_end) {
                     let count_bar = (b_idx / beats_per_bar) + 1;
                     let count_beat = (b_idx % beats_per_bar) + 1;
                     if count_bar <= total_bars {
@@ -212,10 +242,12 @@ impl Timeline {
                             beat: count_beat,
                             total_bars,
                         };
+                        let beat_sample = (b_idx as f64 * spb).round() as u64;
                         events.push(TimelineEvent::Beat {
                             bar: count_bar,
                             beat: count_beat,
                             is_count_in: true,
+                            offset: beat_sample.saturating_sub(start_sample) as usize,
                         });
                         if count_beat == 1 {
                             events.push(TimelineEvent::Bar {
@@ -227,16 +259,33 @@ impl Timeline {
                 }
 
                 if end_sample >= total_count_in_samples {
-                    // Count-in finished, transition to Playing
                     self.state = TransportState::Playing;
                     events.push(TimelineEvent::CountInComplete);
-
-                    // Account for surplus frames in Playing state
-                    let surplus = (end_sample - total_count_in_samples) as usize;
                     self.current_sample = 0;
+                    self.count_in_sample = 0;
+
+                    let surplus = (end_sample - total_count_in_samples) as usize;
                     if surplus > 0 {
-                        let mut sub_events = self.advance(surplus);
-                        events.append(&mut sub_events);
+                        let block_offset = frames - surplus;
+                        let (sub_events, sub_spans) = self.advance_with_spans(surplus);
+                        events.extend(sub_events.into_iter().map(|e| match e {
+                            TimelineEvent::Beat {
+                                bar,
+                                beat,
+                                is_count_in,
+                                offset,
+                            } => TimelineEvent::Beat {
+                                bar,
+                                beat,
+                                is_count_in,
+                                offset: offset + block_offset,
+                            },
+                            other => other,
+                        }));
+                        spans.extend(sub_spans.into_iter().map(|s| Span {
+                            offset: s.offset + block_offset,
+                            ..s
+                        }));
                     }
                 } else {
                     self.count_in_sample = end_sample;
@@ -244,52 +293,102 @@ impl Timeline {
             }
 
             TransportState::Playing => {
-                let start_sample = self.current_sample;
-                let mut end_sample = start_sample + frames as u64;
+                let mut remaining = frames;
+                let mut block_offset = 0usize;
 
-                // Check loop boundary
-                if self.loop_enabled {
-                    let loop_start_sample =
-                        (self.loop_start_bar - 1) as u64 * self.samples_per_bar();
-                    let loop_end_sample = (self.loop_end_bar - 1) as u64 * self.samples_per_bar();
+                while remaining > 0 {
+                    let start_sample = self.current_sample;
+                    let mut segment_end = start_sample + remaining as u64;
+                    let mut wrap_to: Option<u64> = None;
 
-                    if end_sample >= loop_end_sample && loop_end_sample > loop_start_sample {
+                    if self.loop_enabled {
+                        let spb_u = self.samples_per_bar();
+                        let loop_start_sample = (self.loop_start_bar - 1) as u64 * spb_u;
+                        let loop_end_sample = (self.loop_end_bar - 1) as u64 * spb_u;
+                        if loop_end_sample > loop_start_sample {
+                            if start_sample >= loop_end_sample {
+                                // Loop was enabled while already past its end: jump back first.
+                                events.push(TimelineEvent::LoopWrapped {
+                                    from_sample: start_sample,
+                                    to_sample: loop_start_sample,
+                                });
+                                self.current_sample = loop_start_sample;
+                                continue;
+                            }
+                            if segment_end >= loop_end_sample {
+                                segment_end = loop_end_sample;
+                                wrap_to = Some(loop_start_sample);
+                            }
+                        }
+                    }
+
+                    let seg_frames = (segment_end - start_sample) as usize;
+                    self.emit_beats(start_sample, segment_end, block_offset, &mut events);
+                    if seg_frames > 0 {
+                        spans.push(Span {
+                            offset: block_offset,
+                            frames: seg_frames,
+                            start_beats: samples_to_beats(start_sample, self.bpm, self.sample_rate),
+                        });
+                    }
+                    block_offset += seg_frames;
+                    remaining -= seg_frames;
+
+                    if let Some(target) = wrap_to {
                         events.push(TimelineEvent::LoopWrapped {
-                            from_sample: loop_end_sample,
-                            to_sample: loop_start_sample,
+                            from_sample: segment_end,
+                            to_sample: target,
                         });
-                        let wrap_surplus = end_sample - loop_end_sample;
-                        end_sample = loop_start_sample + wrap_surplus;
+                        self.current_sample = target;
+                    } else {
+                        self.current_sample = segment_end;
                     }
                 }
-
-                // Detect beat / bar boundaries crossed
-                let prev_beat_idx = (start_sample as f64 / spb).floor() as u32;
-                let next_beat_idx = (end_sample as f64 / spb).floor() as u32;
-
-                for b_idx in (prev_beat_idx + 1)..=next_beat_idx {
-                    let cur_bar = (b_idx / beats_per_bar) + 1;
-                    let cur_beat = (b_idx % beats_per_bar) + 1;
-                    events.push(TimelineEvent::Beat {
-                        bar: cur_bar,
-                        beat: cur_beat,
-                        is_count_in: false,
-                    });
-                    if cur_beat == 1 {
-                        events.push(TimelineEvent::Bar {
-                            bar: cur_bar,
-                            is_count_in: false,
-                        });
-                    }
-                }
-
-                self.current_sample = end_sample;
             }
 
             TransportState::Stopped | TransportState::Paused => {}
         }
 
-        events
+        (events, spans)
+    }
+
+    /// Beat indices `b` whose boundary sample `b * samples_per_beat` lies in `[start, end)`.
+    fn beat_indices_in(&self, start: u64, end: u64) -> std::ops::Range<u32> {
+        if end <= start {
+            return 0..0;
+        }
+        let spb = self.samples_per_beat();
+        let first = (start as f64 / spb).ceil() as u32;
+        let last_exclusive = (end as f64 / spb).ceil() as u32;
+        first..last_exclusive
+    }
+
+    fn emit_beats(
+        &self,
+        start: u64,
+        end: u64,
+        block_offset: usize,
+        events: &mut Vec<TimelineEvent>,
+    ) {
+        let beats_per_bar = self.time_signature.0 as u32;
+        let spb = self.samples_per_beat();
+        for b_idx in self.beat_indices_in(start, end) {
+            let cur_bar = (b_idx / beats_per_bar) + 1;
+            let cur_beat = (b_idx % beats_per_bar) + 1;
+            let beat_sample = (b_idx as f64 * spb).round() as u64;
+            events.push(TimelineEvent::Beat {
+                bar: cur_bar,
+                beat: cur_beat,
+                is_count_in: false,
+                offset: block_offset + beat_sample.saturating_sub(start) as usize,
+            });
+            if cur_beat == 1 {
+                events.push(TimelineEvent::Bar {
+                    bar: cur_bar,
+                    is_count_in: false,
+                });
+            }
+        }
     }
 }
 
@@ -415,5 +514,135 @@ mod tests {
         assert!((pos.beats - 1200.0).abs() < 1e-6);
         assert_eq!(pos.bar, 301); // 1-indexed, starting bar 301 beat 1
         assert_eq!(pos.beat, 1);
+    }
+
+    #[test]
+    fn first_downbeat_is_emitted_exactly_once() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(0);
+        tl.play();
+        let ev = tl.advance(256);
+        let downbeats = ev
+            .iter()
+            .filter(|e| matches!(e, TimelineEvent::Bar { bar: 1, .. }))
+            .count();
+        assert_eq!(downbeats, 1, "bar 1 downbeat must fire on the first block");
+        let ev2 = tl.advance(256);
+        assert!(ev2.is_empty(), "no boundary lies inside the second block");
+    }
+
+    #[test]
+    fn count_in_emits_its_first_click() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(1);
+        tl.play();
+        let ev = tl.advance(256);
+        assert!(ev.contains(&TimelineEvent::Beat {
+            bar: 1,
+            beat: 1,
+            is_count_in: true,
+            offset: 0,
+        }));
+    }
+
+    #[test]
+    fn beat_offsets_are_block_relative() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(0);
+        tl.play();
+        tl.advance(23_900); // 100 frames before beat 2 (24_000)
+        let ev = tl.advance(256);
+        assert!(ev.contains(&TimelineEvent::Beat {
+            bar: 1,
+            beat: 2,
+            is_count_in: false,
+            offset: 100,
+        }));
+    }
+
+    #[test]
+    fn count_in_surplus_beat_offset_includes_block_offset() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(1);
+        tl.play();
+        tl.advance(95_000);
+        let ev = tl.advance(2_000);
+        assert!(ev.contains(&TimelineEvent::Beat {
+            bar: 1,
+            beat: 1,
+            is_count_in: false,
+            offset: 1_000,
+        }));
+    }
+
+    #[test]
+    fn loop_wrap_splits_span_and_fires_loop_start_downbeat() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(0);
+        tl.set_loop(1, 3, true); // ends at sample 192_000
+        tl.play();
+        tl.advance(191_000);
+        let (ev, spans) = tl.advance_with_spans(2_000);
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].offset, 0);
+        assert_eq!(spans[0].frames, 1_000);
+        assert_eq!(spans[1].offset, 1_000);
+        assert_eq!(spans[1].frames, 1_000);
+        assert!((spans[1].start_beats - 0.0).abs() < 1e-9);
+        assert!(ev.contains(&TimelineEvent::Bar {
+            bar: 1,
+            is_count_in: false
+        }));
+        assert!(!ev.contains(&TimelineEvent::Bar {
+            bar: 3,
+            is_count_in: false
+        }));
+    }
+
+    #[test]
+    fn count_in_surplus_span_is_offset_into_block() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(1); // 96_000 samples
+        tl.play();
+        tl.advance(95_000);
+        let (ev, spans) = tl.advance_with_spans(2_000);
+        assert!(ev.contains(&TimelineEvent::CountInComplete));
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].offset, 1_000);
+        assert_eq!(spans[0].frames, 1_000);
+        assert_eq!(spans[0].start_beats, 0.0);
+        assert!(ev.contains(&TimelineEvent::Bar {
+            bar: 1,
+            is_count_in: false
+        }));
+    }
+
+    #[test]
+    fn tempo_change_keeps_musical_position() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(0);
+        tl.play();
+        tl.advance(96_000 + 24_000); // bar 2, beat 2
+        let before = tl.current_position();
+        tl.set_bpm(90.0);
+        let after = tl.current_position();
+        assert_eq!((before.bar, before.beat), (after.bar, after.beat));
+        assert!((before.beats - after.beats).abs() < 1e-6);
+    }
+
+    #[test]
+    fn loop_enabled_past_end_jumps_back() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(0);
+        tl.play();
+        tl.advance(96_000 * 6); // bar 7
+        tl.set_loop(1, 3, true);
+        let (ev, spans) = tl.advance_with_spans(256);
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, TimelineEvent::LoopWrapped { to_sample: 0, .. })));
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].start_beats, 0.0);
+        assert_eq!(tl.current_sample, 256);
     }
 }

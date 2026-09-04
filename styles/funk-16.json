@@ -3,29 +3,106 @@
   "id": "funk-16",
   "name": "Funk 16th Groove",
   "genre": "Funk",
-  "feel": {
-    "swing": 0.15,
-    "timeSig": [4, 4],
-    "bpmRange": [80.0, 130.0]
-  },
+  "feel": { "swing": 0.15, "timeSig": [4, 4], "bpmRange": [80.0, 130.0] },
   "kitId": "standard-rock-kit",
   "bassProgram": "slap-bass",
   "compProgram": "clean-strat",
   "patterns": [
     {
-      "intensity": [0.0, 1.0],
+      "intensity": [0.0, 0.34],
+      "drums": {
+        "lengthBeats": 4.0,
+        "hits": [
+          { "instrument": "kick", "atBeats": 0.0, "velocity": 0.75 },
+          { "instrument": "hihat_closed", "atBeats": 0.0, "velocity": 0.5 },
+          { "instrument": "hihat_closed", "atBeats": 0.5, "velocity": 0.35 },
+          { "instrument": "sidestick", "atBeats": 1.0, "velocity": 0.65 },
+          { "instrument": "hihat_closed", "atBeats": 1.0, "velocity": 0.5 },
+          { "instrument": "hihat_closed", "atBeats": 1.5, "velocity": 0.35 },
+          { "instrument": "hihat_closed", "atBeats": 2.0, "velocity": 0.5 },
+          { "instrument": "kick", "atBeats": 2.5, "velocity": 0.65 },
+          { "instrument": "hihat_closed", "atBeats": 2.5, "velocity": 0.35 },
+          { "instrument": "sidestick", "atBeats": 3.0, "velocity": 0.65 },
+          { "instrument": "hihat_closed", "atBeats": 3.0, "velocity": 0.5 },
+          {
+            "instrument": "hihat_open",
+            "atBeats": 3.5,
+            "velocity": 0.4,
+            "prob": 0.5
+          }
+        ]
+      },
+      "bass": {
+        "lengthBeats": 4.0,
+        "notes": [
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.0,
+            "durBeats": 0.4,
+            "velocity": 0.8
+          },
+          {
+            "degree": 1,
+            "octave": 1,
+            "atBeats": 1.5,
+            "durBeats": 0.25,
+            "velocity": 0.65
+          },
+          {
+            "degree": 5,
+            "octave": 0,
+            "atBeats": 2.5,
+            "durBeats": 0.3,
+            "velocity": 0.7
+          }
+        ]
+      },
+      "comp": {
+        "lengthBeats": 4.0,
+        "voicing": "shell",
+        "strums": [
+          {
+            "atBeats": 1.5,
+            "durBeats": 0.25,
+            "velocity": 0.55,
+            "direction": "down"
+          },
+          {
+            "atBeats": 3.5,
+            "durBeats": 0.25,
+            "velocity": 0.5,
+            "direction": "up"
+          }
+        ]
+      }
+    },
+    {
+      "intensity": [0.34, 0.67],
       "drums": {
         "lengthBeats": 4.0,
         "hits": [
           { "instrument": "kick", "atBeats": 0.0, "velocity": 0.9 },
           { "instrument": "hihat_closed", "atBeats": 0.0, "velocity": 0.7 },
-          { "instrument": "hihat_closed", "atBeats": 0.25, "velocity": 0.5 },
+          { "instrument": "hihat_closed", "atBeats": 0.25, "velocity": 0.45 },
           { "instrument": "hihat_closed", "atBeats": 0.5, "velocity": 0.6 },
-          { "instrument": "hihat_closed", "atBeats": 0.75, "velocity": 0.5 },
+          { "instrument": "hihat_closed", "atBeats": 0.75, "velocity": 0.45 },
           { "instrument": "snare", "atBeats": 1.0, "velocity": 0.9 },
+          { "instrument": "hihat_closed", "atBeats": 1.0, "velocity": 0.7 },
+          { "instrument": "hihat_closed", "atBeats": 1.25, "velocity": 0.45 },
+          { "instrument": "hihat_closed", "atBeats": 1.5, "velocity": 0.6 },
           { "instrument": "kick", "atBeats": 1.75, "velocity": 0.8 },
+          { "instrument": "hihat_closed", "atBeats": 1.75, "velocity": 0.45 },
           { "instrument": "kick", "atBeats": 2.0, "velocity": 0.85 },
-          { "instrument": "snare", "atBeats": 3.0, "velocity": 0.9 }
+          { "instrument": "hihat_closed", "atBeats": 2.0, "velocity": 0.7 },
+          { "instrument": "hihat_closed", "atBeats": 2.25, "velocity": 0.45 },
+          { "instrument": "hihat_closed", "atBeats": 2.5, "velocity": 0.6 },
+          { "instrument": "hihat_closed", "atBeats": 2.75, "velocity": 0.45 },
+          { "instrument": "snare", "atBeats": 3.0, "velocity": 0.9 },
+          { "instrument": "hihat_closed", "atBeats": 3.0, "velocity": 0.7 },
+          { "instrument": "hihat_closed", "atBeats": 3.25, "velocity": 0.45 },
+          { "instrument": "hihat_open", "atBeats": 3.5, "velocity": 0.6 },
+          { "instrument": "hihat_closed", "atBeats": 3.75, "velocity": 0.45 }
         ]
       },
       "bass": {
@@ -58,6 +135,20 @@
             "atBeats": 2.0,
             "durBeats": 0.25,
             "velocity": 0.9
+          },
+          {
+            "degree": 5,
+            "octave": 0,
+            "atBeats": 2.75,
+            "durBeats": 0.2,
+            "velocity": 0.75
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 3.5,
+            "durBeats": 0.25,
+            "velocity": 0.8
           }
         ]
       },
@@ -78,10 +169,198 @@
             "direction": "up"
           },
           {
+            "atBeats": 1.75,
+            "durBeats": 0.2,
+            "velocity": 0.5,
+            "direction": "down"
+          },
+          {
             "atBeats": 2.5,
             "durBeats": 0.25,
             "velocity": 0.7,
             "direction": "down"
+          },
+          {
+            "atBeats": 3.5,
+            "durBeats": 0.25,
+            "velocity": 0.6,
+            "direction": "up"
+          }
+        ]
+      }
+    },
+    {
+      "intensity": [0.67, 1.0],
+      "drums": {
+        "lengthBeats": 4.0,
+        "hits": [
+          { "instrument": "kick", "atBeats": 0.0, "velocity": 1.0 },
+          {
+            "instrument": "crash",
+            "atBeats": 0.0,
+            "velocity": 0.7,
+            "prob": 0.2
+          },
+          { "instrument": "hihat_closed", "atBeats": 0.0, "velocity": 0.8 },
+          { "instrument": "hihat_closed", "atBeats": 0.25, "velocity": 0.55 },
+          { "instrument": "hihat_closed", "atBeats": 0.5, "velocity": 0.7 },
+          { "instrument": "kick", "atBeats": 0.75, "velocity": 0.85 },
+          { "instrument": "hihat_closed", "atBeats": 0.75, "velocity": 0.55 },
+          { "instrument": "snare", "atBeats": 1.0, "velocity": 1.0 },
+          { "instrument": "hihat_closed", "atBeats": 1.0, "velocity": 0.8 },
+          { "instrument": "hihat_closed", "atBeats": 1.25, "velocity": 0.55 },
+          {
+            "instrument": "kick",
+            "atBeats": 1.5,
+            "velocity": 0.8,
+            "prob": 0.6
+          },
+          { "instrument": "hihat_closed", "atBeats": 1.5, "velocity": 0.7 },
+          {
+            "instrument": "snare",
+            "atBeats": 1.75,
+            "velocity": 0.45,
+            "prob": 0.5
+          },
+          { "instrument": "hihat_closed", "atBeats": 1.75, "velocity": 0.55 },
+          { "instrument": "kick", "atBeats": 2.0, "velocity": 0.95 },
+          { "instrument": "hihat_closed", "atBeats": 2.0, "velocity": 0.8 },
+          { "instrument": "hihat_closed", "atBeats": 2.25, "velocity": 0.55 },
+          { "instrument": "hihat_closed", "atBeats": 2.5, "velocity": 0.7 },
+          { "instrument": "kick", "atBeats": 2.75, "velocity": 0.85 },
+          { "instrument": "hihat_closed", "atBeats": 2.75, "velocity": 0.55 },
+          { "instrument": "snare", "atBeats": 3.0, "velocity": 1.0 },
+          { "instrument": "hihat_closed", "atBeats": 3.0, "velocity": 0.8 },
+          { "instrument": "hihat_closed", "atBeats": 3.25, "velocity": 0.55 },
+          {
+            "instrument": "snare",
+            "atBeats": 3.5,
+            "velocity": 0.45,
+            "prob": 0.5
+          },
+          { "instrument": "hihat_closed", "atBeats": 3.5, "velocity": 0.7 },
+          { "instrument": "hihat_open", "atBeats": 3.75, "velocity": 0.7 }
+        ]
+      },
+      "bass": {
+        "lengthBeats": 4.0,
+        "notes": [
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.0,
+            "durBeats": 0.25,
+            "velocity": 1.0
+          },
+          {
+            "degree": 1,
+            "octave": 1,
+            "atBeats": 0.5,
+            "durBeats": 0.2,
+            "velocity": 0.85
+          },
+          {
+            "degree": 7,
+            "octave": 0,
+            "atBeats": 0.75,
+            "durBeats": 0.2,
+            "velocity": 0.85
+          },
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 1.5,
+            "durBeats": 0.25,
+            "velocity": 0.9
+          },
+          {
+            "degree": 5,
+            "octave": 0,
+            "atBeats": 2.0,
+            "durBeats": 0.25,
+            "velocity": 0.95
+          },
+          {
+            "degree": 1,
+            "octave": 1,
+            "atBeats": 2.25,
+            "durBeats": 0.2,
+            "velocity": 0.8
+          },
+          {
+            "degree": 6,
+            "octave": 0,
+            "atBeats": 2.75,
+            "durBeats": 0.2,
+            "velocity": 0.8
+          },
+          {
+            "degree": 7,
+            "octave": 0,
+            "atBeats": 3.5,
+            "durBeats": 0.25,
+            "velocity": 0.9
+          },
+          {
+            "degree": 1,
+            "octave": 1,
+            "atBeats": 3.75,
+            "durBeats": 0.2,
+            "velocity": 0.8
+          }
+        ]
+      },
+      "comp": {
+        "lengthBeats": 4.0,
+        "voicing": "shell",
+        "strums": [
+          {
+            "atBeats": 0.5,
+            "durBeats": 0.2,
+            "velocity": 0.85,
+            "direction": "down"
+          },
+          {
+            "atBeats": 0.75,
+            "durBeats": 0.2,
+            "velocity": 0.6,
+            "direction": "up"
+          },
+          {
+            "atBeats": 1.5,
+            "durBeats": 0.2,
+            "velocity": 0.9,
+            "direction": "down"
+          },
+          {
+            "atBeats": 1.75,
+            "durBeats": 0.2,
+            "velocity": 0.6,
+            "direction": "up"
+          },
+          {
+            "atBeats": 2.5,
+            "durBeats": 0.2,
+            "velocity": 0.85,
+            "direction": "down"
+          },
+          {
+            "atBeats": 2.75,
+            "durBeats": 0.2,
+            "velocity": 0.6,
+            "direction": "up"
+          },
+          {
+            "atBeats": 3.25,
+            "durBeats": 0.2,
+            "velocity": 0.7,
+            "direction": "down"
+          },
+          {
+            "atBeats": 3.5,
+            "durBeats": 0.2,
+            "velocity": 0.8,
+            "direction": "up"
           }
         ]
       }

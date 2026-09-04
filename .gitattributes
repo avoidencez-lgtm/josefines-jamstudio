@@ -1,0 +1,20 @@
+# Normalise line endings to LF in the repository and on checkout on every OS.
+# Biome, rustfmt and the golden tests all assume LF; core.autocrlf=true on
+# Windows otherwise rewrites the tree to CRLF and breaks `pnpm lint`.
+* text=auto eol=lf
+
+# Binary assets never get touched.
+*.png binary
+*.ico binary
+*.icns binary
+*.wav binary
+*.sf2 binary
+*.mp3 binary
+*.flac binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.zip binary

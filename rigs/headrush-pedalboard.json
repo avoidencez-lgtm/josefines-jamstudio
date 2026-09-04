@@ -2,5 +2,56 @@
   "schemaVersion": 1,
   "id": "headrush-pedalboard",
   "name": "HeadRush Pedalboard",
-  "target_device": "HeadRush Pedalboard"
+  "targetDevice": "HeadRush Pedalboard (5-pin MIDI In, channel 1)",
+  "kind": "HeadRush",
+  "midiChannel": 0,
+  "sceneCc": null,
+  "supports": {
+    "programChange": true,
+    "controlChange": true,
+    "midiClock": true
+  },
+  "notes": "Each HeadRush rig has a \"MIDI Prog\" number (0-127) on its Hardware Assign page; the scenes below send that number as a Program Change on channel 1. Rename the scenes to match the rigs. The HeadRush has no USB-MIDI: use a USB-MIDI interface into its 5-pin MIDI In (or daisy-chain from the Black Spirit MIDI Out/Thru).",
+  "programs": [
+    { "number": 0, "name": "Rig 1" },
+    { "number": 1, "name": "Rig 2" },
+    { "number": 2, "name": "Rig 3" },
+    { "number": 3, "name": "Rig 4" },
+    { "number": 4, "name": "Rig 5" },
+    { "number": 5, "name": "Rig 6" },
+    { "number": 6, "name": "Rig 7" },
+    { "number": 7, "name": "Rig 8" }
+  ],
+  "controls": [],
+  "scenes": [
+    {
+      "name": "Rig 1 (Clean)",
+      "commands": [{ "type": "programChange", "program": 0 }]
+    },
+    {
+      "name": "Rig 2 (Crunch)",
+      "commands": [{ "type": "programChange", "program": 1 }]
+    },
+    {
+      "name": "Rig 3 (Rhythm)",
+      "commands": [{ "type": "programChange", "program": 2 }]
+    },
+    {
+      "name": "Rig 4 (Lead)",
+      "commands": [{ "type": "programChange", "program": 3 }]
+    },
+    {
+      "name": "Rig 5",
+      "commands": [{ "type": "programChange", "program": 4 }]
+    },
+    {
+      "name": "Rig 6",
+      "commands": [{ "type": "programChange", "program": 5 }]
+    },
+    {
+      "name": "Rig 7",
+      "commands": [{ "type": "programChange", "program": 6 }]
+    },
+    { "name": "Rig 8", "commands": [{ "type": "programChange", "program": 7 }] }
+  ]
 }

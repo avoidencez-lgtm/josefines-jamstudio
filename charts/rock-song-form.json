@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "rock-song-form",
+  "name": "Rock Song Form (Verse / Chorus / Solo)",
+  "keyTonic": 9,
+  "mode": "major",
+  "timeSig": [4, 4],
+  "defaultBpm": 120.0,
+  "defaultStyleId": "rock-straight",
+  "sections": [
+    {
+      "id": "intro",
+      "name": "Intro",
+      "bars": [
+        [{ "chord": "A", "beats": 4.0 }],
+        [{ "chord": "A", "beats": 4.0 }],
+        [{ "chord": "D", "beats": 4.0 }],
+        [{ "chord": "E", "beats": 4.0 }]
+      ]
+    },
+    {
+      "id": "verse",
+      "name": "Verse",
+      "bars": [
+        [{ "chord": "A", "beats": 4.0 }],
+        [{ "chord": "A", "beats": 4.0 }],
+        [{ "chord": "D", "beats": 4.0 }],
+        [{ "chord": "D", "beats": 4.0 }],
+        [{ "chord": "A", "beats": 4.0 }],
+        [{ "chord": "F#m", "beats": 4.0 }],
+        [{ "chord": "E", "beats": 4.0 }],
+        [{ "chord": "E", "beats": 4.0 }]
+      ]
+    },
+    {
+      "id": "chorus",
+      "name": "Chorus",
+      "bars": [
+        [{ "chord": "D", "beats": 4.0 }],
+        [{ "chord": "E", "beats": 4.0 }],
+        [{ "chord": "A", "beats": 4.0 }],
+        [{ "chord": "F#m", "beats": 4.0 }],
+        [{ "chord": "D", "beats": 4.0 }],
+        [{ "chord": "E", "beats": 4.0 }],
+        [{ "chord": "A", "beats": 2.0 }, { "chord": "E", "beats": 2.0 }],
+        [{ "chord": "A", "beats": 4.0 }]
+      ]
+    },
+    {
+      "id": "solo",
+      "name": "Solo",
+      "bars": [
+        [{ "chord": "A", "beats": 4.0 }],
+        [{ "chord": "A", "beats": 4.0 }],
+        [{ "chord": "D", "beats": 4.0 }],
+        [{ "chord": "D", "beats": 4.0 }],
+        [{ "chord": "A", "beats": 4.0 }],
+        [{ "chord": "F#m", "beats": 4.0 }],
+        [{ "chord": "E", "beats": 4.0 }],
+        [{ "chord": "E", "beats": 4.0 }]
+      ]
+    },
+    {
+      "id": "outro",
+      "name": "Outro",
+      "bars": [
+        [{ "chord": "D", "beats": 4.0 }],
+        [{ "chord": "E", "beats": 4.0 }],
+        [{ "chord": "A", "beats": 4.0 }],
+        [{ "chord": "A", "beats": 4.0 }]
+      ]
+    }
+  ],
+  "arrangement": [
+    { "sectionId": "intro", "repeats": 1 },
+    { "sectionId": "verse", "repeats": 1 },
+    { "sectionId": "chorus", "repeats": 1 },
+    { "sectionId": "verse", "repeats": 1 },
+    { "sectionId": "chorus", "repeats": 1 },
+    { "sectionId": "solo", "repeats": 1 },
+    { "sectionId": "chorus", "repeats": 2 },
+    { "sectionId": "outro", "repeats": 1 }
+  ]
+}

@@ -1,11 +1,14 @@
-//! recorder: Multi-track take recorder writing 24-bit 48 kHz WAV stems with latency compensation.
-
+//! Bounded disk recording. WAV headers checkpoint every second; manifests are truth.
+use crate::workstation::Frame;
 use hound::{WavSpec, WavWriter};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+    sync::mpsc,
+    thread,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -23,271 +26,309 @@ pub struct TakeMetadata {
     pub path_master: String,
     pub waveform_peaks: Vec<f32>,
     pub notes: String,
+    #[serde(default)]
+    pub stems: BTreeMap<String, String>,
+    #[serde(default)]
+    pub snapshot: serde_json::Value,
+    #[serde(default)]
+    pub midi: Vec<crate::workstation::MidiNote>,
+    #[serde(default)]
+    pub sample_rate: u32,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
+type Writer = thread::JoinHandle<Result<TakeMetadata, String>>;
 pub struct TakeRecorder {
     sample_rate: u32,
     base_dir: PathBuf,
-    is_recording: Arc<AtomicBool>,
-    current_take_id: Option<String>,
-    session_id: String,
-    style_id: String,
-    chart_id: String,
-    tempo: f64,
     latency_offset_samples: usize,
-    recorded_input: Vec<f32>,
-    recorded_band_left: Vec<f32>,
-    recorded_band_right: Vec<f32>,
-    recorded_master_left: Vec<f32>,
-    recorded_master_right: Vec<f32>,
+    sender: Option<mpsc::SyncSender<Vec<Frame>>>,
+    writer: Option<Writer>,
+    failure: Option<String>,
+    pub snapshot: serde_json::Value,
+    pub midi: Vec<crate::workstation::MidiNote>,
+    pub frames_written: u64,
 }
-
 impl TakeRecorder {
     pub fn new(sample_rate: u32, base_dir: PathBuf) -> Self {
         Self {
             sample_rate,
             base_dir,
-            is_recording: Arc::new(AtomicBool::new(false)),
-            current_take_id: None,
-            session_id: "default-session".into(),
-            style_id: "blues-shuffle".into(),
-            chart_id: "blues-12-bar".into(),
-            tempo: 120.0,
             latency_offset_samples: 0,
-            recorded_input: Vec::new(),
-            recorded_band_left: Vec::new(),
-            recorded_band_right: Vec::new(),
-            recorded_master_left: Vec::new(),
-            recorded_master_right: Vec::new(),
+            sender: None,
+            writer: None,
+            failure: None,
+            snapshot: serde_json::Value::Null,
+            midi: Vec::new(),
+            frames_written: 0,
         }
     }
-
-    pub fn set_latency_compensation(&mut self, offset_samples: usize) {
-        self.latency_offset_samples = offset_samples;
+    pub fn set_latency_compensation(&mut self, samples: usize) {
+        self.latency_offset_samples = samples;
     }
-
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+    pub fn set_sample_rate(&mut self, rate: u32) -> Result<(), String> {
+        if self.is_recording() {
+            return Err("Stop recording before changing audio devices.".into());
+        }
+        self.sample_rate = rate.max(1);
+        Ok(())
+    }
     pub fn is_recording(&self) -> bool {
-        self.is_recording.load(Ordering::SeqCst)
+        self.writer.is_some()
     }
-
     pub fn start_take(
         &mut self,
         session_id: String,
         style_id: String,
         chart_id: String,
         tempo: f64,
-    ) -> String {
-        let take_id = format!(
-            "take-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis()
-        );
-        self.current_take_id = Some(take_id.clone());
-        self.session_id = session_id;
-        self.style_id = style_id;
-        self.chart_id = chart_id;
-        self.tempo = tempo;
-
-        self.recorded_input.clear();
-        self.recorded_band_left.clear();
-        self.recorded_band_right.clear();
-        self.recorded_master_left.clear();
-        self.recorded_master_right.clear();
-
-        self.is_recording.store(true, Ordering::SeqCst);
-        take_id
-    }
-
-    pub fn push_block(
-        &mut self,
-        input: &[f32],
-        band_l: &[f32],
-        band_r: &[f32],
-        master_l: &[f32],
-        master_r: &[f32],
-    ) {
-        if !self.is_recording.load(Ordering::SeqCst) {
-            return;
+    ) -> Result<String, String> {
+        if self.is_recording() {
+            return Err("A take is already recording. Stop and save it first.".into());
         }
-
-        self.recorded_input.extend_from_slice(input);
-        self.recorded_band_left.extend_from_slice(band_l);
-        self.recorded_band_right.extend_from_slice(band_r);
-        self.recorded_master_left.extend_from_slice(master_l);
-        self.recorded_master_right.extend_from_slice(master_r);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?;
+        let id = format!("take-{}", now.as_nanos());
+        fs::create_dir_all(&self.base_dir).map_err(|e| e.to_string())?;
+        let dir = self.base_dir.join(&id);
+        fs::create_dir(&dir).map_err(|e| e.to_string())?;
+        let layout: [(&str, &[usize]); 6] = [
+            ("guitar-di", &[0]),
+            ("band", &[1, 2]),
+            ("master", &[3, 4]),
+            ("drums", &[5, 6]),
+            ("bass", &[7]),
+            ("comp", &[8]),
+        ];
+        let mut writers = Vec::new();
+        let mut stems = BTreeMap::new();
+        for (name, channels) in layout {
+            let path = dir.join(format!("{name}.wav"));
+            let writer = WavWriter::create(
+                &path,
+                WavSpec {
+                    channels: channels.len() as u16,
+                    sample_rate: self.sample_rate,
+                    bits_per_sample: 24,
+                    sample_format: hound::SampleFormat::Int,
+                },
+            )
+            .map_err(|e| e.to_string())?;
+            stems.insert(name.to_string(), path.to_string_lossy().into_owned());
+            writers.push((channels.to_vec(), writer));
+        }
+        let mut meta = TakeMetadata {
+            id: id.clone(),
+            session_id,
+            timestamp: format!("{}.{:03}", now.as_secs(), now.subsec_millis()),
+            style_id,
+            chart_id,
+            tempo,
+            path_input: stems["guitar-di"].clone(),
+            path_band: stems["band"].clone(),
+            path_master: stems["master"].clone(),
+            stems,
+            snapshot: self.snapshot.clone(),
+            sample_rate: self.sample_rate,
+            ..Default::default()
+        };
+        meta.extra
+            .insert("schemaVersion".into(), serde_json::json!(1));
+        // Keep enough queued audio for disk jitter; never block the render thread.
+        let (tx, rx) = mpsc::sync_channel::<Vec<Frame>>(512);
+        let rate = self.sample_rate;
+        let offset = self.latency_offset_samples;
+        let writer = thread::spawn(move || -> Result<TakeMetadata, String> {
+            let mut frames = 0usize;
+            let mut checkpoint = 0usize;
+            let mut peak = 0.0f32;
+            let mut peaks = Vec::new();
+            for block in rx {
+                for frame in block {
+                    for (channels, writer) in &mut writers {
+                        if channels == &[0] && frames < offset {
+                            continue;
+                        }
+                        for &ch in channels.iter() {
+                            let v = frame[ch];
+                            if !v.is_finite() {
+                                return Err(
+                                    "Non-finite audio; partial WAVs kept for recovery.".into()
+                                );
+                            }
+                            writer
+                                .write_sample((v.clamp(-1.0, 1.0) * 8_388_607.0) as i32)
+                                .map_err(|e| e.to_string())?;
+                        }
+                    }
+                    peak = peak.max(frame[0].abs()).max(frame[3].abs());
+                    frames += 1;
+                    if frames.is_multiple_of((rate as usize / 10).max(1)) {
+                        peaks.push(peak);
+                        peak = 0.0;
+                    }
+                    if frames - checkpoint >= rate as usize {
+                        for (_, writer) in &mut writers {
+                            writer.flush().map_err(|e| e.to_string())?;
+                        }
+                        checkpoint = frames;
+                    }
+                }
+            }
+            // Pad the shifted input so every exported stem retains a common duration.
+            for (channels, writer) in &mut writers {
+                if channels == &[0] {
+                    for _ in 0..offset.min(frames) {
+                        writer.write_sample(0i32).map_err(|e| e.to_string())?;
+                    }
+                }
+            }
+            for (_, writer) in writers {
+                writer.finalize().map_err(|e| e.to_string())?;
+            }
+            if peaks.is_empty() {
+                peaks.push(peak);
+            }
+            meta.waveform_peaks = peaks
+                .chunks(peaks.len().div_ceil(100))
+                .map(|p| p.iter().copied().fold(0.0, f32::max))
+                .collect();
+            meta.sample_count = frames;
+            meta.duration_secs = frames as f64 / rate as f64;
+            Ok(meta)
+        });
+        self.sender = Some(tx);
+        self.writer = Some(writer);
+        self.failure = None;
+        self.midi.clear();
+        self.frames_written = 0;
+        Ok(id)
     }
-
+    pub fn push_frames(&mut self, frames: Vec<Frame>) {
+        if let Some(tx) = &self.sender {
+            self.frames_written += frames.len() as u64;
+            if let Err(e) = tx.try_send(frames) {
+                self.failure = Some(format!(
+                    "Recording interrupted by disk backpressure: {e}. Partial WAVs kept."
+                ));
+                self.sender = None;
+            }
+        }
+    }
+    pub fn push_capture(&mut self, frames: &[Frame]) -> Result<(), String> {
+        // Called on the command thread, never the audio/render thread.
+        for chunk in frames.chunks(256) {
+            self.sender
+                .as_ref()
+                .ok_or("Recorder not running")?
+                .send(chunk.to_vec())
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
     pub fn stop_and_save(&mut self) -> Result<TakeMetadata, String> {
-        self.is_recording.store(false, Ordering::SeqCst);
-        let take_id = self
-            .current_take_id
-            .take()
-            .ok_or_else(|| "No active take to stop".to_string())?;
-
-        let take_dir = self.base_dir.join(&take_id);
-        fs::create_dir_all(&take_dir).map_err(|e| e.to_string())?;
-
-        let path_input = take_dir.join(format!("{}-input.wav", take_id));
-        let path_band = take_dir.join(format!("{}-band.wav", take_id));
-        let path_master = take_dir.join(format!("{}-master.wav", take_id));
-
-        // Apply latency compensation shift to recorded input
-        let compensated_input = if self.latency_offset_samples < self.recorded_input.len() {
-            &self.recorded_input[self.latency_offset_samples..]
-        } else {
-            &self.recorded_input[..]
-        };
-
-        // Write 24-bit PCM WAVs
-        write_wav_mono_24(&path_input, compensated_input, self.sample_rate)?;
-        write_wav_stereo_24(
-            &path_band,
-            &self.recorded_band_left,
-            &self.recorded_band_right,
-            self.sample_rate,
-        )?;
-        write_wav_stereo_24(
-            &path_master,
-            &self.recorded_master_left,
-            &self.recorded_master_right,
-            self.sample_rate,
-        )?;
-
-        let sample_count = self.recorded_master_left.len();
-        let duration_secs = sample_count as f64 / self.sample_rate as f64;
-
-        // Compute 100-point thumbnail waveform peaks
-        let peaks = compute_peaks(&self.recorded_master_left, 100);
-
-        let meta = TakeMetadata {
-            id: take_id,
-            session_id: self.session_id.clone(),
-            timestamp: chrono_now_iso(),
-            duration_secs,
-            style_id: self.style_id.clone(),
-            chart_id: self.chart_id.clone(),
-            tempo: self.tempo,
-            sample_count,
-            path_input: path_input.to_string_lossy().into(),
-            path_band: path_band.to_string_lossy().into(),
-            path_master: path_master.to_string_lossy().into(),
-            waveform_peaks: peaks,
-            notes: "".into(),
-        };
-
+        self.sender.take();
+        let writer = self.writer.take().ok_or("No active recording")?;
+        let mut meta = writer
+            .join()
+            .map_err(|_| "Recording writer failed; partial WAVs kept")??;
+        meta.midi = std::mem::take(&mut self.midi);
+        if let Some(e) = self.failure.take() {
+            meta.notes = e.clone();
+            save_manifest(&meta)?;
+            return Err(e);
+        }
+        save_manifest(&meta)?;
         Ok(meta)
     }
 }
-
-fn write_wav_mono_24(path: &Path, samples: &[f32], sample_rate: u32) -> Result<(), String> {
-    let spec = WavSpec {
-        channels: 1,
-        sample_rate,
-        bits_per_sample: 24,
-        sample_format: hound::SampleFormat::Int,
-    };
-    let mut writer = WavWriter::create(path, spec).map_err(|e| e.to_string())?;
-    for &s in samples {
-        let val = (s.clamp(-1.0, 1.0) * 8_388_607.0) as i32;
-        writer.write_sample(val).map_err(|e| e.to_string())?;
-    }
-    writer.finalize().map_err(|e| e.to_string())
-}
-
-fn write_wav_stereo_24(
-    path: &Path,
-    left: &[f32],
-    right: &[f32],
-    sample_rate: u32,
-) -> Result<(), String> {
-    let spec = WavSpec {
-        channels: 2,
-        sample_rate,
-        bits_per_sample: 24,
-        sample_format: hound::SampleFormat::Int,
-    };
-    let mut writer = WavWriter::create(path, spec).map_err(|e| e.to_string())?;
-    let len = left.len().min(right.len());
-    for i in 0..len {
-        let l = (left[i].clamp(-1.0, 1.0) * 8_388_607.0) as i32;
-        let r = (right[i].clamp(-1.0, 1.0) * 8_388_607.0) as i32;
-        writer.write_sample(l).map_err(|e| e.to_string())?;
-        writer.write_sample(r).map_err(|e| e.to_string())?;
-    }
-    writer.finalize().map_err(|e| e.to_string())
-}
-
-fn compute_peaks(samples: &[f32], num_points: usize) -> Vec<f32> {
-    if samples.is_empty() || num_points == 0 {
-        return vec![0.0; num_points];
-    }
-    let chunk_size = (samples.len() / num_points).max(1);
-    let mut peaks = Vec::with_capacity(num_points);
-
-    for chunk in samples.chunks(chunk_size).take(num_points) {
-        let mut max_val = 0.0f32;
-        for &s in chunk {
-            let abs_s = s.abs();
-            if abs_s > max_val {
-                max_val = abs_s;
-            }
+impl Drop for TakeRecorder {
+    fn drop(&mut self) {
+        if self.is_recording() {
+            let _ = self.stop_and_save();
         }
-        peaks.push(max_val);
     }
-
-    while peaks.len() < num_points {
-        peaks.push(0.0);
-    }
-
-    peaks
+}
+pub fn save_manifest(meta: &TakeMetadata) -> Result<(), String> {
+    let dir = Path::new(&meta.path_input)
+        .parent()
+        .ok_or("Take directory missing")?;
+    let temp = dir.join("take.json.tmp");
+    fs::write(
+        &temp,
+        serde_json::to_vec_pretty(meta).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    fs::rename(temp, dir.join("take.json")).map_err(|e| e.to_string())
 }
 
-fn chrono_now_iso() -> String {
-    let dur = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap();
-    format!("{}.{}", dur.as_secs(), dur.subsec_millis())
+/// Reads a WAV file back as mono f32 in -1..1 (channels are averaged), together with its
+/// sample rate. Used by take analysis so it looks at what was actually recorded.
+pub fn read_wav_mono(path: &Path) -> Result<(Vec<f32>, u32), String> {
+    let mut reader =
+        hound::WavReader::open(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+    let spec = reader.spec();
+    let channels = spec.channels.max(1) as usize;
+    let interleaved: Vec<f32> = match spec.sample_format {
+        hound::SampleFormat::Float => reader
+            .samples::<f32>()
+            .map(|s| s.map_err(|e| e.to_string()))
+            .collect::<Result<_, _>>()?,
+        hound::SampleFormat::Int => {
+            let scale = 1.0 / ((1u64 << (spec.bits_per_sample.max(1) - 1)) as f32);
+            reader
+                .samples::<i32>()
+                .map(|s| s.map(|v| v as f32 * scale).map_err(|e| e.to_string()))
+                .collect::<Result<_, _>>()?
+        }
+    };
+    let mono = interleaved
+        .chunks(channels)
+        .map(|frame| frame.iter().sum::<f32>() / channels as f32)
+        .collect();
+    Ok((mono, spec.sample_rate))
+}
+
+pub fn wav_sample_rate(path: &Path) -> Result<u32, String> {
+    hound::WavReader::open(path)
+        .map(|r| r.spec().sample_rate)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn test_take_recorder_and_wav_generation() {
-        let temp_dir = std::env::temp_dir().join("jam_test_takes");
-        let _ = fs::remove_dir_all(&temp_dir);
-
-        let mut recorder = TakeRecorder::new(48_000, temp_dir.clone());
-        recorder.set_latency_compensation(10);
-
-        let take_id = recorder.start_take(
-            "session-1".into(),
-            "blues-shuffle".into(),
-            "blues-12-bar".into(),
-            120.0,
-        );
-        assert!(!take_id.is_empty());
-        assert!(recorder.is_recording());
-
-        // Simulate 48,000 samples (1 second)
-        let in_buf = vec![0.5f32; 4800];
-        let band_buf = vec![0.3f32; 4800];
-        for _ in 0..10 {
-            recorder.push_block(&in_buf, &band_buf, &band_buf, &band_buf, &band_buf);
+    fn recording_has_separate_aligned_stems_and_a_durable_snapshot() {
+        let root = std::env::temp_dir().join(format!("jam-recording-{}", std::process::id()));
+        let mut r = TakeRecorder::new(1000, root.clone());
+        r.snapshot = serde_json::json!({"name":"First riff"});
+        r.set_latency_compensation(10);
+        r.start_take("song".into(), "rock".into(), "verse".into(), 100.0)
+            .unwrap();
+        assert!(r
+            .start_take("x".into(), "x".into(), "x".into(), 100.0)
+            .is_err());
+        r.push_capture(&vec![[0.5, 0.2, 0.2, 0.7, 0.7, 0.1, 0.1, 0.04, 0.06]; 1000])
+            .unwrap();
+        let t = r.stop_and_save().unwrap();
+        assert_eq!(t.snapshot["name"], "First riff");
+        for p in t.stems.values() {
+            assert_eq!(read_wav_mono(Path::new(p)).unwrap().0.len(), 1000);
         }
-
-        let meta = recorder.stop_and_save().expect("save succeeds");
-        assert_eq!(meta.id, take_id);
-        assert!((meta.duration_secs - 1.0).abs() < 0.01);
-        assert_eq!(meta.waveform_peaks.len(), 100);
-
-        assert!(Path::new(&meta.path_input).exists());
-        assert!(Path::new(&meta.path_band).exists());
-        assert!(Path::new(&meta.path_master).exists());
-
-        let _ = fs::remove_dir_all(&temp_dir);
+        let input = read_wav_mono(Path::new(&t.path_input)).unwrap().0;
+        assert!((input[0] - 0.5).abs() < 1e-6);
+        assert_eq!(input[999], 0.0);
+        assert!(Path::new(&t.path_input)
+            .parent()
+            .unwrap()
+            .join("take.json")
+            .exists());
+        fs::remove_dir_all(root).unwrap();
     }
 }

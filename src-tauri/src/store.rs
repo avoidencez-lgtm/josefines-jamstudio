@@ -7,10 +7,7 @@ use std::fs;
 use std::path::PathBuf;
 
 pub fn db_path() -> PathBuf {
-    let mut dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    dir.push("JosefinesJamstudio");
-    dir.push("index.sqlite");
-    dir
+    crate::library::Library::default_user_root().join("index.sqlite")
 }
 
 pub struct IndexStore {
@@ -68,6 +65,16 @@ impl IndexStore {
         )
         .map_err(|e| e.to_string())?;
 
+        let has_manifest: bool = conn
+            .prepare("PRAGMA table_info(takes)")
+            .map_err(|e| e.to_string())?
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .any(|name| name.is_ok_and(|name| name == "manifest"));
+        if !has_manifest {
+            conn.execute("ALTER TABLE takes ADD COLUMN manifest TEXT", [])
+                .map_err(|e| e.to_string())?;
+        }
         Ok(())
     }
 
@@ -79,8 +86,8 @@ impl IndexStore {
                 "INSERT OR REPLACE INTO takes (
                 id, session_id, timestamp, duration_secs, style_id, chart_id,
                 tempo, sample_count, path_input, path_band, path_master,
-                waveform_peaks, notes
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                waveform_peaks, notes, manifest
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 params![
                     take.id,
                     take.session_id,
@@ -94,7 +101,8 @@ impl IndexStore {
                     take.path_band,
                     take.path_master,
                     peaks_json,
-                    take.notes
+                    take.notes,
+                    serde_json::to_string(take).map_err(|e| e.to_string())?
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -107,13 +115,22 @@ impl IndexStore {
             .prepare(
                 "SELECT id, session_id, timestamp, duration_secs, style_id, chart_id,
                     tempo, sample_count, path_input, path_band, path_master,
-                    waveform_peaks, notes
+                    waveform_peaks, notes, manifest
              FROM takes ORDER BY timestamp DESC",
             )
             .map_err(|e| e.to_string())?;
 
         let rows = stmt
             .query_map([], |row| {
+                if let Some(manifest) = row.get::<_, Option<String>>(13)? {
+                    return serde_json::from_str(&manifest).map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            13,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    });
+                }
                 let peaks_str: String = row.get(11)?;
                 let peaks: Vec<f32> = serde_json::from_str(&peaks_str).unwrap_or_default();
                 Ok(TakeMetadata {
@@ -130,6 +147,7 @@ impl IndexStore {
                     path_master: row.get(10)?,
                     waveform_peaks: peaks,
                     notes: row.get(12)?,
+                    ..Default::default()
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -218,12 +236,23 @@ mod tests {
             path_master: "/tmp/master.wav".into(),
             waveform_peaks: vec![0.1, 0.5, 0.9],
             notes: "Great first take".into(),
+            ..Default::default()
         };
 
+        let mut take = take;
+        take.sample_rate = 48_000;
+        take.stems.insert("drums".into(), "/tmp/drums.wav".into());
+        take.extra
+            .insert("favourite".into(), serde_json::json!(true));
+        take.snapshot = serde_json::json!({"timeSignature": [6, 8]});
         store.insert_take(&take).expect("insert succeeds");
 
         let list = store.list_takes().expect("list succeeds");
         assert_eq!(list.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&list[0]).unwrap(),
+            serde_json::to_value(&take).unwrap()
+        );
         assert_eq!(list[0].id, "take-123");
         assert_eq!(list[0].waveform_peaks, vec![0.1, 0.5, 0.9]);
 

@@ -77,10 +77,28 @@ impl Sf2Synth {
         self.voices.clear();
     }
 
+    pub fn active_voices(&self) -> usize {
+        self.voices.len()
+    }
+
+    /// Voices whose note-off has not been requested yet.
+    pub fn sustaining_voices(&self, channel: u8) -> usize {
+        let short_release = (self.sample_rate as f32 * 0.05) as usize;
+        self.voices
+            .iter()
+            .filter(|v| v.channel == channel && v.decay_samples > v.age_samples + short_release)
+            .count()
+    }
+
     pub fn render(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.render_channel(0, left, right);
+        self.render_channel(1, left, right);
+    }
+
+    pub fn render_channel(&mut self, channel: u8, left: &mut [f32], right: &mut [f32]) {
         let frames = left.len().min(right.len());
 
-        for v in self.voices.iter_mut() {
+        for v in self.voices.iter_mut().filter(|v| v.channel == channel) {
             let start_age = v.age_samples;
             let end_age = start_age + frames;
 

@@ -27,14 +27,23 @@ fn render_style_headless(style_json: &str, bars: u32, bpm: f64, seed: u64) -> (V
     let mut rendered = 0;
     while rendered < total_frames {
         let chunk = block_size.min(total_frames - rendered);
-        let evs = timeline.advance(chunk);
+        let (evs, spans) = timeline.advance_with_spans(chunk);
         for ev in &evs {
             seq.handle_timeline_event(ev);
         }
 
         blk_l.fill(0.0);
         blk_r.fill(0.0);
-        seq.render(&mut blk_l[..chunk], &mut blk_r[..chunk]);
+        for span in &spans {
+            let end = span.offset + span.frames;
+            seq.render_span(
+                span,
+                timeline.samples_per_beat(),
+                beats_per_bar,
+                &mut blk_l[span.offset..end],
+                &mut blk_r[span.offset..end],
+            );
+        }
 
         out_left.extend_from_slice(&blk_l[..chunk]);
         out_right.extend_from_slice(&blk_r[..chunk]);
@@ -42,6 +51,103 @@ fn render_style_headless(style_json: &str, bars: u32, bpm: f64, seed: u64) -> (V
     }
 
     (out_left, out_right)
+}
+
+/// Every style must produce audible bass and comp on their own, not just drums.
+fn render_part_only(style_json: &str, drums: bool, bass: bool, comp: bool) -> f32 {
+    let style: Style = serde_json::from_str(style_json).expect("valid style JSON");
+    let bpb = style.feel.time_sig.0 as f64;
+    let mut seq = BandSequencer::new(style.clone(), 48_000, 3);
+    seq.set_parts(!drums, !bass, !comp);
+    let mut tl = Timeline::new(48_000, 110.0, style.feel.time_sig);
+    tl.set_count_in(0);
+    tl.play();
+    let frames = (bpb * 2.0 * tl.samples_per_beat()) as usize;
+    let mut l = vec![0.0f32; frames];
+    let mut r = vec![0.0f32; frames];
+    let mut done = 0;
+    while done < frames {
+        let n = 256.min(frames - done);
+        let (evs, spans) = tl.advance_with_spans(n);
+        for e in &evs {
+            seq.handle_timeline_event(e);
+        }
+        for s in &spans {
+            let end = done + s.offset + s.frames;
+            seq.render_span(
+                s,
+                tl.samples_per_beat(),
+                bpb,
+                &mut l[done + s.offset..end],
+                &mut r[done + s.offset..end],
+            );
+        }
+        done += n;
+    }
+    calculate_level(&l).peak_db
+}
+
+#[test]
+fn every_style_has_audible_drums_bass_and_comp() {
+    let styles = [
+        (
+            "blues-shuffle",
+            include_str!("../../../styles/blues-shuffle.json"),
+        ),
+        (
+            "rock-straight",
+            include_str!("../../../styles/rock-straight.json"),
+        ),
+        ("funk-16", include_str!("../../../styles/funk-16.json")),
+        (
+            "jazz-swing",
+            include_str!("../../../styles/jazz-swing.json"),
+        ),
+        ("ballad-68", include_str!("../../../styles/ballad-68.json")),
+        (
+            "metal-gallop",
+            include_str!("../../../styles/metal-gallop.json"),
+        ),
+    ];
+    for (id, json) in styles {
+        let d = render_part_only(json, true, false, false);
+        let b = render_part_only(json, false, true, false);
+        let c = render_part_only(json, false, false, true);
+        assert!(d > -30.0, "{id}: drums silent ({d:.1} dBFS)");
+        assert!(b > -30.0, "{id}: bass silent ({b:.1} dBFS)");
+        assert!(c > -30.0, "{id}: comp silent ({c:.1} dBFS)");
+    }
+}
+
+#[test]
+fn every_style_has_three_intensity_tiers() {
+    let styles = [
+        include_str!("../../../styles/blues-shuffle.json"),
+        include_str!("../../../styles/rock-straight.json"),
+        include_str!("../../../styles/funk-16.json"),
+        include_str!("../../../styles/jazz-swing.json"),
+        include_str!("../../../styles/ballad-68.json"),
+        include_str!("../../../styles/metal-gallop.json"),
+    ];
+    for json in styles {
+        let style: Style = serde_json::from_str(json).unwrap();
+        assert!(
+            style.patterns.len() >= 3,
+            "{} has {} intensity tiers, want at least 3",
+            style.id,
+            style.patterns.len()
+        );
+        for probe in [0.0f32, 0.5, 1.0] {
+            assert!(
+                style
+                    .patterns
+                    .iter()
+                    .any(|p| probe >= p.intensity.0 && probe <= p.intensity.1),
+                "{}: no pattern covers intensity {probe}",
+                style.id
+            );
+        }
+    }
 }
 
 #[test]
@@ -122,13 +228,22 @@ fn test_render_worker_benchmark_budget() {
 
     let start = Instant::now();
     for _ in 0..10_000 {
-        let evs = timeline.advance(256);
+        let (evs, spans) = timeline.advance_with_spans(256);
         for ev in &evs {
             seq.handle_timeline_event(ev);
         }
         blk_l.fill(0.0);
         blk_r.fill(0.0);
-        seq.render(&mut blk_l, &mut blk_r);
+        for span in &spans {
+            let end = span.offset + span.frames;
+            seq.render_span(
+                span,
+                timeline.samples_per_beat(),
+                4.0,
+                &mut blk_l[span.offset..end],
+                &mut blk_r[span.offset..end],
+            );
+        }
     }
     let elapsed = start.elapsed();
 

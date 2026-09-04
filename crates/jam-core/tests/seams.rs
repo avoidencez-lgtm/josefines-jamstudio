@@ -17,7 +17,7 @@ fn test_bundled_registries_load() {
         .load_from_dir(&BUNDLED_CHARTS)
         .expect("charts load");
     assert!(chart_count > 0, "Expected at least 1 bundled chart");
-    assert!(chart_reg.get("blues-in-a").is_some());
+    assert!(chart_reg.get("blues-12-bar").is_some());
 
     let mut rig_reg = SeamRegistry::<RigManifest>::new();
     let rig_count = rig_reg.load_from_dir(&BUNDLED_RIGS).expect("rigs load");

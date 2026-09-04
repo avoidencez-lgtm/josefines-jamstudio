@@ -3,14 +3,17 @@
 
 use jam_core::timeline::SAMPLE_RATE;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Clone)]
 struct ActiveVoice {
     #[allow(dead_code)]
     instrument: String,
-    samples: Vec<f32>,
+    samples: Arc<Vec<f32>>,
     position: usize,
     velocity: f32,
+    gain_left: f32,
+    gain_right: f32,
     choke_group: Option<String>,
     fade_remaining: usize,
     fade_total: usize,
@@ -20,8 +23,10 @@ pub struct Sampler {
     sample_rate: u32,
     kit_name: String,
     /// Instrument name -> list of alternative samples (round-robin)
-    sample_bank: HashMap<String, Vec<Vec<f32>>>,
+    sample_bank: HashMap<String, Vec<Arc<Vec<f32>>>>,
     choke_mappings: HashMap<String, String>,
+    /// Instrument name -> stereo position, -1.0 (left) .. 1.0 (right)
+    pan: HashMap<String, f32>,
     voices: Vec<Option<ActiveVoice>>,
     round_robin_idx: HashMap<String, usize>,
     #[allow(dead_code)]
@@ -41,6 +46,7 @@ impl Sampler {
             kit_name: "Default".into(),
             sample_bank: HashMap::new(),
             choke_mappings: HashMap::new(),
+            pan: HashMap::new(),
             voices: vec![None; max_polyphony],
             round_robin_idx: HashMap::new(),
             max_polyphony,
@@ -58,6 +64,16 @@ impl Sampler {
         sampler.set_choke_group("hihat_open", "hihat");
         sampler.set_choke_group("pedal_hihat", "hihat");
 
+        // Drummer's perspective: hats slightly left, ride right, toms fanned.
+        sampler.set_pan("hihat_closed", -0.35);
+        sampler.set_pan("hihat_open", -0.35);
+        sampler.set_pan("pedal_hihat", -0.35);
+        sampler.set_pan("ride", 0.4);
+        sampler.set_pan("crash", 0.2);
+        sampler.set_pan("tom_high", -0.25);
+        sampler.set_pan("tom_mid", 0.1);
+        sampler.set_pan("tom_low", 0.35);
+
         // Synthesize drum samples
         sampler.add_synthetic_kick();
         sampler.add_synthetic_snare();
@@ -68,6 +84,8 @@ impl Sampler {
         sampler.add_synthetic_tom("tom_high", 160.0);
         sampler.add_synthetic_tom("tom_mid", 120.0);
         sampler.add_synthetic_tom("tom_low", 90.0);
+        sampler.add_synthetic_sidestick();
+        sampler.add_synthetic_pedal_hihat();
 
         sampler
     }
@@ -76,11 +94,32 @@ impl Sampler {
         self.choke_mappings.insert(instrument.into(), group.into());
     }
 
+    pub fn set_pan(&mut self, instrument: &str, pan: f32) {
+        self.pan.insert(instrument.into(), pan.clamp(-1.0, 1.0));
+    }
+
     pub fn load_sample(&mut self, instrument: &str, pcm: Vec<f32>) {
         self.sample_bank
             .entry(instrument.into())
             .or_default()
-            .push(pcm);
+            .push(Arc::new(pcm));
+    }
+
+    pub fn has_instrument(&self, instrument: &str) -> bool {
+        self.sample_bank
+            .get(instrument)
+            .is_some_and(|alts| !alts.is_empty())
+    }
+
+    /// Silences every voice immediately (transport stop).
+    pub fn all_off(&mut self) {
+        for slot in self.voices.iter_mut() {
+            *slot = None;
+        }
+    }
+
+    pub fn active_voices(&self) -> usize {
+        self.voices.iter().flatten().count()
     }
 
     pub fn trigger(&mut self, instrument: &str, velocity: f32) {
@@ -97,24 +136,30 @@ impl Sampler {
             }
         }
 
-        // Fetch sample from bank or generate on the fly
         let samples = if let Some(alternatives) = self.sample_bank.get(instrument) {
             if alternatives.is_empty() {
                 return;
             }
             let idx = self.round_robin_idx.entry(instrument.into()).or_insert(0);
-            let s = alternatives[*idx % alternatives.len()].clone();
+            let s = Arc::clone(&alternatives[*idx % alternatives.len()]);
             *idx = (*idx + 1) % alternatives.len();
             s
         } else {
             return;
         };
 
+        // Constant-power pan.
+        let pan = self.pan.get(instrument).copied().unwrap_or(0.0);
+        let angle = (pan + 1.0) * 0.25 * std::f32::consts::PI;
+        let (gain_left, gain_right) = (angle.cos(), angle.sin());
+
         let voice = ActiveVoice {
             instrument: instrument.into(),
             samples,
             position: 0,
             velocity: velocity.clamp(0.0, 1.0),
+            gain_left,
+            gain_right,
             choke_group: choke_grp,
             fade_remaining: 0,
             fade_total: 0,
@@ -150,8 +195,8 @@ impl Sampler {
                         voice.fade_remaining = voice.fade_remaining.saturating_sub(1);
                     }
 
-                    output_left[i] += s;
-                    output_right[i] += s;
+                    output_left[i] += s * voice.gain_left;
+                    output_right[i] += s * voice.gain_right;
 
                     if voice.fade_total > 0 && voice.fade_remaining == 0 {
                         voice.position = voice.samples.len();
@@ -251,6 +296,40 @@ impl Sampler {
             s.push(tone * decay * 0.5);
         }
         self.load_sample("ride", s);
+    }
+
+    /// Cross-stick on the snare rim: a short woody click for quiet grooves.
+    fn add_synthetic_sidestick(&mut self) {
+        let len = (self.sample_rate as f32 * 0.06) as usize; // 60ms
+        let mut s = Vec::with_capacity(len);
+        let mut seed = 24680u32;
+        for i in 0..len {
+            let t = i as f32 / self.sample_rate as f32;
+            let decay = (-70.0 * t).exp();
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            let noise = (seed as f32 / 2147483648.0) - 1.0;
+            let knock = (t * 2.0 * std::f32::consts::PI * 1450.0).sin()
+                + (t * 2.0 * std::f32::consts::PI * 2900.0).sin() * 0.4;
+            s.push((knock * 0.55 + noise * 0.25) * decay * 0.7);
+        }
+        self.load_sample("sidestick", s);
+    }
+
+    /// Foot-closed hi-hat "chick": darker and shorter than a stick hit.
+    fn add_synthetic_pedal_hihat(&mut self) {
+        let len = (self.sample_rate as f32 * 0.03) as usize; // 30ms
+        let mut s = Vec::with_capacity(len);
+        let mut seed = 13572u32;
+        let mut lp = 0.0f32;
+        for i in 0..len {
+            let t = i as f32 / self.sample_rate as f32;
+            let decay = (-110.0 * t).exp();
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            let noise = (seed as f32 / 2147483648.0) - 1.0;
+            lp += 0.35 * (noise - lp);
+            s.push(lp * decay * 0.8);
+        }
+        self.load_sample("pedal_hihat", s);
     }
 
     fn add_synthetic_tom(&mut self, name: &str, base_freq: f32) {

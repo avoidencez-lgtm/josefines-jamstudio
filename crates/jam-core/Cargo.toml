@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "jam-core"
 version.workspace = true
 edition.workspace = true
@@ -7,6 +7,5 @@ license.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-schemars.workspace = true
 include_dir.workspace = true
 thiserror.workspace = true
