@@ -2,6 +2,17 @@
 
 This document is the contract between the milestones. Names here (crates, modules, commands, events, types) are the names the code uses. A change to a contract is a change to this file in the same PR.
 
+The music-video extension is governed by [ADR 0008](adr/0008-music-video-workspace.md).
+`media_list`, `media_save`, `media_import`, `media_from_take`, `media_generate`,
+`media_refresh`, `media_tools`, `media_render`, `media_cancel` and `media_open` are
+additive IPC commands. They exchange JSON project/job/asset metadata and paths,
+never binary audio/video. Projects use schemaVersion 1 and revision conflict checks.
+The shared media catalog defines cloud and fixed-loopback ComfyUI protocols;
+all HTTP remains under `net/media.rs`. Tauri asset access is limited to media
+assets and exports, excluding generation receipts. Native preview is silent;
+FFmpeg and the user's external media player own exported audiovisual playback.
+See [music-video setup and acceptance](guide/music-video.md).
+
 ## 1. The governing rule
 
 > **JS owns text and UI. Rust owns bytes and time. The WebView never produces sound and never holds a key.**
@@ -10,7 +21,7 @@ Corollaries that resolve most design questions:
 
 - All audio devices, capture, mixing, playback, recording and MIDI live in Rust. The WebView has no `<audio>` element and no Web Audio output.
 - All realtime network streams that carry audio or need a key (Lyria, ElevenLabs TTS and STT, Music.ai jobs, stem jobs, asset downloads) live in Rust.
-- The LLM conversation (text in, tool calls out) lives in TypeScript with the Vercel AI SDK, but its HTTP goes through the Rust `provider_fetch` proxy that injects the key.
+- The LLM conversation (text in, tool calls out) lives in the TypeScript provider registry, but its HTTP goes through the Rust `provider_fetch` proxy that injects the key.
 - Music theory (chord parsing, transposition, scales) lives in TypeScript (`tonal`); Rust receives fully resolved numeric charts and owns only voicing templates.
 - 48 kHz internally, always. Devices that run at another rate are resampled at the edge.
 - One clock: the output audio callback's frame counter. Everything musical derives from it.
@@ -412,3 +423,129 @@ Recorded, scrubbed fixtures under `tests/fixtures/providers/<provider>/` capture
 ## 12. Errors and logging
 
 `AppError { code, message, detail?, fatal }` with codes in `src-tauri/src/ipc/errors.rs` mirrored in `src/ipc/errors.ts`; every code has a user-facing message and a next step in the UI. Logs via `tauri-plugin-log` to `~/JosefinesJamstudio/logs/` with rotation; levels info by default, debug with `JAM_LOG=debug`; never bodies, never keys, never raw audio.
+# Implemented songwriting workflow
+
+The Write screen adds a file-backed original-song document (`schemaVersion: 1`),
+reusing `Chart` for chords/arrangement and the existing style registry for each
+section's three independent parts. `src/lib/originals.ts` holds editable state,
+50 body-level undo steps and named versions. Changes reach audio on Play or Record.
+Locks preserve a part's settings when trying another groove; direct edits remain available.
+
+`originals_save/list/load/record`, `capture_arm/keep` and `takes_favourite` are
+additive commands. `src-tauri/src/originals.rs` bounds and validates documents,
+preserves unknown JSON fields, checks revisions and retains a backup when saving.
+Playback resolves the same document into the Rust sequencer and guitar clips.
+Supported scope is 4/4, 40–240 BPM, 256 arranged bars, 16 clips and 20 UI versions.
+
+Rust owns the rolling buffer (opt-in, at most 60 seconds), selected mono input,
+clip playback, per-part buses and MIDI note collection. Guitar clips keep their
+recorded pitch/speed; fitting tempo changes the band. Recording starts atomically
+at bar 1, without a count-in. Timing and chart changes are refused until the take
+is saved. A bounded disk queue writes WAVs and checkpoints headers every second.
+Every completed take has a JSON manifest containing its song snapshot and actual
+scheduled notes. File manifests override the legacy SQLite cache on discovery.
+
+DAW export includes the take snapshot, separate stems, rendered guitar layers,
+tempo/section map and scheduled band MIDI when available. Band/master WAVs are
+reference mixes, not additional instrument layers. Capture-only ideas have no
+musical grid or reconstructed MIDI. The current single input and synthetic
+instruments are unchanged; real rig alignment and Logic import remain owner gates.
+See [the user workflow](guide/songwriting.md) and [extension recipe](EXTENDING.md).
+
+The second songwriting slice adds Rust guitar auditioning and explicitly opened
+MIDI input. `ControllerInput` filters PC/CC/note presses into a bounded queue; the
+existing telemetry worker emits them to the shared frontend controller registry.
+Learning persists a validated, versioned `controller.json`; pedal actions use the
+same writing commands as buttons and Jo. Releases/held CCs do not trigger commands,
+and recent echoed rig messages are filtered before dispatch. No MIDI input is opened
+or armed automatically. Rehearsal ranges are computed from the existing arrangement.
+
+Optional song tones reference the active rig profile's scenes. They use temporary
+`song_mappings` in the existing orchestrator, leaving persisted global mappings
+unchanged. A missing port, mismatched profile, invalid scene or ambiguous section
+name is rejected before playback. Selecting another hardware profile clears this
+override. Guitar audition reuses the clip renderer and ends at the trim boundary;
+it never passes PCM through IPC and is stopped before a new recording.
+
+Complete DAW exports also carry an optional REAPER session builder. Rust generates
+escaped session data from validated WAV headers, tempo/meter, markers and recorded
+MIDI; a bundled Lua consumer calls REAPER's documented API in an empty project.
+Audio has explicit time-based placement; separate MIDI channels remain editable.
+Reference mixes and MIDI alternatives start muted. Relative file references allow
+moving the export folder between Windows and Mac. Import never opens a network,
+modifies the original audio, or saves over a project. Logic-compatible WAV/MIDI
+exports remain available. This is a one-way performance handoff, not a hosted DAW.
+
+## Implemented text providers and Song Lab (2026-09-04)
+
+This supersedes the planned LLM mechanism in section 6.2 for current Jo requests.
+`src/lib/jo/providers.ts` is the shared registry for Gemini, OpenAI Responses,
+Claude Messages and OpenRouter Chat Completions. It reuses Jo declarations and
+context, normalizes replies and validates every action before dispatch. One user
+request makes one proxy call; there is no automatic paid retry or fallback.
+`settings.ai` stores schemaVersion 1, selected provider and per-provider model,
+output limit and optional prices. It contains no credentials and preserves unknown
+fields through the existing settings commands.
+
+Rust's existing `net.rs` allowlist and keychain inject authentication. Requests
+are bounded to 128 KiB, responses to 2 MiB and time to 90 seconds. Redirects are
+refused so credentials cannot be forwarded to another endpoint. Usage entries
+add optional model/estimatedCostUsd while retaining compatibility with old logs.
+Estimates are approximate metadata, not provider invoices or spending caps.
+
+Song Lab sends text context only, without take/clip audio. It parses bounded
+proposals, validates chords and checks song identity plus the original body before
+applying. The existing version/edit operations preserve the original; recording
+and version/bar limits prevent unsafe application. Generated chords and notes
+remain editable. This does not implement audio generation, analysis uploads,
+cloud speech or DAW hosting. [Current API guide](guide/api-options.md).
+
+## Installed agents and persistent assistant panel
+
+ADR 0007 adds an explicit installed-CLI path to the shared brain registry.
+`agent_status({provider, executable})` only detects the local executable;
+`agent_request({request: {provider, model, executable, prompt}})` returns a bounded
+structured envelope; `agent_cancel()` stops the current local request. Rust owns
+process pipes, timeouts and cancellation. CLI credentials never traverse IPC.
+The CLI owns its network/auth lifecycle, while the existing cost log receives
+provider/model/duration/byte metadata with unknown monetary cost.
+
+The assistant remains mounted across screen changes. It supplies the current song
+chart/settings/notes, rig name, available grooves and cached take metrics, but no
+audio, credential or local asset path. It reviews proposed actions. Studio edits
+run against a clone as one transaction and keep a version; stage/analysis actions
+are deliberately single-action requests. New tools reuse the same declarations
+for Jo, API models and installed agents. Dynamic API model catalogs are explicit
+GET requests through the existing proxy. User-entered model IDs remain available.
+See [ADR 0007](adr/0007-installed-studio-agents.md) and [setup guide](guide/api-options.md).
+
+## Preview build boundary (2026-09-05)
+
+The sections above retain the target design, including unbuilt voice, analysis,
+resampling and extension-proof work. Current support is recorded in
+[build closeout](reviews/build-closeout.md), the README and the milestone board.
+
+Logical UI event names use `domain.state`; `src/ipc/client.ts` translates dots to
+colons for Tauri (`transport:state`, `input:meters`, etc.). Rust emits these colon
+names because Tauri rejects dots. The local `main` capability grants event
+listen/unlisten and window destruction after the close guard. Production CSP permits local IPC, bundled assets and scoped
+silent video; external scripts, frames and browser networking are blocked.
+
+A transport beat is the denominator unit: 6/8 at 60 means six seconds per bar.
+Exports use quarter-note BPM = engine BPM × 4 / denominator, for both MIDI files
+and REAPER. Recordings snapshot the meter; timing edits are refused during a take.
+Charts and styles with different meters are refused before playback changes.
+
+Settings writes flush a temporary file, retain the previous valid `.bak`, then
+rename. Corrupt settings are reported and are never overwritten by defaults.
+Take scanning reports damaged manifests individually; complete cached manifests
+retain stems, MIDI, snapshots and flags. New code uses the native Mac Keychain
+and Windows credential store. Browser speech APIs are not part of this build.
+
+CPAL conversion uses bounded stack blocks and one callback owner, with no resize,
+mutex or logging in the callback. A rejected requested buffer is reported to the
+user; the engine's headless fallback still keeps the editor usable.
+
+Native close requests are guarded for unsaved documents and active work. Film's
+Use take sums band, guitar DI and unmuted guitar layers through FFmpeg with
+normalisation for headroom; master/monitor click and test tone are excluded.

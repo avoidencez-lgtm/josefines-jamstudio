@@ -190,6 +190,11 @@ struct MixParams {
 }
 
 pub struct AudioEngine {
+    render_gate: Arc<Mutex<()>>,
+    pub capture: Arc<Mutex<crate::workstation::Capture>>,
+    pub clips: Arc<Mutex<Vec<crate::workstation::Clip>>>,
+    pub song_snapshot: serde_json::Value,
+    pub audition: Arc<Mutex<Option<crate::workstation::Audition>>>,
     config: AudioConfig,
     running: Arc<AtomicBool>,
     tone_active: Arc<AtomicBool>,
@@ -246,6 +251,11 @@ impl AudioEngine {
         let recorder = crate::recorder::TakeRecorder::new(sample_rate, dirs_base().join("takes"));
 
         Self {
+            render_gate: Arc::new(Mutex::new(())),
+            capture: Arc::new(Mutex::new(Default::default())),
+            clips: Arc::new(Mutex::new(Vec::new())),
+            song_snapshot: serde_json::Value::Null,
+            audition: Arc::new(Mutex::new(None)),
             config: config.clone(),
             running: Arc::new(AtomicBool::new(false)),
             tone_active: Arc::new(AtomicBool::new(false)),
@@ -309,6 +319,7 @@ impl AudioEngine {
     // ----- transport -------------------------------------------------------
 
     pub fn transport_play(&self) {
+        self.audition.lock().take();
         self.timeline.lock().play();
     }
 
@@ -317,6 +328,7 @@ impl AudioEngine {
     }
 
     pub fn transport_stop(&self) {
+        self.audition.lock().take();
         self.timeline.lock().stop();
         self.sequencer.lock().reset();
     }
@@ -348,6 +360,23 @@ impl AudioEngine {
 
     // ----- band ------------------------------------------------------------
 
+    pub fn validate_style_meter(&self, style: &Style) -> Result<(), String> {
+        if style.feel.time_sig != self.timeline.lock().time_signature {
+            return Err(
+                "Style and transport meters differ. Load a chart with a matching style and meter."
+                    .into(),
+            );
+        }
+        Ok(())
+    }
+
+    pub fn validate_transport_meter(&self, meter: (u8, u8)) -> Result<(), String> {
+        if meter != self.sequencer.lock().style.feel.time_sig {
+            return Err("Load a chart with a matching style to change meter.".into());
+        }
+        Ok(())
+    }
+
     pub fn band_set_style(&self, style: Style) {
         self.sequencer.lock().set_style(style);
     }
@@ -360,8 +389,12 @@ impl AudioEngine {
         self.sequencer.lock().cue(cue);
     }
 
-    pub fn band_load_chart(&self, chart: ResolvedChart) {
-        self.sequencer.lock().load_chart(chart);
+    pub fn band_load_chart(&mut self, chart: ResolvedChart) {
+        self.song_snapshot = serde_json::Value::Null;
+        self.clips.lock().clear();
+        let mut seq = self.sequencer.lock();
+        seq.clear_song();
+        seq.load_chart(chart);
     }
 
     pub fn band_set(&self, patch: BandPatch) {
@@ -391,7 +424,11 @@ impl AudioEngine {
 
     // ----- recorder --------------------------------------------------------
 
-    pub fn recorder_start(&self, session_id: String) -> String {
+    pub fn recorder_start(&self, session_id: String) -> Result<String, String> {
+        if !self.status().running {
+            return Err("Start a working audio device before recording.".into());
+        }
+        self.audition.lock().take();
         let (style_id, chart_id) = {
             let seq = self.sequencer.lock();
             (
@@ -402,10 +439,82 @@ impl AudioEngine {
                     .unwrap_or_else(|| "blues-12-bar".into()),
             )
         };
-        let tempo = self.timeline.lock().bpm;
-        self.recorder
-            .lock()
-            .start_take(session_id, style_id, chart_id, tempo)
+        let (tempo, meter) = {
+            let tl = self.timeline.lock();
+            (tl.bpm, tl.time_signature)
+        };
+        let mut recorder = self.recorder.lock();
+        recorder.snapshot = self.song_snapshot.clone();
+        if recorder.snapshot.is_null() {
+            recorder.snapshot = serde_json::json!({});
+        }
+        recorder.snapshot["timeSignature"] = serde_json::json!(meter);
+        recorder.start_take(session_id, style_id, chart_id, tempo)
+    }
+
+    pub fn ensure_timing_editable(&self) -> Result<(), String> {
+        if self.recorder_is_recording() {
+            return Err("Save the take before changing playback or timing.".into());
+        }
+        Ok(())
+    }
+
+    pub fn record_song(&self, session_id: String) -> Result<String, String> {
+        let _gate = self.render_gate.lock();
+        if self.recorder_is_recording() {
+            return Err("Save the current take first.".into());
+        }
+        self.transport_stop();
+        self.transport_set_count_in(0);
+        if let Some(bpm) = self.song_snapshot["body"]["chart"]["defaultBpm"].as_f64() {
+            self.transport_set_tempo(bpm);
+            self.transport_set_time_signature((4, 4));
+            self.transport_set_loop(1, 257, false);
+        }
+        let id = self.recorder_start(session_id)?;
+        self.timeline.lock().play();
+        Ok(id)
+    }
+
+    pub fn keep_capture(
+        &self,
+        session_id: String,
+    ) -> Result<crate::recorder::TakeMetadata, String> {
+        let frames = self.capture.lock().snapshot()?;
+        let mut r =
+            crate::recorder::TakeRecorder::new(self.sample_rate(), dirs_base().join("takes"));
+        r.snapshot = serde_json::json!({"capture": true});
+        r.start_take(
+            session_id,
+            "captured-idea".into(),
+            "free-time".into(),
+            self.transport_bpm(),
+        )?;
+        r.push_capture(&frames)?;
+        r.stop_and_save()
+    }
+
+    pub fn configure_song(
+        &mut self,
+        chart: ResolvedChart,
+        sections: std::collections::BTreeMap<String, jam_band::sequencer::SectionBand>,
+        clips: Vec<crate::workstation::Clip>,
+        snapshot: serde_json::Value,
+    ) -> Result<(), String> {
+        if self.recorder_is_recording() {
+            return Err("Save the recording before changing the song.".into());
+        }
+        self.transport_stop();
+        self.transport_set_tempo(chart.default_bpm);
+        self.transport_set_time_signature(chart.time_sig);
+        self.transport_set_loop(1, chart.bars.len() as u32 + 1, false);
+        let mut seq = self.sequencer.lock();
+        seq.set_follow_energy(false);
+        seq.section_bands = sections;
+        seq.load_chart(chart);
+        *self.clips.lock() = clips;
+        self.song_snapshot = snapshot;
+        Ok(())
     }
 
     pub fn recorder_stop(&self) -> Result<crate::recorder::TakeMetadata, String> {
@@ -438,6 +547,9 @@ impl AudioEngine {
     /// Stops, swaps the configuration and starts again. Returns the error of the
     /// restart (the engine will be in headless fallback in that case, not dead).
     pub fn apply_config(&mut self, config: AudioConfig) -> Result<(), String> {
+        if self.recorder_is_recording() {
+            return Err("Save the recording before changing audio devices.".into());
+        }
         let _ = self.stop();
         self.config = config;
         self.start()
@@ -595,6 +707,11 @@ impl AudioEngine {
         }
         self.sequencer.lock().set_sample_rate(effective_rate);
         let _ = self.recorder.lock().set_sample_rate(effective_rate);
+        // Audio from before a device restart has a different clock/rate.
+        let mut capture = self.capture.lock();
+        let seconds = capture.seconds;
+        capture.arm(seconds)?;
+        drop(capture);
 
         status.last_error = if problems.is_empty() {
             None
@@ -638,6 +755,10 @@ impl AudioEngine {
         let timeline_arc = Arc::clone(&self.timeline);
         let sequencer_arc = Arc::clone(&self.sequencer);
         let recorder_arc = Arc::clone(&self.recorder);
+        let gate = Arc::clone(&self.render_gate);
+        let capture = Arc::clone(&self.capture);
+        let clips = Arc::clone(&self.clips);
+        let audition = Arc::clone(&self.audition);
         let telemetry = Arc::clone(&self.latest_telemetry);
         let status_arc = Arc::clone(&self.status);
 
@@ -665,6 +786,7 @@ impl AudioEngine {
 
                     let mut rendered = false;
                     while prod.slots() >= block_len * 2 {
+                        let _gate = gate.lock();
                         // Input for this block.
                         ctx.in_block.fill(0.0);
                         let available = input_queue.len();
@@ -687,15 +809,64 @@ impl AudioEngine {
                             tuner_active.load(Ordering::SeqCst),
                         );
 
-                        if recorder_arc.lock().is_recording() {
-                            recorder_arc.lock().push_block(
-                                &ctx.in_block,
-                                &ctx.band_left,
-                                &ctx.band_right,
-                                &ctx.out_left,
-                                &ctx.out_right,
+                        // Previously recorded clips are heard in Rust and never fed back to the input.
+                        let mut playback = vec![0.0; block_len];
+                        for clip in clips.lock().iter() {
+                            clip.render(
+                                &ctx.spans,
+                                transport_telem.bpm,
+                                transport_telem.time_signature.0 as f64,
+                                sample_rate,
+                                &mut playback,
                             );
                         }
+                        for (i, v) in playback.iter().enumerate() {
+                            ctx.out_left[i] += v;
+                            ctx.out_right[i] += v;
+                        }
+                        playback.fill(0.0);
+                        let mut preview = audition.lock();
+                        if let Some(voice) = preview.as_mut() {
+                            if !voice.render(sample_rate, &mut playback) {
+                                *preview = None;
+                            }
+                            for (i, v) in playback.iter().enumerate() {
+                                ctx.out_left[i] += v;
+                                ctx.out_right[i] += v;
+                            }
+                        }
+                        drop(preview);
+                        let (parts, notes) = {
+                            let seq = sequencer_arc.lock();
+                            (seq.part_audio.clone(), seq.note_events.clone())
+                        };
+                        let input_gain = 1.0 - mix.lock().input_monitor;
+                        let frames: Vec<crate::workstation::Frame> = (0..block_len)
+                            .map(|i| {
+                                [
+                                    ctx.in_block[i],
+                                    ctx.band_left[i],
+                                    ctx.band_right[i],
+                                    ctx.out_left[i] + ctx.in_block[i] * input_gain,
+                                    ctx.out_right[i] + ctx.in_block[i] * input_gain,
+                                    parts[0][i],
+                                    parts[1][i],
+                                    parts[2][i],
+                                    parts[3][i],
+                                ]
+                            })
+                            .collect();
+                        capture.lock().push(&frames, sample_rate);
+                        let mut recorder = recorder_arc.lock();
+                        if recorder.is_recording() {
+                            let base = recorder.frames_written;
+                            recorder.midi.extend(notes.into_iter().map(|mut n| {
+                                n.frame += base;
+                                n
+                            }));
+                            recorder.push_frames(frames);
+                        }
+                        drop(recorder);
 
                         for i in 0..block_len {
                             // slots() was checked above, so these cannot fail.
@@ -790,6 +961,7 @@ struct RenderContext {
     band_right: Vec<f32>,
     out_left: Vec<f32>,
     out_right: Vec<f32>,
+    spans: Vec<jam_core::timeline::Span>,
     tone_phase: f32,
     click: Option<ClickVoice>,
     click_len: usize,
@@ -819,6 +991,7 @@ impl RenderContext {
             band_right: vec![0.0; RENDER_BLOCK],
             out_left: vec![0.0; RENDER_BLOCK],
             out_right: vec![0.0; RENDER_BLOCK],
+            spans: Vec::new(),
             tone_phase: 0.0,
             click: None,
             click_len: (sample_rate as f32 * CLICK_SECS) as usize,
@@ -902,6 +1075,7 @@ impl RenderContext {
                 },
             )
         };
+        self.spans = spans.clone();
         let samples_per_beat = 60.0 / transport.bpm * self.sample_rate as f64;
         let beats_per_bar = transport.time_signature.0.max(1) as f64;
 
@@ -910,6 +1084,7 @@ impl RenderContext {
         self.band_right.fill(0.0);
         let (band, ending_done) = {
             let mut seq = sequencer.lock();
+            seq.begin_block();
             seq.update_energy(energy);
             for ev in &events {
                 seq.handle_timeline_event(ev);
@@ -1031,16 +1206,103 @@ impl RenderContext {
 fn dirs_base() -> std::path::PathBuf {
     std::env::var("JAM_DATA_DIR")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::env::temp_dir().join("josefines_jamstudio"))
+        .unwrap_or_else(|_| {
+            std::env::var("JAM_USER_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| {
+                    std::env::var_os("USERPROFILE")
+                        .or_else(|| std::env::var_os("HOME"))
+                        .map(std::path::PathBuf::from)
+                        .unwrap_or_else(std::env::temp_dir)
+                        .join("JosefinesJamstudio")
+                })
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[test]
+    fn incompatible_meter_is_refused_before_groove_change() {
+        let engine = AudioEngine::new(AudioConfig::default());
+        let ballad: Style =
+            serde_json::from_str(include_str!("../../../styles/ballad-68.json")).unwrap();
+        assert!(engine.validate_style_meter(&ballad).is_err());
+        assert!(engine.validate_transport_meter((6, 8)).is_err());
+        engine.transport_set_time_signature((6, 8));
+        assert!(engine.validate_style_meter(&ballad).is_ok());
+        engine.band_set_style(ballad);
+        assert!(engine.validate_transport_meter((6, 8)).is_ok());
+    }
+
     fn headless_engine() -> AudioEngine {
         std::env::set_var("JAM_HEADLESS", "1");
         AudioEngine::new(AudioConfig::default())
+    }
+
+    #[test]
+    fn original_records_parts_notes_and_snapshot_then_clears_for_a_regular_chart() {
+        let mut engine = headless_engine();
+        let root = std::env::temp_dir().join(format!("jam-song-engine-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        *engine.recorder.lock() = crate::recorder::TakeRecorder::new(48_000, root.clone());
+        let doc: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/seams/original.json"))
+                .unwrap();
+        let chart: jam_core::chart::Chart =
+            serde_json::from_value(doc["body"]["chart"].clone()).unwrap();
+        let style = engine.sequencer.lock().style.clone();
+        let sections = [(
+            "verse".into(),
+            jam_band::sequencer::SectionBand {
+                styles: [style.clone(), style.clone(), style],
+                intensity: [0.5; 3],
+                gains: [1.0; 3],
+                muted: [false; 3],
+                swing: 0.5,
+            },
+        )]
+        .into();
+        engine
+            .configure_song(chart.resolve(), sections, vec![], doc.clone())
+            .unwrap();
+        assert!(engine.recorder_start("no-device".into()).is_err());
+        engine.start().unwrap();
+        engine.record_song("test".into()).unwrap();
+        assert!(engine.ensure_timing_editable().is_err());
+        assert!(engine.record_song("duplicate".into()).is_err());
+        thread::sleep(Duration::from_millis(220));
+        let take = engine.recorder_stop().unwrap();
+        engine.stop().unwrap();
+        let mut recorded = doc.clone();
+        recorded["timeSignature"] = serde_json::json!([4, 4]);
+        assert_eq!(take.snapshot, recorded);
+        assert!(take.sample_count > 1000);
+        assert!(take.midi.iter().any(|n| n.bytes[0] == 0x99));
+        assert!(take.midi.iter().any(|n| n.bytes[0] == 0x90));
+        for path in take.stems.values() {
+            let (samples, rate) =
+                crate::recorder::read_wav_mono(std::path::Path::new(path)).unwrap();
+            assert_eq!(samples.len(), take.sample_count);
+            assert_eq!(rate, take.sample_rate);
+            assert!(
+                samples.iter().any(|x| x.abs() > 0.0001),
+                "silent stem: {path}"
+            );
+        }
+        let midi_path = root.join("notes.mid");
+        crate::export::write_performance_midi(&midi_path, &take, (4, 4)).unwrap();
+        let bytes = std::fs::read(midi_path).unwrap();
+        assert_eq!(&bytes[..4], b"MThd");
+        assert!(bytes
+            .windows(3)
+            .any(|b| b[0] == 0x99 && b[1] == 36 && b[2] > 0));
+        engine.band_load_chart(chart.resolve());
+        assert!(engine.song_snapshot.is_null());
+        assert!(engine.sequencer.lock().section_bands.is_empty());
+        assert!(engine.ensure_timing_editable().is_ok());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

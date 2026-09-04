@@ -39,7 +39,7 @@ What "better than the manufacturers" means, concretely (from the competitive res
 
 ## Definition of Done for the project
 
-The project is done when every point below is true and verified, the owner gates in [06-owner-verification.md](06-owner-verification.md) are ticked, and the status board shows every milestone ✅.
+These are the original full-product targets, not claims about the current preview. The project is done when every point below is true and verified, the owner gates in [06-owner-verification.md](06-owner-verification.md) are ticked, and the status board shows every milestone ✅.
 
 1. **Installs and runs on the guitarist's Apple Silicon Mac** from a GitHub Release. Onboarding completes with the HeadRush Pedalboard selected as a 4-channel input (dry DI on channel 3) and the HeadRush USB return as output. Latency calibration returns a stable offset within ±2 samples across 5 runs.
 2. **Band.** At least 6 styles, any key, 40 to 240 bpm, chart editor with presets, count-in, cues (fill, crash, stop, ending), intensity following the guitarist's energy.
@@ -62,8 +62,8 @@ The project is done when every point below is true and verified, the owner gates
 | M1d | Live steering and the Stage screen | ✅ | #10, #28 |
 | M1e | Recorder, latency calibration, take browser | ⏳ | #12, #28 |
 | M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ⏳ | #14, #28 |
-| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ☐ | placeholder screen only |
-| M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ☐ | placeholder screen only |
+| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | local media import/player in #29; stems, analysis and stretch pending |
+| M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ⏳ | file-generation catalog/workflows in #29; RealTime and owner acceptance pending |
 | M5 | Rig orchestration over MIDI | ⏳ | #20, #28 |
 | M6 | Sessions: take analysis, LLM review, Logic export, progress | ⏳ | #22, #28 |
 | M7 | Polish and distribution | ⏳ | #28 |
@@ -71,8 +71,8 @@ The project is done when every point below is true and verified, the owner gates
 What remains, per open milestone:
 
 - **M1e**: takes record as 24-bit WAV stems and the take browser works. Latency compensation is a manual offset; the automatic loopback measurement is not built.
-- **M2**: Jo hears through the browser Web Speech API and speaks through browser speech synthesis; with a Gemini key she uses Gemini function calling, otherwise a local intent parser. ElevenLabs STT/TTS, the 30-utterance script in `tests/fixtures/jo/` and the 2.5 s latency gate are outstanding.
-- **M3**, **M4**: not started beyond UI layout. `song_*` and `ai_music_start` commands refuse with a clear message so nothing pretends to work.
+- **M2**: typed Jo, configurable providers, offline intents and installed-agent proposals are available. Native STT/TTS, the voice bus, the planned 30-utterance fixture and the Mac latency gate remain outstanding. Browser speech has been removed.
+- **M3**, **M4**: local media import/reference playback, music/video generation, ComfyUI workflows and Film rendering exist in #29. Automatic stems/analysis/stretch and Lyria RealTime remain unbuilt. Model/GPU acceptance is pending owner.
 - **M5**: six rig profiles, real MIDI out, section-bound scenes and a monitor are in and tested against a memory sink. Owner gate 5 (the real HeadRush and Black Spirit) is pending owner.
 - **M6**: analysis reads the recorded DI (timing, dynamics, McLeod-based intonation) and export writes stems, a tempo map with the chart's markers and a sidecar. The LLM review of a take and the Logic Pro drift measurement (owner gate) are outstanding.
 - **M7**: CI is green on Windows and macOS; `release.yml` builds bundles on a tag. Signing, notarisation, onboarding and the `tests/invariants/` extensibility proofs are outstanding.
@@ -90,3 +90,66 @@ Rules for the board: ☐ becomes ⏳ when work starts, and ✅ only when **all**
 - Spike findings: [`docs/spikes/`](../spikes/).
 - Code (from M0): `crates/`, `src-tauri/`, `src/`, `tests/`, `styles/`, `charts/`, `rigs/`, `controls/`.
 - The guitarist's data at runtime: `~/JosefinesJamstudio/` (files are truth; SQLite is a cache).
+# Songwriting slice: writing and recording originals
+
+Added on top of the real-band rebuild: Write editor, independent section parts and
+groove locks, optional rolling capture, trimmed guitar layers, overdub recording,
+undo/versions, favourite takes, durable song/take files and separated DAW exports.
+The follow-up adds learned PC/CC/note pedals, section rehearsal loops, guitar/trim
+audition, and optional song-owned rig scenes with MIDI echo suppression.
+Complete exports now also include a REAPER session builder for aligned tracks,
+section markers and editable band MIDI; Logic export remains available.
+See [the user guide and owner acceptance session](../guide/songwriting.md).
+This does not complete the broader M3/M4 provider work or the hardware/Logic gates.
+Verification results belong in the associated PR; owner acceptance remains pending.
+
+The API follow-up connects OpenAI Responses, Claude Messages and OpenRouter
+alongside Gemini, with shared editable model/limit settings and a Song Lab for
+reviewable chords, bridges, lyric seeds and arrangement advice. This is text-only;
+At that stage cloud audio was unimplemented. Live provider/account acceptance is
+pending; documented synthetic fixtures are not live API evidence.
+See [the current API guide](../guide/api-options.md).
+
+The installed-agent slice adds a persistent in-app assistant, dynamic API model
+catalogs, Codex/Claude Code CLI connections and six practical studio tools. A live
+Codex structured-reply check passed with this host's saved ChatGPT login. Claude
+Code was unavailable locally; live Claude and Mac owner acceptance remain pending.
+Studio action groups preserve versions and reject stale/invalid/locked edits.
+The installed-agent slice does not implement an embedded terminal or external MCP control.
+
+The music-video slice adds Film projects, retained media jobs, imported or recorded
+soundtracks, editable section-based cuts and local FFmpeg MP4 rendering. The shared
+catalog includes Lyria 3.5, Eleven Music, MiniMax Music 3, Omni, Runway Gen-4.5,
+Veo 3.1, Hailuo 3, Seedance 2.5, Wan 3 and configurable ComfyUI workflows for local
+Wan, ACE-Step and MiniMax Music. Agent shot edits use Undo and never generate media.
+This replaces the AI Music placeholder with an actual generation workflow; live
+streaming, separation and broader M3/M4 work remain incomplete. Paid model access,
+GPU generation and native Mac preview/playback remain owner gates. The local
+synthetic MP4 test passed with duration and AAC signal tolerances. See the
+[music-video guide](../guide/music-video.md) and [ADR 0008](../adr/0008-music-video-workspace.md).
+
+
+The Write redesign puts the song map and beat-aware chord grid first, with local
+harmony exploration, independent section variations, phrase transforms, locked-part
+energy controls and durable section lyrics. AI lyric proposals target the section
+sheet after review. Capture, pedals, layers and versions remain available in focused
+views. See [prior art and limits](../research/write-workspace.md). This UI/text slice
+does not complete native audio, transcription or Mac owner acceptance gates.
+
+
+The studio-room redesign extends #29 across Stage, Library, Jo, Songs, AI Music,
+Film, Sessions, Rig and Settings. Distinct labelled icons, task views, searchable
+collections, arranged-section practice loops, persistent chart/conversation drafts,
+reviewed Jo song edits and take keeper workflows are implemented. Songs now uses
+real local media import/player commands; it does not complete M3 stem/stretch
+work. See [room guide](../guide/studio-rooms.md) and [research](../research/studio-workspaces.md).
+Frontend checks, headless Rust gates and multi-size browser checks pass locally;
+Windows/macOS CI and owner acceptance are tracked in #29. No milestones are marked
+complete by this UI slice alone.
+
+## Build integration
+
+The current build is stabilised separately from the unbuilt roadmap above. See
+[build closeout](../reviews/build-closeout.md) for native IPC, persistence, meter
+export and installer validation. Owner hardware/provider gates remain open;
+no milestone is marked complete by a headless or browser-only check.

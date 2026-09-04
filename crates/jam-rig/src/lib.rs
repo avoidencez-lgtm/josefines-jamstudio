@@ -1,6 +1,7 @@
 //! jam-rig: MIDI rig control. Profiles are data (`rigs/*.json`), the orchestrator maps
 //! chart sections to scenes and talks to a real port through `midir`.
 
+pub mod controller;
 pub mod midi;
 pub mod orchestrator;
 pub mod profiles;

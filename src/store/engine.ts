@@ -28,11 +28,13 @@ import type {
 import { transposeChart } from "../lib/chart/transpose";
 
 export type ScreenId =
+  | "originals"
   | "stage"
   | "library"
   | "jo"
   | "songs"
   | "ai-music"
+  | "music-video"
   | "sessions"
   | "rig"
   | "settings";
@@ -226,7 +228,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
   };
 
   return {
-    currentScreen: "stage",
+    currentScreen: "originals",
     isPreview,
     activeSource: "band",
     toneOn: false,
@@ -726,7 +728,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
           missing ? "error" : "info",
           missing
             ? `Exported ${stems} stem(s) + tempo map to ${report.dir}; ${missing} stem file(s) were missing on disk`
-            : `Exported ${stems} stems + tempo map to ${report.dir}`,
+            : `Exported ${stems} stems + tempo map${report.reaperScript ? " + REAPER session builder" : ""} to ${report.dir}`,
         );
       }
       return report;
@@ -806,7 +808,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
     },
 
     initListeners: async () => {
-      const unlisten = await Promise.all([
+      const subscriptions = await Promise.allSettled([
         ipc.listen<MeterTelemetry>("meters", (output_level) => {
           set((state) => ({ telemetry: { ...state.telemetry, output_level } }));
         }),
@@ -848,6 +850,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
         ipc.listen<RigState>("rig.state", (rigState) => {
           set({ rigState });
         }),
+        ipc.listen<string>("app.error", (text) => get().notify("error", text)),
         ipc.listen<string>("rig.error", (text) => {
           get().notify("error", `Rig: ${text}`);
         }),
@@ -863,6 +866,15 @@ export const useEngineStore = create<EngineState>((set, get) => {
           }
         }),
       ]);
+
+      const unlisten = subscriptions.flatMap((result) => {
+        if (result.status === "fulfilled") return [result.value];
+        get().notify(
+          "error",
+          `Live updates unavailable: ${String(result.reason)}`,
+        );
+        return [];
+      });
 
       await Promise.all([
         get().refreshEngineStatus(),

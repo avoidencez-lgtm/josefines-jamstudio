@@ -5,6 +5,7 @@
  */
 
 import type { EngineState } from "../store/engine";
+import { useWriting } from "./originals";
 
 export interface Shortcut {
   /** Human-readable key label for the help overlay. */
@@ -21,6 +22,13 @@ const key = (k: string) => (e: KeyboardEvent) =>
   e.key === k && !e.ctrlKey && !e.metaKey && !e.altKey;
 
 export const SHORTCUTS: Shortcut[] = [
+  {
+    keys: "H",
+    description: "Keep the recent guitar idea (capture must be armed)",
+    group: "Transport",
+    matches: code("KeyH"),
+    run: () => useWriting.getState().action(useWriting.getState().keep),
+  },
   {
     keys: "Space",
     description: "Play / pause",
@@ -158,7 +166,13 @@ export function handleShortcut(
   store: EngineState,
   ctx: ShortcutContext,
 ): boolean {
+  if (e.defaultPrevented) return false;
   const target = e.target as HTMLElement | null;
+  if (
+    target?.closest("button, summary") &&
+    (e.code === "Space" || e.code === "Enter")
+  )
+    return false;
   if (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||

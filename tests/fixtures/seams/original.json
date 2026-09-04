@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "id": "test-original",
+  "revision": 0,
+  "customNote": "keep me",
+  "versions": [],
+  "body": {
+    "chart": {
+      "schemaVersion": 1,
+      "id": "test-chart",
+      "name": "My first riff",
+      "keyTonic": 9,
+      "mode": "minor",
+      "timeSig": [4, 4],
+      "defaultBpm": 100,
+      "sections": [
+        {
+          "id": "verse",
+          "name": "Verse",
+          "bars": [
+            [
+              {
+                "chord": "Am",
+                "beats": 4
+              }
+            ]
+          ]
+        }
+      ],
+      "arrangement": [
+        {
+          "sectionId": "verse",
+          "repeats": 2
+        }
+      ]
+    },
+    "sections": {
+      "verse": {
+        "swing": 0.5,
+        "parts": [
+          {
+            "styleId": "rock-straight",
+            "intensity": 0.5,
+            "gain": 1,
+            "muted": false,
+            "locked": false
+          },
+          {
+            "styleId": "rock-straight",
+            "intensity": 0.5,
+            "gain": 1,
+            "muted": false,
+            "locked": false
+          },
+          {
+            "styleId": "rock-straight",
+            "intensity": 0.5,
+            "gain": 1,
+            "muted": false,
+            "locked": false
+          }
+        ]
+      }
+    },
+    "clips": [],
+    "notes": ""
+  }
+}

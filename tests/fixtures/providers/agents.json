@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "provenance": "Synthetic CLI and model catalog contracts; official docs checked 2026-09-04. Not live provider recordings.",
+  "reply": {
+    "reply": "Proposed a slower song tempo.",
+    "toolCalls": [{ "name": "edit_song", "argumentsJson": "{\"bpm\":96}" }]
+  },
+  "catalog": { "data": [{ "id": "model-one" }] },
+  "geminiCatalog": {
+    "models": [
+      {
+        "name": "models/gemini-test",
+        "supportedGenerationMethods": ["generateContent"]
+      },
+      {
+        "name": "models/embedding",
+        "supportedGenerationMethods": ["embedContent"]
+      }
+    ]
+  },
+  "routerCatalog": {
+    "data": [
+      { "id": "vendor/tool-model", "supported_parameters": ["tools"] },
+      { "id": "vendor/image", "supported_parameters": [] }
+    ]
+  },
+  "edits": [
+    { "name": "edit_song", "arguments": { "bpm": 96 } },
+    {
+      "name": "shape_part",
+      "arguments": { "sectionId": "verse", "part": "drums", "muted": true }
+    },
+    {
+      "name": "arrange_song",
+      "arguments": { "order": "verse,chorus,verse,chorus*2" }
+    },
+    {
+      "name": "write_notes",
+      "arguments": { "text": "Double the last chorus guitar." }
+    }
+  ]
+}

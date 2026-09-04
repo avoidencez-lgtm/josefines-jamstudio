@@ -4,11 +4,8 @@
  * the request and reading the reply are exported so they can be tested offline.
  */
 
-import { providerJson } from "../net/providerFetch";
 import { JO_SYSTEM_PROMPT, type JoMessage, type JoToolCall } from "./persona";
 import { JO_TOOLS } from "./tools";
-
-export const JO_MODEL = "gemini-2.5-flash";
 
 /** What Jo needs to know about the room right now. */
 export interface JoContext {
@@ -24,6 +21,15 @@ export interface JoContext {
   muted: { drums: boolean; bass: boolean; comp: boolean };
   styles: Array<{ id: string; name: string }>;
   charts: Array<{ id: string; name: string }>;
+  writing?: {
+    name: string;
+    selected: string;
+    sections: unknown;
+    versions: string[];
+    chart?: unknown;
+    notes?: string;
+    lyrics?: Record<string, string>;
+  };
 }
 
 interface GeminiPart {
@@ -65,6 +71,7 @@ export function contextSummary(ctx: JoContext): string {
     `Muted parts: ${muted.length ? muted.join(", ") : "none"}.`,
     `Available style ids: ${ctx.styles.map((s) => `${s.id} (${s.name})`).join(", ")}.`,
     `Available chart ids: ${ctx.charts.map((c) => `${c.id} (${c.name})`).join(", ")}.`,
+    `Songwriting document: ${ctx.writing ? JSON.stringify(ctx.writing) : "none"}. Use the songwriting tool for this document.`,
   ].join("\n");
 }
 
@@ -126,17 +133,4 @@ export function readResponse(res: GeminiResponse): {
       ? "On it."
       : "I didn't catch that. Try 'faster', 'play some funk' or 'drop the bass'.");
   return { reply, toolCalls };
-}
-
-export async function askGemini(
-  history: JoMessage[],
-  userText: string,
-  ctx: JoContext,
-): Promise<{ reply: string; toolCalls: JoToolCall[] }> {
-  const res = await providerJson<GeminiResponse>(
-    "gemini",
-    `/v1beta/models/${JO_MODEL}:generateContent`,
-    buildRequest(history, userText, ctx),
-  );
-  return readResponse(res);
 }

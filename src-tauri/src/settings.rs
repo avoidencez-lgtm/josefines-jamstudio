@@ -6,10 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 
 pub fn settings_path() -> PathBuf {
-    let mut dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    dir.push("JosefinesJamstudio");
-    dir.push("settings.json");
-    dir
+    crate::library::Library::default_user_root().join("settings.json")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -98,28 +95,75 @@ impl Default for AppSettings {
     }
 }
 
-pub fn load_settings() -> AppSettings {
-    let path = settings_path();
-    if let Ok(content) = fs::read_to_string(&path) {
-        serde_json::from_str(&content).unwrap_or_default()
-    } else {
-        AppSettings::default()
+// Serialises writers; a corrupt source is kept intact and never replaced with defaults.
+static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn load_from(path: &std::path::Path) -> Result<AppSettings, String> {
+    match fs::read_to_string(path) {
+        Ok(content) => serde_json::from_str(&content)
+            .map_err(|e| format!("Cannot read {}: {e}. Restore settings.json.bak or repair the file; it has not been overwritten.", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(AppSettings::default()),
+        Err(e) => Err(format!("Cannot read {}: {e}", path.display())),
     }
 }
 
-pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
-    let path = settings_path();
+pub fn load_settings() -> Result<AppSettings, String> {
+    load_from(&settings_path())
+}
+
+fn save_to(path: &std::path::Path, settings: &AppSettings) -> Result<(), String> {
+    let _lock = SAVE_LOCK.lock().map_err(|e| e.to_string())?;
+    load_from(path)?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let content = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    fs::write(&path, content).map_err(|e| e.to_string())?;
-    Ok(())
+    let temp = path.with_extension("json.tmp");
+    fs::write(
+        &temp,
+        serde_json::to_vec_pretty(settings).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&temp)
+        .and_then(|f| f.sync_all())
+        .map_err(|e| e.to_string())?;
+    if path.exists() {
+        fs::copy(path, path.with_extension("json.bak")).map_err(|e| e.to_string())?;
+    }
+    fs::rename(temp, path).map_err(|e| e.to_string())
+}
+
+pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
+    save_to(&settings_path(), settings)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_keep_backup_and_never_overwrite_corrupt_source() {
+        let root = std::env::temp_dir().join(format!("jam-settings-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("settings.json");
+        let mut settings = AppSettings::default();
+        save_to(&path, &settings).unwrap();
+        settings.buffer_size = 512;
+        save_to(&path, &settings).unwrap();
+        assert_eq!(load_from(&path).unwrap().buffer_size, 512);
+        assert_eq!(
+            load_from(&path.with_extension("json.bak"))
+                .unwrap()
+                .buffer_size,
+            256
+        );
+        fs::write(&path, "broken JSON").unwrap();
+        assert!(load_from(&path).is_err());
+        assert!(save_to(&path, &settings).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "broken JSON");
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn test_settings_preserves_unknown_fields() {

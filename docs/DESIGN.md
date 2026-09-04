@@ -70,7 +70,7 @@ No headline exceeds one line. No italic-for-emphasis in readouts. Numbers never 
 
 ## 4. Layout
 
-Window minimum 1100 × 700; default 1440 × 900. A 72 px left rail with the screens (Stage, Library, Sessions, Rig, Settings), a 56 px top bar with the transport, the screen body, and Jo's presence pinned bottom-right.
+Window minimum 1100 × 700; default 1440 × 900. A 184 px left rail lists all ten rooms with distinct icons, labels and short task descriptions. At widths up to 1200 px it becomes a 92 px rail retaining icons and labels. A wrapping top bar contains the transport and Assistant; the screen body scrolls independently.
 
 ```
 ┌──────┬────────────────────────────────────────────────────────────────┐
@@ -127,7 +127,7 @@ Motivated only: state transitions (source switch cross-fade 220 ms), pending-at-
 | Rig | ports, profiles, scenes, monitor | "No MIDI output found. Plug in the interface." | port disappeared |
 | Settings | audio, keys, providers, controls, assets, budget, diagnostics, about | never empty | key rejected by provider ("test key" result) |
 
-Jo's presence is on every screen; PTT works everywhere.
+The Studio assistant opens from the top bar on every screen. Jo's push-to-talk is available in the Jo room when supported by the WebView; T is reserved there and never also taps tempo.
 
 ## 8. Copy
 
@@ -149,3 +149,45 @@ Full keyboard navigation with visible focus rings (accent, 2 px, offset 2 px); e
 - [ ] Contrast pairs checked; focus rings visible; hit targets ≥ 32 px
 - [ ] Meters and playhead at 60 fps on the PC with the fixture running
 - [ ] Copy self-audit: every visible string re-read for sense and length
+
+## Write workspace (Operate)
+
+Write uses the existing warm dark tokens and standard controls. Its composition
+is a song map followed by a selected-section chord grid and a 300 px harmony
+inspector. Song title, explicit Save and Undo sit above the Compose / Lyrics /
+Record & layers / Versions navigation. Capture and pedal setup live with recording;
+band details use native disclosure. First-screen priority is the editable music.
+
+Chord widths represent beat duration. Song-map widths represent arranged bars,
+subject to a readable minimum; long maps scroll horizontally. Amber marks selection
+and actions. Intensity bars reflect actual section settings, never invented audio
+waveforms. Section lyrics are a plain readable text sheet with a chord reference.
+At narrow widths the inspector stacks below the grid. Desktop target remains
+1100 x 700 minimum; controls remain keyboard reachable. Only data changes animate,
+and reduced motion disables that transition. No new fonts, icons or raster assets.
+
+
+## Studio rooms (2026-09-04)
+
+`WorkspaceHeader` pairs a room's registered pictogram with its task and title.
+`WorkspaceViews` uses native, keyboard-reachable buttons with pressed state;
+its hidden content stays mounted so in-progress fields survive view changes.
+Room descriptions are functional wayfinding, not decorative marketing labels.
+Stage readouts/cues and Rig scenes precede setup. Library uses a collection/editor
+split; Songs uses a collection/detail split; Jo uses a bounded conversation with
+an always-reachable composer. Film and AI Music separate creation from results.
+Native disclosures keep project/MIDI/advanced controls close without dominating
+the first screen. Icons alone are never the sole name of an action.
+
+The screen registry is the only navigation icon mapping. Use the same symbol in
+its page header. Active-page and pressed semantics accompany colour, while text
+names disconnected MIDI, pending AI proposals and missing media. The assistant
+launcher occupies real toolbar space so it cannot hide Stage cues.
+See [research](research/studio-workspaces.md) and [room guide](guide/studio-rooms.md).
+
+### Current preview voice and close behaviour
+
+Jo is text-only in the current preview; browser speech and push-to-talk are not
+implemented product controls. Native voice is a pending M2 task. T taps tempo
+outside editors. Native window close prompts for unsaved song/chart/film work
+and refuses to close during recording or an active save/render.

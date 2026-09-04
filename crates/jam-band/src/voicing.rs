@@ -36,16 +36,17 @@ pub fn parse_chord(symbol: &str) -> (i32, ChordQuality) {
         _ => 0,
     };
 
-    let rest = &s[root_char.len_utf8()..];
-    let quality_str = if let Some(stripped) = rest.strip_prefix('#') {
-        root = (root + 1) % 12;
-        stripped
-    } else if let Some(stripped) = rest.strip_prefix('b') {
-        root = (root + 11) % 12;
-        stripped
-    } else {
-        rest
-    };
+    let mut quality_str = &s[root_char.len_utf8()..];
+    while let Some(accidental) = quality_str.chars().next() {
+        let delta = match accidental {
+            '#' => 1,
+            'b' => -1,
+            'x' => 2,
+            _ => break,
+        };
+        root = (root + delta + 12) % 12;
+        quality_str = &quality_str[accidental.len_utf8()..];
+    }
 
     // Slash chords ("C/G") keep the upper structure; the bass player reads the root.
     let quality_str = quality_str.split('/').next().unwrap_or("");
@@ -240,6 +241,19 @@ pub fn bass_note_for_chord(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn double_accidentals_preserve_pitch_and_quality() {
+        assert_eq!(
+            super::parse_chord("F##dim"),
+            (7, super::ChordQuality::Diminished)
+        );
+        assert_eq!(
+            super::parse_chord("Bbbm7"),
+            (9, super::ChordQuality::Minor7)
+        );
+        assert_eq!(super::parse_chord("Cxm"), (2, super::ChordQuality::Minor));
+    }
+
     use super::*;
 
     #[test]

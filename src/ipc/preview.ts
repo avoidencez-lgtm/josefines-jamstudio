@@ -5,6 +5,7 @@
  */
 
 import { resolveChart } from "../lib/chart/text";
+import type { Original } from "../lib/originals";
 import type {
   AiMusicState,
   AudioConfig,
@@ -492,8 +493,10 @@ export function createPreviewEngine(
     else refreshBand();
   }
 
+  const originals: Original[] = [];
   const commands: Record<string, (args: Record<string, unknown>) => unknown> = {
     settings_get: () => ({
+      ...config,
       schemaVersion: 1,
       input_device: config.input_device,
       output_device: config.output_device,
@@ -513,9 +516,26 @@ export function createPreviewEngine(
       );
     },
     providers_list: () => [
+      {
+        id: "minimax",
+        description: "MiniMax Music · existing API accounts",
+        hasKey: false,
+      },
+      { id: "runway", description: "Runway · video", hasKey: false },
       { id: "gemini", description: "Google Gemini", hasKey: false },
       { id: "elevenlabs", description: "ElevenLabs", hasKey: false },
+      { id: "openai", description: "OpenAI", hasKey: false },
+      { id: "anthropic", description: "Anthropic Claude", hasKey: false },
+      { id: "openrouter", description: "OpenRouter", hasKey: false },
     ],
+    agent_status: () => ({
+      installed: false,
+      message: "Installed agents require the desktop app.",
+    }),
+    agent_request: () => {
+      throw new Error("Agent requests require the desktop app.");
+    },
+    agent_cancel: () => undefined,
     cost_log_list: () => [],
     cost_log_totals: () => [],
     keys_delete: () => undefined,
@@ -672,6 +692,40 @@ export function createPreviewEngine(
       if (p.muteDrums !== undefined) band.mute_drums = p.muteDrums;
       if (p.muteBass !== undefined) band.mute_bass = p.muteBass;
       if (p.muteComp !== undefined) band.mute_comp = p.muteComp;
+    },
+    originals_list: () => structuredClone(originals),
+    originals_save: (a) => {
+      const doc = structuredClone(a.document) as Original;
+      const idx = originals.findIndex((s) => s.id === doc.id);
+      if (idx >= 0 && originals[idx].revision !== doc.revision)
+        throw new Error("Reopen the song before saving.");
+      doc.revision++;
+      if (idx >= 0) originals[idx] = doc;
+      else originals.push(doc);
+      return structuredClone(doc);
+    },
+    originals_load: () => {
+      throw new Error("Playback requires the desktop app.");
+    },
+    clip_audition: () => {
+      throw new Error("Guitar preview requires the desktop app.");
+    },
+    controller_ports: () => [],
+    controller_config: () => ({ schemaVersion: 1, bindings: [] }),
+    controller_open: () => {
+      throw new Error("MIDI input requires the desktop app.");
+    },
+    controller_save: () => {
+      throw new Error("Pedal setup requires the desktop app.");
+    },
+    originals_record: () => {
+      throw new Error("Recording requires the desktop app.");
+    },
+    capture_arm: () => {
+      throw new Error("Audio capture requires the desktop app.");
+    },
+    capture_keep: () => {
+      throw new Error("Audio capture requires the desktop app.");
     },
     recorder_start: (a) => {
       recordingSince = clock;

@@ -3,6 +3,7 @@
  * function declarations, and the offline intent parser emits the same names.
  */
 
+import { STUDIO_TOOLS } from "./studioTools";
 export interface JoToolDeclaration {
   name: string;
   description: string;
@@ -20,7 +21,96 @@ export interface JoToolDeclaration {
   };
 }
 
+/** Validate at the shared execution boundary, including offline and cloud callers. */
+export function validateToolCall(call: {
+  name: string;
+  arguments: Record<string, unknown>;
+}): void {
+  const tool = JO_TOOLS.find((t) => t.name === call.name);
+  if (
+    !tool ||
+    !call.arguments ||
+    typeof call.arguments !== "object" ||
+    Array.isArray(call.arguments)
+  )
+    throw new Error("Unknown or malformed Jo action.");
+  for (const name of tool.parameters.required ?? []) {
+    if (!(name in call.arguments))
+      throw new Error(`Missing ${name} for ${call.name}.`);
+  }
+  for (const [name, value] of Object.entries(call.arguments)) {
+    const property = tool.parameters.properties[name];
+    const actualType = typeof value;
+    if (
+      !property ||
+      actualType !== property.type ||
+      (typeof value === "number" && !Number.isFinite(value)) ||
+      (property.enum && !property.enum.includes(String(value)))
+    )
+      throw new Error(`Invalid ${name} for ${call.name}.`);
+  }
+}
+
 export const JO_TOOLS: JoToolDeclaration[] = [
+  {
+    name: "edit_video_shot",
+    description:
+      "Edit one existing music-video shot in the open Film project. Changes text and timing only; never generates media or spends API credits. User can Undo and Save video.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        shotId: { type: "string" },
+        title: { type: "string" },
+        prompt: { type: "string" },
+        seconds: { type: "number" },
+      },
+      required: ["projectId", "shotId"],
+    },
+  },
+  ...Object.values(STUDIO_TOOLS).map((t) => t.declaration),
+  {
+    name: "analyze_take",
+    description:
+      "Run the existing local timing/dynamics/intonation analysis of a saved guitar take. Use a take ID from context. Metrics are heuristic, not a human listening review.",
+    parameters: {
+      type: "object",
+      properties: { takeId: { type: "string" } },
+      required: ["takeId"],
+    },
+  },
+  {
+    name: "songwriting",
+    description:
+      "Work on the original song in Write. Keep captures, save or compare versions, select a section, lock a part, change its groove, undo or record. Changes need play to audition.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: [
+            "keep",
+            "save",
+            "version",
+            "restore",
+            "undo",
+            "play",
+            "record",
+            "select",
+            "lock",
+            "groove",
+            "loop",
+            "next",
+          ],
+        },
+        name: { type: "string", description: "Section or version name" },
+        part: { type: "string", enum: ["drums", "bass", "comp"] },
+        styleId: { type: "string" },
+        locked: { type: "boolean" },
+      },
+      required: ["action"],
+    },
+  },
   {
     name: "transport_control",
     description: "Start, pause or stop the band.",

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "provenance": "Synthetic contract examples based on official docs, checked 2026-09-04. Not recordings of live API calls.",
+  "openai": {
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "content": [{ "type": "output_text", "text": "Up five." }]
+      },
+      {
+        "type": "function_call",
+        "name": "set_tempo",
+        "arguments": "{\"delta\":5}"
+      }
+    ]
+  },
+  "anthropic": {
+    "stop_reason": "tool_use",
+    "content": [
+      { "type": "text", "text": "Up five." },
+      { "type": "tool_use", "name": "set_tempo", "input": { "delta": 5 } }
+    ]
+  },
+  "openrouter": {
+    "choices": [
+      {
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": "Up five.",
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": { "name": "set_tempo", "arguments": "{\"delta\":5}" }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "idea": {
+    "title": "Open the chorus",
+    "summary": "A lift with simple open chords.",
+    "chords": "F | G | Am | C",
+    "notes": "Let the last chord ring; leave room for the vocal."
+  }
+}

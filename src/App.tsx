@@ -1,33 +1,45 @@
 import {
-  BookOpen,
-  Gear,
-  Guitar,
-  Microphone,
-  MusicNotes,
   Pause,
   Play,
+  Question,
   Record,
   Repeat,
-  Sliders,
   Stop,
-  Waveform,
 } from "@phosphor-icons/react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "./components/Button";
 import { EngineStatusPill } from "./components/EngineStatusPill";
 import { Notices } from "./components/Notices";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
+import { StudioAssistant } from "./components/StudioAssistant";
+import { listenToController } from "./lib/controller";
+import { useAi } from "./lib/jo/providers";
+import { useMedia } from "./lib/media";
+import { useWriting } from "./lib/originals";
 import { handleShortcut } from "./lib/shortcuts";
 import { AiMusic } from "./screens/AiMusic";
 import { Jo } from "./screens/Jo";
-import { Library } from "./screens/Library";
+import { Library, useLibraryDraft } from "./screens/Library";
+import { MusicVideo } from "./screens/MusicVideo";
+import { Originals } from "./screens/Originals";
 import { Rig } from "./screens/Rig";
 import { Sessions } from "./screens/Sessions";
 import { Settings } from "./screens/Settings";
 import { Songs } from "./screens/Songs";
 import { Stage } from "./screens/Stage";
-import { SCREENS } from "./screens/registry";
+import { SCREENS, SCREEN_ICONS } from "./screens/registry";
 import { useEngineStore } from "./store/engine";
+import "./screens/studio.css";
+
+const hasUnsavedWork = () =>
+  useLibraryDraft.getState().dirty ||
+  useMedia.getState().dirty ||
+  useWriting.getState().dirty;
+const hasActiveWork = () =>
+  useEngineStore.getState().isRecording ||
+  useWriting.getState().busy ||
+  Boolean(useMedia.getState().busy);
 
 export const App: React.FC = () => {
   const {
@@ -48,7 +60,70 @@ export const App: React.FC = () => {
     initListeners,
   } = useEngineStore();
 
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedWork() || hasActiveWork()) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+  const [showClose, setShowClose] = useState(false);
+  const closeDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (showClose) closeDialog.current?.showModal();
+  }, [showClose]);
+  useEffect(() => {
+    if (isPreview) return;
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
+    void import("@tauri-apps/api/window")
+      .then(async ({ getCurrentWindow }) => {
+        const off = await getCurrentWindow().onCloseRequested((event) => {
+          if (hasActiveWork()) {
+            event.preventDefault();
+            useEngineStore
+              .getState()
+              .notify(
+                "error",
+                "Finish the recording or current operation before closing.",
+              );
+          } else if (hasUnsavedWork()) {
+            event.preventDefault();
+            setShowClose(true);
+          }
+        });
+        if (disposed) off();
+        else cleanup = off;
+      })
+      .catch((e) =>
+        useEngineStore.getState().notify("error", `Close guard: ${String(e)}`),
+      );
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
+  }, [isPreview]);
   const [showHelp, setShowHelp] = useState(false);
+  useEffect(() => {
+    void useAi
+      .getState()
+      .load()
+      .catch((e) => useEngineStore.getState().notify("error", String(e)));
+  }, []);
+  useEffect(() => {
+    let closed = false;
+    let off: (() => void) | undefined;
+    void listenToController()
+      .then((cleanup) => {
+        if (closed) cleanup();
+        else off = cleanup;
+      })
+      .catch((e) => useEngineStore.getState().notify("error", String(e)));
+    return () => {
+      closed = true;
+      off?.();
+    };
+  }, []);
 
   const transport = telemetry.transport;
   const isPlaying =
@@ -56,17 +131,25 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
-    initListeners().then((c) => {
-      cleanup = c;
-    });
+    let disposed = false;
+    initListeners()
+      .then((c) => {
+        if (disposed) c();
+        else cleanup = c;
+      })
+      .catch((e) =>
+        useEngineStore.getState().notify("error", `Startup: ${String(e)}`),
+      );
     return () => {
-      if (cleanup) cleanup();
+      disposed = true;
+      cleanup?.();
     };
   }, [initListeners]);
 
   // One global key handler for the whole app (see lib/shortcuts.ts for the list).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (showClose) return;
       if (showHelp && e.key === "Escape") {
         setShowHelp(false);
         return;
@@ -78,10 +161,12 @@ export const App: React.FC = () => {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showHelp]);
+  }, [showHelp, showClose]);
 
   const renderScreen = () => {
     switch (currentScreen) {
+      case "originals":
+        return <Originals />;
       case "stage":
         return <Stage />;
       case "library":
@@ -92,6 +177,8 @@ export const App: React.FC = () => {
         return <Songs />;
       case "ai-music":
         return <AiMusic />;
+      case "music-video":
+        return <MusicVideo />;
       case "sessions":
         return <Sessions />;
       case "rig":
@@ -103,58 +190,36 @@ export const App: React.FC = () => {
     }
   };
 
-  const getIcon = (iconName: string, active: boolean) => {
-    const props = {
-      size: 24,
-      weight: active ? ("fill" as const) : ("regular" as const),
-      className: active ? "text-[var(--accent)]" : "text-[var(--fg-1)]",
-    };
-    switch (iconName) {
-      case "Guitar":
-        return <Guitar {...props} />;
-      case "BookOpen":
-        return <BookOpen {...props} />;
-      case "MusicNotes":
-        return <MusicNotes {...props} />;
-      case "Waveform":
-        return <Waveform {...props} />;
-      case "Microphone":
-        return <Microphone {...props} />;
-      case "Record":
-        return <Record {...props} />;
-      case "Sliders":
-        return <Sliders {...props} />;
-      case "Gear":
-        return <Gear {...props} />;
-      default:
-        return <Guitar {...props} />;
-    }
-  };
-
   return (
     <div className="flex h-screen w-screen bg-[var(--bg-0)] text-[var(--fg-0)] overflow-hidden">
-      <nav className="w-[72px] bg-[var(--bg-1)] border-r border-[var(--line)] flex flex-col items-center py-4 gap-6 shrink-0 z-20">
-        <div className="w-10 h-10 rounded-[var(--radius-m)] bg-[var(--accent)] flex items-center justify-center text-[var(--bg-0)] font-bold text-xl mb-2">
-          J
+      <nav className="studio-nav" aria-label="Studio rooms">
+        <div className="studio-brand">
+          <span>J</span>
+          <div>
+            JOSEFINE’S<small>JAM STUDIO</small>
+          </div>
         </div>
-        <div className="flex flex-col gap-2 w-full px-2">
+        <div className="studio-nav-items">
           {SCREENS.map((s) => {
             const active = currentScreen === s.id;
+            const Icon = SCREEN_ICONS[s.iconName];
             return (
               <button
                 key={s.id}
                 type="button"
                 onClick={() => setScreen(s.id)}
-                className={`flex flex-col items-center justify-center w-full py-2.5 rounded-[var(--radius-m)] transition-colors cursor-pointer ${
-                  active
-                    ? "bg-[var(--accent-soft)]"
-                    : "hover:bg-[var(--bg-2)] text-[var(--fg-1)]"
-                }`}
-                title={s.label}
+                aria-current={active ? "page" : undefined}
+                aria-label={s.label}
+                title={`${s.label} · ${s.description}`}
               >
-                {getIcon(s.iconName, active)}
-                <span className="text-[10px] tracking-tight mt-1 font-mono">
+                <Icon
+                  size={25}
+                  weight={active ? "fill" : "regular"}
+                  aria-hidden="true"
+                />
+                <span>
                   {s.label}
+                  <small>{s.description}</small>
                 </span>
               </button>
             );
@@ -162,11 +227,12 @@ export const App: React.FC = () => {
         </div>
         <button
           type="button"
+          className="studio-shortcuts"
           onClick={() => setShowHelp(true)}
-          className="mt-auto text-[var(--fg-2)] hover:text-[var(--fg-0)] text-xs font-mono cursor-pointer"
           title="Keyboard shortcuts (?)"
         >
-          ?
+          <Question size={21} aria-hidden="true" />
+          <span>Shortcuts</span>
         </button>
       </nav>
 
@@ -177,9 +243,8 @@ export const App: React.FC = () => {
               Browser preview
             </span>
             <span>
-              Simulated engine: the UI works, no audio is produced and nothing
-              is written to disk. Run <code>pnpm tauri dev</code> for the real
-              band.
+              Explore the studio. Sound, files and connected services work in
+              the desktop app.
             </span>
           </div>
         )}
@@ -315,21 +380,50 @@ export const App: React.FC = () => {
               isPreview={isPreview}
               onClick={() => setScreen("settings")}
             />
+            <StudioAssistant />
           </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-8 relative">
           {renderScreen()}
-
-          <aside className="fixed bottom-6 right-6 flex items-center gap-2.5 px-3 py-2 bg-[var(--bg-1)] border border-[var(--line)] rounded-full shadow-[var(--shadow)] z-30">
-            <div className="w-3 h-3 rounded-full bg-[var(--accent)] animate-pulse" />
-            <span className="text-xs font-mono font-medium text-[var(--fg-0)]">
-              Jo (Ready)
-            </span>
-          </aside>
         </main>
       </div>
 
+      {showClose && (
+        <dialog
+          ref={closeDialog}
+          aria-labelledby="close-title"
+          onCancel={() => setShowClose(false)}
+          className="bg-[var(--bg-1)] text-[var(--fg-0)] border border-[var(--line)] rounded-xl p-6 max-w-md m-auto backdrop:bg-black/70"
+        >
+          <h2 id="close-title" className="text-lg font-semibold mb-2">
+            Keep your unsaved work?
+          </h2>
+          <p className="mb-5 text-sm">
+            Your song, chart or film has unsaved changes. Keep editing to save
+            them before closing.
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={() => setShowClose(false)}>Keep editing</Button>
+            <Button
+              variant="danger"
+              onClick={async () => {
+                if (hasActiveWork()) return;
+                try {
+                  const { getCurrentWindow } = await import(
+                    "@tauri-apps/api/window"
+                  );
+                  await getCurrentWindow().destroy();
+                } catch (e) {
+                  useEngineStore.getState().notify("error", String(e));
+                }
+              }}
+            >
+              Discard and close
+            </Button>
+          </div>
+        </dialog>
+      )}
       <Notices />
       <ShortcutsHelp open={showHelp} onClose={() => setShowHelp(false)} />
     </div>

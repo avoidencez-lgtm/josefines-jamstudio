@@ -91,9 +91,14 @@ impl Sf2Synth {
     }
 
     pub fn render(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.render_channel(0, left, right);
+        self.render_channel(1, left, right);
+    }
+
+    pub fn render_channel(&mut self, channel: u8, left: &mut [f32], right: &mut [f32]) {
         let frames = left.len().min(right.len());
 
-        for v in self.voices.iter_mut() {
+        for v in self.voices.iter_mut().filter(|v| v.channel == channel) {
             let start_age = v.age_samples;
             let end_age = start_age + frames;
 

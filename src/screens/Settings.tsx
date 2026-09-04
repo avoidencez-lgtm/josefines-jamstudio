@@ -1,8 +1,11 @@
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
+import { create } from "zustand";
+import { AiSettings } from "../components/AiSettings";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
+import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import { ipc } from "../ipc/client";
 import type {
   AudioConfig,
@@ -101,34 +104,33 @@ const EngineStatusView: React.FC<{
   );
 };
 
+const useSettingsView = create(() => ({ view: "Audio devices" }));
+export function openAiSettings() {
+  useSettingsView.setState({ view: "AI & models" });
+  useEngineStore.getState().setScreen("settings");
+}
 export const Settings: React.FC = () => {
   const {
     devices,
     settings,
     engineStatus,
     isPreview,
-    keysPresent,
     refreshDevices,
     loadSettings,
     applyAudioConfig,
     refreshEngineStatus,
     restartEngine,
-    checkKey,
-    setKey,
-    deleteKey,
   } = useEngineStore();
 
-  const [geminiKeyInput, setGeminiKeyInput] = useState("");
-  const [elevenKeyInput, setElevenKeyInput] = useState("");
+  const { view } = useSettingsView();
+  const setView = (view: string) => useSettingsView.setState({ view });
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     refreshDevices();
     loadSettings();
     refreshEngineStatus();
-    checkKey("gemini");
-    checkKey("elevenlabs");
-  }, [refreshDevices, loadSettings, refreshEngineStatus, checkKey]);
+  }, [refreshDevices, loadSettings, refreshEngineStatus]);
 
   const applyAudio = async (patch: Partial<AudioConfig>) => {
     if (!settings) return;
@@ -164,234 +166,161 @@ export const Settings: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
-      <Panel title="Audio Engine">
-        <EngineStatusView
-          status={engineStatus}
-          isPreview={isPreview}
-          onRestart={restartEngine}
-          busy={applying}
-        />
-      </Panel>
+      <WorkspaceHeader
+        screen="settings"
+        title="Make the studio yours."
+        description="Set up your interface, choose your AI, and see what your connections use."
+      />
+      <WorkspaceViews
+        labels={["Audio devices", "AI & models", "Usage"]}
+        value={view}
+        onChange={setView}
+      />
+      <div hidden={view !== "Audio devices"} className="workspace-stack">
+        <Panel title="Audio Engine">
+          <EngineStatusView
+            status={engineStatus}
+            isPreview={isPreview}
+            onRestart={restartEngine}
+            busy={applying}
+          />
+        </Panel>
 
-      <Panel title="Audio Devices">
-        <p className="text-xs font-mono text-[var(--fg-2)] mb-4">
-          Changes apply immediately (the engine restarts on the new device) and
-          are saved. Use one interface for both input and output so the tuner
-          and the band share a clock.
-        </p>
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-              Output Device
-              <select
-                value={settings?.output_device ?? ""}
-                disabled={applying}
-                onChange={(e) =>
-                  applyAudio({ output_device: e.target.value || null })
-                }
-                className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
-              >
-                <option value="">System default output</option>
-                {devices.outputs.map((d) => (
-                  <option key={d.name} value={d.name}>
-                    {d.name} ({d.channels} ch{d.is_default ? ", default" : ""})
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div>
-            <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-              Input Device (guitar DI)
-              <select
-                value={settings?.input_device ?? ""}
-                disabled={applying}
-                onChange={(e) =>
-                  applyAudio({ input_device: e.target.value || null })
-                }
-                className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
-              >
-                <option value="">System default input</option>
-                {devices.inputs.map((d) => (
-                  <option key={d.name} value={d.name}>
-                    {d.name} ({d.channels} ch{d.is_default ? ", default" : ""})
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-            <div>
-              <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-                Input Channel
-                <select
-                  value={(settings?.input_channel ?? 2) + 1}
-                  disabled={applying}
-                  onChange={(e) =>
-                    applyAudio({
-                      input_channel: Number.parseInt(e.target.value, 10) - 1,
-                    })
-                  }
-                  className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
-                >
-                  {channelNumbers.map((ch) => (
-                    <option key={ch} value={ch}>
-                      Channel {ch}
-                      {ch === 3 ? " (HeadRush dry DI)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div>
-              <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-                Sample Rate
-                <select
-                  value={settings?.sample_rate ?? 48000}
-                  disabled={applying}
-                  onChange={(e) =>
-                    applyAudio({
-                      sample_rate: Number.parseInt(e.target.value, 10) || 48000,
-                    })
-                  }
-                  className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
-                >
-                  <option value={44100}>44.1 kHz</option>
-                  <option value={48000}>48 kHz</option>
-                  <option value={96000}>96 kHz</option>
-                </select>
-              </label>
-            </div>
-            <div>
-              <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-                Buffer Size
-                <select
-                  value={settings?.buffer_size ?? 256}
-                  disabled={applying}
-                  onChange={(e) =>
-                    applyAudio({
-                      buffer_size: Number.parseInt(e.target.value, 10) || 256,
-                    })
-                  }
-                  className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
-                >
-                  {[64, 128, 256, 512, 1024].map((n) => (
-                    <option key={n} value={n}>
-                      {n} frames ({bufferMs(n)} ms)
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button size="sm" variant="ghost" onClick={() => refreshDevices()}>
-              Rescan devices
-            </Button>
-          </div>
-        </div>
-      </Panel>
-
-      <Panel title="API Credentials (Stored in OS Keychain)">
-        <div className="flex flex-col gap-6">
-          {/* Gemini */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-[var(--fg-0)]">
-                Google Gemini
-              </span>
-              <StatusPill
-                status={keysPresent.gemini ? "ok" : "idle"}
-                label={keysPresent.gemini ? "Configured" : "Missing"}
-              />
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                placeholder={
-                  keysPresent.gemini
-                    ? "••••••••••••••••"
-                    : "Paste Gemini API Key"
-                }
-                value={geminiKeyInput}
-                onChange={(e) => setGeminiKeyInput(e.target.value)}
-                className="flex-1 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
-              />
-              <Button
-                variant="primary"
-                onClick={async () => {
-                  if (geminiKeyInput) {
-                    await setKey("gemini", geminiKeyInput);
-                    setGeminiKeyInput("");
-                  }
-                }}
-              >
-                Save
-              </Button>
-              {keysPresent.gemini && (
-                <Button variant="danger" onClick={() => deleteKey("gemini")}>
-                  Delete
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* ElevenLabs */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-[var(--fg-0)]">
-                ElevenLabs
-              </span>
-              <StatusPill
-                status={keysPresent.elevenlabs ? "ok" : "idle"}
-                label={keysPresent.elevenlabs ? "Configured" : "Missing"}
-              />
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                placeholder={
-                  keysPresent.elevenlabs
-                    ? "••••••••••••••••"
-                    : "Paste ElevenLabs API Key"
-                }
-                value={elevenKeyInput}
-                onChange={(e) => setElevenKeyInput(e.target.value)}
-                className="flex-1 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
-              />
-              <Button
-                variant="primary"
-                onClick={async () => {
-                  if (elevenKeyInput) {
-                    await setKey("elevenlabs", elevenKeyInput);
-                    setElevenKeyInput("");
-                  }
-                }}
-              >
-                Save
-              </Button>
-              {keysPresent.elevenlabs && (
-                <Button
-                  variant="danger"
-                  onClick={() => deleteKey("elevenlabs")}
-                >
-                  Delete
-                </Button>
-              )}
-            </div>
-          </div>
-          <p className="text-xs font-mono text-[var(--fg-2)]">
-            Keys never reach the UI. Every request goes through the Rust{" "}
-            <code>provider_fetch</code> proxy, which only talks to allow-listed
-            hosts and writes one line per call to the usage log below (no
-            request bodies).
+        <Panel title="Audio Devices">
+          <p className="text-xs font-mono text-[var(--fg-2)] mb-4">
+            Changes apply immediately (the engine restarts on the new device)
+            and are saved. Use one interface for both input and output so the
+            tuner and the band share a clock.
           </p>
-        </div>
-      </Panel>
+          <div className="flex flex-col gap-4">
+            <div>
+              <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
+                Output Device
+                <select
+                  value={settings?.output_device ?? ""}
+                  disabled={applying}
+                  onChange={(e) =>
+                    applyAudio({ output_device: e.target.value || null })
+                  }
+                  className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
+                >
+                  <option value="">System default output</option>
+                  {devices.outputs.map((d) => (
+                    <option key={d.name} value={d.name}>
+                      {d.name} ({d.channels} ch{d.is_default ? ", default" : ""}
+                      )
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
-      <UsageLog />
+            <div>
+              <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
+                Input Device (guitar DI)
+                <select
+                  value={settings?.input_device ?? ""}
+                  disabled={applying}
+                  onChange={(e) =>
+                    applyAudio({ input_device: e.target.value || null })
+                  }
+                  className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
+                >
+                  <option value="">System default input</option>
+                  {devices.inputs.map((d) => (
+                    <option key={d.name} value={d.name}>
+                      {d.name} ({d.channels} ch{d.is_default ? ", default" : ""}
+                      )
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+              <div>
+                <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
+                  Input Channel
+                  <select
+                    value={(settings?.input_channel ?? 2) + 1}
+                    disabled={applying}
+                    onChange={(e) =>
+                      applyAudio({
+                        input_channel: Number.parseInt(e.target.value, 10) - 1,
+                      })
+                    }
+                    className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
+                  >
+                    {channelNumbers.map((ch) => (
+                      <option key={ch} value={ch}>
+                        Channel {ch}
+                        {ch === 3 ? " (HeadRush dry DI)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div>
+                <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
+                  Sample Rate
+                  <select
+                    value={settings?.sample_rate ?? 48000}
+                    disabled={applying}
+                    onChange={(e) =>
+                      applyAudio({
+                        sample_rate:
+                          Number.parseInt(e.target.value, 10) || 48000,
+                      })
+                    }
+                    className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
+                  >
+                    <option value={44100}>44.1 kHz</option>
+                    <option value={48000}>48 kHz</option>
+                    <option value={96000}>96 kHz</option>
+                  </select>
+                </label>
+              </div>
+              <div>
+                <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
+                  Buffer Size
+                  <select
+                    value={settings?.buffer_size ?? 256}
+                    disabled={applying}
+                    onChange={(e) =>
+                      applyAudio({
+                        buffer_size: Number.parseInt(e.target.value, 10) || 256,
+                      })
+                    }
+                    className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
+                  >
+                    {[64, 128, 256, 512, 1024].map((n) => (
+                      <option key={n} value={n}>
+                        {n} frames ({bufferMs(n)} ms)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => refreshDevices()}
+              >
+                Rescan devices
+              </Button>
+            </div>
+          </div>
+        </Panel>
+      </div>
+      <div hidden={view !== "AI & models"}>
+        <AiSettings />
+      </div>
+
+      <div hidden={view !== "Usage"}>
+        <UsageLog />
+      </div>
     </div>
   );
 };
@@ -417,6 +346,7 @@ const UsageLog: React.FC = () => {
 
   useEffect(() => {
     load();
+    let closed = false;
     let unlisten: (() => void) | undefined;
     ipc
       .listen<CostTotal[]>("cost.state", (t) => {
@@ -424,9 +354,14 @@ const UsageLog: React.FC = () => {
         load();
       })
       .then((u) => {
-        unlisten = u;
-      });
-    return () => unlisten?.();
+        if (closed) u();
+        else unlisten = u;
+      })
+      .catch((e) => setError(String(e)));
+    return () => {
+      closed = true;
+      unlisten?.();
+    };
   }, [load]);
 
   return (
@@ -461,7 +396,7 @@ const UsageLog: React.FC = () => {
           {[...entries].reverse().map((e) => (
             <li
               key={`${e.atMs}-${e.provider}-${e.path}`}
-              className="py-1.5 flex items-center gap-3"
+              className="py-1.5 flex flex-wrap items-center gap-3"
             >
               <span className="text-[var(--fg-2)] w-36 shrink-0 tabular-nums">
                 {new Date(e.atMs).toLocaleString([], {
@@ -490,6 +425,14 @@ const UsageLog: React.FC = () => {
               >
                 {e.method} {e.path}
               </span>
+              {e.model && (
+                <span className="text-[var(--fg-1)] break-all">
+                  {e.model} ·{" "}
+                  {e.estimatedCostUsd == null
+                    ? "cost unknown"
+                    : `est. $${e.estimatedCostUsd.toFixed(4)}`}
+                </span>
+              )}
               <span className="ml-auto text-[var(--fg-2)] tabular-nums shrink-0">
                 {e.durationMs} ms · {formatBytes(e.bytesOut)}↑{" "}
                 {formatBytes(e.bytesIn)}↓

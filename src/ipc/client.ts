@@ -51,7 +51,8 @@ const tauriClient: IpcClient = {
     handler: (payload: T) => void,
   ): Promise<Unlisten> {
     const { listen } = await import("@tauri-apps/api/event");
-    return listen<T>(event, (e) => handler(e.payload));
+    // Tauri wire names cannot contain dots. Keep logical domain names in the UI.
+    return listen<T>(event.replaceAll(".", ":"), (e) => handler(e.payload));
   },
 };
 

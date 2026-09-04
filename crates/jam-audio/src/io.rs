@@ -458,6 +458,47 @@ impl CpalOutput {
     }
 }
 
+fn convert_output<T: SizedSample + FromSample<f32>>(
+    data: &mut [T],
+    channels: usize,
+    callback: &mut dyn FnMut(&mut [f32]),
+) {
+    let mut tmp = [0.0_f32; 2048];
+    for block in data.chunks_mut(1024 * channels) {
+        let frames = block.len() / channels;
+        tmp.fill(0.0);
+        callback(&mut tmp[..frames * 2]);
+        for (frame, stereo) in block
+            .chunks_exact_mut(channels)
+            .zip(tmp.as_chunks::<2>().0.iter())
+        {
+            frame.fill(T::from_sample(0.0_f32));
+            frame[0] = T::from_sample(stereo[0]);
+            if channels > 1 {
+                frame[1] = T::from_sample(stereo[1]);
+            }
+        }
+    }
+}
+
+fn convert_input<T: SizedSample>(
+    data: &[T],
+    channels: usize,
+    ch: usize,
+    callback: &mut dyn FnMut(&[f32]),
+) where
+    f32: FromSample<T>,
+{
+    let mut tmp = [0.0_f32; 1024];
+    for block in data.chunks(1024 * channels) {
+        let frames = block.len() / channels;
+        for (sample, frame) in tmp.iter_mut().zip(block.chunks_exact(channels)) {
+            *sample = f32::from_sample(frame[ch]);
+        }
+        callback(&tmp[..frames]);
+    }
+}
+
 fn build_output<T>(
     device: &cpal::Device,
     cfg: &StreamConfig,
@@ -468,31 +509,12 @@ where
     T: SizedSample + FromSample<f32>,
 {
     let channels = cfg.channels.max(1) as usize;
-    let mut tmp: Vec<f32> = Vec::new();
     device
         .build_output_stream(
             cfg,
-            move |data: &mut [T], _| {
-                let frames = data.len() / channels;
-                tmp.resize(frames * 2, 0.0);
-                tmp.fill(0.0);
-                callback(&mut tmp);
-                for f in 0..frames {
-                    let l = tmp[f * 2];
-                    let r = tmp[f * 2 + 1];
-                    let base = f * channels;
-                    data[base] = T::from_sample(l);
-                    if channels > 1 {
-                        data[base + 1] = T::from_sample(r);
-                    }
-                    for c in 2..channels {
-                        data[base + c] = T::from_sample(0.0f32);
-                    }
-                }
-            },
-            move |err| {
+            move |data: &mut [T], _| convert_output(data, channels, &mut callback),
+            move |_err| {
                 errors.fetch_add(1, Ordering::Relaxed);
-                tracing::error!("output stream error: {err}");
             },
             None,
         )
@@ -520,42 +542,18 @@ impl AudioOutput for CpalOutput {
             let mut cfg = supported.config();
             cfg.buffer_size = fixed_buffer_within(supported.buffer_size(), wanted_buffer);
 
-            // A failed build consumes its callback, so hand each attempt a forwarder to
-            // the one real callback (the lock is uncontended: one stream ever calls it).
-            let shared: Arc<parking_lot::Mutex<OutputCallback>> =
-                Arc::new(parking_lot::Mutex::new(callback));
-            let forwarder = || -> OutputCallback {
-                let s = Arc::clone(&shared);
-                Box::new(move |buf: &mut [f32]| {
-                    let mut cb = s.lock();
-                    (**cb)(buf)
-                })
-            };
-            let attempt = |cfg: &StreamConfig| {
-                let cb = forwarder();
-                match supported.sample_format() {
-                    SampleFormat::F32 => build_output::<f32>(&device, cfg, cb, Arc::clone(&errors)),
-                    SampleFormat::I16 => build_output::<i16>(&device, cfg, cb, Arc::clone(&errors)),
-                    SampleFormat::U16 => build_output::<u16>(&device, cfg, cb, Arc::clone(&errors)),
-                    SampleFormat::I32 => build_output::<i32>(&device, cfg, cb, Arc::clone(&errors)),
-                    other => Err(format!("unsupported output sample format: {other:?}")),
-                }
-            };
-
-            // Some backends reject a fixed buffer size; retry with the driver default.
-            let (stream, buffer_frames) = match cfg.buffer_size {
-                BufferSize::Fixed(n) => match attempt(&cfg) {
-                    Ok(s) => (s, Some(n)),
-                    Err(first_err) => {
-                        tracing::warn!(
-                            "fixed buffer {n} rejected ({first_err}); retrying with default"
-                        );
-                        let mut relaxed = cfg.clone();
-                        relaxed.buffer_size = BufferSize::Default;
-                        (attempt(&relaxed)?, None)
-                    }
-                },
-                BufferSize::Default => (attempt(&cfg)?, None),
+            // The callback is owned by exactly one stream. If a fixed buffer is rejected,
+            // report the device error; a new start creates a fresh callback.
+            let stream = match supported.sample_format() {
+                SampleFormat::F32 => build_output::<f32>(&device, &cfg, callback, errors),
+                SampleFormat::I16 => build_output::<i16>(&device, &cfg, callback, errors),
+                SampleFormat::U16 => build_output::<u16>(&device, &cfg, callback, errors),
+                SampleFormat::I32 => build_output::<i32>(&device, &cfg, callback, errors),
+                other => Err(format!("unsupported output sample format: {other:?}")),
+            }?;
+            let buffer_frames = match cfg.buffer_size {
+                BufferSize::Fixed(n) => Some(n),
+                BufferSize::Default => None,
             };
 
             Ok((
@@ -629,21 +627,12 @@ where
 {
     let channels = cfg.channels.max(1) as usize;
     let ch = channel.min(channels - 1);
-    let mut tmp: Vec<f32> = Vec::new();
     device
         .build_input_stream(
             cfg,
-            move |data: &[T], _| {
-                let frames = data.len() / channels;
-                tmp.resize(frames, 0.0);
-                for f in 0..frames {
-                    tmp[f] = f32::from_sample(data[f * channels + ch]);
-                }
-                callback(&tmp);
-            },
-            move |err| {
+            move |data: &[T], _| convert_input(data, channels, ch, &mut callback),
+            move |_err| {
                 errors.fetch_add(1, Ordering::Relaxed);
-                tracing::error!("input stream error: {err}");
             },
             None,
         )
@@ -682,47 +671,16 @@ impl AudioInput for CpalInput {
             let mut cfg = supported.config();
             cfg.buffer_size = fixed_buffer_within(supported.buffer_size(), wanted_buffer);
 
-            let shared: Arc<parking_lot::Mutex<InputCallback>> =
-                Arc::new(parking_lot::Mutex::new(callback));
-            let forwarder = || -> InputCallback {
-                let s = Arc::clone(&shared);
-                Box::new(move |buf: &[f32]| {
-                    let mut cb = s.lock();
-                    (**cb)(buf)
-                })
-            };
-            let attempt = |cfg: &StreamConfig| {
-                let cb = forwarder();
-                match supported.sample_format() {
-                    SampleFormat::F32 => {
-                        build_input::<f32>(&device, cfg, channel, cb, Arc::clone(&errors))
-                    }
-                    SampleFormat::I16 => {
-                        build_input::<i16>(&device, cfg, channel, cb, Arc::clone(&errors))
-                    }
-                    SampleFormat::U16 => {
-                        build_input::<u16>(&device, cfg, channel, cb, Arc::clone(&errors))
-                    }
-                    SampleFormat::I32 => {
-                        build_input::<i32>(&device, cfg, channel, cb, Arc::clone(&errors))
-                    }
-                    other => Err(format!("unsupported input sample format: {other:?}")),
-                }
-            };
-
-            let (stream, buffer_frames) = match cfg.buffer_size {
-                BufferSize::Fixed(n) => match attempt(&cfg) {
-                    Ok(s) => (s, Some(n)),
-                    Err(first_err) => {
-                        tracing::warn!(
-                            "fixed buffer {n} rejected ({first_err}); retrying with default"
-                        );
-                        let mut relaxed = cfg.clone();
-                        relaxed.buffer_size = BufferSize::Default;
-                        (attempt(&relaxed)?, None)
-                    }
-                },
-                BufferSize::Default => (attempt(&cfg)?, None),
+            let stream = match supported.sample_format() {
+                SampleFormat::F32 => build_input::<f32>(&device, &cfg, channel, callback, errors),
+                SampleFormat::I16 => build_input::<i16>(&device, &cfg, channel, callback, errors),
+                SampleFormat::U16 => build_input::<u16>(&device, &cfg, channel, callback, errors),
+                SampleFormat::I32 => build_input::<i32>(&device, &cfg, channel, callback, errors),
+                other => Err(format!("unsupported input sample format: {other:?}")),
+            }?;
+            let buffer_frames = match cfg.buffer_size {
+                BufferSize::Fixed(n) => Some(n),
+                BufferSize::Default => None,
             };
 
             Ok((
@@ -797,5 +755,37 @@ mod tests {
             fixed_buffer_within(&SupportedBufferSize::Unknown, 256),
             BufferSize::Default
         );
+    }
+}
+
+#[cfg(test)]
+mod conversion_tests {
+    #[test]
+    fn oversized_driver_buffers_keep_every_frame_and_channel() {
+        let mut output = vec![99.0_f32; 9001 * 3];
+        let mut rendered = 0;
+        super::convert_output(&mut output, 3, &mut |block| {
+            assert!(block.len() <= 2048);
+            for frame in block.as_chunks_mut::<2>().0 {
+                frame[0] = 0.25;
+                frame[1] = -0.5;
+                rendered += 1;
+            }
+        });
+        assert_eq!(rendered, 9001);
+        assert!(output
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .all(|f| *f == [0.25, -0.5, 0.0]));
+        let mut captured = Vec::new();
+        super::convert_input(&output, 3, 1, &mut |block| {
+            assert!(block.len() <= 1024);
+            captured.extend_from_slice(block);
+        });
+        assert_eq!(captured, vec![-0.5; 9001]);
+        let mut mono = [0_i16; 1];
+        super::convert_output(&mut mono, 1, &mut |block| block.fill(0.5));
+        assert!(mono[0] > 16_000);
     }
 }
