@@ -1,5 +1,8 @@
 # Quickstart
 
+Full instructions: [English](guide/manual-en.md) · [Norsk bokmål](guide/manual-nb.md).
+The same searchable manual is available through **Help & guides** inside the app.
+
 This preview supports writing originals, playing the virtual band, recording guitar
 and exporting stems. It does not yet provide native voice, automatic calibration,
 stem separation, automatic song analysis, time-stretch or Lyria RealTime.

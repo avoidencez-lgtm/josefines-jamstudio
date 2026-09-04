@@ -59,8 +59,8 @@ export interface TempoTrainer {
   targetBpm: number;
   stepBpm: number;
   everyBars: number;
-  /** Bar index at which the last step was applied. */
-  lastStepBar: number;
+  /** Completed bar transitions since the last tempo step, including loop wraps. */
+  playedBars: number;
 }
 
 export interface EngineState {
@@ -283,7 +283,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       targetBpm: 120,
       stepBpm: 4,
       everyBars: 4,
-      lastStepBar: 0,
+      playedBars: 0,
     },
     styles: [],
     charts: [],
@@ -366,7 +366,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const trainer = get().tempoTrainer;
       if (trainer.enabled && get().telemetry.transport.state === "stopped") {
         await get().transportSetTempo(trainer.startBpm);
-        set({ tempoTrainer: { ...trainer, lastStepBar: 0 } });
+        set({ tempoTrainer: { ...trainer, playedBars: 0 } });
       }
       await run("Play", () => ipc.invoke("transport_play"));
     },
@@ -821,26 +821,44 @@ export const useEngineStore = create<EngineState>((set, get) => {
         ipc.listen<TransportTelemetry>("transport.state", (transport) => {
           const prev = get().telemetry.transport;
           set((state) => ({ telemetry: { ...state.telemetry, transport } }));
-          // Tempo trainer steps on bar boundaries while playing.
+          // Count performed bars, not absolute bar numbers: short loops wrap.
           const trainer = get().tempoTrainer;
+          const boundary =
+            transport.bar === prev.bar + 1 ||
+            (transport.loop_enabled &&
+              prev.loop_enabled &&
+              prev.bar === transport.loop_end_bar - 1 &&
+              transport.bar === transport.loop_start_bar &&
+              transport.bar_progress < prev.bar_progress);
           if (
             trainer.enabled &&
+            !get().isRecording &&
+            prev.state === "playing" &&
             transport.state === "playing" &&
-            transport.bar !== prev.bar &&
-            transport.bar - trainer.lastStepBar >= trainer.everyBars &&
-            transport.bar > trainer.lastStepBar
+            boundary
           ) {
-            const dir = Math.sign(trainer.targetBpm - transport.bpm);
-            if (dir !== 0) {
-              const next =
-                dir > 0
-                  ? Math.min(trainer.targetBpm, transport.bpm + trainer.stepBpm)
-                  : Math.max(
-                      trainer.targetBpm,
-                      transport.bpm - trainer.stepBpm,
-                    );
-              set({ tempoTrainer: { ...trainer, lastStepBar: transport.bar } });
-              void get().transportSetTempo(next);
+            const playedBars = trainer.playedBars + 1;
+            set({
+              tempoTrainer: {
+                ...trainer,
+                playedBars: playedBars >= trainer.everyBars ? 0 : playedBars,
+              },
+            });
+            if (playedBars >= trainer.everyBars) {
+              const dir = Math.sign(trainer.targetBpm - transport.bpm);
+              if (dir !== 0) {
+                const next =
+                  dir > 0
+                    ? Math.min(
+                        trainer.targetBpm,
+                        transport.bpm + trainer.stepBpm,
+                      )
+                    : Math.max(
+                        trainer.targetBpm,
+                        transport.bpm - trainer.stepBpm,
+                      );
+                void get().transportSetTempo(next);
+              }
             }
           }
         }),

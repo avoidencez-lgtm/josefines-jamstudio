@@ -237,3 +237,9 @@ write drafts or conversation to browser storage. Durable files still use the
 existing Rust save commands. `openAiSettings` selects the AI category before
 navigation. Imported audio and generated audio share `useMedia` assets; native
 playback must pass `media::playable_file` and its canonical-library boundary.
+
+## Extend the manual or finishing recipes
+
+Edit `docs/guide/manual.json` in both `en` and `nb`, retain stable chapter IDs and set `room` to an existing screen ID for contextual opening. Run `node scripts/export-manual.mjs`; the invariant test verifies translation coverage and export freshness. Shortcut English text is checked against the live command registry; update the Bokmål description with any shortcut change. Main UI labels remain English.
+
+Finishing helpers live in `src/lib/finishing.ts`, with examples in `tests/invariants/finishing.test.ts`. Keep transformations pure and timing-preserving, respect part locks, and route audio through the existing native clip/transport commands. A managed comp uses `compSlot` for its absolute bar interval; do not interpret it as automatic arrangement-following audio. New ideas must remain reversible through the existing Versions/Undo flow.

@@ -1,7 +1,7 @@
 import {
+  BookOpen,
   Pause,
   Play,
-  Question,
   Record,
   Repeat,
   Stop,
@@ -150,8 +150,8 @@ export const App: React.FC = () => {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (showClose) return;
-      if (showHelp && e.key === "Escape") {
-        setShowHelp(false);
+      if (showHelp) {
+        if (e.key === "Escape") setShowHelp(false);
         return;
       }
       const consumed = handleShortcut(e, useEngineStore.getState(), {
@@ -207,7 +207,10 @@ export const App: React.FC = () => {
               <button
                 key={s.id}
                 type="button"
-                onClick={() => setScreen(s.id)}
+                onClick={() => {
+                  setShowHelp(false);
+                  setScreen(s.id);
+                }}
                 aria-current={active ? "page" : undefined}
                 aria-label={s.label}
                 title={`${s.label} · ${s.description}`}
@@ -229,10 +232,10 @@ export const App: React.FC = () => {
           type="button"
           className="studio-shortcuts"
           onClick={() => setShowHelp(true)}
-          title="Keyboard shortcuts (?)"
+          title="Help & guides (?)"
         >
-          <Question size={21} aria-hidden="true" />
-          <span>Shortcuts</span>
+          <BookOpen size={21} aria-hidden="true" />
+          <span>Help & guides</span>
         </button>
       </nav>
 
@@ -385,7 +388,12 @@ export const App: React.FC = () => {
         </header>
 
         <main className="flex-1 overflow-y-auto p-8 relative">
-          {renderScreen()}
+          <div hidden={showHelp}>{renderScreen()}</div>
+          <ShortcutsHelp
+            open={showHelp}
+            room={currentScreen}
+            onClose={() => setShowHelp(false)}
+          />
         </main>
       </div>
 
@@ -425,7 +433,6 @@ export const App: React.FC = () => {
         </dialog>
       )}
       <Notices />
-      <ShortcutsHelp open={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   );
 };

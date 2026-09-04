@@ -78,6 +78,10 @@ impl Library {
         let (_, errs) = user.load_from_fs_dir(self.charts_dir());
         self.load_errors.extend(errs);
         for chart in user.list() {
+            if let Err(e) = validate_chart(chart) {
+                self.load_errors.push(format!("chart {}: {e}", chart.id));
+                continue;
+            }
             self.user_chart_ids.push(chart.id.clone());
             self.charts.insert(chart.clone());
         }
@@ -182,7 +186,17 @@ impl Library {
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let file = dir.join(format!("{}.json", safe_file_stem(&chart.id)));
         let json = serde_json::to_string_pretty(chart).map_err(|e| e.to_string())?;
-        std::fs::write(&file, json).map_err(|e| format!("{}: {e}", file.display()))?;
+        let temp = file.with_extension("json.tmp");
+        std::fs::write(&temp, json).map_err(|e| format!("{}: {e}", temp.display()))?;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&temp)
+            .and_then(|f| f.sync_all())
+            .map_err(|e| e.to_string())?;
+        if file.exists() {
+            std::fs::copy(&file, file.with_extension("json.bak")).map_err(|e| e.to_string())?;
+        }
+        std::fs::rename(temp, &file).map_err(|e| e.to_string())?;
         self.charts.insert(chart.clone());
         if !self.user_chart_ids.contains(&chart.id) {
             self.user_chart_ids.push(chart.id.clone());
@@ -242,6 +256,9 @@ fn safe_file_stem(id: &str) -> String {
 
 /// Structural checks a chart must pass before the band will play it.
 pub fn validate_chart(chart: &Chart) -> Result<(), String> {
+    if !chart.default_bpm.is_finite() || !(40.0..=240.0).contains(&chart.default_bpm) {
+        return Err("Chart tempo must be within 40–240 BPM.".into());
+    }
     if chart.id.trim().is_empty() {
         return Err("chart id is empty".into());
     }
@@ -254,12 +271,25 @@ pub fn validate_chart(chart: &Chart) -> Result<(), String> {
     if chart.time_sig.0 == 0 || chart.time_sig.1 == 0 {
         return Err("time signature must be positive".into());
     }
+    let mut total_bars = 0_u64;
+    let mut ids = std::collections::BTreeSet::new();
+    if chart
+        .sections
+        .iter()
+        .any(|s| s.id.is_empty() || !ids.insert(&s.id))
+    {
+        return Err("Chart section IDs must be nonempty and unique.".into());
+    }
     for item in &chart.arrangement {
-        if !chart.sections.iter().any(|s| s.id == item.section_id) {
+        let Some(section) = chart.sections.iter().find(|s| s.id == item.section_id) else {
             return Err(format!(
                 "arrangement references unknown section \"{}\"",
                 item.section_id
             ));
+        };
+        total_bars = total_bars.saturating_add(section.bars.len() as u64 * u64::from(item.repeats));
+        if item.repeats == 0 || total_bars > 4096 {
+            return Err("Keep chart repeats positive and the arrangement within 4096 bars.".into());
         }
     }
     let beats_per_bar = chart.time_sig.0 as f64;
@@ -268,6 +298,9 @@ pub fn validate_chart(chart: &Chart) -> Result<(), String> {
             return Err(format!("section \"{}\" has no bars", section.id));
         }
         for (i, bar) in section.bars.iter().enumerate() {
+            if bar.iter().any(|c| !c.beats.is_finite() || c.beats <= 0.0) {
+                return Err("Chord beat lengths must be positive and finite.".into());
+            }
             if bar.is_empty() {
                 return Err(format!("section \"{}\" bar {} is empty", section.id, i + 1));
             }
@@ -281,7 +314,7 @@ pub fn validate_chart(chart: &Chart) -> Result<(), String> {
             }
         }
     }
-    if chart.resolve().bars.is_empty() {
+    if total_bars == 0 {
         return Err("chart resolves to zero bars".into());
     }
     Ok(())
@@ -345,5 +378,27 @@ mod tests {
         chart.sections[0].bars[0][0].beats = 3.0;
         let err = validate_chart(&chart).unwrap_err();
         assert!(err.contains("beats"), "{err}");
+    }
+
+    #[test]
+    fn unsafe_chart_lengths_are_rejected_before_expansion_and_reload() {
+        let root = temp_root("bounded-chart");
+        let mut lib = Library::load_from(root.clone());
+        let mut chart = lib.chart("blues-12-bar").unwrap();
+        chart.arrangement[0].repeats = u32::MAX;
+        assert!(validate_chart(&chart).unwrap_err().contains("4096"));
+        std::fs::create_dir_all(lib.charts_dir()).unwrap();
+        std::fs::write(
+            lib.charts_dir().join("bad.json"),
+            serde_json::to_vec(&chart).unwrap(),
+        )
+        .unwrap();
+        lib.reload();
+        assert!(!lib.load_errors().is_empty());
+        assert!(lib.chart(&chart.id).unwrap().arrangement[0].repeats < u32::MAX);
+        chart.arrangement[0].repeats = 1;
+        chart.sections[0].bars[0][0].beats = f64::NAN;
+        assert!(validate_chart(&chart).is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

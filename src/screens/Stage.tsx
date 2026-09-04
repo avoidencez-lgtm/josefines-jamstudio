@@ -511,7 +511,7 @@ export const Stage: React.FC = () => {
             <Toggle
               checked={tempoTrainer.enabled}
               onChange={(enabled) =>
-                setTempoTrainer({ enabled, lastStepBar: 0 })
+                setTempoTrainer({ enabled, playedBars: 0 })
               }
               label={tempoTrainer.enabled ? "On" : "Off"}
             />

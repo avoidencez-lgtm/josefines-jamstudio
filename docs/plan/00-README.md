@@ -153,3 +153,7 @@ The current build is stabilised separately from the unbuilt roadmap above. See
 [build closeout](../reviews/build-closeout.md) for native IPC, persistence, meter
 export and installer validation. Owner hardware/provider gates remain open;
 no milestone is marked complete by a headless or browser-only check.
+
+## Documentation and original-song finishing
+
+The 2026-09-05 pass adds searchable English/Bokmål help, generated manuals for all rooms, save/recovery/trainer fixes, and Write → Finish (structural review, transition variants and compatible section comps). [Verification and remaining owner gates](../reviews/studio-verification-2026-09-05.md) and [research decisions](../research/song-finishing.md) describe the scope. This pass does not complete the unbuilt voice, stem/stretch, realtime generation or hardware acceptance milestones.

@@ -4,8 +4,10 @@
    whether local import/render tools are found. On Mac, common Homebrew paths are
    searched as well as PATH. The app does not bundle or install these executables.
 2. Choose a saved **Studio take → Use take**, or expand **Import your audio or
-   footage** and paste a full local file path. This copies the full recorded mix
-   into the media library. Alternatively generate a soundtrack in **AI Music**.
+   footage** and paste a full local file path. Use take builds a clean soundtrack
+   from guitar, drums, bass and comp stems, excluding the click and voice buses;
+   incomplete older takes require an explicit full-mix choice. Local import copies
+   the selected file into the media library. Alternatively generate a soundtrack in **AI Music**.
 3. Set the title, landscape/portrait frame and visual direction. **Build cuts from
    song sections** uses the selected take's saved chart, or the open Write song.
    It divides sections into four-bar shots and fits them to the recording length.

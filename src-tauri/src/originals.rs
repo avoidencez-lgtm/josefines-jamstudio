@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
-use tauri::State;
+use tauri::{Emitter, State};
 
 static SAVE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -186,23 +186,46 @@ pub fn originals_save(document: Value) -> Result<Value, String> {
     write_document(&song_dir(), document)
 }
 #[tauri::command]
-pub fn originals_list() -> Result<Vec<Value>, String> {
-    let root = song_dir();
+pub fn originals_list(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
+    let (docs, warnings) = scan_originals(&song_dir())?;
+    for warning in warnings {
+        let _ = app.emit("app:error", warning);
+    }
+    Ok(docs)
+}
+
+fn scan_originals(root: &Path) -> Result<(Vec<Value>, Vec<String>), String> {
     if !root.exists() {
-        return Ok(vec![]);
+        return Ok((vec![], vec![]));
     }
     let mut docs = Vec::new();
+    let mut warnings = Vec::new();
     for entry in fs::read_dir(root).map_err(|e| e.to_string())? {
         let p = entry.map_err(|e| e.to_string())?.path();
         if p.extension().is_some_and(|x| x == "json") {
-            let v: Value =
-                serde_json::from_str(&fs::read_to_string(&p).map_err(|e| e.to_string())?)
-                    .map_err(|e| format!("{}: {e}", p.display()))?;
-            body(&v)?;
-            docs.push(v);
+            let read = || -> Result<Value, String> {
+                if fs::metadata(&p).map_err(|e| e.to_string())?.len() > 2_000_000 {
+                    return Err("Song file exceeds 2 MB.".into());
+                }
+                let v: Value = serde_json::from_slice(&fs::read(&p).map_err(|e| e.to_string())?)
+                    .map_err(|e| e.to_string())?;
+                body(&v)?;
+                valid_id(v["id"].as_str().ok_or("Song id missing")?)?;
+                if v["revision"].as_u64().is_none() || !v["versions"].is_array() {
+                    return Err("Song revision or version list is invalid.".into());
+                }
+                Ok(v)
+            };
+            match read() {
+                Ok(v) => docs.push(v),
+                Err(e) => warnings.push(format!(
+                    "Cannot read {}: {e}. Other songs remain available; this file was left intact.",
+                    p.display()
+                )),
+            }
         }
     }
-    Ok(docs)
+    Ok((docs, warnings))
 }
 
 pub fn file_takes() -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
@@ -386,6 +409,23 @@ pub fn takes_favourite(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn corrupt_song_does_not_hide_healthy_originals() {
+        let root = std::env::temp_dir().join(format!("jam-song-scan-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("good.json"),
+            include_bytes!("../../tests/fixtures/seams/original.json"),
+        )
+        .unwrap();
+        std::fs::write(root.join("broken.json"), b"broken").unwrap();
+        let (docs, warnings) = super::scan_originals(&root).unwrap();
+        assert_eq!(docs.len(), 1);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("broken.json"));
+        assert_eq!(std::fs::read(root.join("broken.json")).unwrap(), b"broken");
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn corrupt_manifest_does_not_hide_other_takes() {
         let root = std::env::temp_dir().join(format!("jam-take-scan-{}", std::process::id()));

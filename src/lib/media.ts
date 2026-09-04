@@ -195,7 +195,10 @@ export const useMedia = create<MediaState>((set, get) => ({
   undoEdit: () => {
     const s = get();
     if (s.busy || !s.undo.length) return;
-    const project = s.undo[s.undo.length - 1];
+    const project = {
+      ...s.undo[s.undo.length - 1],
+      revision: s.project.revision,
+    };
     set({ project, undo: s.undo.slice(0, -1), dirty: true, renderPath: "" });
   },
   projects: [],
@@ -241,10 +244,27 @@ export const useMedia = create<MediaState>((set, get) => ({
       throw new Error(
         "Saving projects requires the desktop app. This preview keeps edits until reload.",
       );
+    const sent = get().project;
     const project = await ipc.invoke<VideoProject>("media_save", {
-      document: get().project,
+      document: sent,
     });
-    set({ project, dirty: false });
+    set((current) => {
+      if (
+        current.project.id !== sent.id ||
+        current.project.revision > project.revision
+      )
+        return {};
+      const changed = current.project !== sent;
+      return {
+        project: changed
+          ? { ...current.project, revision: project.revision }
+          : project,
+        dirty: changed,
+        message: changed
+          ? "Earlier changes saved. Newer edits still need saving."
+          : "Video saved.",
+      };
+    });
     await get().refresh();
   },
   work: async (label, task) => {
