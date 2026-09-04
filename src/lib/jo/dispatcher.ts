@@ -53,6 +53,32 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       return `Switched style to ${styleId}`;
     }
 
+    case "set_intensity": {
+      const raw = Number(call.arguments.intensity);
+      const intensity = Math.min(1, Math.max(0, raw > 1 ? raw / 100 : raw));
+      await store.bandSetIntensity(intensity);
+      return `Intensity ${Math.round(intensity * 100)}%`;
+    }
+
+    case "load_chart": {
+      const chartId = call.arguments.chartId as string;
+      await store.bandLoadChart(chartId);
+      return `Loaded chart ${chartId}`;
+    }
+
+    case "set_loop": {
+      const enabled = Boolean(call.arguments.enabled);
+      const start = Number(call.arguments.startBar);
+      const end = Number(call.arguments.endBar);
+      const t = store.telemetry.transport;
+      await store.transportSetLoop(
+        Number.isFinite(start) && start > 0 ? start : t.loop_start_bar,
+        Number.isFinite(end) && end > 0 ? end : t.loop_end_bar,
+        enabled,
+      );
+      return enabled ? "Looping" : "Loop off";
+    }
+
     case "set_parts": {
       await store.bandSet({
         muteDrums: call.arguments.muteDrums as boolean | undefined,

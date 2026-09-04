@@ -15,4 +15,6 @@ export interface JoMessage {
   text: string;
   timestamp: string;
   toolCalls?: JoToolCall[];
+  /** One line per tool call, what the engine actually did. */
+  toolResults?: string[];
 }

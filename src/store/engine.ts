@@ -1,44 +1,91 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
+import { ipc, isPreview } from "../ipc/client";
 import type {
+  AiMusicConfig,
+  AiMusicState,
   AppSettings,
+  AudioConfig,
   AudioDevices,
+  BandPatch,
   BandTelemetry,
+  Chart,
+  EngineStatus,
   EngineTelemetry,
+  ExportReport,
+  LibraryInfo,
   MeterTelemetry,
+  MidiPortInfo,
+  RigProfile,
+  RigState,
+  SongMetadata,
+  StemSettings,
+  StyleSummary,
+  TakeAnalysis,
+  TakeMetadata,
   TransportTelemetry,
   TunerTelemetry,
 } from "../ipc/contract";
+import { transposeChart } from "../lib/chart/transpose";
 
 export type ScreenId =
   | "stage"
+  | "library"
   | "jo"
   | "songs"
   | "ai-music"
   | "sessions"
   | "rig"
-  | "settings"
-  | "library";
+  | "settings";
+
+export type Cue = "none" | "fill" | "crash" | "stop" | "ending";
+
+/** A message the UI shows in the toast rail; errors from the engine land here. */
+export interface Notice {
+  id: number;
+  kind: "info" | "error";
+  text: string;
+  at: number;
+}
+
+/**
+ * Tempo trainer: after every `everyBars` bars of playing, the tempo moves by
+ * `stepBpm` until it reaches `targetBpm`. Classic "start slow, creep up" practice.
+ */
+export interface TempoTrainer {
+  enabled: boolean;
+  startBpm: number;
+  targetBpm: number;
+  stepBpm: number;
+  everyBars: number;
+  /** Bar index at which the last step was applied. */
+  lastStepBar: number;
+}
 
 export interface EngineState {
   currentScreen: ScreenId;
+  isPreview: boolean;
   activeSource: "none" | "band" | "song" | "lyria";
   toneOn: boolean;
   toneHz: number;
   tunerOn: boolean;
   clickVolume: number;
+  bandVolume: number;
   telemetry: EngineTelemetry;
+  engineStatus: EngineStatus | null;
   devices: AudioDevices;
   settings: AppSettings | null;
   keysPresent: Record<string, boolean>;
+  notices: Notice[];
 
   setScreen: (screen: ScreenId) => void;
+  notify: (kind: Notice["kind"], text: string) => void;
+  dismissNotice: (id: number) => void;
   setTone: (on: boolean, hz?: number) => Promise<void>;
   setTuner: (on: boolean) => Promise<void>;
   setClickVolume: (volume: number) => Promise<void>;
+  setBandVolume: (volume: number) => Promise<void>;
 
-  // Transport actions
+  // Transport
   transportPlay: () => Promise<void>;
   transportPause: () => Promise<void>;
   transportStop: () => Promise<void>;
@@ -54,657 +101,778 @@ export interface EngineState {
     numerator: number,
     denominator: number,
   ) => Promise<void>;
+  /** Tap tempo: call on each tap; the tempo follows the average interval. */
+  tapTempo: () => Promise<number | null>;
+  tapTimes: number[];
 
-  // Band actions
+  tempoTrainer: TempoTrainer;
+  setTempoTrainer: (patch: Partial<TempoTrainer>) => void;
+
+  // Band
   bandSetStyle: (styleId: string) => Promise<void>;
   bandSetIntensity: (intensity: number) => Promise<void>;
-  bandCue: (
-    cue: "none" | "fill" | "crash" | "stop" | "ending",
-  ) => Promise<void>;
-  bandLoadChart: (chartId: string) => Promise<void>;
-  bandSet: (patch: import("../ipc/contract").BandPatch) => Promise<void>;
+  bandCue: (cue: Cue) => Promise<void>;
+  bandLoadChart: (chartId: string, followChart?: boolean) => Promise<void>;
+  bandSet: (patch: BandPatch) => Promise<void>;
   togglePart: (part: "drums" | "bass" | "comp") => Promise<void>;
   toggleFollowEnergy: () => Promise<void>;
 
+  // Library (styles and charts)
+  styles: StyleSummary[];
+  charts: Chart[];
+  currentChart: Chart | null;
+  libraryInfo: LibraryInfo | null;
+  loadLibrary: () => Promise<void>;
+  reloadLibrary: () => Promise<void>;
+  saveChart: (chart: Chart) => Promise<string | null>;
+  deleteUserChart: (chartId: string) => Promise<void>;
+  importChartFile: (path: string) => Promise<Chart | null>;
+  /** Load a chart object straight into the band without saving (editor preview). */
+  playChartInline: (chart: Chart) => Promise<boolean>;
+  transposeCurrentChart: (semitones: number) => Promise<void>;
+
   // Recorder & Takes
-  takes: import("../ipc/contract").TakeMetadata[];
+  takes: TakeMetadata[];
   isRecording: boolean;
-  calibratedLatencySamples: number;
+  /** Round-trip offset trimmed from the guitar stem, set by hand (no auto-calibration yet). */
+  latencySamples: number;
   startRecording: (sessionId?: string) => Promise<string>;
-  stopRecording: () => Promise<import("../ipc/contract").TakeMetadata | null>;
-  calibrateLatency: () => Promise<number>;
+  stopRecording: () => Promise<TakeMetadata | null>;
+  setLatencySamples: (samples: number) => Promise<number>;
   loadTakes: () => Promise<void>;
   deleteTake: (id: string) => Promise<void>;
 
   // Real Song & Stem Separation (M3)
-  currentSong: import("../ipc/contract").SongMetadata | null;
+  currentSong: SongMetadata | null;
   songSpeed: number;
   songTranspose: number;
-  stemSettings: import("../ipc/contract").StemSettings;
-  importSong: (
-    filePath: string,
-  ) => Promise<import("../ipc/contract").SongMetadata | null>;
+  stemSettings: StemSettings;
+  importSong: (filePath: string) => Promise<SongMetadata | null>;
   setSongSpeed: (speed: number) => Promise<void>;
   setSongTranspose: (semitones: number) => Promise<void>;
-  updateStemSettings: (
-    patch: Partial<import("../ipc/contract").StemSettings>,
-  ) => Promise<void>;
+  updateStemSettings: (patch: Partial<StemSettings>) => Promise<void>;
 
   // AI Music Streaming (M4)
-  aiMusic: import("../ipc/contract").AiMusicState;
-  startAiMusic: (
-    config?: Partial<import("../ipc/contract").AiMusicConfig>,
-  ) => Promise<void>;
+  aiMusic: AiMusicState;
+  startAiMusic: (config?: Partial<AiMusicConfig>) => Promise<void>;
   stopAiMusic: () => Promise<void>;
   steerAiMusic: (delta: string) => Promise<void>;
   setAiMusicVolume: (volume: number) => Promise<void>;
 
   // Rig Orchestration (M5)
-  rigState: import("../ipc/contract").RigState | null;
-  availableProfiles: import("../ipc/contract").RigProfile[];
+  rigState: RigState | null;
+  availableProfiles: RigProfile[];
+  midiPorts: MidiPortInfo[];
+  midiPortsError: string | null;
   loadRigProfiles: () => Promise<void>;
   selectRigProfile: (id: string) => Promise<void>;
   selectRigScene: (sceneIdx: number) => Promise<void>;
-  setRigSectionMapping: (section: string, sceneIdx: number) => Promise<void>;
+  setRigSectionMapping: (
+    section: string,
+    sceneIdx: number | null,
+  ) => Promise<void>;
+  setRigFollowSections: (enabled: boolean) => Promise<void>;
   refreshRigState: () => Promise<void>;
+  refreshMidiPorts: () => Promise<void>;
+  openMidiPort: (port: string | null) => Promise<void>;
+  setRigControl: (cc: number, value: number) => Promise<void>;
+  sendRigProgram: (program: number) => Promise<void>;
+  clearRigMonitor: () => Promise<void>;
 
   // Take Analysis & DAW Export (M6)
-  takeAnalysis: Record<string, import("../ipc/contract").TakeAnalysis>;
-  analyzeTake: (
-    takeId: string,
-  ) => Promise<import("../ipc/contract").TakeAnalysis | null>;
-  exportTakeDaw: (takeId: string) => Promise<string | null>;
+  takeAnalysis: Record<string, TakeAnalysis>;
+  analyzeTake: (takeId: string) => Promise<TakeAnalysis | null>;
+  exportTakeDaw: (takeId: string) => Promise<ExportReport | null>;
 
+  // Devices, settings, keys
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
+  applyAudioConfig: (config: AudioConfig) => Promise<EngineStatus | null>;
+  refreshEngineStatus: () => Promise<void>;
+  restartEngine: () => Promise<void>;
   checkKey: (provider: string) => Promise<boolean>;
   setKey: (provider: string, key: string) => Promise<void>;
   deleteKey: (provider: string) => Promise<void>;
   initListeners: () => Promise<() => void>;
 }
 
-export const useEngineStore = create<EngineState>((set, get) => ({
-  currentScreen: "stage",
-  activeSource: "none",
-  toneOn: false,
-  toneHz: 440,
-  tunerOn: true,
-  clickVolume: 0.7,
-  telemetry: {
-    xruns: 0,
-    input_level: { peak_db: -180, rms_db: -180 },
-    output_level: { peak_db: -180, rms_db: -180 },
-    tuner: null,
-    transport: {
-      state: "stopped",
-      bar: 1,
-      beat: 1,
-      bpm: 120,
-      time_signature: [4, 4],
-      loop_enabled: false,
-      loop_start_bar: 1,
-      loop_end_bar: 5,
-      count_in_bars: 1,
+let noticeSeq = 0;
+
+function errorText(e: unknown): string {
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
+export const useEngineStore = create<EngineState>((set, get) => {
+  /** Runs an engine command; failures become visible notices instead of console noise. */
+  const run = async <T>(
+    label: string,
+    fn: () => Promise<T>,
+  ): Promise<T | null> => {
+    try {
+      return await fn();
+    } catch (e) {
+      const text = `${label}: ${errorText(e)}`;
+      console.error(text);
+      get().notify("error", text);
+      return null;
+    }
+  };
+
+  return {
+    currentScreen: "stage",
+    isPreview,
+    activeSource: "band",
+    toneOn: false,
+    toneHz: 440,
+    tunerOn: true,
+    clickVolume: 0.7,
+    bandVolume: 0.8,
+    telemetry: {
+      xruns: 0,
+      input_level: { peak_db: -180, rms_db: -180 },
+      output_level: { peak_db: -180, rms_db: -180 },
+      tuner: null,
+      transport: {
+        state: "stopped",
+        bar: 1,
+        beat: 1,
+        position_beats: 0,
+        bar_progress: 0,
+        bpm: 120,
+        time_signature: [4, 4],
+        loop_enabled: false,
+        loop_start_bar: 1,
+        loop_end_bar: 5,
+        count_in_bars: 1,
+      },
+      band: {
+        style_id: "blues-shuffle",
+        style_name: "Blues Shuffle",
+        intensity: 0.5,
+        active_cue: "none",
+        pending_cue: "none",
+        current_chord: "A7",
+        next_chord: "D7",
+        current_section: "",
+        mute_drums: false,
+        mute_bass: false,
+        mute_comp: false,
+        follow_energy: false,
+        current_energy: 0.0,
+        is_stopped: false,
+      },
     },
-    band: {
-      style_id: "blues-shuffle",
-      style_name: "Blues Shuffle",
-      intensity: 0.5,
-      active_cue: "none",
-      pending_cue: "none",
-      current_chord: "A7",
-      next_chord: "D7",
-      mute_drums: false,
-      mute_bass: false,
-      mute_comp: false,
-      follow_energy: false,
-      current_energy: 0.0,
+    engineStatus: null,
+    devices: { inputs: [], outputs: [] },
+    settings: null,
+    keysPresent: {},
+    notices: [],
+    tapTimes: [],
+    tempoTrainer: {
+      enabled: false,
+      startBpm: 80,
+      targetBpm: 120,
+      stepBpm: 4,
+      everyBars: 4,
+      lastStepBar: 0,
     },
-  },
-  devices: { inputs: [], outputs: [] },
-  settings: null,
-  keysPresent: {},
-  takes: [],
-  isRecording: false,
-  calibratedLatencySamples: 0,
-  currentSong: null,
-  songSpeed: 1.0,
-  songTranspose: 0,
-  stemSettings: {
-    vocalsVolume: 1.0,
-    drumsVolume: 1.0,
-    bassVolume: 1.0,
-    otherVolume: 1.0,
-    vocalsMute: false,
-    drumsMute: false,
-    bassMute: false,
-    otherMute: false,
-    vocalsSolo: false,
-    drumsSolo: false,
-    bassSolo: false,
-    otherSolo: false,
-  },
-  aiMusic: {
-    active: false,
-    provider: "offline-synthetic",
-    currentPrompt: "Neo-soul groove with rhodes and pocket drums",
-    promptDelta: "",
-    mixVolume: 0.8,
-  },
-  rigState: null,
-  availableProfiles: [],
-  takeAnalysis: {},
+    styles: [],
+    charts: [],
+    currentChart: null,
+    libraryInfo: null,
+    takes: [],
+    isRecording: false,
+    latencySamples: 0,
+    currentSong: null,
+    songSpeed: 1.0,
+    songTranspose: 0,
+    stemSettings: {
+      vocalsVolume: 1.0,
+      drumsVolume: 1.0,
+      bassVolume: 1.0,
+      otherVolume: 1.0,
+      vocalsMute: false,
+      drumsMute: false,
+      bassMute: false,
+      otherMute: false,
+      vocalsSolo: false,
+      drumsSolo: false,
+      bassSolo: false,
+      otherSolo: false,
+    },
+    aiMusic: {
+      active: false,
+      provider: "offline-synthetic",
+      currentPrompt: "Neo-soul groove with rhodes and pocket drums",
+      promptDelta: "",
+      mixVolume: 0.8,
+    },
+    rigState: null,
+    availableProfiles: [],
+    midiPorts: [],
+    midiPortsError: null,
+    takeAnalysis: {},
 
-  setScreen: (screen) => set({ currentScreen: screen }),
+    setScreen: (screen) => set({ currentScreen: screen }),
 
-  setTone: async (on, hz) => {
-    const finalHz = hz ?? get().toneHz;
-    set({ toneOn: on, toneHz: finalHz });
-    try {
-      await invoke("tone_set", { on, hz: finalHz });
-    } catch (e) {
-      console.error("Failed to set tone:", e);
-    }
-  },
+    notify: (kind, text) => {
+      const id = ++noticeSeq;
+      set((s) => ({
+        notices: [...s.notices.slice(-4), { id, kind, text, at: Date.now() }],
+      }));
+      setTimeout(() => get().dismissNotice(id), kind === "error" ? 8000 : 4000);
+    },
 
-  setTuner: async (on) => {
-    set({ tunerOn: on });
-    try {
-      await invoke("tuner_set", { on });
-    } catch (e) {
-      console.error("Failed to set tuner:", e);
-    }
-  },
+    dismissNotice: (id) =>
+      set((s) => ({ notices: s.notices.filter((n) => n.id !== id) })),
 
-  setClickVolume: async (volume) => {
-    const clamped = Math.max(0, Math.min(1, volume));
-    set({ clickVolume: clamped });
-    try {
-      await invoke("transport_set_click_volume", { volume: clamped });
-    } catch (e) {
-      console.error("Failed to set click volume:", e);
-    }
-  },
+    setTone: async (on, hz) => {
+      const finalHz = hz ?? get().toneHz;
+      set({ toneOn: on, toneHz: finalHz });
+      await run("Tone", () => ipc.invoke("tone_set", { on, hz: finalHz }));
+    },
 
-  transportPlay: async () => {
-    try {
-      await invoke("transport_play");
-    } catch (e) {
-      console.error("Failed to start playback:", e);
-    }
-  },
+    setTuner: async (on) => {
+      set({ tunerOn: on });
+      await run("Tuner", () => ipc.invoke("tuner_set", { on }));
+    },
 
-  transportPause: async () => {
-    try {
-      await invoke("transport_pause");
-    } catch (e) {
-      console.error("Failed to pause playback:", e);
-    }
-  },
+    setClickVolume: async (volume) => {
+      const clamped = Math.max(0, Math.min(1, volume));
+      set({ clickVolume: clamped });
+      await run("Click volume", () =>
+        ipc.invoke("transport_set_click_volume", { volume: clamped }),
+      );
+    },
 
-  transportStop: async () => {
-    try {
-      await invoke("transport_stop");
-    } catch (e) {
-      console.error("Failed to stop playback:", e);
-    }
-  },
+    setBandVolume: async (volume) => {
+      const clamped = Math.max(0, Math.min(1, volume));
+      set({ bandVolume: clamped });
+      await run("Band volume", () =>
+        ipc.invoke("audio_set_band_volume", { volume: clamped }),
+      );
+    },
 
-  transportSeekBar: async (bar) => {
-    try {
-      await invoke("transport_seek_bar", { bar });
-    } catch (e) {
-      console.error("Failed to seek bar:", e);
-    }
-  },
+    transportPlay: async () => {
+      const trainer = get().tempoTrainer;
+      if (trainer.enabled && get().telemetry.transport.state === "stopped") {
+        await get().transportSetTempo(trainer.startBpm);
+        set({ tempoTrainer: { ...trainer, lastStepBar: 0 } });
+      }
+      await run("Play", () => ipc.invoke("transport_play"));
+    },
+    transportPause: async () => {
+      await run("Pause", () => ipc.invoke("transport_pause"));
+    },
+    transportStop: async () => {
+      await run("Stop", () => ipc.invoke("transport_stop"));
+    },
+    transportSeekBar: async (bar) => {
+      await run("Seek", () => ipc.invoke("transport_seek_bar", { bar }));
+    },
+    transportSetLoop: async (startBar, endBar, enabled) => {
+      await run("Loop", () =>
+        ipc.invoke("transport_set_loop", { startBar, endBar, enabled }),
+      );
+    },
+    transportSetCountIn: async (bars) => {
+      await run("Count-in", () =>
+        ipc.invoke("transport_set_count_in", { bars }),
+      );
+    },
+    transportSetTempo: async (bpm) => {
+      const clamped = Math.max(20, Math.min(300, Math.round(bpm * 10) / 10));
+      await run("Tempo", () =>
+        ipc.invoke("transport_set_tempo", { bpm: clamped }),
+      );
+    },
+    transportSetTimeSignature: async (numerator, denominator) => {
+      await run("Time signature", () =>
+        ipc.invoke("transport_set_time_signature", { numerator, denominator }),
+      );
+    },
 
-  transportSetLoop: async (startBar, endBar, enabled) => {
-    try {
-      await invoke("transport_set_loop", { startBar, endBar, enabled });
-    } catch (e) {
-      console.error("Failed to set loop:", e);
-    }
-  },
+    tapTempo: async () => {
+      const now = performance.now();
+      const recent = [
+        ...get().tapTimes.filter((t) => now - t < 2500),
+        now,
+      ].slice(-6);
+      set({ tapTimes: recent });
+      if (recent.length < 2) return null;
+      const intervals = recent.slice(1).map((t, i) => t - recent[i]);
+      const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      const bpm = Math.round(60_000 / avg);
+      if (bpm >= 20 && bpm <= 300) {
+        await get().transportSetTempo(bpm);
+        return bpm;
+      }
+      return null;
+    },
 
-  transportSetCountIn: async (bars) => {
-    try {
-      await invoke("transport_set_count_in", { bars });
-    } catch (e) {
-      console.error("Failed to set count in:", e);
-    }
-  },
+    setTempoTrainer: (patch) =>
+      set((s) => ({ tempoTrainer: { ...s.tempoTrainer, ...patch } })),
 
-  transportSetTempo: async (bpm) => {
-    const clamped = Math.max(20, Math.min(300, bpm));
-    try {
-      await invoke("transport_set_tempo", { bpm: clamped });
-    } catch (e) {
-      console.error("Failed to set tempo:", e);
-    }
-  },
+    bandSetStyle: async (styleId) => {
+      await run("Style", () => ipc.invoke("band_set_style", { styleId }));
+    },
+    bandSetIntensity: async (intensity) => {
+      const clamped = Math.max(0, Math.min(1, intensity));
+      await run("Intensity", () =>
+        ipc.invoke("band_set_intensity", { intensity: clamped }),
+      );
+    },
+    bandCue: async (cue) => {
+      await run("Cue", () => ipc.invoke("band_cue", { cue }));
+    },
+    bandLoadChart: async (chartId, followChart = true) => {
+      const chart = await run("Load chart", () =>
+        ipc.invoke<Chart>("band_load_chart", { chartId, followChart }),
+      );
+      if (chart) set({ currentChart: chart });
+    },
+    bandSet: async (patch) => {
+      await run("Band", () => ipc.invoke("band_set", { args: patch }));
+    },
+    togglePart: async (part) => {
+      const band = get().telemetry.band;
+      const patch: BandPatch = {};
+      if (part === "drums") patch.muteDrums = !band.mute_drums;
+      if (part === "bass") patch.muteBass = !band.mute_bass;
+      if (part === "comp") patch.muteComp = !band.mute_comp;
+      await get().bandSet(patch);
+    },
+    toggleFollowEnergy: async () => {
+      const band = get().telemetry.band;
+      await get().bandSet({ followEnergy: !band.follow_energy });
+    },
 
-  transportSetTimeSignature: async (numerator, denominator) => {
-    try {
-      await invoke("transport_set_time_signature", { numerator, denominator });
-    } catch (e) {
-      console.error("Failed to set time signature:", e);
-    }
-  },
+    loadLibrary: async () => {
+      const [styles, charts] = await Promise.all([
+        run("Styles", () => ipc.invoke<StyleSummary[]>("band_list_styles")),
+        run("Charts", () => ipc.invoke<Chart[]>("band_list_charts")),
+      ]);
+      set({ styles: styles ?? [], charts: charts ?? [] });
+      if (!get().currentChart && charts && charts.length > 0) {
+        const first = charts.find((c) => c.id === "blues-12-bar") ?? charts[0];
+        await get().bandLoadChart(first.id);
+      }
+    },
+    reloadLibrary: async () => {
+      const info = await run("Library", () =>
+        ipc.invoke<LibraryInfo>("library_reload"),
+      );
+      if (info) {
+        set({ libraryInfo: info });
+        for (const e of info.loadErrors) get().notify("error", e);
+      }
+      await get().loadLibrary();
+    },
+    saveChart: async (chart) => {
+      const path = await run("Save chart", () =>
+        ipc.invoke<string>("charts_save", { chart }),
+      );
+      if (path !== null) {
+        get().notify("info", `Saved ${chart.name}`);
+        await get().reloadLibrary();
+      }
+      return path;
+    },
+    deleteUserChart: async (chartId) => {
+      const ok = await run("Delete chart", () =>
+        ipc.invoke("charts_delete_user", { chartId }),
+      );
+      if (ok !== null) await get().reloadLibrary();
+    },
+    importChartFile: async (path) => {
+      const chart = await run("Import chart", () =>
+        ipc.invoke<Chart>("charts_import_file", { path }),
+      );
+      if (chart) await get().reloadLibrary();
+      return chart;
+    },
+    playChartInline: async (chart) => {
+      const ok = await run("Play chart", () =>
+        ipc.invoke("band_load_chart_inline", { chart }),
+      );
+      if (ok !== null) set({ currentChart: chart });
+      return ok !== null;
+    },
+    transposeCurrentChart: async (semitones) => {
+      const current = get().currentChart;
+      if (!current) return;
+      const moved = transposeChart(current, semitones);
+      await get().playChartInline(moved);
+    },
 
-  bandSetStyle: async (styleId) => {
-    try {
-      await invoke("band_set_style", { styleId });
-    } catch (e) {
-      console.error("Failed to set band style:", e);
-    }
-  },
-
-  bandSetIntensity: async (intensity) => {
-    const clamped = Math.max(0, Math.min(1, intensity));
-    try {
-      await invoke("band_set_intensity", { intensity: clamped });
-    } catch (e) {
-      console.error("Failed to set band intensity:", e);
-    }
-  },
-
-  bandCue: async (cue) => {
-    try {
-      await invoke("band_cue", { cue });
-    } catch (e) {
-      console.error("Failed to set band cue:", e);
-    }
-  },
-
-  bandLoadChart: async (chartId: string) => {
-    try {
-      await invoke("band_load_chart", { chartId });
-    } catch (e) {
-      console.error("Failed to load chart:", e);
-    }
-  },
-
-  bandSet: async (patch) => {
-    try {
-      await invoke("band_set", { args: patch });
-    } catch (e) {
-      console.error("Failed to apply band patch:", e);
-    }
-  },
-
-  togglePart: async (part) => {
-    const band = get().telemetry.band;
-    const patch: import("../ipc/contract").BandPatch = {};
-    if (part === "drums") patch.muteDrums = !band.mute_drums;
-    if (part === "bass") patch.muteBass = !band.mute_bass;
-    if (part === "comp") patch.muteComp = !band.mute_comp;
-    await get().bandSet(patch);
-  },
-
-  toggleFollowEnergy: async () => {
-    const band = get().telemetry.band;
-    await get().bandSet({ followEnergy: !band.follow_energy });
-  },
-
-  startRecording: async (sessionId = "default-session") => {
-    try {
-      const takeId = await invoke<string>("recorder_start", { sessionId });
-      set({ isRecording: true });
-      return takeId;
-    } catch (e) {
-      console.error("Failed to start recording:", e);
-      return "";
-    }
-  },
-
-  stopRecording: async () => {
-    try {
-      const meta =
-        await invoke<import("../ipc/contract").TakeMetadata>("recorder_stop");
+    startRecording: async (sessionId = "default-session") => {
+      const takeId = await run("Record", () =>
+        ipc.invoke<string>("recorder_start", { sessionId }),
+      );
+      if (takeId) set({ isRecording: true });
+      return takeId ?? "";
+    },
+    stopRecording: async () => {
+      const meta = await run("Stop recording", () =>
+        ipc.invoke<TakeMetadata>("recorder_stop"),
+      );
       set((state) => ({
         isRecording: false,
-        takes: [meta, ...state.takes],
+        takes: meta ? [meta, ...state.takes] : state.takes,
       }));
       return meta;
-    } catch (e) {
-      console.error("Failed to stop recording:", e);
-      set({ isRecording: false });
-      return null;
-    }
-  },
-
-  calibrateLatency: async () => {
-    try {
-      const samples = await invoke<number>("recorder_calibrate_latency");
-      set({ calibratedLatencySamples: samples });
-      return samples;
-    } catch (e) {
-      console.error("Failed to calibrate latency:", e);
-      return 0;
-    }
-  },
-
-  loadTakes: async () => {
-    try {
-      const takes =
-        await invoke<import("../ipc/contract").TakeMetadata[]>("takes_list");
-      set({ takes });
-    } catch (e) {
-      console.error("Failed to load takes:", e);
-    }
-  },
-
-  deleteTake: async (takeId: string) => {
-    try {
-      await invoke("takes_delete", { takeId });
-      set((state) => ({
-        takes: state.takes.filter((t) => t.id !== takeId),
-      }));
-    } catch (e) {
-      console.error("Failed to delete take:", e);
-    }
-  },
-
-  importSong: async (filePath: string) => {
-    try {
-      const song = await invoke<import("../ipc/contract").SongMetadata>(
-        "song_import",
-        { filePath },
+    },
+    setLatencySamples: async (samples) => {
+      const clamped = Math.max(0, Math.min(48_000, Math.round(samples)));
+      const applied = await run("Latency offset", () =>
+        ipc.invoke<number>("recorder_set_latency", { samples: clamped }),
       );
-      set({ currentSong: song });
+      if (applied !== null) set({ latencySamples: applied });
+      return applied ?? get().latencySamples;
+    },
+    loadTakes: async () => {
+      const latency = await run("Latency offset", () =>
+        ipc.invoke<number>("recorder_get_latency"),
+      );
+      if (latency !== null) set({ latencySamples: latency });
+      const takes = await run("Takes", () =>
+        ipc.invoke<TakeMetadata[]>("takes_list"),
+      );
+      if (takes) set({ takes });
+    },
+    deleteTake: async (takeId) => {
+      const ok = await run("Delete take", () =>
+        ipc.invoke("takes_delete", { takeId }),
+      );
+      if (ok !== null)
+        set((state) => ({ takes: state.takes.filter((t) => t.id !== takeId) }));
+    },
+
+    importSong: async (filePath) => {
+      const song = await run("Import song", () =>
+        ipc.invoke<SongMetadata>("song_import", { filePath }),
+      );
+      if (song) set({ currentSong: song });
       return song;
-    } catch (e) {
-      console.error("Failed to import song:", e);
-      return null;
-    }
-  },
-
-  setSongSpeed: async (speed: number) => {
-    try {
+    },
+    setSongSpeed: async (speed) => {
       const clamped = Math.max(0.5, Math.min(1.5, speed));
-      await invoke("song_set_speed", { speed: clamped });
-      set({ songSpeed: clamped });
-    } catch (e) {
-      console.error("Failed to set song speed:", e);
-    }
-  },
-
-  setSongTranspose: async (semitones: number) => {
-    try {
+      const ok = await run("Song speed", () =>
+        ipc.invoke("song_set_speed", { speed: clamped }),
+      );
+      if (ok !== null) set({ songSpeed: clamped });
+    },
+    setSongTranspose: async (semitones) => {
       const clamped = Math.max(-12, Math.min(12, semitones));
-      await invoke("song_set_transpose", { semitones: clamped });
-      set({ songTranspose: clamped });
-    } catch (e) {
-      console.error("Failed to set song transpose:", e);
-    }
-  },
+      const ok = await run("Song transpose", () =>
+        ipc.invoke("song_set_transpose", { semitones: clamped }),
+      );
+      if (ok !== null) set({ songTranspose: clamped });
+    },
+    updateStemSettings: async (patch) => {
+      const updated = { ...get().stemSettings, ...patch };
+      const ok = await run("Stems", () =>
+        ipc.invoke("song_set_stem_settings", { settings: updated }),
+      );
+      if (ok !== null) set({ stemSettings: updated });
+    },
 
-  updateStemSettings: async (patch) => {
-    const updated = { ...get().stemSettings, ...patch };
-    try {
-      await invoke("song_set_stem_settings", { settings: updated });
-      set({ stemSettings: updated });
-    } catch (e) {
-      console.error("Failed to update stem settings:", e);
-    }
-  },
+    startAiMusic: async (config) => {
+      const fullConfig: AiMusicConfig = {
+        provider: config?.provider ?? "offline-synthetic",
+        prompt: config?.prompt ?? get().aiMusic.currentPrompt,
+        tempo: config?.tempo ?? 120,
+        key: config?.key ?? "A",
+        mixVolume: config?.mixVolume ?? get().aiMusic.mixVolume,
+      };
+      const ok = await run("AI music", () =>
+        ipc.invoke("ai_music_start", { config: fullConfig }),
+      );
+      if (ok !== null) {
+        set((state) => ({
+          aiMusic: {
+            ...state.aiMusic,
+            active: true,
+            provider: fullConfig.provider,
+            currentPrompt: fullConfig.prompt,
+          },
+        }));
+      }
+    },
+    stopAiMusic: async () => {
+      const ok = await run("AI music", () => ipc.invoke("ai_music_stop"));
+      if (ok !== null)
+        set((state) => ({ aiMusic: { ...state.aiMusic, active: false } }));
+    },
+    steerAiMusic: async (delta) => {
+      const ok = await run("AI music", () =>
+        ipc.invoke("ai_music_steer", { delta }),
+      );
+      if (ok !== null)
+        set((state) => ({ aiMusic: { ...state.aiMusic, promptDelta: delta } }));
+    },
+    setAiMusicVolume: async (volume) => {
+      const ok = await run("AI music volume", () =>
+        ipc.invoke("ai_music_set_volume", { volume }),
+      );
+      if (ok !== null)
+        set((state) => ({ aiMusic: { ...state.aiMusic, mixVolume: volume } }));
+    },
 
-  startAiMusic: async (config) => {
-    const fullConfig: import("../ipc/contract").AiMusicConfig = {
-      provider: config?.provider ?? "offline-synthetic",
-      prompt: config?.prompt ?? get().aiMusic.currentPrompt,
-      tempo: config?.tempo ?? 120,
-      key: config?.key ?? "A",
-      mixVolume: config?.mixVolume ?? get().aiMusic.mixVolume,
-    };
-    try {
-      await invoke("ai_music_start", { config: fullConfig });
-      set((state) => ({
-        aiMusic: {
-          ...state.aiMusic,
-          active: true,
-          provider: fullConfig.provider,
-          currentPrompt: fullConfig.prompt,
-        },
-      }));
-    } catch (e) {
-      console.error("Failed to start AI music stream:", e);
-    }
-  },
-
-  stopAiMusic: async () => {
-    try {
-      await invoke("ai_music_stop");
-      set((state) => ({
-        aiMusic: { ...state.aiMusic, active: false },
-      }));
-    } catch (e) {
-      console.error("Failed to stop AI music stream:", e);
-    }
-  },
-
-  steerAiMusic: async (delta: string) => {
-    try {
-      await invoke("ai_music_steer", { delta });
-      set((state) => ({
-        aiMusic: { ...state.aiMusic, promptDelta: delta },
-      }));
-    } catch (e) {
-      console.error("Failed to steer AI music stream:", e);
-    }
-  },
-
-  setAiMusicVolume: async (volume: number) => {
-    try {
-      await invoke("ai_music_set_volume", { volume });
-      set((state) => ({
-        aiMusic: { ...state.aiMusic, mixVolume: volume },
-      }));
-    } catch (e) {
-      console.error("Failed to set AI music volume:", e);
-    }
-  },
-
-  loadRigProfiles: async () => {
-    try {
-      const profiles =
-        await invoke<import("../ipc/contract").RigProfile[]>(
-          "rig_list_profiles",
+    loadRigProfiles: async () => {
+      const profiles = await run("Rig profiles", () =>
+        ipc.invoke<RigProfile[]>("rig_list_profiles"),
+      );
+      const state = await run("Rig state", () =>
+        ipc.invoke<RigState>("rig_get_state"),
+      );
+      set({ availableProfiles: profiles ?? [], rigState: state });
+      await get().refreshMidiPorts();
+    },
+    selectRigProfile: async (id) => {
+      const state = await run("Rig profile", () =>
+        ipc.invoke<RigState>("rig_select_profile", { profileId: id }),
+      );
+      if (state) set({ rigState: state });
+    },
+    selectRigScene: async (sceneIdx) => {
+      const state = await run("Rig scene", () =>
+        ipc.invoke<RigState>("rig_select_scene", { sceneIdx }),
+      );
+      if (state) set({ rigState: state });
+    },
+    setRigSectionMapping: async (section, sceneIdx) => {
+      const state = await run("Rig mapping", () =>
+        ipc.invoke<RigState>("rig_set_section_mapping", { section, sceneIdx }),
+      );
+      if (state) set({ rigState: state });
+    },
+    setRigFollowSections: async (enabled) => {
+      const state = await run("Rig follow", () =>
+        ipc.invoke<RigState>("rig_set_follow_sections", { enabled }),
+      );
+      if (state) set({ rigState: state });
+    },
+    refreshRigState: async () => {
+      const state = await run("Rig state", () =>
+        ipc.invoke<RigState>("rig_get_state"),
+      );
+      if (state) set({ rigState: state });
+    },
+    refreshMidiPorts: async () => {
+      try {
+        const ports = await ipc.invoke<MidiPortInfo[]>("rig_list_ports");
+        set({ midiPorts: ports, midiPortsError: null });
+      } catch (e) {
+        set({ midiPorts: [], midiPortsError: String(e) });
+      }
+    },
+    openMidiPort: async (port) => {
+      const state = await run("MIDI port", () =>
+        ipc.invoke<RigState>("rig_open_port", { port }),
+      );
+      if (state) {
+        set({ rigState: state });
+        get().notify(
+          "info",
+          state.live ? `MIDI out: ${state.port}` : "MIDI port closed",
         );
-      const state =
-        await invoke<import("../ipc/contract").RigState>("rig_get_state");
-      set({ availableProfiles: profiles, rigState: state });
-    } catch (e) {
-      console.error("Failed to load rig profiles:", e);
-    }
-  },
-
-  selectRigProfile: async (id: string) => {
-    try {
-      const profile = await invoke<import("../ipc/contract").RigProfile>(
-        "rig_select_profile",
-        { profileId: id },
+      }
+    },
+    setRigControl: async (cc, value) => {
+      const state = await run("Rig control", () =>
+        ipc.invoke<RigState>("rig_set_control", { cc, value }),
       );
-      set((state) => ({
-        rigState: state.rigState
-          ? { ...state.rigState, currentProfile: profile, currentScene: 0 }
-          : null,
-      }));
-    } catch (e) {
-      console.error("Failed to select rig profile:", e);
-    }
-  },
-
-  selectRigScene: async (sceneIdx: number) => {
-    try {
-      await invoke("rig_select_scene", { sceneIdx });
-      set((state) => ({
-        rigState: state.rigState
-          ? { ...state.rigState, currentScene: sceneIdx }
-          : null,
-      }));
-    } catch (e) {
-      console.error("Failed to select rig scene:", e);
-    }
-  },
-
-  setRigSectionMapping: async (section: string, sceneIdx: number) => {
-    try {
-      await invoke("rig_set_section_mapping", { section, sceneIdx });
-      set((state) => ({
-        rigState: state.rigState
-          ? {
-              ...state.rigState,
-              sectionMappings: {
-                ...state.rigState.sectionMappings,
-                [section]: sceneIdx,
-              },
-            }
-          : null,
-      }));
-    } catch (e) {
-      console.error("Failed to set section mapping:", e);
-    }
-  },
-
-  refreshRigState: async () => {
-    try {
-      const state =
-        await invoke<import("../ipc/contract").RigState>("rig_get_state");
-      set({ rigState: state });
-    } catch (e) {
-      console.error("Failed to refresh rig state:", e);
-    }
-  },
-
-  analyzeTake: async (takeId: string) => {
-    try {
-      const analysis = await invoke<import("../ipc/contract").TakeAnalysis>(
-        "takes_analyze",
-        { takeId },
+      if (state) set({ rigState: state });
+    },
+    sendRigProgram: async (program) => {
+      const state = await run("Rig program", () =>
+        ipc.invoke<RigState>("rig_send_program", { program }),
       );
-      set((state) => ({
-        takeAnalysis: { ...state.takeAnalysis, [takeId]: analysis },
-      }));
+      if (state) set({ rigState: state });
+    },
+    clearRigMonitor: async () => {
+      const state = await run("Rig monitor", () =>
+        ipc.invoke<RigState>("rig_clear_monitor"),
+      );
+      if (state) set({ rigState: state });
+    },
+
+    analyzeTake: async (takeId) => {
+      const analysis = await run("Analyze take", () =>
+        ipc.invoke<TakeAnalysis>("takes_analyze", { takeId }),
+      );
+      if (analysis)
+        set((state) => ({
+          takeAnalysis: { ...state.takeAnalysis, [takeId]: analysis },
+        }));
       return analysis;
-    } catch (e) {
-      console.error("Failed to analyze take:", e);
-      return null;
-    }
-  },
+    },
+    exportTakeDaw: async (takeId) => {
+      const report = await run("Export take", () =>
+        ipc.invoke<ExportReport>("takes_export_daw", { takeId }),
+      );
+      if (report) {
+        const stems = report.copiedStems.length;
+        const missing = report.missingStems.length;
+        get().notify(
+          missing ? "error" : "info",
+          missing
+            ? `Exported ${stems} stem(s) + tempo map to ${report.dir}; ${missing} stem file(s) were missing on disk`
+            : `Exported ${stems} stems + tempo map to ${report.dir}`,
+        );
+      }
+      return report;
+    },
 
-  exportTakeDaw: async (takeId: string) => {
-    try {
-      const path = await invoke<string>("takes_export_daw", { takeId });
-      return path;
-    } catch (e) {
-      console.error("Failed to export take for DAW:", e);
-      return null;
-    }
-  },
-
-  refreshDevices: async () => {
-    try {
-      const devs = await invoke<AudioDevices>("audio_list_devices");
-      set({ devices: devs });
-    } catch (e) {
-      console.error("Failed to list audio devices:", e);
-    }
-  },
-
-  loadSettings: async () => {
-    try {
-      const s = await invoke<AppSettings>("settings_get");
-      set({ settings: s });
-    } catch (e) {
-      console.error("Failed to load settings:", e);
-    }
-  },
-
-  saveSettings: async (settings) => {
-    try {
-      await invoke("settings_set", { settings });
-      set({ settings });
-    } catch (e) {
-      console.error("Failed to save settings:", e);
-    }
-  },
-
-  checkKey: async (provider) => {
-    try {
-      const has = await invoke<boolean>("keys_has", { provider });
-      set((state) => ({
-        keysPresent: { ...state.keysPresent, [provider]: has },
-      }));
-      return has;
-    } catch {
-      return false;
-    }
-  },
-
-  setKey: async (provider, key) => {
-    await invoke("keys_set", { provider, key });
-    set((state) => ({
-      keysPresent: { ...state.keysPresent, [provider]: true },
-    }));
-  },
-
-  deleteKey: async (provider) => {
-    await invoke("keys_delete", { provider });
-    set((state) => ({
-      keysPresent: { ...state.keysPresent, [provider]: false },
-    }));
-  },
-
-  initListeners: async () => {
-    const unlistenMeter = await listen<MeterTelemetry>("meters", (event) => {
-      set((state) => ({
-        telemetry: {
-          ...state.telemetry,
-          output_level: event.payload,
-        },
-      }));
-    });
-
-    const unlistenTuner = await listen<TunerTelemetry>(
-      "tuner.state",
-      (event) => {
-        set((state) => ({
-          telemetry: {
-            ...state.telemetry,
-            tuner: event.payload,
-          },
+    refreshDevices: async () => {
+      const devs = await run("Audio devices", () =>
+        ipc.invoke<AudioDevices>("audio_list_devices"),
+      );
+      if (devs) set({ devices: devs });
+    },
+    loadSettings: async () => {
+      const s = await run("Settings", () =>
+        ipc.invoke<AppSettings>("settings_get"),
+      );
+      if (s) set({ settings: s });
+    },
+    saveSettings: async (settings) => {
+      const ok = await run("Save settings", () =>
+        ipc.invoke("settings_set", { settings }),
+      );
+      if (ok !== null) set({ settings });
+    },
+    applyAudioConfig: async (config) => {
+      const status = await run("Audio devices", () =>
+        ipc.invoke<EngineStatus>("audio_set_config", { config }),
+      );
+      if (status) {
+        set((s) => ({
+          engineStatus: status,
+          settings: s.settings ? { ...s.settings, ...config } : s.settings,
         }));
-      },
-    );
+        if (status.last_error) get().notify("error", status.last_error);
+        else get().notify("info", `Audio running at ${status.sample_rate} Hz`);
+      } else {
+        // The engine restarted anyway (possibly headless); show what it is doing now.
+        await get().refreshEngineStatus();
+      }
+      return status;
+    },
+    refreshEngineStatus: async () => {
+      const status = await run("Engine status", () =>
+        ipc.invoke<EngineStatus>("engine_status"),
+      );
+      if (status) set({ engineStatus: status });
+    },
+    restartEngine: async () => {
+      const status = await run("Restart audio", () =>
+        ipc.invoke<EngineStatus>("engine_restart"),
+      );
+      if (status) set({ engineStatus: status });
+      else await get().refreshEngineStatus();
+    },
 
-    const unlistenTransport = await listen<TransportTelemetry>(
-      "transport.state",
-      (event) => {
+    checkKey: async (provider) => {
+      try {
+        const has = await ipc.invoke<boolean>("keys_has", { provider });
         set((state) => ({
-          telemetry: {
-            ...state.telemetry,
-            transport: event.payload,
-          },
+          keysPresent: { ...state.keysPresent, [provider]: has },
         }));
-      },
-    );
-
-    const unlistenBand = await listen<BandTelemetry>("band.state", (event) => {
+        return has;
+      } catch {
+        return false;
+      }
+    },
+    setKey: async (provider, key) => {
+      await ipc.invoke("keys_set", { provider, key });
       set((state) => ({
-        telemetry: {
-          ...state.telemetry,
-          band: event.payload,
-        },
+        keysPresent: { ...state.keysPresent, [provider]: true },
       }));
-    });
+    },
+    deleteKey: async (provider) => {
+      await ipc.invoke("keys_delete", { provider });
+      set((state) => ({
+        keysPresent: { ...state.keysPresent, [provider]: false },
+      }));
+    },
 
-    return () => {
-      unlistenMeter();
-      unlistenTuner();
-      unlistenTransport();
-      unlistenBand();
-    };
-  },
-}));
+    initListeners: async () => {
+      const unlisten = await Promise.all([
+        ipc.listen<MeterTelemetry>("meters", (output_level) => {
+          set((state) => ({ telemetry: { ...state.telemetry, output_level } }));
+        }),
+        ipc.listen<MeterTelemetry>("input.meters", (input_level) => {
+          set((state) => ({ telemetry: { ...state.telemetry, input_level } }));
+        }),
+        ipc.listen<TunerTelemetry>("tuner.state", (tuner) => {
+          set((state) => ({ telemetry: { ...state.telemetry, tuner } }));
+        }),
+        ipc.listen<TransportTelemetry>("transport.state", (transport) => {
+          const prev = get().telemetry.transport;
+          set((state) => ({ telemetry: { ...state.telemetry, transport } }));
+          // Tempo trainer steps on bar boundaries while playing.
+          const trainer = get().tempoTrainer;
+          if (
+            trainer.enabled &&
+            transport.state === "playing" &&
+            transport.bar !== prev.bar &&
+            transport.bar - trainer.lastStepBar >= trainer.everyBars &&
+            transport.bar > trainer.lastStepBar
+          ) {
+            const dir = Math.sign(trainer.targetBpm - transport.bpm);
+            if (dir !== 0) {
+              const next =
+                dir > 0
+                  ? Math.min(trainer.targetBpm, transport.bpm + trainer.stepBpm)
+                  : Math.max(
+                      trainer.targetBpm,
+                      transport.bpm - trainer.stepBpm,
+                    );
+              set({ tempoTrainer: { ...trainer, lastStepBar: transport.bar } });
+              void get().transportSetTempo(next);
+            }
+          }
+        }),
+        ipc.listen<BandTelemetry>("band.state", (band) => {
+          set((state) => ({ telemetry: { ...state.telemetry, band } }));
+        }),
+        ipc.listen<RigState>("rig.state", (rigState) => {
+          set({ rigState });
+        }),
+        ipc.listen<string>("rig.error", (text) => {
+          get().notify("error", `Rig: ${text}`);
+        }),
+        ipc.listen<EngineStatus>("engine.status", (engineStatus) => {
+          const prev = get().engineStatus;
+          set({ engineStatus });
+          if (
+            !isPreview &&
+            engineStatus.last_error &&
+            engineStatus.last_error !== prev?.last_error
+          ) {
+            get().notify("error", engineStatus.last_error);
+          }
+        }),
+      ]);
+
+      await Promise.all([
+        get().refreshEngineStatus(),
+        get().reloadLibrary(),
+        get().loadSettings(),
+      ]);
+
+      return () => {
+        for (const u of unlisten) u();
+      };
+    },
+  };
+});

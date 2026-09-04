@@ -1,11 +1,14 @@
+import type { ScreenId } from "../store/engine";
+
 export interface ScreenDescriptor {
-  id: "stage" | "jo" | "songs" | "ai-music" | "sessions" | "rig" | "settings";
+  id: ScreenId;
   label: string;
   iconName: string;
 }
 
 export const SCREENS: ScreenDescriptor[] = [
   { id: "stage", label: "Stage", iconName: "Guitar" },
+  { id: "library", label: "Library", iconName: "BookOpen" },
   { id: "jo", label: "Jo AI", iconName: "Microphone" },
   { id: "songs", label: "Songs", iconName: "MusicNotes" },
   { id: "ai-music", label: "AI Music", iconName: "Waveform" },

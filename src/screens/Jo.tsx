@@ -4,8 +4,9 @@ import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
 import { dispatchJoToolCall, speakJoReply } from "../lib/jo/dispatcher";
+import { JO_MODEL, type JoContext, askGemini } from "../lib/jo/gemini";
 import { parseNaturalIntent } from "../lib/jo/intent";
-import type { JoMessage } from "../lib/jo/persona";
+import type { JoMessage, JoToolCall } from "../lib/jo/persona";
 import { useEngineStore } from "../store/engine";
 
 interface SpeechResultEvent {
@@ -39,8 +40,54 @@ export const Jo: React.FC = () => {
   const [isHoldingPtt, setIsHoldingPtt] = useState(false);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  // The speech-recognition callback is created once; it reads history through a ref.
+  const messagesRef = useRef<JoMessage[]>(messages);
+  messagesRef.current = messages;
 
-  const { keysPresent } = useEngineStore();
+  const { keysPresent, isPreview, notify } = useEngineStore();
+  const useLlm = Boolean(keysPresent.gemini) && !isPreview;
+  const [lastBrain, setLastBrain] = useState<"gemini" | "offline" | null>(null);
+
+  const snapshotContext = (): JoContext => {
+    const s = useEngineStore.getState();
+    const t = s.telemetry;
+    return {
+      transportState: t.transport.state,
+      bpm: t.transport.bpm,
+      bar: t.transport.bar,
+      styleId: t.band.style_id,
+      styleName: t.band.style_name,
+      intensity: t.band.intensity,
+      chartName: s.currentChart?.name ?? null,
+      currentChord: t.band.current_chord,
+      currentSection: t.band.current_section,
+      muted: {
+        drums: t.band.mute_drums,
+        bass: t.band.mute_bass,
+        comp: t.band.mute_comp,
+      },
+      styles: s.styles.map((x) => ({ id: x.id, name: x.name })),
+      charts: s.charts.map((x) => ({ id: x.id, name: x.name })),
+    };
+  };
+
+  /** Gemini when there is a key, the offline parser otherwise (or if Gemini fails). */
+  const think = async (
+    history: JoMessage[],
+    query: string,
+  ): Promise<{ reply: string; toolCalls: JoToolCall[] }> => {
+    if (useLlm) {
+      try {
+        const out = await askGemini(history, query, snapshotContext());
+        setLastBrain("gemini");
+        return out;
+      } catch (e) {
+        notify("error", `Jo (Gemini): ${String(e)}. Using the offline parser.`);
+      }
+    }
+    setLastBrain("offline");
+    return parseNaturalIntent(query);
+  };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll to bottom whenever messages or state updates
   useEffect(() => {
@@ -153,37 +200,41 @@ export const Jo: React.FC = () => {
       }),
     };
 
+    const history = messagesRef.current;
     setMessages((prev) => [...prev, userMsg]);
     setInputValue("");
     setJoState("thinking");
 
-    // Process intent and execute tool calls
-    setTimeout(async () => {
-      const { reply, toolCalls } = parseNaturalIntent(query);
+    const { reply, toolCalls } = await think(history, query);
 
-      for (const call of toolCalls) {
-        await dispatchJoToolCall(call);
+    const results: string[] = [];
+    for (const call of toolCalls) {
+      try {
+        results.push(await dispatchJoToolCall(call));
+      } catch (e) {
+        results.push(`${call.name} failed: ${String(e)}`);
       }
+    }
 
-      const joMsg: JoMessage = {
-        id: `msg-${Date.now() + 1}`,
-        sender: "jo",
-        text: reply,
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        toolCalls,
-      };
+    const joMsg: JoMessage = {
+      id: `msg-${Date.now() + 1}`,
+      sender: "jo",
+      text: reply,
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      toolCalls,
+      toolResults: results,
+    };
 
-      setMessages((prev) => [...prev, joMsg]);
-      setJoState("speaking");
-      speakJoReply(reply);
+    setMessages((prev) => [...prev, joMsg]);
+    setJoState("speaking");
+    speakJoReply(reply);
 
-      setTimeout(() => {
-        setJoState("idle");
-      }, 2500);
-    }, 400);
+    setTimeout(() => {
+      setJoState("idle");
+    }, 2500);
   };
 
   return (
@@ -222,11 +273,21 @@ export const Jo: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] font-mono text-[var(--fg-2)]">
-            Provider:{" "}
-            {keysPresent.gemini ? "Gemini Live" : "Local Jam-Intent (Offline)"}
+        <div className="flex flex-col items-end gap-0.5 text-[11px] font-mono text-[var(--fg-2)]">
+          <span>
+            Brain:{" "}
+            {useLlm
+              ? `${JO_MODEL} via provider_fetch`
+              : isPreview
+                ? "offline intent parser (browser preview)"
+                : "offline intent parser (add a Gemini key in Settings)"}
           </span>
+          {lastBrain && (
+            <span className="text-[10px]">
+              last answer:{" "}
+              {lastBrain === "gemini" ? "Gemini" : "offline parser"}
+            </span>
+          )}
         </div>
       </div>
 
@@ -259,9 +320,18 @@ export const Jo: React.FC = () => {
                     {m.toolCalls.map((tc, idx) => (
                       <span
                         key={`${m.id}-${tc.name}-${idx}`}
+                        title={
+                          m.toolResults?.[idx] ?? JSON.stringify(tc.arguments)
+                        }
                         className="px-1.5 py-0.5 rounded bg-[var(--bg-1)] border border-[var(--accent)] text-[10px] text-[var(--accent)] font-mono"
                       >
                         ⚡ {tc.name}
+                        {m.toolResults?.[idx] && (
+                          <span className="text-[var(--fg-2)]">
+                            {" "}
+                            · {m.toolResults[idx]}
+                          </span>
+                        )}
                       </span>
                     ))}
                   </div>
