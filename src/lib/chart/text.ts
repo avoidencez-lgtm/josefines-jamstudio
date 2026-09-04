@@ -30,6 +30,7 @@
  * problems so the editor can underline them, and `chartToText` round-trips a chart back.
  */
 
+import { Chord } from "tonal";
 import type {
   ArrangementItem,
   BarChord,
@@ -373,7 +374,11 @@ function parseBar(
 
 function isChordToken(tok: string): boolean {
   if (/^(n\.?c\.?|rest|-)$/i.test(tok)) return true;
-  return splitChord(tok) !== null;
+  const chord = splitChord(tok);
+  return (
+    chord !== null &&
+    !Chord.get(chord.rootName + tok.slice(chord.rootName.length)).empty
+  );
 }
 
 function buildArrangement(

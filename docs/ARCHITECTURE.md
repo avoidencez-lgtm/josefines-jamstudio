@@ -488,3 +488,22 @@ applying. The existing version/edit operations preserve the original; recording
 and version/bar limits prevent unsafe application. Generated chords and notes
 remain editable. This does not implement audio generation, analysis uploads,
 cloud speech or DAW hosting. [Current API guide](guide/api-options.md).
+
+## Installed agents and persistent assistant panel
+
+ADR 0007 adds an explicit installed-CLI path to the shared brain registry.
+`agent_status({provider, executable})` only detects the local executable;
+`agent_request({request: {provider, model, executable, prompt}})` returns a bounded
+structured envelope; `agent_cancel()` stops the current local request. Rust owns
+process pipes, timeouts and cancellation. CLI credentials never traverse IPC.
+The CLI owns its network/auth lifecycle, while the existing cost log receives
+provider/model/duration/byte metadata with unknown monetary cost.
+
+The assistant remains mounted across screen changes. It supplies the current song
+chart/settings/notes, rig name, available grooves and cached take metrics, but no
+audio, credential or local asset path. It reviews proposed actions. Studio edits
+run against a clone as one transaction and keep a version; stage/analysis actions
+are deliberately single-action requests. New tools reuse the same declarations
+for Jo, API models and installed agents. Dynamic API model catalogs are explicit
+GET requests through the existing proxy. User-entered model IDs remain available.
+See [ADR 0007](adr/0007-installed-studio-agents.md) and [setup guide](guide/api-options.md).

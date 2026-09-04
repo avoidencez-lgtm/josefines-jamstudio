@@ -1,10 +1,12 @@
 //! src-tauri: Tauri application library and command dispatch.
 
+pub mod agents;
 pub mod controller;
 pub mod keys;
 pub mod library;
 pub mod net;
 pub mod originals;
+pub mod platform;
 pub mod settings;
 pub mod store;
 
@@ -21,6 +23,7 @@ use std::sync::Arc;
 use tauri::{Emitter, State};
 
 pub struct AppState {
+    pub agents: agents::AgentRunner,
     pub secret_store: Arc<dyn SecretStore>,
     pub engine: Arc<Mutex<AudioEngine>>,
     pub library: Arc<Mutex<Library>>,
@@ -29,6 +32,24 @@ pub struct AppState {
     pub rig: Arc<Mutex<jam_rig::RigOrchestrator>>,
     pub controller: Arc<Mutex<Option<jam_rig::controller::ControllerInput>>>,
     pub cost_log: Arc<net::CostLog>,
+}
+
+#[tauri::command]
+async fn agent_status(provider: String, executable: String) -> agents::AgentStatus {
+    agents::AgentRunner::status(&provider, &executable).await
+}
+
+#[tauri::command]
+async fn agent_request(
+    request: agents::AgentRequest,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    state.agents.run(request, &state.cost_log).await
+}
+
+#[tauri::command]
+fn agent_cancel(state: State<'_, AppState>) {
+    state.agents.cancel();
 }
 
 /// The only network command. The WebView names a provider; Rust adds the key.
@@ -959,6 +980,7 @@ pub fn run() {
     let rig_orchestrator = Arc::new(Mutex::new(build_rig(&settings, &library_arc.lock())));
 
     let app_state = AppState {
+        agents: agents::AgentRunner::default(),
         controller: Arc::new(Mutex::new(None)),
         secret_store,
         engine: Arc::clone(&engine_arc),
@@ -1027,6 +1049,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            agent_status,
+            agent_request,
+            agent_cancel,
             controller::controller_ports,
             controller::controller_open,
             controller::controller_config,

@@ -168,3 +168,23 @@ calls. Run the frontend tests and Rust `net::tests`; leave the core snapshot
 unchanged. No additional SDK is needed for these non-streaming text requests.
 Settings persist versioned `ai` preferences through existing settings IPC,
 retaining unknown fields. See [setup, limits and audio API options](guide/api-options.md).
+
+## Installed agent and studio-tool extension recipe
+
+`src/lib/jo/providers.ts` defines local-agent entries alongside API connections.
+`src-tauri/src/agents.rs` owns the CLI argument/envelope registry, bounded process
+execution, cancellation and metadata logging. Native executable lookup and hidden
+Windows processes live under `src-tauri/src/platform/`. Adding an agent requires
+its official non-interactive contract, a registry entry and a synthetic envelope;
+never implement subscription token extraction. See ADR 0007 for the narrow
+exception allowing installed agents to own their provider connections.
+
+For an original-song edit, add a declaration and pure-on-clone edit to
+`STUDIO_TOOLS` in `src/lib/jo/studioTools.ts`. Existing consumers collect declarations
+and dispatch them without another provider-specific implementation. The shared
+`applyStudioEdits` checks state/limits, validates the whole group and keeps one
+version. Add a case to `tests/invariants/agents.test.ts`; malformed later actions
+must leave the original and version count intact. Schemas and catalogs are in
+`tests/fixtures/providers/agents.json`. Core seam snapshots remain unchanged.
+The model catalog URL/parser belongs to its provider registry entry. Reuse the
+Rust proxy and native datalist; do not ship a model-list package or stale price table.

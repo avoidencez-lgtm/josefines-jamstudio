@@ -21,7 +21,10 @@ export function SongLab() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const ready = loaded && keysPresent[preferences.selected] && !isPreview;
+  const ready =
+    loaded &&
+    (BRAINS[preferences.selected].local || keysPresent[preferences.selected]) &&
+    !isPreview;
   const model = preferences.models[preferences.selected];
   const request = song ? labRequest(song, selected, kind, direction) : null;
   const estimate = request ? estimateRequest(request, model) : null;
@@ -83,9 +86,11 @@ export function SongLab() {
       </label>
       <p className="song-help">
         {BRAINS[preferences.selected].name} · {model.model} ·{" "}
-        {estimate === null
-          ? "Cost unknown: enter model prices in Settings for an estimate."
-          : `Approx. USD ${estimate.toFixed(4)} at the output limit; actual billing can differ.`}
+        {BRAINS[preferences.selected].local
+          ? "Uses the installed agent's account and limits."
+          : estimate === null
+            ? "Cost unknown: enter model prices in Settings for an estimate."
+            : `Approx. USD ${estimate.toFixed(4)} at the output limit; actual billing can differ.`}
       </p>
       {!ready && (
         <p className="song-help">

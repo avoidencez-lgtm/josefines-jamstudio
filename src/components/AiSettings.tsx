@@ -5,6 +5,7 @@ import {
   type AiPreferences,
   BRAINS,
   askBrain,
+  listModels,
   useAi,
 } from "../lib/jo/providers";
 import { useEngineStore } from "../store/engine";
@@ -21,6 +22,7 @@ export function AiSettings() {
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [models, setModels] = useState<Record<string, string[]>>({});
   useEffect(() => setDraft(preferences), [preferences]);
   useEffect(() => {
     void ipc
@@ -41,6 +43,7 @@ export function AiSettings() {
     }
   };
   const model = draft.models[draft.selected];
+  const local = BRAINS[draft.selected].local;
   const changeModel = (patch: Partial<typeof model>) =>
     setDraft((p) => ({
       ...p,
@@ -53,8 +56,9 @@ export function AiSettings() {
     <Panel title="AI providers & Song Lab">
       <div className="flex flex-col gap-5">
         <p className="text-sm text-[var(--fg-1)]">
-          Choose who helps Jo and Song Lab. Each request uses only the selected
-          provider. API billing is separate from chat subscriptions.
+          Choose who helps the studio assistant, Jo and Song Lab. Installed
+          agents use their own login and limits. API connections use separate
+          billing.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label>
@@ -77,6 +81,7 @@ export function AiSettings() {
           <label>
             Model ID
             <input
+              list="available-ai-models"
               className={field}
               value={model.model}
               disabled={busy}
@@ -90,73 +95,153 @@ export function AiSettings() {
             />
           </label>
         </div>
-        <details>
-          <summary>Response limits and cost estimate</summary>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
+        <datalist id="available-ai-models">
+          {(models[draft.selected] ?? [BRAINS[draft.selected].model]).map(
+            (id) => (
+              <option key={id} value={id} />
+            ),
+          )}
+        </datalist>
+        {local ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-[var(--fg-1)]">
+              Install and sign into the native CLI once. Leave model as
+              “default” to use the agent default, or enter a supported model ID.
+              Requests run here inside Jamstudio. No subscription token is
+              copied into this app. CLI account billing and usage limits apply;
+              this does not unlock the general API.
+            </p>
             <label>
-              Maximum output tokens
+              Agent executable path (optional)
               <input
                 className={field}
-                type="number"
-                min={256}
-                max={4096}
-                step={256}
-                value={model.maxTokens}
-                onChange={(e) =>
-                  changeModel({ maxTokens: Number(e.target.value) })
-                }
+                value={model.executable ?? ""}
+                onChange={(e) => changeModel({ executable: e.target.value })}
+                placeholder="Auto-detect from PATH"
               />
             </label>
-            <label>
-              Input USD / million tokens
-              <input
-                className={field}
-                type="number"
-                min={0}
-                step="any"
-                value={model.inputPrice ?? ""}
-                placeholder="Unknown"
-                onChange={(e) =>
-                  changeModel({
-                    inputPrice:
-                      e.target.value === "" ? null : Number(e.target.value),
-                  })
-                }
-              />
-            </label>
-            <label>
-              Output USD / million tokens
-              <input
-                className={field}
-                type="number"
-                min={0}
-                step="any"
-                value={model.outputPrice ?? ""}
-                placeholder="Unknown"
-                onChange={(e) =>
-                  changeModel({
-                    outputPrice:
-                      e.target.value === "" ? null : Number(e.target.value),
-                  })
-                }
-              />
-            </label>
-          </div>
-          <p className="text-sm text-[var(--fg-1)] mt-3">
-            Prices are optional and model-specific. Estimates use approximate
-            input tokens and the output limit, not the final bill. Set spending
-            limits with your provider.{" "}
+            <Button
+              disabled={busy || isPreview}
+              onClick={() =>
+                void run(async () => {
+                  const status = await ipc.invoke<{
+                    installed: boolean;
+                    message: string;
+                  }>("agent_status", {
+                    provider: draft.selected,
+                    executable: model.executable ?? "",
+                  });
+                  setMessage(status.message);
+                })
+              }
+            >
+              Detect installed agent
+            </Button>
             <a
-              className="underline"
+              className="underline text-sm"
               href={BRAINS[draft.selected].pricing}
               target="_blank"
               rel="noreferrer"
             >
-              Check current pricing
+              Account and subscription documentation
             </a>
-            .
-          </p>
-        </details>
+            <p className="text-sm text-[var(--fg-1)]">
+              Use a current CLI. The bridge requests structured replies,
+              disables shell/MCP tools where supported, and never grants file
+              writes. API token limits do not govern local-agent runs. Managed
+              CLI policies may still apply.
+            </p>
+          </div>
+        ) : (
+          <>
+            <Button
+              disabled={busy || isPreview || !keysPresent[draft.selected]}
+              onClick={() =>
+                void run(async () => {
+                  const ids = await listModels(draft.selected);
+                  setModels((m) => ({ ...m, [draft.selected]: ids }));
+                  setMessage(
+                    `${ids.length} models loaded. Start typing in Model ID. Listings may include models incompatible with text tools; use Test model before relying on one.`,
+                  );
+                })
+              }
+            >
+              Load provider models
+            </Button>
+            <p className="text-sm text-[var(--fg-1)]">
+              Model ID stays editable. The catalog shows the first provider page
+              (up to 100 for Gemini/Claude); enter another model ID manually if
+              absent.
+            </p>
+            <details>
+              <summary>Response limits and cost estimate</summary>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
+                <label>
+                  Maximum output tokens
+                  <input
+                    className={field}
+                    type="number"
+                    min={256}
+                    max={4096}
+                    step={256}
+                    value={model.maxTokens}
+                    onChange={(e) =>
+                      changeModel({ maxTokens: Number(e.target.value) })
+                    }
+                  />
+                </label>
+                <label>
+                  Input USD / million tokens
+                  <input
+                    className={field}
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={model.inputPrice ?? ""}
+                    placeholder="Unknown"
+                    onChange={(e) =>
+                      changeModel({
+                        inputPrice:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Output USD / million tokens
+                  <input
+                    className={field}
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={model.outputPrice ?? ""}
+                    placeholder="Unknown"
+                    onChange={(e) =>
+                      changeModel({
+                        outputPrice:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                  />
+                </label>
+              </div>
+              <p className="text-sm text-[var(--fg-1)] mt-3">
+                Prices are optional and model-specific. Estimates use
+                approximate input tokens and the output limit, not the final
+                bill. Set spending limits with your provider.{" "}
+                <a
+                  className="underline"
+                  href={BRAINS[draft.selected].pricing}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Check current pricing
+                </a>
+                .
+              </p>
+            </details>
+          </>
+        )}
         <div className="flex flex-wrap gap-3">
           <Button
             disabled={busy}
@@ -174,7 +259,9 @@ export function AiSettings() {
             Save AI settings
           </Button>
           <Button
-            disabled={busy || isPreview || !keysPresent[draft.selected]}
+            disabled={
+              busy || isPreview || (!local && !keysPresent[draft.selected])
+            }
             onClick={() =>
               void run(async () => {
                 const reply = await askBrain(
@@ -192,14 +279,14 @@ export function AiSettings() {
               })
             }
           >
-            Test model (API request)
+            {local ? "Test agent (uses account)" : "Test model (API request)"}
           </Button>
         </div>
         <p className="text-sm text-[var(--fg-1)]">
-          Custom models must support text and function calling for Jo.
-          OpenRouter sends requests through its service to the selected model
-          provider. Audio generation, stem separation and cloud voice are
-          separate features.
+          API models must support text and function calling for Jo. OpenRouter
+          sends requests through its service to the selected model provider.
+          Audio generation, stem separation and cloud voice are separate
+          features.
         </p>
         <details>
           <summary>API keys · stored in the OS keychain</summary>

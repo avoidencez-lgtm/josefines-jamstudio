@@ -26,6 +26,8 @@ export interface JoContext {
     selected: string;
     sections: unknown;
     versions: string[];
+    chart?: unknown;
+    notes?: string;
   };
 }
 

@@ -3,6 +3,7 @@
  * function declarations, and the offline intent parser emits the same names.
  */
 
+import { STUDIO_TOOLS } from "./studioTools";
 export interface JoToolDeclaration {
   name: string;
   description: string;
@@ -51,6 +52,17 @@ export function validateToolCall(call: {
 }
 
 export const JO_TOOLS: JoToolDeclaration[] = [
+  ...Object.values(STUDIO_TOOLS).map((t) => t.declaration),
+  {
+    name: "analyze_take",
+    description:
+      "Run the existing local timing/dynamics/intonation analysis of a saved guitar take. Use a take ID from context. Metrics are heuristic, not a human listening review.",
+    parameters: {
+      type: "object",
+      properties: { takeId: { type: "string" } },
+      required: ["takeId"],
+    },
+  },
   {
     name: "songwriting",
     description:

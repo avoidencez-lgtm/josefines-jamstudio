@@ -109,3 +109,10 @@ reviewable chords, bridges, lyric seeds and arrangement advice. This is text-onl
 M3/M4 cloud audio remains unimplemented. Live provider/account acceptance is
 pending; documented synthetic fixtures are not live API evidence.
 See [the current API guide](../guide/api-options.md).
+
+The installed-agent slice adds a persistent in-app assistant, dynamic API model
+catalogs, Codex/Claude Code CLI connections and six practical studio tools. A live
+Codex structured-reply check passed with this host's saved ChatGPT login. Claude
+Code was unavailable locally; live Claude and Mac owner acceptance remain pending.
+Studio action groups preserve versions and reject stale/invalid/locked edits.
+This does not implement cloud audio, an embedded terminal or external MCP control.

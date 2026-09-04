@@ -1,11 +1,24 @@
 import { useEngineStore } from "../../store/engine";
 import { PARTS, changeGroove, useWriting } from "../originals";
 import type { JoToolCall } from "./persona";
+import { STUDIO_TOOLS, applyStudioEdits } from "./studioTools";
 import { validateToolCall } from "./tools";
 
 export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
   validateToolCall(call);
+  if (Object.hasOwn(STUDIO_TOOLS, call.name)) return applyStudioEdits([call]);
   const store = useEngineStore.getState();
+  if (call.name === "analyze_take") {
+    const id = String(call.arguments.takeId);
+    if (!store.takes.some((t) => t.id === id))
+      throw new Error("Choose a saved take from the current take list.");
+    if (store.isRecording)
+      throw new Error("Finish recording before analyzing a take.");
+    const analysis = await store.analyzeTake(id);
+    if (!analysis)
+      throw new Error("Take analysis failed; check the local recording.");
+    return `Local heuristic analysis (not a listening review): ${JSON.stringify(analysis)}`;
+  }
 
   switch (call.name) {
     case "songwriting": {

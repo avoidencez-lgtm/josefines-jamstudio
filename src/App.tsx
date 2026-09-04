@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { EngineStatusPill } from "./components/EngineStatusPill";
 import { Notices } from "./components/Notices";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
+import { StudioAssistant } from "./components/StudioAssistant";
 import { listenToController } from "./lib/controller";
 import { useAi } from "./lib/jo/providers";
 import { handleShortcut } from "./lib/shortcuts";
@@ -346,12 +347,7 @@ export const App: React.FC = () => {
         <main className="flex-1 overflow-y-auto p-8 relative">
           {renderScreen()}
 
-          <aside className="fixed bottom-6 right-6 flex items-center gap-2.5 px-3 py-2 bg-[var(--bg-1)] border border-[var(--line)] rounded-full shadow-[var(--shadow)] z-30">
-            <div className="w-3 h-3 rounded-full bg-[var(--accent)] animate-pulse" />
-            <span className="text-xs font-mono font-medium text-[var(--fg-0)]">
-              Jo (Ready)
-            </span>
-          </aside>
+          <StudioAssistant />
         </main>
       </div>
 

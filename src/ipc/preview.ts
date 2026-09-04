@@ -522,6 +522,14 @@ export function createPreviewEngine(
       { id: "anthropic", description: "Anthropic Claude", hasKey: false },
       { id: "openrouter", description: "OpenRouter", hasKey: false },
     ],
+    agent_status: () => ({
+      installed: false,
+      message: "Installed agents require the desktop app.",
+    }),
+    agent_request: () => {
+      throw new Error("Agent requests require the desktop app.");
+    },
+    agent_cancel: () => undefined,
     cost_log_list: () => [],
     cost_log_totals: () => [],
     keys_delete: () => undefined,

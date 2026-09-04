@@ -8,6 +8,11 @@ import type { JoContext } from "../lib/jo/gemini";
 import { parseNaturalIntent } from "../lib/jo/intent";
 import type { JoMessage, JoToolCall } from "../lib/jo/persona";
 import { BRAINS, askBrain, joRequest, useAi } from "../lib/jo/providers";
+import {
+  STUDIO_TOOLS,
+  applyStudioEdits,
+  songFingerprint,
+} from "../lib/jo/studioTools";
 import { useWriting } from "../lib/originals";
 import { useEngineStore } from "../store/engine";
 
@@ -49,7 +54,11 @@ export const Jo: React.FC = () => {
   const { keysPresent, isPreview, notify } = useEngineStore();
   const { preferences, loaded } = useAi();
   const useLlm =
-    loaded && Boolean(keysPresent[preferences.selected]) && !isPreview;
+    loaded &&
+    Boolean(
+      BRAINS[preferences.selected].local || keysPresent[preferences.selected],
+    ) &&
+    !isPreview;
   const [lastBrain, setLastBrain] = useState<string | null>(null);
 
   const snapshotContext = (): JoContext => {
@@ -76,6 +85,8 @@ export const Jo: React.FC = () => {
       writing: w.song
         ? {
             name: w.song.body.chart.name,
+            chart: w.song.body.chart,
+            notes: w.song.body.notes,
             selected: w.selected,
             sections: w.song.body.chart.sections.map((section) => ({
               name: section.name,
@@ -96,7 +107,11 @@ export const Jo: React.FC = () => {
     const current = useAi.getState();
     const selected = current.preferences.selected;
     const engine = useEngineStore.getState();
-    if (current.loaded && engine.keysPresent[selected] && !engine.isPreview) {
+    if (
+      current.loaded &&
+      (BRAINS[selected].local || engine.keysPresent[selected]) &&
+      !engine.isPreview
+    ) {
       try {
         const out = await askBrain(
           joRequest(history, query, snapshotContext()),
@@ -231,16 +246,31 @@ export const Jo: React.FC = () => {
     setInputValue("");
     setJoState("thinking");
 
+    const expectedSong = songFingerprint();
     const { reply, toolCalls } = await think(history, query);
 
     const results: string[] = [];
-    for (const call of toolCalls) {
+    if (
+      toolCalls.length &&
+      toolCalls.every((c) => Object.hasOwn(STUDIO_TOOLS, c.name))
+    ) {
       try {
-        results.push(await dispatchJoToolCall(call));
+        results.push(applyStudioEdits(toolCalls, expectedSong));
       } catch (e) {
-        results.push(`${call.name} failed: ${String(e)}`);
+        results.push(`Studio edits failed: ${String(e)}`);
       }
-    }
+    } else
+      for (const call of toolCalls) {
+        try {
+          if (Object.hasOwn(STUDIO_TOOLS, call.name))
+            throw new Error(
+              "Request song edits separately from transport actions.",
+            );
+          results.push(await dispatchJoToolCall(call));
+        } catch (e) {
+          results.push(`${call.name} failed: ${String(e)}`);
+        }
+      }
 
     const joMsg: JoMessage = {
       id: `msg-${Date.now() + 1}`,
