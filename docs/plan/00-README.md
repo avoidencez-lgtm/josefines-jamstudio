@@ -62,8 +62,8 @@ The project is done when every point below is true and verified, the owner gates
 | M1d | Live steering and the Stage screen | ✅ | #10, #28 |
 | M1e | Recorder, latency calibration, take browser | ⏳ | #12, #28 |
 | M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ⏳ | #14, #28 |
-| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ☐ | placeholder screen only |
-| M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ☐ | placeholder screen only |
+| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | local media import/player in #29; stems, analysis and stretch pending |
+| M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ⏳ | file-generation catalog/workflows in #29; RealTime and owner acceptance pending |
 | M5 | Rig orchestration over MIDI | ⏳ | #20, #28 |
 | M6 | Sessions: take analysis, LLM review, Logic export, progress | ⏳ | #22, #28 |
 | M7 | Polish and distribution | ⏳ | #28 |
@@ -135,3 +135,14 @@ energy controls and durable section lyrics. AI lyric proposals target the sectio
 sheet after review. Capture, pedals, layers and versions remain available in focused
 views. See [prior art and limits](../research/write-workspace.md). This UI/text slice
 does not complete native audio, transcription or Mac owner acceptance gates.
+
+
+The studio-room redesign extends #29 across Stage, Library, Jo, Songs, AI Music,
+Film, Sessions, Rig and Settings. Distinct labelled icons, task views, searchable
+collections, arranged-section practice loops, persistent chart/conversation drafts,
+reviewed Jo song edits and take keeper workflows are implemented. Songs now uses
+real local media import/player commands; it does not complete M3 stem/stretch
+work. See [room guide](../guide/studio-rooms.md) and [research](../research/studio-workspaces.md).
+Frontend checks, headless Rust gates and multi-size browser checks pass locally;
+Windows/macOS CI and owner acceptance are tracked in #29. No milestones are marked
+complete by this UI slice alone.

@@ -23,6 +23,7 @@ export const Toggle: React.FC<ToggleProps> = ({
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={label}
         disabled={disabled}
         onClick={() => !disabled && onChange(!checked)}
         className={`w-11 h-6 rounded-full transition-colors relative border border-[var(--line)] cursor-pointer ${

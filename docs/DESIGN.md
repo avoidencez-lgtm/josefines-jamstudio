@@ -70,7 +70,7 @@ No headline exceeds one line. No italic-for-emphasis in readouts. Numbers never 
 
 ## 4. Layout
 
-Window minimum 1100 × 700; default 1440 × 900. A 72 px left rail with the screens (Stage, Library, Sessions, Rig, Settings), a 56 px top bar with the transport, the screen body, and Jo's presence pinned bottom-right.
+Window minimum 1100 × 700; default 1440 × 900. A 184 px left rail lists all ten rooms with distinct icons, labels and short task descriptions. At widths up to 1200 px it becomes a 92 px rail retaining icons and labels. A wrapping top bar contains the transport and Assistant; the screen body scrolls independently.
 
 ```
 ┌──────┬────────────────────────────────────────────────────────────────┐
@@ -127,7 +127,7 @@ Motivated only: state transitions (source switch cross-fade 220 ms), pending-at-
 | Rig | ports, profiles, scenes, monitor | "No MIDI output found. Plug in the interface." | port disappeared |
 | Settings | audio, keys, providers, controls, assets, budget, diagnostics, about | never empty | key rejected by provider ("test key" result) |
 
-Jo's presence is on every screen; PTT works everywhere.
+The Studio assistant opens from the top bar on every screen. Jo's push-to-talk is available in the Jo room when supported by the WebView; T is reserved there and never also taps tempo.
 
 ## 8. Copy
 
@@ -165,3 +165,22 @@ waveforms. Section lyrics are a plain readable text sheet with a chord reference
 At narrow widths the inspector stacks below the grid. Desktop target remains
 1100 x 700 minimum; controls remain keyboard reachable. Only data changes animate,
 and reduced motion disables that transition. No new fonts, icons or raster assets.
+
+
+## Studio rooms (2026-09-04)
+
+`WorkspaceHeader` pairs a room's registered pictogram with its task and title.
+`WorkspaceViews` uses native, keyboard-reachable buttons with pressed state;
+its hidden content stays mounted so in-progress fields survive view changes.
+Room descriptions are functional wayfinding, not decorative marketing labels.
+Stage readouts/cues and Rig scenes precede setup. Library uses a collection/editor
+split; Songs uses a collection/detail split; Jo uses a bounded conversation with
+an always-reachable composer. Film and AI Music separate creation from results.
+Native disclosures keep project/MIDI/advanced controls close without dominating
+the first screen. Icons alone are never the sole name of an action.
+
+The screen registry is the only navigation icon mapping. Use the same symbol in
+its page header. Active-page and pressed semantics accompany colour, while text
+names disconnected MIDI, pending AI proposals and missing media. The assistant
+launcher occupies real toolbar space so it cannot hide Stage cues.
+See [research](research/studio-workspaces.md) and [room guide](guide/studio-rooms.md).

@@ -28,8 +28,8 @@ Guitar ─► HeadRush ─► Black Spirit 200 ─► Vox 4x12
 | Rig over MIDI | Working, hardware gate open | Data-driven profiles for HeadRush Pedalboard, Black Spirit 200, Quad Cortex, Helix, Kemper and Axe-Fx III; real MIDI out through `midir`; section-bound scene changes as the band plays; knobs, program changes and a MIDI monitor. Verified against the real rig: not yet (owner gate). |
 | Recorder and export | Working | Every take is written as 24-bit WAV stems (guitar DI, band, master). Analysis measures pick timing against the take's tempo grid, dynamic consistency and intonation on the real DI file. Export writes the stems, a Standard MIDI File tempo map with the chart's section markers, and a JSON sidecar. Latency offset is a manual setting; automatic loopback measurement is not built. |
 | Network | Working | An allow-listed proxy in Rust injects API keys from the OS keychain (keys never reach the UI) and keeps a local usage log shown on the Settings screen. |
-| Real songs (M3) | Not built | Import, stems, beats, chords, time-stretch and section looping. The screen shows the intended layout and its commands return an honest error. |
-| AI music (M4) | Not built | Lyria RealTime, Lyria 3, ElevenLabs Music. Same: placeholder screen, honest error. |
+| Songs / real songs (M3) | Partial | Local audio import, reference playback and Film soundtrack selection. Stem separation, automatic beats/chords and time-stretch remain unbuilt. |
+| AI music (M4) | Partial | Music-generation catalog, editable prompts, local ComfyUI workflows and saved job receipts. Lyria RealTime remains unbuilt; provider/GPU owner acceptance is pending. |
 | Installers (M7) | Partly | `release.yml` builds macOS and Windows bundles on a tag; code signing and notarisation are not set up, so first launch needs the usual unsigned-app steps. |
 
 Everything above is covered by CI on Windows and macOS (`cargo fmt`, `clippy -D warnings`, `cargo test` headless, `cargo deny`) and on Linux for the TypeScript side (Biome, `tsc`, Vitest, licence check, Vite build).
@@ -69,3 +69,5 @@ On Windows with Smart App Control enabled, freshly compiled proc-macro DLLs and 
 ## Licence
 
 Apache-2.0. Sample packs are fetched at first run under their own licences, listed in `assets/LICENSES.md`.
+
+See the [studio room guide](docs/guide/studio-rooms.md) for navigation, drafts, rehearsing, take review and music-video workflows.

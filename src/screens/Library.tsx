@@ -1,9 +1,11 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
+import { create } from "zustand";
 import { Button } from "../components/Button";
 import { ChordStrip } from "../components/ChordStrip";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
+import { WorkspaceHeader } from "../components/Workspace";
 import type { Chart } from "../ipc/contract";
 import { keyName } from "../lib/chart/notes";
 import { chartToText, parseChartText, resolveChart } from "../lib/chart/text";
@@ -22,6 +24,18 @@ style: blues-shuffle
 [Bridge]
 | Dm7 G7 | Cmaj7 | % | Bm7b5 E7 | Am7:3 D7:1 |
 `;
+
+// Keep the editor when navigating to Stage or Settings; files remain the saved truth.
+export const useLibraryDraft = create<{
+  text: string | null;
+  baseline: string;
+  editingId: string | null;
+  dirty: boolean;
+}>(() => ({ text: null, baseline: "", editingId: null, dirty: false }));
+const setText = (text: string) => useLibraryDraft.setState({ text });
+const setEditingId = (editingId: string | null) =>
+  useLibraryDraft.setState({ editingId });
+const setDirty = (dirty: boolean) => useLibraryDraft.setState({ dirty });
 
 /**
  * Library: browse styles and charts, type a chart as text, hear it, save it. User charts
@@ -46,19 +60,21 @@ export const Library: React.FC = () => {
     notify,
   } = useEngineStore();
 
-  const [text, setText] = useState<string>("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
-
-  // Start the editor on the chart that is playing.
+  const { text, editingId, dirty } = useLibraryDraft();
+  const [query, setQuery] = useState("");
+  const [collection, setCollection] = useState("All charts");
   useEffect(() => {
-    if (text.length === 0 && currentChart) {
-      setText(chartToText(currentChart));
-      setEditingId(currentChart.id);
+    if (text === null && currentChart) {
+      const baseline = chartToText(currentChart);
+      useLibraryDraft.setState({
+        text: baseline,
+        baseline,
+        editingId: currentChart.id,
+      });
     }
-  }, [currentChart, text.length]);
+  }, [currentChart, text]);
 
-  const parsed = useMemo(() => parseChartText(text), [text]);
+  const parsed = useMemo(() => parseChartText(text ?? ""), [text]);
   const draft = parsed.chart;
   const bars = draft ? resolveChart(draft) : [];
   const beatsTotal = bars.reduce(
@@ -72,14 +88,24 @@ export const Library: React.FC = () => {
   );
   const isUserChart = (c: Chart) => userIds.has(c.id);
 
+  const visibleCharts = charts.filter(
+    (c) =>
+      (collection === "All charts" ||
+        (collection === "Your charts") === isUserChart(c)) &&
+      `${c.name} ${keyName(c.keyTonic, c.mode)} ${c.defaultBpm}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
   const openChart = (chart: Chart) => {
+    if (dirty) return;
+    useLibraryDraft.setState({ baseline: chartToText(chart) });
     setText(chartToText(chart));
     setEditingId(chart.id);
     setDirty(false);
   };
 
   const play = async () => {
-    if (!draft) {
+    if (!draft || parsed.problems.length) {
       notify("error", "Fix the chart problems before playing it.");
       return;
     }
@@ -87,19 +113,22 @@ export const Library: React.FC = () => {
   };
 
   const save = async () => {
-    if (!draft) {
+    if (!draft || parsed.problems.length) {
       notify("error", "Fix the chart problems before saving.");
       return;
     }
     const path = await saveChart(draft);
     if (path !== null) {
-      setDirty(false);
-      setEditingId(draft.id);
+      useLibraryDraft.setState((current) => ({
+        baseline: text ?? "",
+        dirty: current.text !== text,
+        editingId: draft.id,
+      }));
     }
   };
 
   const transposeDraft = (semis: number) => {
-    if (!draft) return;
+    if (!draft || parsed.problems.length) return;
     setText(chartToText(transposeChart(draft, semis)));
     setDirty(true);
   };
@@ -115,13 +144,66 @@ export const Library: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col gap-6 max-w-6xl mx-auto w-full">
+    <div className="library-workspace flex flex-col gap-6 max-w-6xl mx-auto w-full">
+      <WorkspaceHeader
+        screen="library"
+        title="Find the feel. Make it yours."
+        description="Browse chord charts and band grooves. Edit a chart, then play it on Stage."
+      />
+      <div className="workspace-search">
+        <label>
+          Search
+          <input
+            type="search"
+            aria-label="Search charts and grooves"
+            placeholder="Title, key, genre or tempo"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <select
+          aria-label="Chart collection"
+          value={collection}
+          onChange={(e) => setCollection(e.target.value)}
+        >
+          <option>All charts</option>
+          <option>Your charts</option>
+          <option>Bundled charts</option>
+        </select>
+        <Button onClick={() => useEngineStore.getState().setScreen("stage")}>
+          Go to Stage
+        </Button>
+      </div>
+      {dirty && (
+        <div className="workspace-actions">
+          <p className="workspace-note">
+            Your draft stays here when you change rooms. Save or discard it
+            before opening another chart.
+          </p>
+          <Button
+            size="sm"
+            onClick={() =>
+              useLibraryDraft.setState({
+                text: useLibraryDraft.getState().baseline,
+                dirty: false,
+              })
+            }
+          >
+            Discard draft changes
+          </Button>
+        </div>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-6">
         {/* Left: charts and styles */}
         <div className="flex flex-col gap-6 min-w-0">
-          <Panel title={`Charts (${charts.length})`}>
+          <Panel title={`Charts (${visibleCharts.length} of ${charts.length})`}>
+            {!visibleCharts.length && (
+              <p className="workspace-note py-4">
+                No charts match. Try another search or collection.
+              </p>
+            )}
             <div className="flex flex-col gap-1 max-h-[360px] overflow-y-auto pr-1">
-              {charts.map((c) => {
+              {visibleCharts.map((c) => {
                 const active = currentChart?.id === c.id;
                 const editing = editingId === c.id;
                 return (
@@ -136,6 +218,7 @@ export const Library: React.FC = () => {
                     <button
                       type="button"
                       className="flex-1 text-left cursor-pointer min-w-0"
+                      disabled={dirty}
                       onClick={() => openChart(c)}
                       title="Open in the editor"
                     >
@@ -167,7 +250,9 @@ export const Library: React.FC = () => {
             <div className="flex gap-2 mt-3">
               <Button
                 size="sm"
+                disabled={dirty}
                 onClick={() => {
+                  useLibraryDraft.setState({ baseline: TEMPLATE });
                   setText(TEMPLATE);
                   setEditingId(null);
                   setDirty(true);
@@ -190,29 +275,35 @@ export const Library: React.FC = () => {
 
           <Panel title={`Styles (${styles.length})`}>
             <div className="flex flex-col gap-1">
-              {styles.map((s) => {
-                const active = telemetry.band.style_id === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => bandSetStyle(s.id)}
-                    className={`text-left rounded-[var(--radius-m)] border px-2.5 py-1.5 cursor-pointer transition-colors ${
-                      active
-                        ? "bg-[var(--accent-soft)] border-[var(--accent)]"
-                        : "bg-[var(--bg-2)] border-[var(--line)] hover:bg-[var(--bg-3)]"
-                    }`}
-                  >
-                    <div className="text-sm text-[var(--fg-0)]">{s.name}</div>
-                    <div className="text-[10px] font-mono text-[var(--fg-2)]">
-                      {s.genre} · {s.feel.timeSig[0]}/{s.feel.timeSig[1]} ·{" "}
-                      {Math.round(s.feel.bpmRange[0])}–
-                      {Math.round(s.feel.bpmRange[1])} BPM
-                      {s.feel.swing > 0.55 ? " · swung" : ""}
-                    </div>
-                  </button>
-                );
-              })}
+              {styles
+                .filter((s) =>
+                  `${s.name} ${s.genre} ${s.feel.bpmRange.join(" ")}`
+                    .toLowerCase()
+                    .includes(query.toLowerCase()),
+                )
+                .map((s) => {
+                  const active = telemetry.band.style_id === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => bandSetStyle(s.id)}
+                      className={`text-left rounded-[var(--radius-m)] border px-2.5 py-1.5 cursor-pointer transition-colors ${
+                        active
+                          ? "bg-[var(--accent-soft)] border-[var(--accent)]"
+                          : "bg-[var(--bg-2)] border-[var(--line)] hover:bg-[var(--bg-3)]"
+                      }`}
+                    >
+                      <div className="text-sm text-[var(--fg-0)]">{s.name}</div>
+                      <div className="text-[10px] font-mono text-[var(--fg-2)]">
+                        {s.genre} · {s.feel.timeSig[0]}/{s.feel.timeSig[1]} ·{" "}
+                        {Math.round(s.feel.bpmRange[0])}–
+                        {Math.round(s.feel.bpmRange[1])} BPM
+                        {s.feel.swing > 0.55 ? " · swung" : ""}
+                      </div>
+                    </button>
+                  );
+                })}
             </div>
             <p className="text-[10px] font-mono text-[var(--fg-2)] mt-3">
               Styles are JSON files. Drop your own into the styles folder and
@@ -267,7 +358,7 @@ export const Library: React.FC = () => {
                   size="sm"
                   variant="primary"
                   onClick={play}
-                  disabled={!draft}
+                  disabled={!draft || parsed.problems.length > 0}
                   title="Ctrl/Cmd+Enter"
                 >
                   Play this
@@ -275,7 +366,7 @@ export const Library: React.FC = () => {
                 <Button
                   size="sm"
                   onClick={save}
-                  disabled={!draft}
+                  disabled={!draft || parsed.problems.length > 0}
                   title="Ctrl/Cmd+S"
                 >
                   Save
@@ -296,7 +387,8 @@ export const Library: React.FC = () => {
             </div>
 
             <textarea
-              value={text}
+              aria-label="Chart editor"
+              value={text ?? ""}
               onChange={(e) => {
                 setText(e.target.value);
                 setDirty(true);
@@ -350,7 +442,9 @@ export const Library: React.FC = () => {
             <ChordStrip
               chart={draft}
               currentBar={
-                currentChart && draft && currentChart.id === draft.id
+                currentChart &&
+                draft &&
+                chartToText(currentChart) === chartToText(draft)
                   ? telemetry.transport.bar
                   : 0
               }
@@ -360,8 +454,25 @@ export const Library: React.FC = () => {
                 startBar: telemetry.transport.loop_start_bar,
                 endBar: telemetry.transport.loop_end_bar,
               }}
-              onSeek={(bar) => transportSeekBar(bar)}
-              onSetLoop={(a, b) => transportSetLoop(a, b, true)}
+              onSeek={(bar) => {
+                if (
+                  draft &&
+                  currentChart &&
+                  chartToText(draft) === chartToText(currentChart)
+                )
+                  void transportSeekBar(bar);
+                else
+                  notify("info", "Play this chart before seeking in its form.");
+              }}
+              onSetLoop={(a, b) => {
+                if (
+                  draft &&
+                  currentChart &&
+                  chartToText(draft) === chartToText(currentChart)
+                )
+                  void transportSetLoop(a, b, true);
+                else notify("info", "Play this chart before setting its loop.");
+              }}
               compact
             />
             {isPreview && (
@@ -377,7 +488,8 @@ export const Library: React.FC = () => {
 };
 
 function formatDuration(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = Math.round(secs % 60);
+  const rounded = Math.round(secs);
+  const m = Math.floor(rounded / 60);
+  const s = rounded % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }

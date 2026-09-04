@@ -1,17 +1,10 @@
 import {
-  BookOpen,
-  FilmStrip,
-  Gear,
-  Guitar,
-  Microphone,
-  MusicNotes,
   Pause,
   Play,
+  Question,
   Record,
   Repeat,
-  Sliders,
   Stop,
-  Waveform,
 } from "@phosphor-icons/react";
 import type React from "react";
 import { useEffect, useState } from "react";
@@ -21,10 +14,12 @@ import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { StudioAssistant } from "./components/StudioAssistant";
 import { listenToController } from "./lib/controller";
 import { useAi } from "./lib/jo/providers";
+import { useMedia } from "./lib/media";
+import { useWriting } from "./lib/originals";
 import { handleShortcut } from "./lib/shortcuts";
 import { AiMusic } from "./screens/AiMusic";
 import { Jo } from "./screens/Jo";
-import { Library } from "./screens/Library";
+import { Library, useLibraryDraft } from "./screens/Library";
 import { MusicVideo } from "./screens/MusicVideo";
 import { Originals } from "./screens/Originals";
 import { Rig } from "./screens/Rig";
@@ -32,8 +27,9 @@ import { Sessions } from "./screens/Sessions";
 import { Settings } from "./screens/Settings";
 import { Songs } from "./screens/Songs";
 import { Stage } from "./screens/Stage";
-import { SCREENS } from "./screens/registry";
+import { SCREENS, SCREEN_ICONS } from "./screens/registry";
 import { useEngineStore } from "./store/engine";
+import "./screens/studio.css";
 
 export const App: React.FC = () => {
   const {
@@ -54,6 +50,18 @@ export const App: React.FC = () => {
     initListeners,
   } = useEngineStore();
 
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (
+        useLibraryDraft.getState().dirty ||
+        useMedia.getState().dirty ||
+        useWriting.getState().dirty
+      )
+        e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
   const [showHelp, setShowHelp] = useState(false);
   useEffect(() => {
     void useAi
@@ -133,60 +141,36 @@ export const App: React.FC = () => {
     }
   };
 
-  const getIcon = (iconName: string, active: boolean) => {
-    const props = {
-      size: 24,
-      weight: active ? ("fill" as const) : ("regular" as const),
-      className: active ? "text-[var(--accent)]" : "text-[var(--fg-1)]",
-    };
-    switch (iconName) {
-      case "Guitar":
-        return <Guitar {...props} />;
-      case "BookOpen":
-        return <BookOpen {...props} />;
-      case "MusicNotes":
-        return <MusicNotes {...props} />;
-      case "FilmStrip":
-        return <FilmStrip {...props} />;
-      case "Waveform":
-        return <Waveform {...props} />;
-      case "Microphone":
-        return <Microphone {...props} />;
-      case "Record":
-        return <Record {...props} />;
-      case "Sliders":
-        return <Sliders {...props} />;
-      case "Gear":
-        return <Gear {...props} />;
-      default:
-        return <Guitar {...props} />;
-    }
-  };
-
   return (
     <div className="flex h-screen w-screen bg-[var(--bg-0)] text-[var(--fg-0)] overflow-hidden">
-      <nav className="w-[72px] bg-[var(--bg-1)] border-r border-[var(--line)] flex flex-col items-center py-4 gap-4 shrink-0 z-20 overflow-y-auto">
-        <div className="w-10 h-10 rounded-[var(--radius-m)] bg-[var(--accent)] flex items-center justify-center text-[var(--bg-0)] font-bold text-xl mb-2">
-          J
+      <nav className="studio-nav" aria-label="Studio rooms">
+        <div className="studio-brand">
+          <span>J</span>
+          <div>
+            JOSEFINE’S<small>JAM STUDIO</small>
+          </div>
         </div>
-        <div className="flex flex-col gap-2 w-full px-2">
+        <div className="studio-nav-items">
           {SCREENS.map((s) => {
             const active = currentScreen === s.id;
+            const Icon = SCREEN_ICONS[s.iconName];
             return (
               <button
                 key={s.id}
                 type="button"
                 onClick={() => setScreen(s.id)}
-                className={`flex flex-col items-center justify-center w-full py-2.5 rounded-[var(--radius-m)] transition-colors cursor-pointer ${
-                  active
-                    ? "bg-[var(--accent-soft)]"
-                    : "hover:bg-[var(--bg-2)] text-[var(--fg-1)]"
-                }`}
-                title={s.label}
+                aria-current={active ? "page" : undefined}
+                aria-label={s.label}
+                title={`${s.label} · ${s.description}`}
               >
-                {getIcon(s.iconName, active)}
-                <span className="text-[10px] tracking-tight mt-1 font-mono">
+                <Icon
+                  size={25}
+                  weight={active ? "fill" : "regular"}
+                  aria-hidden="true"
+                />
+                <span>
                   {s.label}
+                  <small>{s.description}</small>
                 </span>
               </button>
             );
@@ -194,11 +178,12 @@ export const App: React.FC = () => {
         </div>
         <button
           type="button"
+          className="studio-shortcuts"
           onClick={() => setShowHelp(true)}
-          className="mt-auto text-[var(--fg-2)] hover:text-[var(--fg-0)] text-xs font-mono cursor-pointer"
           title="Keyboard shortcuts (?)"
         >
-          ?
+          <Question size={21} aria-hidden="true" />
+          <span>Shortcuts</span>
         </button>
       </nav>
 
@@ -209,9 +194,8 @@ export const App: React.FC = () => {
               Browser preview
             </span>
             <span>
-              Simulated engine: the UI works, no audio is produced and nothing
-              is written to disk. Run <code>pnpm tauri dev</code> for the real
-              band.
+              Explore the studio. Sound, files and connected services work in
+              the desktop app.
             </span>
           </div>
         )}
@@ -347,13 +331,12 @@ export const App: React.FC = () => {
               isPreview={isPreview}
               onClick={() => setScreen("settings")}
             />
+            <StudioAssistant />
           </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-8 relative">
           {renderScreen()}
-
-          <StudioAssistant />
         </main>
       </div>
 

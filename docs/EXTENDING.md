@@ -87,7 +87,7 @@ Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, 
 ## Add a screen
 
 1. Create `src/screens/<name>/<Name>Screen.tsx` using the design primitives (no new colours, no new radii; see DESIGN.md).
-2. Add one line to `src/screens/registry.ts` (id, label, icon from the one icon family, component, shortcut).
+2. Add the screen ID to `ScreenId` in `src/store/engine.ts`, its component route in `src/App.tsx`, and one `SCREENS` entry in `src/screens/registry.ts` with `id`, `label`, `description` and a distinct `iconName` from `SCREEN_ICONS`. That mapping supplies both the sidebar and `WorkspaceHeader`; there is no second icon switch.
 3. Empty, loading and error states are part of the screen from the first commit.
 
 ## Add an IPC domain
@@ -222,3 +222,18 @@ rewrites preserve unknown fields. No schema migration is required for this addit
 annotation. AI `write_notes` accepts an optional `sectionId`; omission keeps its
 original song-notebook behavior. Extend `writing-desk.test.ts` for transforms,
 lyrics, limits and Undo, and the Rust round-trip test for stored fields.
+
+
+## Studio navigation and view state
+
+Use `WorkspaceHeader` and `WorkspaceViews` for the established room pattern. Keep
+live performance controls first and use native disclosures for setup. Shared
+icons are existing Phosphor components. `tests/invariants/studio-workspaces.test.ts`
+checks unique icon assignments and arranged rehearsal boundaries. Do not change
+core snapshot fixtures to add a navigation label.
+
+Library and Jo keep session state in their exported Zustand stores; they do not
+write drafts or conversation to browser storage. Durable files still use the
+existing Rust save commands. `openAiSettings` selects the AI category before
+navigation. Imported audio and generated audio share `useMedia` assets; native
+playback must pass `media::playable_file` and its canonical-library boundary.

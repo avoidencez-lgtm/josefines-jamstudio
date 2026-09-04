@@ -19,6 +19,7 @@ export function AiSettings() {
   const { keysPresent, setKey, deleteKey, isPreview } = useEngineStore();
   const [draft, setDraft] = useState<AiPreferences>(preferences);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [providerQuery, setProviderQuery] = useState("");
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -290,9 +291,26 @@ export function AiSettings() {
         </p>
         <details>
           <summary>API keys · stored in the OS keychain</summary>
+          <label className="block mt-4">
+            Find a connection
+            <input
+              className={field}
+              type="search"
+              value={providerQuery}
+              onChange={(e) => setProviderQuery(e.target.value)}
+              placeholder="Provider name"
+            />
+          </label>
           <div className="flex flex-col gap-4 mt-4">
             {providers.map((p) => (
-              <div key={p.id}>
+              <div
+                key={p.id}
+                hidden={
+                  !`${p.id} ${p.description}`
+                    .toLowerCase()
+                    .includes(providerQuery.toLowerCase())
+                }
+              >
                 <label htmlFor={`key-${p.id}`}>
                   {BRAINS[p.id]?.name ?? p.description} ·{" "}
                   {keysPresent[p.id] ? "Key saved" : "No key"}
@@ -337,8 +355,8 @@ export function AiSettings() {
                 </div>
                 {p.id === "elevenlabs" && (
                   <p className="text-sm text-[var(--fg-1)]">
-                    Credential storage only; ElevenLabs cloud audio is not
-                    connected yet.
+                    Eleven Music uses this connection in AI Music. Jo’s spoken
+                    replies use the available system voice.
                   </p>
                 )}
               </div>

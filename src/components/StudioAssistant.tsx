@@ -1,3 +1,4 @@
+import { ChatCircleDots } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 import { ipc } from "../ipc/client";
 import { dispatchJoToolCall } from "../lib/jo/dispatcher";
@@ -16,6 +17,7 @@ import {
 } from "../lib/jo/studioTools";
 import { useMedia } from "../lib/media";
 import { useWriting } from "../lib/originals";
+import { openAiSettings } from "../screens/Settings";
 import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 
@@ -136,9 +138,11 @@ export function StudioAssistant() {
         aria-expanded={open}
         aria-controls="studio-assistant"
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-5 right-5 z-30 rounded-full border border-[var(--line)] bg-[var(--bg-1)] px-4 py-3 text-sm shadow-[var(--shadow)]"
+        className="inline-flex items-center gap-2 rounded border border-[var(--line)] bg-[var(--bg-2)] px-3 py-2 text-xs cursor-pointer"
+        aria-label={open ? "Hide studio assistant" : "Studio assistant"}
       >
-        {open ? "Hide assistant" : "Studio assistant"}
+        <ChatCircleDots size={18} aria-hidden="true" />
+        {open ? "Hide assistant" : "Assistant"}
         {busy ? " · working" : ""}
       </button>
       {open && (
@@ -308,7 +312,10 @@ export function StudioAssistant() {
               )}
               <Button
                 type="button"
-                onClick={() => engine.setScreen("settings")}
+                onClick={() => {
+                  setOpen(false);
+                  openAiSettings();
+                }}
               >
                 AI settings
               </Button>

@@ -1,8 +1,11 @@
+import { Microphone } from "@phosphor-icons/react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { create } from "zustand";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
+import { WorkspaceHeader } from "../components/Workspace";
 import { dispatchJoToolCall, speakJoReply } from "../lib/jo/dispatcher";
 import type { JoContext } from "../lib/jo/gemini";
 import { parseNaturalIntent } from "../lib/jo/intent";
@@ -13,8 +16,10 @@ import {
   applyStudioEdits,
   songFingerprint,
 } from "../lib/jo/studioTools";
+import { useMedia } from "../lib/media";
 import { useWriting } from "../lib/originals";
 import { useEngineStore } from "../store/engine";
+import { openAiSettings } from "./Settings";
 
 interface SpeechResultEvent {
   results: Array<Array<{ transcript: string }>>;
@@ -31,26 +36,54 @@ interface BrowserSpeechRecognition {
   onerror: (error: unknown) => void;
 }
 
-export const Jo: React.FC = () => {
-  const [messages, setMessages] = useState<JoMessage[]>([
+export function joNeedsReview(call: JoToolCall): boolean {
+  return (
+    Object.hasOwn(STUDIO_TOOLS, call.name) ||
+    call.name === "edit_video_shot" ||
+    (call.name === "songwriting" &&
+      ["lock", "groove", "restore"].includes(String(call.arguments.action)))
+  );
+}
+const documentFingerprint = () =>
+  JSON.stringify([songFingerprint(), useMedia.getState().project]);
+
+export const useJoConversation = create<{
+  messages: JoMessage[];
+  inputValue: string;
+  busy: boolean;
+  lastBrain: string | null;
+  pending: { calls: JoToolCall[]; expected: string } | null;
+}>(() => ({
+  messages: [
     {
-      id: "msg-welcome",
+      id: "welcome",
       sender: "jo",
-      text: "Hey! I'm Jo, your rhythm section leader. Ask me to change tempos, cues, styles, drop the bass, or record a take.",
-      timestamp: "Just now",
+      text: "Tell me what the band should do. Live commands run when you send them; changes to your original song are proposed for review.",
+      timestamp: "Jo",
     },
-  ]);
-  const [inputValue, setInputValue] = useState("");
+  ],
+  inputValue: "",
+  busy: false,
+  lastBrain: null,
+  pending: null,
+}));
+const setMessages = (update: (previous: JoMessage[]) => JoMessage[]) =>
+  useJoConversation.setState((s) => ({ messages: update(s.messages) }));
+const setInputValue = (inputValue: string) =>
+  useJoConversation.setState({ inputValue });
+const setLastBrain = (lastBrain: string) =>
+  useJoConversation.setState({ lastBrain });
+
+export const Jo: React.FC = () => {
+  const { messages, inputValue, busy, pending, lastBrain } =
+    useJoConversation();
+  const [voiceAvailable, setVoiceAvailable] = useState(false);
   const [joState, setJoState] = useState<
     "idle" | "listening" | "thinking" | "speaking"
   >("idle");
   const [isHoldingPtt, setIsHoldingPtt] = useState(false);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  // The speech-recognition callback is created once; it reads history through a ref.
-  const messagesRef = useRef<JoMessage[]>(messages);
-  messagesRef.current = messages;
-
   const { keysPresent, isPreview, notify } = useEngineStore();
   const { preferences, loaded } = useAi();
   const useLlm =
@@ -59,7 +92,6 @@ export const Jo: React.FC = () => {
       BRAINS[preferences.selected].local || keysPresent[preferences.selected],
     ) &&
     !isPreview;
-  const [lastBrain, setLastBrain] = useState<string | null>(null);
 
   const snapshotContext = (): JoContext => {
     const s = useEngineStore.getState();
@@ -87,6 +119,7 @@ export const Jo: React.FC = () => {
             name: w.song.body.chart.name,
             chart: w.song.body.chart,
             notes: w.song.body.notes,
+            lyrics: w.song.body.lyrics,
             selected: w.selected,
             sections: w.song.body.chart.sections.map((section) => ({
               name: section.name,
@@ -132,7 +165,8 @@ export const Jo: React.FC = () => {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll to bottom whenever messages or state updates
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const list = messagesEndRef.current?.parentElement;
+    if (list) list.scrollTop = list.scrollHeight;
   }, [messages, joState]);
 
   // Setup Web Speech API if supported
@@ -145,6 +179,7 @@ export const Jo: React.FC = () => {
       const RecognitionCtor =
         win.SpeechRecognition || win.webkitSpeechRecognition;
 
+      setVoiceAvailable(Boolean(RecognitionCtor));
       if (RecognitionCtor) {
         const rec = new RecognitionCtor();
         rec.continuous = false;
@@ -159,14 +194,27 @@ export const Jo: React.FC = () => {
         };
 
         rec.onend = () => {
+          setIsHoldingPtt(false);
           setJoState("idle");
         };
 
         rec.onerror = () => {
+          setIsHoldingPtt(false);
           setJoState("idle");
         };
 
         recognitionRef.current = rec;
+        return () => {
+          rec.onresult = () => {};
+          rec.onend = () => {};
+          rec.onerror = () => {};
+          try {
+            rec.stop();
+          } catch {
+            /* Some WebViews reject stop before start. */
+          }
+          recognitionRef.current = null;
+        };
       }
     }
   }, []);
@@ -176,10 +224,15 @@ export const Jo: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLSelectElement
+        e.target instanceof HTMLSelectElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable) ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey
       )
         return;
-      if ((e.key === "t" || e.key === "T") && !isHoldingPtt) {
+      if ((e.key === "t" || e.key === "T") && !isHoldingPtt && !e.repeat) {
         e.preventDefault();
         startListening();
       }
@@ -188,7 +241,12 @@ export const Jo: React.FC = () => {
     const handleKeyUp = (e: KeyboardEvent) => {
       if (
         e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLSelectElement
+        e.target instanceof HTMLSelectElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable) ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey
       )
         return;
       if (e.key === "t" || e.key === "T") {
@@ -206,13 +264,20 @@ export const Jo: React.FC = () => {
   }, [isHoldingPtt]);
 
   const startListening = () => {
+    if (
+      !recognitionRef.current ||
+      useJoConversation.getState().busy ||
+      useJoConversation.getState().pending
+    )
+      return;
     setIsHoldingPtt(true);
     setJoState("listening");
     if (recognitionRef.current) {
       try {
         recognitionRef.current.start();
       } catch {
-        // already active
+        setIsHoldingPtt(false);
+        setJoState("idle");
       }
     }
   };
@@ -229,126 +294,119 @@ export const Jo: React.FC = () => {
   };
 
   const handleUserQuery = async (query: string) => {
-    if (!query.trim()) return;
-
-    const userMsg: JoMessage = {
-      id: `msg-${Date.now()}`,
-      sender: "user",
-      text: query,
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
-
-    const history = messagesRef.current;
-    setMessages((prev) => [...prev, userMsg]);
-    setInputValue("");
-    setJoState("thinking");
-
-    const expectedSong = songFingerprint();
-    const { reply, toolCalls } = await think(history, query);
-
-    const results: string[] = [];
     if (
-      toolCalls.length &&
-      toolCalls.every((c) => Object.hasOwn(STUDIO_TOOLS, c.name))
-    ) {
-      try {
-        results.push(applyStudioEdits(toolCalls, expectedSong));
-      } catch (e) {
-        results.push(`Studio edits failed: ${String(e)}`);
-      }
-    } else
-      for (const call of toolCalls) {
-        try {
-          if (Object.hasOwn(STUDIO_TOOLS, call.name))
-            throw new Error(
-              "Request song edits separately from transport actions.",
-            );
-          results.push(await dispatchJoToolCall(call));
-        } catch (e) {
-          results.push(`${call.name} failed: ${String(e)}`);
+      !query.trim() ||
+      useJoConversation.getState().busy ||
+      useJoConversation.getState().pending
+    )
+      return;
+    useJoConversation.setState({ busy: true });
+    try {
+      const userMsg: JoMessage = {
+        id: crypto.randomUUID(),
+        sender: "user",
+        text: query,
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+
+      const history = useJoConversation.getState().messages;
+      setMessages((prev) => [...prev, userMsg]);
+      setInputValue("");
+      setJoState("thinking");
+
+      const expectedSong = documentFingerprint();
+      const { reply, toolCalls } = await think(history, query);
+
+      const results: string[] = [];
+      if (toolCalls.some(joNeedsReview)) {
+        useJoConversation.setState({
+          pending: { calls: toolCalls, expected: expectedSong },
+        });
+        results.push("Proposed song edits · awaiting your review below");
+      } else
+        for (const call of toolCalls) {
+          try {
+            results.push(await dispatchJoToolCall(call));
+          } catch (e) {
+            results.push(`${call.name} failed: ${String(e)}`);
+          }
         }
-      }
 
-    const joMsg: JoMessage = {
-      id: `msg-${Date.now() + 1}`,
-      sender: "jo",
-      text: reply,
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      toolCalls,
-      toolResults: results,
-    };
+      const joMsg: JoMessage = {
+        id: crypto.randomUUID(),
+        sender: "jo",
+        text: reply,
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        toolCalls,
+        toolResults: results,
+      };
 
-    setMessages((prev) => [...prev, joMsg]);
-    setJoState("speaking");
-    speakJoReply(reply);
-
-    setTimeout(() => {
+      setMessages((prev) => [...prev, joMsg]);
+      speakJoReply(reply);
+    } catch (e) {
+      notify("error", String(e));
+    } finally {
+      useJoConversation.setState({ busy: false });
       setJoState("idle");
-    }, 2500);
+    }
   };
 
   return (
-    <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full h-[calc(100vh-140px)]">
-      {/* Top Banner with Orb & Provider Status */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] p-4 rounded-[var(--radius-m)] border border-[var(--line)]">
-        <div className="flex items-center gap-4">
-          {/* Animated Jo Orb */}
-          <div className="relative flex items-center justify-center w-12 h-12">
-            <div
-              className={`w-10 h-10 rounded-full transition-all duration-300 ${
-                joState === "listening"
-                  ? "bg-purple-500 shadow-[0_0_20px_#a855f7] animate-pulse scale-110"
-                  : joState === "thinking"
-                    ? "bg-amber-500 shadow-[0_0_20px_#f59e0b] animate-spin scale-105"
-                    : joState === "speaking"
-                      ? "bg-emerald-500 shadow-[0_0_20px_#10b981] animate-bounce scale-110"
-                      : "bg-[var(--accent)] shadow-[0_0_15px_var(--accent)]"
-              }`}
-            />
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-semibold tracking-wide uppercase font-mono text-[var(--fg-0)]">
-                Jo (AI Bandmate)
-              </h1>
-              <StatusPill
-                status={joState === "idle" ? "idle" : "live"}
-                label={joState.toUpperCase()}
-              />
-            </div>
-            <p className="text-xs font-mono text-[var(--fg-2)] mt-0.5">
-              Natural rhythm section director with full engine control
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-col items-end gap-0.5 text-[11px] font-mono text-[var(--fg-2)]">
-          <span>
-            Brain:{" "}
-            {useLlm
-              ? `${BRAINS[preferences.selected].name} · ${preferences.models[preferences.selected].model}`
-              : isPreview
-                ? "offline intent parser (browser preview)"
-                : "offline intent parser (configure your selected provider in Settings)"}
-          </span>
-          {lastBrain && (
-            <span className="text-[10px]">
-              last answer:{" "}
-              {lastBrain === "offline" ? "offline parser" : lastBrain}
-            </span>
-          )}
-        </div>
+    <div className="jo-workspace flex flex-col gap-4 max-w-5xl mx-auto w-full">
+      <WorkspaceHeader
+        screen="jo"
+        title="A bandmate you can talk to."
+        description="Direct the band in plain language, or work on your original song together."
+      >
+        <StatusPill
+          status={busy || joState === "listening" ? "live" : "idle"}
+          label={
+            busy ? "Thinking" : joState === "listening" ? "Listening" : "Ready"
+          }
+        />
+        <Button onClick={openAiSettings}>Choose AI & model</Button>
+      </WorkspaceHeader>
+      <div className="workspace-summary">
+        <span>
+          <strong>
+            {useLlm ? BRAINS[preferences.selected].name : "Offline commands"}
+          </strong>
+          {useLlm
+            ? preferences.models[preferences.selected].model
+            : "Tempo, cues, styles & recording"}
+        </span>
+        {lastBrain && <span>Last reply: {lastBrain}</span>}
+        <span>
+          {voiceAvailable
+            ? "Voice available · hold T outside text fields"
+            : "Voice unavailable here · type below"}
+        </span>
       </div>
-
+      <div className="jo-suggestions" aria-label="Suggested prompts">
+        {[
+          "Set tempo to 100",
+          "Drop the bass",
+          "Play a fill",
+          ...(useLlm ? ["Suggest a stronger chorus for my song"] : []),
+        ].map((prompt) => (
+          <Button
+            key={prompt}
+            size="sm"
+            disabled={busy || Boolean(pending)}
+            onClick={() => setInputValue(prompt)}
+          >
+            {prompt}
+          </Button>
+        ))}
+      </div>
       {/* Main Chat & Action History Panel */}
-      <Panel className="flex-1 flex flex-col min-h-0 p-4">
+      <Panel className="jo-chat flex-1 flex flex-col min-h-0 p-4">
         <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           {messages.map((m) => (
             <div
@@ -356,7 +414,7 @@ export const Jo: React.FC = () => {
               className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"}`}
             >
               <div
-                className={`max-w-lg p-3 rounded-[var(--radius-m)] text-xs font-mono leading-relaxed ${
+                className={`jo-message max-w-2xl p-3 rounded-[var(--radius-m)] ${
                   m.sender === "user"
                     ? "bg-[var(--bg-2)] text-[var(--fg-0)] border border-[var(--line)]"
                     : "bg-[var(--accent)]/10 text-[var(--fg-0)] border border-[var(--accent)]/30"
@@ -381,7 +439,7 @@ export const Jo: React.FC = () => {
                         }
                         className="px-1.5 py-0.5 rounded bg-[var(--bg-1)] border border-[var(--accent)] text-[10px] text-[var(--accent)] font-mono"
                       >
-                        ⚡ {tc.name}
+                        {tc.name.replaceAll("_", " ")}
                         {m.toolResults?.[idx] && (
                           <span className="text-[var(--fg-2)]">
                             {" "}
@@ -398,19 +456,101 @@ export const Jo: React.FC = () => {
           <div ref={messagesEndRef} />
         </div>
 
+        {pending && (
+          <section
+            className="workspace-stack py-4"
+            aria-label="Proposed studio edits"
+          >
+            <h2>Review studio changes</h2>
+            <div className="max-h-48 overflow-auto text-sm">
+              {pending.calls.map((call, i) => (
+                <details key={`${call.name}-${i}`} open>
+                  <summary>{call.name.replaceAll("_", " ")}</summary>
+                  <pre className="whitespace-pre-wrap break-words text-xs p-2">
+                    {JSON.stringify(call.arguments, null, 2)}
+                  </pre>
+                </details>
+              ))}
+            </div>
+            <div className="workspace-actions">
+              <Button
+                variant="primary"
+                disabled={busy}
+                onClick={async () => {
+                  if (useJoConversation.getState().busy) return;
+                  useJoConversation.setState({ busy: true });
+                  try {
+                    if (documentFingerprint() !== pending.expected)
+                      throw new Error(
+                        "The song or film changed. Dismiss this proposal and ask again.",
+                      );
+                    const allComposition = pending.calls.every((c) =>
+                      Object.hasOwn(STUDIO_TOOLS, c.name),
+                    );
+                    if (!allComposition && pending.calls.length !== 1)
+                      throw new Error(
+                        "Request composition edits, individual legacy song commands and film edits separately. Nothing was applied.",
+                      );
+                    const result = allComposition
+                      ? applyStudioEdits(pending.calls, songFingerprint())
+                      : await dispatchJoToolCall(pending.calls[0]);
+                    setMessages((previous) => [
+                      ...previous,
+                      {
+                        id: crypto.randomUUID(),
+                        sender: "jo",
+                        text: result,
+                        timestamp: "Applied",
+                      },
+                    ]);
+                    useJoConversation.setState({ pending: null });
+                  } catch (e) {
+                    notify("error", String(e));
+                  } finally {
+                    useJoConversation.setState({ busy: false });
+                  }
+                }}
+              >
+                Apply proposed edits
+              </Button>
+              <Button
+                onClick={() => useJoConversation.setState({ pending: null })}
+              >
+                Dismiss proposal
+              </Button>
+            </div>
+          </section>
+        )}
         {/* Push-to-Talk & Input Bar */}
-        <div className="pt-4 border-t border-[var(--line)] flex items-center gap-3">
+        <div className="jo-composer">
           {/* Push-to-talk button */}
           <Button
             variant={isHoldingPtt ? "danger" : "primary"}
             size="md"
-            onMouseDown={startListening}
-            onMouseUp={stopListening}
-            onTouchStart={startListening}
-            onTouchEnd={stopListening}
+            disabled={!voiceAvailable || busy || Boolean(pending)}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              startListening();
+            }}
+            onPointerUp={stopListening}
+            onPointerCancel={stopListening}
+            onKeyDown={(e) => {
+              if ((e.key === " " || e.key === "Enter") && !e.repeat) {
+                e.preventDefault();
+                startListening();
+              }
+            }}
+            onKeyUp={(e) => {
+              if (e.key === " " || e.key === "Enter") {
+                e.preventDefault();
+                stopListening();
+              }
+            }}
+            onBlur={stopListening}
             className="select-none min-w-[140px]"
           >
-            {isHoldingPtt ? "Listening..." : "Hold to Talk [T]"}
+            <Microphone size={18} aria-hidden="true" />
+            {isHoldingPtt ? "Listening…" : "Hold to talk"}
           </Button>
 
           {/* Text input fallback */}
@@ -423,12 +563,19 @@ export const Jo: React.FC = () => {
           >
             <input
               type="text"
+              aria-label="Message Jo"
+              disabled={busy || Boolean(pending)}
               placeholder="Or type a command (e.g. 'faster', 'drop the bass', 'record a take')..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               className="flex-1 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-3 py-2 rounded-[var(--radius-m)] text-xs font-mono focus:outline-none focus:border-[var(--accent)]"
             />
-            <Button type="submit" size="md" variant="secondary">
+            <Button
+              type="submit"
+              size="md"
+              variant="primary"
+              disabled={busy || Boolean(pending) || !inputValue.trim()}
+            >
               Send
             </Button>
           </form>

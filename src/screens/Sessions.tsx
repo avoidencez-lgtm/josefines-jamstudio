@@ -1,8 +1,12 @@
+import { CassetteTape, Export, Play, Star } from "@phosphor-icons/react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
+import { WorkspaceHeader } from "../components/Workspace";
+import { ipc, isPreview } from "../ipc/client";
+import { useWriting } from "../lib/originals";
 import { useEngineStore } from "../store/engine";
 
 /** Take timestamps are either ISO strings or Rust's `secs.millis` epoch form. */
@@ -60,6 +64,8 @@ export const Sessions: React.FC = () => {
     engineStatus,
   } = useEngineStore();
 
+  const [query, setQuery] = useState("");
+  const [favourites, setFavourites] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [latencyDraft, setLatencyDraft] = useState<string>("");
 
@@ -75,6 +81,13 @@ export const Sessions: React.FC = () => {
   const totalSecs = takes.reduce((acc, t) => acc + t.durationSecs, 0);
   const streak = practiceStreakDays(takes);
 
+  const visibleTakes = takes.filter(
+    (t) =>
+      (!favourites || t.favourite) &&
+      `${t.id} ${t.chartId} ${t.styleId} ${t.tempo} ${t.notes}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
   const handleExport = async (takeId: string) => {
     const report = await exportTakeDaw(takeId);
     if (report) {
@@ -98,12 +111,17 @@ export const Sessions: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
+      <WorkspaceHeader
+        screen="sessions"
+        title="Keep the take that matters."
+        description="Listen back, mark the keepers, layer a guitar part, or carry the stems into your DAW."
+      />
       <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] p-4 rounded-[var(--radius-m)] border border-[var(--line)]">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-sm font-semibold tracking-wide uppercase font-mono text-[var(--fg-0)]">
+            <h2 className="text-sm font-semibold tracking-wide uppercase font-mono text-[var(--fg-0)]">
               Sessions, Takes & DAW Export
-            </h1>
+            </h2>
             <StatusPill
               status={isRecording ? "live" : "idle"}
               label={isRecording ? "Recording Take" : "Idle"}
@@ -171,19 +189,49 @@ export const Sessions: React.FC = () => {
         </div>
       )}
 
+      <div className="workspace-search">
+        <label>
+          Find a take
+          <input
+            type="search"
+            aria-label="Search takes"
+            placeholder="Song, style, tempo or notes"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <Button
+          aria-pressed={favourites}
+          onClick={() => setFavourites(!favourites)}
+        >
+          <Star
+            size={17}
+            weight={favourites ? "fill" : "regular"}
+            aria-hidden="true"
+          />
+          {favourites ? "Favourites only" : "All takes"}
+        </Button>
+      </div>
       {/* Takes List */}
-      <Panel title={`Recorded Takes (${takes.length})`}>
+      <Panel
+        title={`Recorded takes (${visibleTakes.length} of ${takes.length})`}
+      >
+        {takes.length > 0 && !visibleTakes.length && (
+          <p className="workspace-note py-8">
+            No takes match this search. Clear the search or show all takes.
+          </p>
+        )}
         {takes.length === 0 ? (
           <div className="py-12 flex flex-col items-center justify-center text-center text-[var(--fg-2)] space-y-3 font-mono text-xs">
-            <p>No takes recorded yet in this session.</p>
+            <CassetteTape size={40} aria-hidden="true" />
+            <p>No recordings yet.</p>
             <p className="text-[var(--fg-1)]">
-              Hit <strong>Record New Take</strong> or start jamming to record
-              multi-track stems.
+              Hit <strong>Record New Take</strong> to record multi-track stems.
             </p>
           </div>
         ) : (
           <div className="divide-y divide-[var(--line)]">
-            {takes.map((take) => (
+            {visibleTakes.map((take) => (
               <TakeRow
                 key={take.id}
                 take={take}
@@ -216,6 +264,21 @@ const TakeRow: React.FC<TakeRowProps> = ({
   onDelete,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const song = useWriting((s) => s.song);
+  const recording = useEngineStore((s) => s.isRecording);
+  const run = async (action: () => Promise<unknown>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await action();
+    } catch (e) {
+      useEngineStore.getState().notify("error", String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const [showJoReview, setShowJoReview] = useState(false);
 
   useEffect(() => {
@@ -232,7 +295,9 @@ const TakeRow: React.FC<TakeRowProps> = ({
     if (!peaks || peaks.length === 0) return;
 
     const barWidth = width / peaks.length;
-    ctx.fillStyle = "var(--accent)";
+    ctx.fillStyle = getComputedStyle(canvas)
+      .getPropertyValue("--accent")
+      .trim();
 
     for (let i = 0; i < peaks.length; i++) {
       const p = Math.min(Math.max(peaks[i], 0.05), 1.0);
@@ -255,7 +320,10 @@ const TakeRow: React.FC<TakeRowProps> = ({
         <div className="flex flex-col gap-1 min-w-[200px]">
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono font-bold text-[var(--fg-0)]">
-              {take.id}
+              {takeDate(take.timestamp)?.toLocaleString([], {
+                dateStyle: "medium",
+                timeStyle: "short",
+              }) ?? take.id}
             </span>
             <span className="text-[10px] font-mono text-[var(--fg-2)] px-1.5 py-0.5 bg-[var(--bg-2)] rounded">
               {formatDuration(take.durationSecs)}
@@ -277,11 +345,78 @@ const TakeRow: React.FC<TakeRowProps> = ({
             width={280}
             height={32}
             className="w-full h-full"
+            role="img"
+            aria-label={
+              take.waveformPeaks?.length
+                ? "Recorded waveform"
+                : "No waveform available"
+            }
           />
         </div>
 
         {/* Action buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            disabled={busy || isPreview || recording}
+            onClick={() =>
+              void run(() =>
+                ipc.invoke("clip_audition", {
+                  spec: {
+                    takeId: take.id,
+                    label: "Preview",
+                    trimStart: 0,
+                    trimEnd: take.durationSecs,
+                    startBar: 1,
+                    repeats: 1,
+                    gain: 1,
+                    muted: false,
+                  },
+                }),
+              )
+            }
+          >
+            <Play size={16} aria-hidden="true" /> Listen to guitar
+          </Button>
+          <Button
+            size="sm"
+            disabled={busy || isPreview}
+            aria-pressed={Boolean(take.favourite)}
+            onClick={() =>
+              void run(async () => {
+                await ipc.invoke("takes_favourite", {
+                  takeId: take.id,
+                  favourite: !take.favourite,
+                });
+                await useEngineStore.getState().loadTakes();
+              })
+            }
+          >
+            <Star
+              size={16}
+              weight={take.favourite ? "fill" : "regular"}
+              aria-hidden="true"
+            />
+            {take.favourite ? "Favourite" : "Keep"}
+          </Button>
+          <Button
+            size="sm"
+            disabled={
+              !song || recording || busy || (song?.body.clips.length ?? 0) >= 16
+            }
+            title={
+              song
+                ? "Attach to the song open in Write"
+                : "Open an original song in Write first"
+            }
+            onClick={() => {
+              useWriting.getState().attach(take);
+              useWriting.setState({ view: "record" });
+              useEngineStore.getState().setScreen("originals");
+            }}
+          >
+            Layer in Write
+          </Button>
           {!analysis ? (
             <Button size="sm" variant="secondary" onClick={onAnalyze}>
               Analyze Take
@@ -297,12 +432,36 @@ const TakeRow: React.FC<TakeRowProps> = ({
           )}
 
           <Button size="sm" variant="secondary" onClick={onExport}>
-            Export for Logic / REAPER
+            <Export size={16} aria-hidden="true" /> Export stems
           </Button>
 
-          <Button size="sm" variant="danger" onClick={onDelete}>
-            Delete
-          </Button>
+          {confirmDelete ? (
+            <>
+              <span className="workspace-note">
+                Delete this take permanently?
+              </span>
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={recording || busy}
+                onClick={onDelete}
+              >
+                Delete take
+              </Button>
+              <Button size="sm" onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={recording || busy}
+              onClick={() => setConfirmDelete(true)}
+            >
+              Delete…
+            </Button>
+          )}
         </div>
       </div>
 
@@ -327,7 +486,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
 
       {/* Jo Constructive Feedback Card */}
       {showJoReview && analysis && (
-        <div className="p-3 bg-[var(--bg-1)] border-l-2 border-l-[var(--accent)] border-t border-r border-b border-[var(--line)] rounded-[var(--radius-m)] text-xs font-mono space-y-2">
+        <div className="p-3 bg-[var(--bg-1)] border border-[var(--line)] rounded-[var(--radius-m)] text-xs font-mono space-y-2">
           <div className="flex items-center gap-2 font-bold text-[var(--accent)]">
             <span>Jo's Take Feedback</span>
           </div>

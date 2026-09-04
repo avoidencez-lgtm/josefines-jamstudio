@@ -12,6 +12,10 @@ use std::{
 };
 use tauri::State;
 
+const MEDIA_EXTENSIONS: &[&str] = &[
+    "mp4", "mov", "webm", "mkv", "wav", "mp3", "flac", "m4a", "aac", "ogg",
+];
+
 // ponytail: one media operation at a time for this single-user desktop studio.
 static GATE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 static SAVE: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -286,11 +290,7 @@ async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Ass
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if ![
-        "mp4", "mov", "webm", "mkv", "wav", "mp3", "flac", "m4a", "aac", "ogg",
-    ]
-    .contains(&ext.as_str())
-    {
+    if !MEDIA_EXTENSIONS.contains(&ext.as_str()) {
         return Err("Choose MP4/MOV/WebM/MKV video or WAV/MP3/FLAC/M4A/AAC/OGG audio.".into());
     }
     let seconds = probe(path, kind).await?;
@@ -608,27 +608,41 @@ pub async fn media_render(document: Value) -> Result<String, String> {
 pub fn media_cancel() {
     CANCEL.store(true, Ordering::Relaxed);
 }
+fn playable_file(base: &Path, path: &Path) -> Result<PathBuf, String> {
+    let file = fs::canonicalize(path).map_err(|e| e.to_string())?;
+    if !file.starts_with(fs::canonicalize(base).map_err(|e| e.to_string())?)
+        || !file.is_file()
+        || !MEDIA_EXTENSIONS.contains(&file.extension().and_then(|s| s.to_str()).unwrap_or(""))
+    {
+        return Err("Choose an imported or generated file from the media library.".into());
+    }
+    Ok(file)
+}
 #[tauri::command]
 pub async fn media_open(path: String) -> Result<(), String> {
-    let file = fs::canonicalize(path).map_err(|e| e.to_string())?;
-    if !file.starts_with(fs::canonicalize(root()).map_err(|e| e.to_string())?)
-        || ![
-            Some("mp4"),
-            Some("mp3"),
-            Some("wav"),
-            Some("flac"),
-            Some("ogg"),
-        ]
-        .contains(&file.extension().and_then(|s| s.to_str()))
-    {
-        return Err("Choose a rendered video or generated audio file.".into());
-    }
-    platform::open_media(&file).await
+    platform::open_media(&playable_file(&root(), Path::new(&path))?).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn player_accepts_import_formats_but_not_outside_files_or_programs() {
+        let base = std::env::temp_dir().join(format!("jam-player-{}", id()));
+        let library = base.join("library");
+        fs::create_dir_all(&library).unwrap();
+        for ext in MEDIA_EXTENSIONS {
+            let file = library.join(format!("reference.{ext}"));
+            fs::write(&file, []).unwrap();
+            assert!(playable_file(&library, &file).is_ok());
+        }
+        for file in [base.join("outside.wav"), library.join("program.exe")] {
+            fs::write(&file, []).unwrap();
+            assert!(playable_file(&library, &file).is_err());
+        }
+        assert!(playable_file(&library, &library).is_err());
+        fs::remove_dir_all(base).unwrap();
+    }
     #[test]
     fn save_conflicts_unknown_fields_and_path_boundaries() {
         let base = std::env::temp_dir().join(format!("jam-video-{}", id()));

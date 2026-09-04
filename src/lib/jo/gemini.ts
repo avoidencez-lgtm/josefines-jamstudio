@@ -28,6 +28,7 @@ export interface JoContext {
     versions: string[];
     chart?: unknown;
     notes?: string;
+    lyrics?: Record<string, string>;
   };
 }
 
