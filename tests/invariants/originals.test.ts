@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { __setIpcForTests, ipc } from "../../src/ipc/client";
 import { createPreviewEngine } from "../../src/ipc/preview";
+import { assignPedal, useController } from "../../src/lib/controller";
 import { parseNaturalIntent } from "../../src/lib/jo/intent";
 import { JO_TOOLS } from "../../src/lib/jo/tools";
 import {
+  arrangementRanges,
   changeGroove,
   defaultSection,
   fitTempo,
@@ -14,6 +17,61 @@ import { SCREENS } from "../../src/screens/registry";
 import fixture from "../fixtures/seams/original.json";
 
 describe("songwriting workflow", () => {
+  it("learning saves a binding without performing it; enabled presses reach capture", async () => {
+    const previous = { ...ipc };
+    const calls: string[] = [];
+    __setIpcForTests({
+      invoke: async <T>(command: string) => {
+        calls.push(command);
+        return (
+          command === "takes_list"
+            ? []
+            : command === "recorder_get_latency"
+              ? 0
+              : null
+        ) as T;
+      },
+    });
+    try {
+      useController.setState({
+        config: { schemaVersion: 1, bindings: [] },
+        enabled: false,
+        learning: "keep",
+        busy: false,
+      });
+      const press = { kind: "program" as const, channel: 1, number: 12 };
+      await useController.getState().receive(press);
+      expect(calls).toEqual(["controller_save"]);
+      useController.setState({ enabled: true });
+      await useController.getState().receive(press);
+      expect(calls.filter((c) => c === "capture_keep")).toHaveLength(1);
+    } finally {
+      __setIpcForTests(previous);
+      useController.setState({ enabled: false, learning: null });
+    }
+  });
+  it("pedal learn reassigns a press instead of firing two actions; repeated form entries remain reachable", () => {
+    const press = { kind: "program" as const, channel: 1, number: 12 };
+    const initial = { schemaVersion: 1, bindings: [], custom: "keep" };
+    const config = assignPedal(
+      assignPedal(initial, "keep", press),
+      "record",
+      press,
+    );
+    expect(config.bindings).toEqual([{ action: "record", press }]);
+    expect(config.custom).toBe("keep");
+    const chart = newOriginal().body.chart;
+    chart.arrangement = [
+      { sectionId: "verse", repeats: 2 },
+      { sectionId: "chorus", repeats: 1 },
+      { sectionId: "verse", repeats: 1 },
+    ];
+    expect(arrangementRanges(chart)).toEqual([
+      { sectionId: "verse", startBar: 1, endBar: 9 },
+      { sectionId: "chorus", startBar: 9, endBar: 13 },
+      { sectionId: "verse", startBar: 13, endBar: 17 },
+    ]);
+  });
   beforeEach(() =>
     useWriting.setState({
       song: newOriginal(),

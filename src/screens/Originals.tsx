@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
+import { FootControls } from "../components/FootControls";
 import { ipc, isPreview } from "../ipc/client";
 import { transposeChart } from "../lib/chart/transpose";
 import {
@@ -23,6 +24,8 @@ export function Originals() {
     loadLibrary,
     exportTakeDaw,
     transportStop,
+    rigState,
+    loadRigProfiles,
   } = useEngineStore();
   const [versionName, setVersionName] = useState("");
   const [chords, setChords] = useState("");
@@ -43,8 +46,9 @@ export function Originals() {
       await w.refresh();
       await loadTakes();
       await loadLibrary();
+      await loadRigProfiles();
     });
-  }, [w.action, w.refresh, loadTakes, loadLibrary]);
+  }, [w.action, w.refresh, loadTakes, loadLibrary, loadRigProfiles]);
   useEffect(() => {
     setChords(savedChords);
     setChordError("");
@@ -138,6 +142,7 @@ export function Originals() {
           </Button>
         </div>
       </section>
+      <FootControls />
       {w.message && <output className="song-message">{w.message}</output>}
       {isPreview && (
         <p className="song-help">
@@ -205,6 +210,18 @@ export function Originals() {
               onClick={() => run(w.play)}
             >
               Play / hear changes
+            </Button>
+            <Button
+              disabled={w.busy || isRecording || isPreview}
+              onClick={() => run(() => w.rehearse())}
+            >
+              Loop section
+            </Button>
+            <Button
+              disabled={w.busy || isRecording || isPreview}
+              onClick={() => run(() => w.rehearse(true))}
+            >
+              Next section
             </Button>
             <Button
               disabled={w.busy || isRecording}
@@ -293,6 +310,29 @@ export function Originals() {
               </p>
             </div>
             <section className="song-form">
+              <div className="song-controls">
+                <label className="song-check">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(song.body.toneProfileId)}
+                    disabled={!rigState?.currentProfile}
+                    onChange={(e) =>
+                      w.edit((b) => {
+                        b.toneProfileId = e.target.checked
+                          ? rigState?.currentProfile.id
+                          : null;
+                      })
+                    }
+                  />
+                  Let this song change my rig tones
+                </label>
+                <span className="song-help">
+                  {song.body.toneProfileId ||
+                    rigState?.currentProfile.name ||
+                    "Choose a rig profile"}{" "}
+                  · MIDI output is selected in Rig.
+                </span>
+              </div>
               <div className="song-section-heading">
                 <h2>Song form</h2>
                 <Button
@@ -455,6 +495,33 @@ export function Originals() {
                     aria-describedby="chord-help"
                   />
                 </label>
+                {song.body.toneProfileId && (
+                  <label>
+                    Tone on section entry
+                    <select
+                      aria-label="Tone on section entry"
+                      disabled={
+                        song.body.toneProfileId !== rigState?.currentProfile.id
+                      }
+                      value={band.rigScene ?? ""}
+                      onChange={(e) =>
+                        w.edit((b) => {
+                          b.sections[section.id].rigScene =
+                            e.target.value === ""
+                              ? null
+                              : Number(e.target.value);
+                        })
+                      }
+                    >
+                      <option value="">Keep current tone</option>
+                      {rigState?.currentProfile.scenes.map((s, i) => (
+                        <option key={s.name} value={i}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <div className="song-actions">
                   <Button
                     onClick={() => {
@@ -727,6 +794,16 @@ export function Originals() {
                     Fit tempo to riff
                   </Button>
                   <Button
+                    disabled={isPreview}
+                    onClick={() =>
+                      run(async () => {
+                        await ipc.invoke("clip_audition", { spec: c });
+                      })
+                    }
+                  >
+                    Listen to trim
+                  </Button>
+                  <Button
                     onClick={() =>
                       w.edit((b) => {
                         b.clips.splice(i, 1);
@@ -838,6 +915,27 @@ export function Originals() {
               <small>{t.id}</small>
             </div>
             <div className="song-actions">
+              <Button
+                disabled={w.busy || isPreview || isRecording}
+                onClick={() =>
+                  run(async () => {
+                    await ipc.invoke("clip_audition", {
+                      spec: {
+                        takeId: t.id,
+                        label: "Preview",
+                        trimStart: 0,
+                        trimEnd: t.durationSecs,
+                        startBar: 1,
+                        repeats: 1,
+                        gain: 1,
+                        muted: false,
+                      },
+                    });
+                  })
+                }
+              >
+                Listen to guitar
+              </Button>
               <Button
                 disabled={w.busy || isPreview}
                 onClick={() => run(() => favourite(t.id, !t.favourite))}

@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { EngineStatusPill } from "./components/EngineStatusPill";
 import { Notices } from "./components/Notices";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
+import { listenToController } from "./lib/controller";
 import { handleShortcut } from "./lib/shortcuts";
 import { AiMusic } from "./screens/AiMusic";
 import { Jo } from "./screens/Jo";
@@ -50,6 +51,20 @@ export const App: React.FC = () => {
   } = useEngineStore();
 
   const [showHelp, setShowHelp] = useState(false);
+  useEffect(() => {
+    let closed = false;
+    let off: (() => void) | undefined;
+    void listenToController()
+      .then((cleanup) => {
+        if (closed) cleanup();
+        else off = cleanup;
+      })
+      .catch((e) => useEngineStore.getState().notify("error", String(e)));
+    return () => {
+      closed = true;
+      off?.();
+    };
+  }, []);
 
   const transport = telemetry.transport;
   const isPlaying =

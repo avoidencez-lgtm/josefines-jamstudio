@@ -4,6 +4,28 @@
   padding-bottom: 64px;
   color: var(--fg-0);
 }
+.song-foot-controls {
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 18px;
+  margin-bottom: 18px;
+}
+.song-foot-controls summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 10px 0;
+}
+.song-pedal-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.song-pedal-row span {
+  color: var(--fg-1);
+  font-size: 13px;
+}
 .song-editor h1 {
   font-size: 30px;
   font-weight: 600;

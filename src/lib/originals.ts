@@ -15,6 +15,7 @@ export interface PartSettings {
 export interface SectionSettings {
   parts: PartSettings[];
   swing: number;
+  rigScene?: number | null;
 }
 export interface GuitarClip {
   takeId: string;
@@ -31,6 +32,22 @@ export interface SongBody {
   sections: Record<string, SectionSettings>;
   clips: GuitarClip[];
   notes: string;
+  toneProfileId?: string | null;
+}
+
+export function arrangementRanges(chart: Chart) {
+  let bar = 1;
+  return chart.arrangement.map((a) => {
+    const section = chart.sections.find((s) => s.id === a.sectionId);
+    if (!section) throw new Error("Section missing from song form.");
+    const range = {
+      sectionId: a.sectionId,
+      startBar: bar,
+      endBar: bar + section.bars.length * a.repeats,
+    };
+    bar = range.endBar;
+    return range;
+  });
 }
 export interface Original {
   schemaVersion: number;
@@ -106,6 +123,8 @@ interface WritingState {
   busy: boolean;
   message: string;
   captureSeconds: number;
+  rehearsalIndex: number;
+  rehearse: (next?: boolean) => Promise<void>;
   edit: (fn: (body: SongBody) => void) => void;
   createSong: () => void;
   openSong: (song: Original) => void;
@@ -135,6 +154,7 @@ export const useWriting = create<WritingState>((set, get) => ({
   busy: false,
   message: "",
   captureSeconds: 0,
+  rehearsalIndex: -1,
   action: async (fn) => {
     if (get().busy) return;
     set({ busy: true, message: "" });
@@ -276,6 +296,35 @@ export const useWriting = create<WritingState>((set, get) => ({
     useEngineStore.setState({ currentChart: song.body.chart });
     await ipc.invoke("transport_set_count_in", { bars: 0 });
     await ipc.invoke("transport_play");
+  },
+  rehearse: async (next = false) => {
+    const { song, selected, rehearsalIndex } = get();
+    if (!song) throw new Error("Create or open a song first.");
+    if (useEngineStore.getState().isRecording)
+      throw new Error("Save the take before changing its timeline.");
+    const ranges = arrangementRanges(song.body.chart);
+    let index =
+      ranges[rehearsalIndex]?.sectionId === selected
+        ? rehearsalIndex
+        : ranges.findIndex((r) => r.sectionId === selected);
+    if (index < 0) throw new Error("Add this section to the song form first.");
+    if (next) index = (index + 1) % ranges.length;
+    const range = ranges[index];
+    await ipc.invoke("originals_load", { document: song });
+    await ipc.invoke("transport_set_count_in", { bars: 0 });
+    await ipc.invoke("transport_set_loop", {
+      startBar: range.startBar,
+      endBar: range.endBar,
+      enabled: true,
+    });
+    await ipc.invoke("transport_seek_bar", { bar: range.startBar });
+    await ipc.invoke("transport_play");
+    set({
+      selected: range.sectionId,
+      rehearsalIndex: index,
+      message: `Looping bars ${range.startBar}–${range.endBar - 1}. Next section advances through your form.`,
+    });
+    useEngineStore.setState({ currentChart: song.body.chart });
   },
   record: async () => {
     const engine = useEngineStore.getState();

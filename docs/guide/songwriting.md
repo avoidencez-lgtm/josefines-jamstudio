@@ -35,6 +35,47 @@ change the performance while you are playing. **Undo** and **Redo** cover the la
 Keep a named version before experimenting; restore a version and press Play to compare.
 Save the song to persist versions. Up to 20 versions, 256 arranged bars and 16 guitar layers are supported.
 
+## Play without reaching for the mouse
+
+Expand **Hands-free controls** in Write. Choose the physical MIDI input, click
+**Learn** beside an action, then press a pedal once. Learning saves the assignment
+without executing it. Enable pedal actions when ready. Reassigning a press removes
+its old action; **Clear** removes a binding. Bindings survive restart, while the
+connection and enable switch require deliberate activation each session.
+
+Actions include Keep that riff, Record/save take, Play/stop, Loop selected section,
+Next section loop and Keep a version (also saves the song). Capture must already be
+armed for Keep. CC pedals trigger on a rising value of at least 64; note pedals on
+note-on. Releases and held values do not repeat actions. Program Change duplicates
+inside 250 ms are ignored. Incoming messages matching a live rig message the app
+sent within 500 ms are suppressed to avoid immediate MIDI Thru feedback.
+
+HeadRush's 5-pin Out sends Program Changes when selecting rigs, so selecting a rig
+can also trigger a learned action. This changes the hardware tone too. Connect that
+Out to the computer through a MIDI interface; a dedicated CC/note foot controller
+can control the app independently. Verify the learned message on the actual device.
+Source: [HeadRush MIDI Out explained](https://support.headrushfx.com/en/support/solutions/articles/69000822866-headrush-the-5-pin-midi-out-port-explained), checked 2026-09-04.
+
+**Loop section** rehearses the selected section, including its repeats. **Next
+section** steps through the song form, including repeated appearances of a section.
+These actions restart playback at the chosen section; they are not seamless live
+arrangement changes. Record starts a fresh complete take at bar 1. Jo also accepts
+“loop the chorus”, “practice the verse” and “next section”.
+
+## Hear the riff and match the rig
+
+**Listen to guitar** auditions a take's selected input without the band. **Listen to
+trim** auditions a layer's trimmed region once, at its original pitch and speed.
+Use Stop to end listening. Listening is unavailable during recording.
+
+Select the intended hardware profile and MIDI output in **Rig**. Back in Write,
+enable **Let this song change my rig tones** and choose a tone on each section.
+“Keep current tone” sends nothing. Use distinct section names. Tone choices are
+saved with song versions; playback refuses an unavailable scene or a different rig.
+The global Rig mappings remain intact when leaving songwriting. Switching hardware
+profiles clears the active song override; press Play in Write to validate and load
+the song again. This slice controls one selected rig profile/output at a time.
+
 ## Record and continue in Logic
 
 **Record / overdub** saves the song, starts from bar 1, and captures a new guitar take
@@ -62,6 +103,7 @@ in `~/JosefinesJamstudio/takes/`. Song saves retain a `.json.bak` copy. Conflict
 saves from another window are rejected. Unknown JSON fields survive song saves.
 Use **Save copy** to keep edits if another window changed the original.
 Take discovery reads the files, so deleting the SQLite cache does not lose new recordings.
+Learned pedal bindings live in `~/JosefinesJamstudio/controller.json`.
 
 Recording uses a bounded disk queue and checkpoints WAV headers every second.
 Disk failure is reported and partial WAVs are kept; a partial recording is not reported
@@ -80,5 +122,8 @@ are owner checks, not things a passing software test proves.
 4. Record a second guitar part over the first.
 5. Close/reopen the desktop app and resume the saved song.
 6. Export a favourite take; verify all guitar/band stems, notes and markers in Logic.
+7. Learn each real pedal; confirm press/release behaviour, disconnect/reconnect and
+   absence of feedback when the app changes rig scenes.
+8. Save contrasting section tones and verify their timing on the intended rig.
 
 Record the build commit, device settings, measured offset and any drift. These checks remain pending until performed with the friend.

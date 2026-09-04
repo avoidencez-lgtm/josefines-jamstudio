@@ -22,5 +22,7 @@ The guitarist chooses what sounds good. Hardware sound, timing and Logic import 
 
 The Write surface supports 4/4 songwriting, manual chord/tempo correction,
 short guitar clips at their recorded pitch/speed, and a small editable rhythm section.
+Learned foot controls, section rehearsal and song-owned tones connect this workflow
+to the existing rig; guitar takes and trims can be auditioned directly.
 Sound selection remains the existing synthesis engine; premium sample libraries,
 automatic riff transcription, pitch-preserving stretch and final production are separate work.

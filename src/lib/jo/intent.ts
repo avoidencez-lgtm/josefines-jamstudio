@@ -7,6 +7,28 @@ export function parseNaturalIntent(text: string): {
   const lower = text.toLowerCase().trim();
   const toolCalls: JoToolCall[] = [];
   const reply = "Got it!";
+  if (lower === "next section")
+    return {
+      reply: "Moving to the next section.",
+      toolCalls: [{ name: "songwriting", arguments: { action: "next" } }],
+    };
+  const rehearsal =
+    /^(?:loop|practice) (?:the )?(verse|chorus|bridge|solo|intro|outro|section)$/.exec(
+      lower,
+    );
+  if (rehearsal)
+    return {
+      reply: "Looping the section.",
+      toolCalls: [
+        {
+          name: "songwriting",
+          arguments: {
+            action: "loop",
+            name: rehearsal[1] === "section" ? "" : rehearsal[1],
+          },
+        },
+      ],
+    };
 
   if (/^(jo[, ]+)?keep (that|what i just played)[.!]?$/.test(lower))
     return {

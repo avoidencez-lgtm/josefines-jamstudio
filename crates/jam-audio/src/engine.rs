@@ -194,6 +194,7 @@ pub struct AudioEngine {
     pub capture: Arc<Mutex<crate::workstation::Capture>>,
     pub clips: Arc<Mutex<Vec<crate::workstation::Clip>>>,
     pub song_snapshot: serde_json::Value,
+    pub audition: Arc<Mutex<Option<crate::workstation::Audition>>>,
     config: AudioConfig,
     running: Arc<AtomicBool>,
     tone_active: Arc<AtomicBool>,
@@ -254,6 +255,7 @@ impl AudioEngine {
             capture: Arc::new(Mutex::new(Default::default())),
             clips: Arc::new(Mutex::new(Vec::new())),
             song_snapshot: serde_json::Value::Null,
+            audition: Arc::new(Mutex::new(None)),
             config: config.clone(),
             running: Arc::new(AtomicBool::new(false)),
             tone_active: Arc::new(AtomicBool::new(false)),
@@ -317,6 +319,7 @@ impl AudioEngine {
     // ----- transport -------------------------------------------------------
 
     pub fn transport_play(&self) {
+        self.audition.lock().take();
         self.timeline.lock().play();
     }
 
@@ -325,6 +328,7 @@ impl AudioEngine {
     }
 
     pub fn transport_stop(&self) {
+        self.audition.lock().take();
         self.timeline.lock().stop();
         self.sequencer.lock().reset();
     }
@@ -404,6 +408,10 @@ impl AudioEngine {
     // ----- recorder --------------------------------------------------------
 
     pub fn recorder_start(&self, session_id: String) -> Result<String, String> {
+        if !self.status().running {
+            return Err("Start a working audio device before recording.".into());
+        }
+        self.audition.lock().take();
         let (style_id, chart_id) = {
             let seq = self.sequencer.lock();
             (
@@ -726,6 +734,7 @@ impl AudioEngine {
         let gate = Arc::clone(&self.render_gate);
         let capture = Arc::clone(&self.capture);
         let clips = Arc::clone(&self.clips);
+        let audition = Arc::clone(&self.audition);
         let telemetry = Arc::clone(&self.latest_telemetry);
         let status_arc = Arc::clone(&self.status);
 
@@ -791,6 +800,18 @@ impl AudioEngine {
                             ctx.out_left[i] += v;
                             ctx.out_right[i] += v;
                         }
+                        playback.fill(0.0);
+                        let mut preview = audition.lock();
+                        if let Some(voice) = preview.as_mut() {
+                            if !voice.render(sample_rate, &mut playback) {
+                                *preview = None;
+                            }
+                            for (i, v) in playback.iter().enumerate() {
+                                ctx.out_left[i] += v;
+                                ctx.out_right[i] += v;
+                            }
+                        }
+                        drop(preview);
                         let (parts, notes) = {
                             let seq = sequencer_arc.lock();
                             (seq.part_audio.clone(), seq.note_events.clone())
@@ -1209,6 +1230,7 @@ mod tests {
         engine
             .configure_song(chart.resolve(), sections, vec![], doc.clone())
             .unwrap();
+        assert!(engine.recorder_start("no-device".into()).is_err());
         engine.start().unwrap();
         engine.record_song("test".into()).unwrap();
         assert!(engine.ensure_timing_editable().is_err());

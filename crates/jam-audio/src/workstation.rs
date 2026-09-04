@@ -117,6 +117,34 @@ impl Clip {
     }
 }
 
+pub struct Audition {
+    pub clip: Clip,
+    frames: usize,
+}
+impl Audition {
+    pub fn new(mut clip: Clip) -> Self {
+        clip.spec.start_bar = 1;
+        clip.spec.repeats = 1;
+        clip.spec.muted = false;
+        Self { clip, frames: 0 }
+    }
+    pub fn render(&mut self, rate: u32, out: &mut [f32]) -> bool {
+        self.clip.render(
+            &[Span {
+                offset: 0,
+                frames: out.len(),
+                start_beats: self.frames as f64 / rate as f64 * 2.0,
+            }],
+            120.0,
+            4.0,
+            rate,
+            out,
+        );
+        self.frames += out.len();
+        self.frames as f64 / (rate as f64) < self.clip.spec.trim_end - self.clip.spec.trim_start
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,6 +186,12 @@ mod tests {
         assert!((out[20] - 0.5).abs() < 1e-6);
         assert!((out[120] - 0.5).abs() < 1e-6);
         assert_eq!(out[220], 0.0);
+        let mut audition =
+            Audition::new(Clip::new(clip.spec.clone(), vec![1.0; 100], 1000).unwrap());
+        let mut first = vec![0.0; 50];
+        assert!(audition.render(1000, &mut first));
+        assert!(first[10] > 0.4);
+        assert!(!audition.render(1000, &mut first));
         let mut invalid = clip.spec.clone();
         invalid.trim_end = 9.0;
         assert!(Clip::new(invalid, vec![0.0; 100], 1000).is_err());

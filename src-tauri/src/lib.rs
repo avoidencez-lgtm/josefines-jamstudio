@@ -1,5 +1,6 @@
 //! src-tauri: Tauri application library and command dispatch.
 
+pub mod controller;
 pub mod keys;
 pub mod library;
 pub mod net;
@@ -26,6 +27,7 @@ pub struct AppState {
     pub store: Arc<Mutex<store::IndexStore>>,
     pub ai_music: Arc<Mutex<jam_audio::ai_music::AiMusicEngine>>,
     pub rig: Arc<Mutex<jam_rig::RigOrchestrator>>,
+    pub controller: Arc<Mutex<Option<jam_rig::controller::ControllerInput>>>,
     pub cost_log: Arc<net::CostLog>,
 }
 
@@ -406,6 +408,7 @@ fn band_load_chart(
         }
     }
     eng.band_load_chart(chart.resolve());
+    restore_rig_mappings(&state);
     Ok(chart)
 }
 
@@ -417,7 +420,14 @@ fn band_load_chart_inline(chart: Chart, state: State<'_, AppState>) -> Result<()
     eng.ensure_timing_editable()?;
     eng.transport_set_time_signature(chart.time_sig);
     eng.band_load_chart(chart.resolve());
+    restore_rig_mappings(&state);
     Ok(())
+}
+
+fn restore_rig_mappings(state: &AppState) {
+    let mut rig = state.rig.lock();
+    rig.song_mappings = None;
+    rig.reset_section_tracking();
 }
 
 #[tauri::command]
@@ -940,6 +950,7 @@ pub fn run() {
     let rig_orchestrator = Arc::new(Mutex::new(build_rig(&settings, &library_arc.lock())));
 
     let app_state = AppState {
+        controller: Arc::new(Mutex::new(None)),
         secret_store,
         engine: Arc::clone(&engine_arc),
         library: Arc::clone(&library_arc),
@@ -953,6 +964,8 @@ pub fn run() {
         .plugin(tauri_plugin_log::Builder::new().build())
         .manage(app_state)
         .setup(move |app| {
+            use tauri::Manager;
+            let controller = Arc::clone(&app.state::<AppState>().controller);
             let app_handle = app.handle().clone();
             let eng = Arc::clone(&engine_arc);
             let rig = Arc::clone(&rig_orchestrator);
@@ -982,6 +995,13 @@ pub fn run() {
                         }
                     }
                     let _ = app_handle.emit("meters", &tel.output_level);
+                    if let Some(input) = controller.lock().as_ref() {
+                        for press in input.drain() {
+                            if !rig.lock().is_recent_echo(&press) {
+                                let _ = app_handle.emit("controller.press", press);
+                            }
+                        }
+                    }
                     let _ = app_handle.emit("input.meters", &tel.input_level);
                     let _ = app_handle.emit("transport.state", &tel.transport);
                     let _ = app_handle.emit("band.state", &tel.band);
@@ -998,11 +1018,16 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            controller::controller_ports,
+            controller::controller_open,
+            controller::controller_config,
+            controller::controller_save,
             originals::originals_record,
             originals::originals_save,
             originals::originals_list,
             originals::originals_load,
             originals::capture_arm,
+            originals::clip_audition,
             originals::capture_keep,
             originals::takes_favourite,
             keys_set,

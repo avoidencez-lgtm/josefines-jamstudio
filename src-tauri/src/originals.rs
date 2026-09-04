@@ -30,15 +30,21 @@ struct Part {
     muted: bool,
 }
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Section {
     parts: [Part; 3],
     swing: f32,
+    #[serde(default)]
+    rig_scene: Option<usize>,
 }
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SongBody {
     chart: Chart,
     sections: BTreeMap<String, Section>,
     clips: Vec<ClipSpec>,
+    #[serde(default)]
+    tone_profile_id: Option<String>,
 }
 
 fn song_dir() -> PathBuf {
@@ -226,17 +232,26 @@ pub fn read_clip(spec: ClipSpec, state: &AppState) -> Result<Clip, String> {
 #[tauri::command]
 pub fn originals_load(document: Value, state: State<'_, AppState>) -> Result<(), String> {
     let song = body(&document)?;
+    let tones = {
+        let rig = state.rig.lock();
+        song_tones(
+            &song,
+            &rig.profile.id,
+            rig.profile.scenes.len(),
+            rig.is_live(),
+        )?
+    };
     let mut sections = BTreeMap::new();
     {
         let lib = state.library.lock();
-        for (id, s) in song.sections {
+        for (id, s) in &song.sections {
             let styles = [
                 lib.style(&s.parts[0].style_id)?,
                 lib.style(&s.parts[1].style_id)?,
                 lib.style(&s.parts[2].style_id)?,
             ];
             sections.insert(
-                id,
+                id.clone(),
                 SectionBand {
                     styles,
                     intensity: std::array::from_fn(|i| s.parts[i].intensity),
@@ -260,7 +275,41 @@ pub fn originals_load(document: Value, state: State<'_, AppState>) -> Result<(),
     state
         .engine
         .lock()
-        .configure_song(song.chart.resolve(), sections, clips, snapshot)
+        .configure_song(song.chart.resolve(), sections, clips, snapshot)?;
+    let mut rig = state.rig.lock();
+    rig.song_mappings = Some(tones);
+    rig.reset_section_tracking();
+    Ok(())
+}
+
+fn song_tones(
+    song: &SongBody,
+    profile: &str,
+    scenes: usize,
+    live: bool,
+) -> Result<std::collections::HashMap<String, usize>, String> {
+    let mut mappings = std::collections::HashMap::new();
+    let Some(wanted) = &song.tone_profile_id else {
+        return Ok(mappings);
+    };
+    if wanted != profile || !live {
+        return Err(format!(
+            "Open the {wanted} profile and a MIDI output in Rig, or switch off song tone changes."
+        ));
+    }
+    let mut names = std::collections::BTreeSet::new();
+    for section in &song.chart.sections {
+        if !names.insert(&section.name) {
+            return Err("Use unique section names when song tones are enabled.".into());
+        }
+        if let Some(scene) = song.sections[&section.id].rig_scene {
+            if scene >= scenes {
+                return Err(format!("Choose an available tone for {}.", section.name));
+            }
+            mappings.insert(section.name.clone(), scene);
+        }
+    }
+    Ok(mappings)
 }
 
 #[tauri::command]
@@ -271,6 +320,21 @@ pub fn originals_record(session_id: String, state: State<'_, AppState>) -> Resul
 #[tauri::command]
 pub fn capture_arm(seconds: u32, state: State<'_, AppState>) -> Result<(), String> {
     state.engine.lock().capture.lock().arm(seconds)
+}
+
+#[tauri::command]
+pub fn clip_audition(spec: ClipSpec, state: State<'_, AppState>) -> Result<(), String> {
+    let clip = read_clip(spec, &state)?;
+    let eng = state.engine.lock();
+    if !eng.status().running {
+        return Err("Start a working audio device before listening.".into());
+    }
+    if eng.recorder_is_recording() {
+        return Err("Save the recording before listening to another take.".into());
+    }
+    eng.transport_stop();
+    *eng.audition.lock() = Some(jam_audio::workstation::Audition::new(clip));
+    Ok(())
 }
 #[tauri::command]
 pub fn capture_keep(
@@ -297,6 +361,25 @@ pub fn takes_favourite(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn song_tones_require_the_selected_live_rig_and_valid_unique_sections() {
+        let mut doc: Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/seams/original.json")).unwrap();
+        doc["body"]["toneProfileId"] = serde_json::json!("headrush-pedalboard");
+        doc["body"]["sections"]["verse"]["rigScene"] = serde_json::json!(2);
+        let song = body(&doc).unwrap();
+        assert_eq!(
+            song_tones(&song, "headrush-pedalboard", 4, true).unwrap()["Verse"],
+            2
+        );
+        assert!(song_tones(&song, "other-rig", 4, true).is_err());
+        assert!(song_tones(&song, "headrush-pedalboard", 4, false).is_err());
+        assert!(song_tones(&song, "headrush-pedalboard", 2, true).is_err());
+        doc["body"]["toneProfileId"] = Value::Null;
+        assert!(song_tones(&body(&doc).unwrap(), "other-rig", 0, false)
+            .unwrap()
+            .is_empty());
+    }
     #[test]
     fn song_roundtrip_preserves_unknown_fields_and_rejects_conflicting_save() {
         let root = std::env::temp_dir().join(format!("jam-originals-{}", std::process::id()));

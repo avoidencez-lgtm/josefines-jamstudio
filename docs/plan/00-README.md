@@ -95,6 +95,8 @@ Rules for the board: ☐ becomes ⏳ when work starts, and ✅ only when **all**
 Added on top of the real-band rebuild: Write editor, independent section parts and
 groove locks, optional rolling capture, trimmed guitar layers, overdub recording,
 undo/versions, favourite takes, durable song/take files and separated DAW exports.
+The follow-up adds learned PC/CC/note pedals, section rehearsal loops, guitar/trim
+audition, and optional song-owned rig scenes with MIDI echo suppression.
 See [the user guide and owner acceptance session](../guide/songwriting.md).
 This does not complete the broader M3/M4 provider work or the hardware/Logic gates.
 Verification results belong in the associated PR; owner acceptance remains pending.

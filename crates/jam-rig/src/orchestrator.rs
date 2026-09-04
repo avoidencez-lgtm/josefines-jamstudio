@@ -25,6 +25,8 @@ pub struct RigOrchestrator {
     pub profile: RigProfile,
     sink: Box<dyn MidiSink>,
     pub section_mappings: HashMap<String, usize>,
+    /// Temporary song-owned mappings; never persisted as the global Rig setup.
+    pub song_mappings: Option<HashMap<String, usize>>,
     pub current_scene: usize,
     /// Last known value per CC, so the UI can show knob positions.
     pub control_values: HashMap<u8, u8>,
@@ -42,6 +44,7 @@ impl RigOrchestrator {
             profile,
             sink,
             section_mappings: HashMap::new(),
+            song_mappings: None,
             current_scene: 0,
             control_values: HashMap::new(),
             follow_sections: true,
@@ -70,6 +73,7 @@ impl RigOrchestrator {
     /// Swaps hardware profile; mappings are kept only if they still point at an
     /// existing scene.
     pub fn set_profile(&mut self, profile: RigProfile) {
+        self.song_mappings = None;
         let n = profile.scenes.len();
         self.section_mappings.retain(|_, idx| *idx < n);
         self.profile = profile;
@@ -105,6 +109,27 @@ impl RigOrchestrator {
 
     pub fn clear_monitor(&mut self) {
         self.monitor.clear();
+    }
+
+    /// Suppress MIDI returned through the rig's Thru path after this app sent it.
+    pub fn is_recent_echo(&self, press: &crate::controller::PedalPress) -> bool {
+        let now = self.started.elapsed().as_millis() as u64;
+        let kind = match press.kind.as_str() {
+            "program" => 0xc0,
+            "cc" => 0xb0,
+            "note" => 0x90,
+            _ => return false,
+        };
+        self.monitor
+            .iter()
+            .rev()
+            .take_while(|m| now.saturating_sub(m.at_ms) <= 500)
+            .any(|m| {
+                m.live
+                    && m.bytes.len() >= 2
+                    && m.bytes[0] == kind | (press.channel - 1)
+                    && m.bytes[1] == press.number
+            })
     }
 
     pub fn set_section_mapping(&mut self, section: String, scene_idx: usize) {
@@ -200,10 +225,14 @@ impl RigOrchestrator {
             return Ok(None);
         }
         self.last_section = Some(section.to_string());
-        if !self.follow_sections {
+        if self.song_mappings.is_none() && !self.follow_sections {
             return Ok(None);
         }
-        let Some(&scene_idx) = self.section_mappings.get(section) else {
+        let mappings = self
+            .song_mappings
+            .as_ref()
+            .unwrap_or(&self.section_mappings);
+        let Some(&scene_idx) = mappings.get(section) else {
             return Ok(None);
         };
         if self.last_sent_scene == Some(scene_idx) {
@@ -318,5 +347,35 @@ mod tests {
             orch.select_scene(i % 8).unwrap();
         }
         assert_eq!(orch.monitor().len(), MONITOR_CAPACITY);
+    }
+    #[test]
+    fn song_tones_do_not_replace_global_mappings_and_midi_thru_is_filtered() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.set_section_mapping("Verse".into(), 1);
+        orch.song_mappings = Some([("Verse".into(), 2)].into());
+        assert_eq!(orch.on_section_change("Verse").unwrap(), Some(2));
+        assert_eq!(orch.section_mappings["Verse"], 1);
+        orch.song_mappings = None;
+        orch.reset_section_tracking();
+        assert_eq!(orch.on_section_change("Verse").unwrap(), Some(1));
+        orch.monitor.push_back(SentMessage {
+            at_ms: 0,
+            bytes: vec![0xc0, 12],
+            text: String::new(),
+            reason: String::new(),
+            live: true,
+        });
+        let press = crate::controller::PedalPress {
+            kind: "program".into(),
+            channel: 1,
+            number: 12,
+        };
+        assert!(orch.is_recent_echo(&press));
+        assert!(!orch.is_recent_echo(&crate::controller::PedalPress {
+            number: 13,
+            ..press.clone()
+        }));
+        orch.started = Instant::now() - Duration::from_secs(1);
+        assert!(!orch.is_recent_echo(&press));
     }
 }

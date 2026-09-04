@@ -41,6 +41,8 @@ export const JO_TOOLS: JoToolDeclaration[] = [
             "select",
             "lock",
             "groove",
+            "loop",
+            "next",
           ],
         },
         name: { type: "string", description: "Section or version name" },

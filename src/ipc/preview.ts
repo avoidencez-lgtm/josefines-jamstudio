@@ -689,6 +689,17 @@ export function createPreviewEngine(
     originals_load: () => {
       throw new Error("Playback requires the desktop app.");
     },
+    clip_audition: () => {
+      throw new Error("Guitar preview requires the desktop app.");
+    },
+    controller_ports: () => [],
+    controller_config: () => ({ schemaVersion: 1, bindings: [] }),
+    controller_open: () => {
+      throw new Error("MIDI input requires the desktop app.");
+    },
+    controller_save: () => {
+      throw new Error("Pedal setup requires the desktop app.");
+    },
     originals_record: () => {
       throw new Error("Recording requires the desktop app.");
     },

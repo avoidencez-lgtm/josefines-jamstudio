@@ -122,7 +122,14 @@ The step-by-step guide is [songwriting.md](guide/songwriting.md).
   Do not hand-edit a song while it is open; revisions reject competing saves.
 - The `songwriting` Jo declaration is in `src/lib/jo/tools.ts`, its dispatcher in
   `dispatcher.ts`, and local phrases in `intent.ts`. It uses the same editor state.
-  H works with keyboard-emulating foot pedals; raw MIDI pedal input is not added.
+  H works with keyboard-emulating foot pedals. Raw MIDI input is learned in Write;
+  `controller.json` stores the same action and press data illustrated in
+  `tests/fixtures/seams/controller.json`. The Rust press filter accepts PC, CC and
+  notes; the frontend action registry lives in `src/lib/controller.ts`.
+- Song tones use `body.toneProfileId` and `body.sections[id].rigScene` (a scene index
+  in the existing rig profile). To rename or change available hardware scenes,
+  copy the rig's JSON into the user `rigs/` folder and edit its `scenes` commands;
+  restart to reload the registry. MIDI values remain validated by that profile.
 - `tests/fixtures/seams/original.json` demonstrates the document. Run
   `pnpm test -- originals` and `cargo test -p src-tauri originals` for its round trip.
 

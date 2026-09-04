@@ -440,3 +440,18 @@ reference mixes, not additional instrument layers. Capture-only ideas have no
 musical grid or reconstructed MIDI. The current single input and synthetic
 instruments are unchanged; real rig alignment and Logic import remain owner gates.
 See [the user workflow](guide/songwriting.md) and [extension recipe](EXTENDING.md).
+
+The second songwriting slice adds Rust guitar auditioning and explicitly opened
+MIDI input. `ControllerInput` filters PC/CC/note presses into a bounded queue; the
+existing telemetry worker emits them to the shared frontend controller registry.
+Learning persists a validated, versioned `controller.json`; pedal actions use the
+same writing commands as buttons and Jo. Releases/held CCs do not trigger commands,
+and recent echoed rig messages are filtered before dispatch. No MIDI input is opened
+or armed automatically. Rehearsal ranges are computed from the existing arrangement.
+
+Optional song tones reference the active rig profile's scenes. They use temporary
+`song_mappings` in the existing orchestrator, leaving persisted global mappings
+unchanged. A missing port, mismatched profile, invalid scene or ambiguous section
+name is rejected before playback. Selecting another hardware profile clears this
+override. Guitar audition reuses the clip renderer and ends at the trim boundary;
+it never passes PCM through IPC and is stopped before a new recording.

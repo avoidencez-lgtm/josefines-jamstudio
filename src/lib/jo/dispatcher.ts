@@ -29,6 +29,17 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         await w.record();
         return "Recording updated.";
       }
+      if (a.action === "loop" || a.action === "next") {
+        if (name) {
+          const section = w.song.body.chart.sections.find(
+            (s) => s.name.toLowerCase() === name.toLowerCase(),
+          );
+          if (!section) throw new Error("Section not found.");
+          w.select(section.id);
+        }
+        await w.rehearse(a.action === "next");
+        return "Section loop ready.";
+      }
       if (store.isRecording)
         throw new Error("Save the recording before editing.");
       if (a.action === "version") {
