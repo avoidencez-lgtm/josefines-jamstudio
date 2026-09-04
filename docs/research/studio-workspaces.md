@@ -31,7 +31,7 @@ with the intended guitarist.
 - Jo retains its conversation and unfinished input in memory between rooms.
   Live commands run on Send. Song-edit batches are reviewed before the existing
   validated, fingerprint-checked application path. Legacy groove/lock/restore and film edits also require review; mixed batches are refused before application. Only the selected provider is
-  contacted. Unsupported voice stays disabled; T is reserved for Jo while there.
+  contacted. Unsupported voice stays disabled; T remains the global tap-tempo shortcut outside text fields.
 - Songs imports into the existing local media library and opens native playback.
   A selected asset can become Film's soundtrack. This replaces the non-working
   M3 screen, not the unbuilt stem-separation/stretching engine.

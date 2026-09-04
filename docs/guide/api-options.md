@@ -43,7 +43,7 @@ Open a song in **Write**, select a section and expand **Song Lab**:
 - **A contrasting bridge:** “Eight bars, quieter first half, build back to the
   chorus.” Apply adds an editable section at the end; move it in the song form.
 - **A lyric seed:** “Three concrete images about leaving home, no generic slogans.”
-  Edit the text and keep the useful lines in song notes.
+  Review and edit the proposed text, then apply it to the selected section lyric sheet.
 - **Arrangement feedback:** “Where can the bass drop out so the last chorus feels
   bigger?” Keep the suggestions, then adjust the existing part controls yourself.
 
@@ -85,7 +85,7 @@ until this session is performed.
 
 ## Stay in the studio with Codex or Claude Code
 
-Open **Studio assistant** at the lower right of any screen. It stays open while
+Open **Studio assistant** from **Assistant** in the top bar of any screen. It stays open while
 you move around Jamstudio and retains the current chat until the app closes.
 Choose **Codex · installed CLI** or **Claude Code · installed CLI**. The same
 selection is used by Jo and Song Lab. This conversation is local to Jamstudio;
@@ -158,6 +158,4 @@ it before asking the assistant to place that new section in the form.
 **Cancel request** terminates a running local CLI request. For API connections it
 discards the answer while the bounded network request finishes. Usage already
 incurred still counts. No provider fallback is added. The panel sends text/chart,
-rig name and cached local analysis summaries, not audio. Jo's dedicated screen
-still executes its validated commands directly; the new panel explicitly reviews
-proposals first. [Bridge boundaries and acceptance](../adr/0007-installed-studio-agents.md).
+rig name and cached local analysis summaries, not audio. Jo's dedicated screen executes local band commands directly and reviews proposed song edits before applying them, as does the assistant panel. [Bridge boundaries and acceptance](../adr/0007-installed-studio-agents.md).

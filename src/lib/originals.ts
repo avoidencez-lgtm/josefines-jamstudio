@@ -19,6 +19,8 @@ export interface SectionSettings {
   rigScene?: number | null;
 }
 export interface GuitarClip {
+  /** Arranged bar range owned by a section comp; other layers remain untouched. */
+  compSlot?: string;
   takeId: string;
   label: string;
   trimStart: number;
@@ -126,7 +128,8 @@ interface WritingState {
   message: string;
   captureSeconds: number;
   rehearsalIndex: number;
-  view: "compose" | "lyrics" | "record" | "versions";
+  view: "compose" | "lyrics" | "record" | "finish" | "versions";
+  loopRange: (startBar: number, endBar: number) => Promise<void>;
   rehearse: (next?: boolean) => Promise<void>;
   edit: (fn: (body: SongBody) => void) => void;
   createSong: () => void;
@@ -288,7 +291,21 @@ export const useWriting = create<WritingState>((set, get) => ({
     const saved = await ipc.invoke<Original>("originals_save", {
       document: song,
     });
-    set({ song: saved, dirty: false, message: "Song saved." });
+    set((current) => {
+      if (
+        current.song?.id !== song.id ||
+        current.song.revision > saved.revision
+      )
+        return {};
+      const changed = current.song !== song;
+      return {
+        song: changed ? { ...current.song, revision: saved.revision } : saved,
+        dirty: changed,
+        message: changed
+          ? "Earlier changes saved. Newer edits still need saving."
+          : "Song saved.",
+      };
+    });
     await get().refresh();
   },
   saveCopy: async () => {
@@ -302,7 +319,13 @@ export const useWriting = create<WritingState>((set, get) => ({
     const saved = await ipc.invoke<Original>("originals_save", {
       document: copy,
     });
-    set({ song: saved, dirty: false, message: "Copy saved. Original kept." });
+    if (get().song === song) {
+      set({ song: saved, dirty: false, message: "Copy saved. Original kept." });
+    } else {
+      set({
+        message: "Copy saved. Your newer draft is still open and needs saving.",
+      });
+    }
     await get().refresh();
   },
   play: async () => {
@@ -326,20 +349,32 @@ export const useWriting = create<WritingState>((set, get) => ({
     if (index < 0) throw new Error("Add this section to the song form first.");
     if (next) index = (index + 1) % ranges.length;
     const range = ranges[index];
-    await ipc.invoke("originals_load", { document: song });
-    await ipc.invoke("transport_set_count_in", { bars: 0 });
-    await ipc.invoke("transport_set_loop", {
-      startBar: range.startBar,
-      endBar: range.endBar,
-      enabled: true,
-    });
-    await ipc.invoke("transport_seek_bar", { bar: range.startBar });
-    await ipc.invoke("transport_play");
+    await get().loopRange(range.startBar, range.endBar);
     set({
       selected: range.sectionId,
       rehearsalIndex: index,
       message: `Looping bars ${range.startBar}–${range.endBar - 1}. Next section advances through your form.`,
     });
+  },
+  loopRange: async (startBar, endBar) => {
+    const song = get().song;
+    if (!song) throw new Error("Create or open a song first.");
+    if (useEngineStore.getState().isRecording)
+      throw new Error("Save the take before changing its timeline.");
+    const ranges = arrangementRanges(song.body.chart);
+    if (
+      !Number.isInteger(startBar) ||
+      !Number.isInteger(endBar) ||
+      startBar < 1 ||
+      endBar <= startBar ||
+      endBar > (ranges.at(-1)?.endBar ?? 1)
+    )
+      throw new Error("Choose a loop inside the song form.");
+    await ipc.invoke("originals_load", { document: song });
+    await ipc.invoke("transport_set_count_in", { bars: 0 });
+    await ipc.invoke("transport_set_loop", { startBar, endBar, enabled: true });
+    await ipc.invoke("transport_seek_bar", { bar: startBar });
+    await ipc.invoke("transport_play");
     useEngineStore.setState({ currentChart: song.body.chart });
   },
   record: async () => {

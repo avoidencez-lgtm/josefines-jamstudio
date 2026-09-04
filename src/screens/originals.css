@@ -708,3 +708,67 @@
     justify-content: start;
   }
 }
+
+.finishing-desk > section {
+  padding: 26px 0;
+  border-top: 1px solid var(--line);
+}
+.finishing-desk h2 {
+  margin-bottom: 8px;
+}
+.finishing-desk .song-controls {
+  margin-top: 18px;
+}
+.finishing-desk ul {
+  margin: 16px 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+.finishing-desk li {
+  padding: 8px 0;
+  font-size: 14px;
+}
+.finishing-desk li p {
+  color: var(--fg-1);
+}
+.finishing-desk summary {
+  cursor: pointer;
+  padding: 12px 0;
+  font-weight: 600;
+}
+.finish-review {
+  margin-top: 20px;
+}
+.finish-proposal {
+  border: 1px solid var(--line);
+  padding: 16px 24px;
+  margin-top: 20px;
+  background: var(--bg-1);
+}
+.finish-proposal h3 {
+  font-size: 18px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.finish-proposal table {
+  text-align: left;
+  margin-top: 14px;
+  width: min(100%, 540px);
+  font-size: 14px;
+}
+.finish-proposal td,
+.finish-proposal th {
+  padding: 8px 16px 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.song-editor .finish-vocal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.song-editor .finish-vocal-toggle input {
+  width: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}

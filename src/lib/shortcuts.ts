@@ -149,7 +149,7 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     keys: "?",
-    description: "Show this help",
+    description: "Open Help & guides",
     group: "App",
     matches: key("?"),
     run: () => undefined,

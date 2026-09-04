@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
+import { FinishingDesk } from "../components/FinishingDesk";
 import { FootControls } from "../components/FootControls";
 import { SongLab } from "../components/SongLab";
 import {
@@ -188,6 +189,7 @@ export function Originals() {
                   ["compose", "Compose"],
                   ["lyrics", "Lyrics"],
                   ["record", "Record & layers"],
+                  ["finish", "Finish"],
                   ["versions", "Versions"],
                 ] as const
               ).map(([id, label]) => (
@@ -270,6 +272,9 @@ export function Originals() {
           <fieldset disabled={w.busy || isRecording} className="song-workspace">
             <legend className="sr-only">Song settings</legend>
             <ArrangementDesk />
+            <div hidden={w.view !== "finish"}>
+              <FinishingDesk key={song.id} />
+            </div>
             <div hidden={w.view !== "lyrics"}>
               <LyricsDesk />
             </div>

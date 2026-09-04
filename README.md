@@ -10,6 +10,13 @@ the app owns the arrangement, accompaniment, recording and DAW handoff.
 > See the [build closeout](docs/reviews/build-closeout.md) and
 > [milestone board](docs/plan/00-README.md) for tested scope and remaining gates.
 
+## User manuals
+
+Open **Help & guides** in the sidebar (or press **?**) for searchable help inside the app.
+Read the complete [English manual](docs/guide/manual-en.md) or [norsk bokmål](docs/guide/manual-nb.md).
+Write → **Finish** adds a structural review, transition experiments and section-based guitar comping.
+See the [verification report](docs/reviews/studio-verification-2026-09-05.md) for evidence and limits.
+
 ## The idea
 
 The guitar's tone is always made by hardware: HeadRush Pedalboard → Hughes & Kettner Black Spirit 200 → Vox 4x12, zero latency. The app **listens and plays**: it takes the dry DI the HeadRush already sends over USB, plays the band back on the HeadRush's return channels so guitar and band meet in the headphones, and never sits in the monitoring path.
@@ -29,7 +36,7 @@ Guitar ─► HeadRush ─► Black Spirit 200 ─► Vox 4x12
 | Audio engine | Working | `cpal` input/output with device and sample-rate negotiation, a render-ahead worker, a headless fallback and a fail-loud status pill. Tuner (McLeod pitch) and click are live. |
 | Virtual band | Working | Sample-accurate sequencer: drums, bass and comp from a chart, six styles with three intensity tiers each, swing, humanisation, count-in, fills, crash, stop and ending cues, loop points, intensity following the guitarist's energy. Offline render tests check determinism, timing and levels. |
 | Chart library | Working | Bundled charts plus a text chart format you can type (`| Am7 D7 | G %|`), a chart editor, transposition, a chord strip that follows the bar, and a soloing helper suggesting scales and arpeggios per chord. |
-| Practice tools | Working | Tap tempo, tempo trainer, keyboard shortcuts with a help overlay. |
+| Practice tools | Working | Tap tempo, tempo trainer, keyboard shortcuts and searchable bilingual in-app help. |
 | Jo | Text tools working | Offline band commands, configurable text providers and installed-agent proposals. Song edits require review. Native microphone input, STT, TTS and voice-bus ducking are not available in this build. |
 | Rig over MIDI | Working, hardware gate open | Data-driven profiles for HeadRush Pedalboard, Black Spirit 200, Quad Cortex, Helix, Kemper and Axe-Fx III; real MIDI out through `midir`; section-bound scene changes as the band plays; knobs, program changes and a MIDI monitor. Verified against the real rig: not yet (owner gate). |
 | Recorder and export | Working | Every take is written as 24-bit WAV stems (guitar DI, band, master). Analysis measures pick timing against the take's tempo grid, dynamic consistency and intonation on the real DI file. Export writes the stems, a Standard MIDI File tempo map with the chart's section markers, and a JSON sidecar. Latency offset is a manual setting; automatic loopback measurement is not built. |
