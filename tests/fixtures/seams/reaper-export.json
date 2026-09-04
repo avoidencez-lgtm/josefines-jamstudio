@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "tempo": 100,
+  "timeSignature": [3, 4],
+  "sampleRate": 48000,
+  "stems": [
+    "guitar-di",
+    "drums",
+    "bass",
+    "comp",
+    "band",
+    "master",
+    "guitar-layer-1"
+  ],
+  "sections": [["Verse \"one\"\nø", 1], ["Chorus", 2], ["Beyond take", 99]],
+  "midi": [{ "frame": 24000, "bytes": [144, 45, 100] }]
+}

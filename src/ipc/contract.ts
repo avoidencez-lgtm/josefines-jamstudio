@@ -356,4 +356,5 @@ export interface ExportReport {
   midiFile: string;
   copiedStems: string[];
   missingStems: string[];
+  reaperScript?: string | null;
 }

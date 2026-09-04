@@ -82,9 +82,8 @@ export const Sessions: React.FC = () => {
         ? ` (${report.missingStems.length} stem file(s) could not be found on disk)`
         : "";
       setExportMessage(
-        `Wrote ${report.copiedStems.length} stem(s) and a tempo map to ${report.dir}${missing}`,
+        `Wrote ${report.copiedStems.length} stem(s) and a tempo map to ${report.dir}${missing}.${report.reaperScript ? " For REAPER, follow REAPER-START-HERE.txt in that folder." : ""}`,
       );
-      setTimeout(() => setExportMessage(null), 8000);
     }
   };
 
@@ -298,7 +297,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
           )}
 
           <Button size="sm" variant="secondary" onClick={onExport}>
-            Export DAW
+            Export for Logic / REAPER
           </Button>
 
           <Button size="sm" variant="danger" onClick={onDelete}>

@@ -97,6 +97,8 @@ groove locks, optional rolling capture, trimmed guitar layers, overdub recording
 undo/versions, favourite takes, durable song/take files and separated DAW exports.
 The follow-up adds learned PC/CC/note pedals, section rehearsal loops, guitar/trim
 audition, and optional song-owned rig scenes with MIDI echo suppression.
+Complete exports now also include a REAPER session builder for aligned tracks,
+section markers and editable band MIDI; Logic export remains available.
 See [the user guide and owner acceptance session](../guide/songwriting.md).
 This does not complete the broader M3/M4 provider work or the hardware/Logic gates.
 Verification results belong in the associated PR; owner acceptance remains pending.

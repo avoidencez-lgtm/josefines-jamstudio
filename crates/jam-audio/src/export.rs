@@ -27,6 +27,7 @@ pub struct ExportReport {
     pub midi_file: String,
     pub copied_stems: Vec<String>,
     pub missing_stems: Vec<String>,
+    pub reaper_script: Option<String>,
 }
 
 impl DawExporter {
@@ -132,8 +133,126 @@ impl DawExporter {
             midi_file: midi_path.to_string_lossy().to_string(),
             copied_stems,
             missing_stems,
+            reaper_script: None,
         })
     }
+}
+
+/// Quote data as Lua, never as executable text (JSON's Unicode escapes are not Lua).
+fn lua_string(value: &str) -> String {
+    let mut out = String::from("\"");
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            c if c.is_control() => out.push_str(&format!("\\{:03}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A portable, inspectable session builder using REAPER's documented ReaScript API.
+/// Existing projects are never overwritten: the user imports into an empty project and saves it.
+pub fn write_reaper_import(
+    output_dir: &Path,
+    job: &ExportJob<'_>,
+    report: &ExportReport,
+    notes: &[crate::workstation::MidiNote],
+) -> std::io::Result<String> {
+    let invalid = |message| std::io::Error::new(std::io::ErrorKind::InvalidData, message);
+    if !report.missing_stems.is_empty()
+        || report.copied_stems.is_empty()
+        || !job.tempo.is_finite()
+        || !(20.0..=400.0).contains(&job.tempo)
+        || job.sample_rate == 0
+        || job.time_sig.0 == 0
+        || !job.time_sig.1.is_power_of_two()
+    {
+        return Err(invalid(
+            "A complete export and valid tempo/meter are required for REAPER.",
+        ));
+    }
+    let mut files = Vec::new();
+    for path in &report.copied_stems {
+        let path = Path::new(path);
+        if path.parent() != Some(output_dir) {
+            return Err(invalid("REAPER media must be inside the export folder."));
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| invalid("Invalid media name"))?;
+        let role = name
+            .strip_prefix(&format!("{}-", job.take_id))
+            .unwrap_or(name)
+            .trim_end_matches(".wav");
+        let wav = hound::WavReader::open(path).map_err(std::io::Error::other)?;
+        let length = wav.duration() as f64 / wav.spec().sample_rate as f64;
+        if !length.is_finite() || length <= 0.0 {
+            return Err(invalid("Cannot import an empty WAV into REAPER."));
+        }
+        files.push((name, role, length));
+    }
+    let individual_band = ["drums", "bass", "comp"]
+        .iter()
+        .all(|role| files.iter().any(|(_, r, _)| r == role));
+    let use_band_mix = !individual_band && files.iter().any(|(_, role, _)| *role == "band");
+    let length = files
+        .iter()
+        .map(|(_, _, seconds)| *seconds)
+        .fold(0.0, f64::max);
+    let mut data = format!(
+        "local session = {{tempo={}, numerator={}, denominator={}, length={}, files={{\n",
+        job.tempo, job.time_sig.0, job.time_sig.1, length
+    );
+    for (name, role, duration) in files {
+        let muted = role == "master"
+            || (role == "band" && !use_band_mix)
+            || (use_band_mix && ["drums", "bass", "comp"].contains(&role));
+        data.push_str(&format!(
+            "{{file={}, name={}, length={}, muted={}}},\n",
+            lua_string(name),
+            lua_string(role),
+            duration,
+            muted
+        ));
+    }
+    data.push_str("}, markers={\n");
+    for (name, bar) in job.sections {
+        let seconds = bar.saturating_sub(1) as f64 * job.time_sig.0 as f64 * 4.0
+            / job.time_sig.1 as f64
+            * 60.0
+            / job.tempo;
+        if seconds < length {
+            data.push_str(&format!(
+                "{{name={}, time={}}},\n",
+                lua_string(name),
+                seconds
+            ));
+        }
+    }
+    data.push_str("}, notes={\n");
+    for note in notes {
+        let time = note.frame as f64 / job.sample_rate as f64;
+        if time <= length
+            && matches!(note.bytes[0] & 0xf0, 0x80 | 0x90)
+            && note.bytes[1] < 128
+            && note.bytes[2] < 128
+        {
+            data.push_str(&format!(
+                "{{time={}, status={}, pitch={}, velocity={}}},\n",
+                time, note.bytes[0], note.bytes[1], note.bytes[2]
+            ));
+        }
+    }
+    data.push_str("}}\n");
+    data.push_str(include_str!("reaper_import.lua"));
+    let path = output_dir.join("Import into REAPER.lua");
+    std::fs::write(&path, data)?;
+    std::fs::write(output_dir.join("REAPER-START-HERE.txt"), "REAPER must be installed separately. No extensions are required.\n\n1. Open a NEW EMPTY project in REAPER (File > New project tab is useful).\n2. Open Actions > Show action list. Choose New action > Load ReaScript.\n3. Select 'Import into REAPER.lua' in this folder and Run it.\n4. Save the resulting project in THIS folder with File > Save project as.\n\nThe script refuses projects containing tracks, markers or tempo automation.\nAudio starts at zero with its original speed/pitch. Reference mixes are muted.\nMIDI tracks are muted until you add instruments and mute the matching audio stems.\nKeep the whole export folder together when moving it or sending it to your Mac.\nWAV stems and the tempo map also remain usable in Logic and other DAWs.\n")?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 fn write_var_len(buf: &mut Vec<u8>, mut val: u32) {
@@ -228,6 +347,79 @@ pub fn write_clip_stem(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reaper_bundle_is_portable_preserves_timing_and_mutes_only_reference_mixes() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/seams/reaper-export.json"
+        ))
+        .unwrap();
+        let dir = std::env::temp_dir().join(format!("jam-reaper-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut report = ExportReport {
+            dir: dir.to_string_lossy().into_owned(),
+            midi_file: String::new(),
+            copied_stems: vec![],
+            missing_stems: vec![],
+            reaper_script: None,
+        };
+        for role in fixture["stems"].as_array().unwrap() {
+            let path = dir.join(format!("take-1-{}.wav", role.as_str().unwrap()));
+            let mut writer = hound::WavWriter::create(
+                &path,
+                hound::WavSpec {
+                    channels: 1,
+                    sample_rate: 48000,
+                    bits_per_sample: 16,
+                    sample_format: hound::SampleFormat::Int,
+                },
+            )
+            .unwrap();
+            for _ in 0..96_000 {
+                writer.write_sample(1000_i16).unwrap();
+            }
+            writer.finalize().unwrap();
+            report
+                .copied_stems
+                .push(path.to_string_lossy().into_owned());
+        }
+        let sections: Vec<(&str, u32)> = fixture["sections"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| (s[0].as_str().unwrap(), s[1].as_u64().unwrap() as u32))
+            .collect();
+        let notes =
+            serde_json::from_value::<Vec<crate::workstation::MidiNote>>(fixture["midi"].clone())
+                .unwrap();
+        let job = ExportJob {
+            take_id: "take-1",
+            tempo: 100.0,
+            time_sig: (3, 4),
+            sample_rate: 48000,
+            sections: &sections,
+            stems: &[],
+        };
+        let script = write_reaper_import(&dir, &job, &report, &notes).unwrap();
+        let text = std::fs::read_to_string(&script).unwrap();
+        assert!(text.contains("name=\"band\", length=2, muted=true"));
+        assert!(text.contains("name=\"master\", length=2, muted=true"));
+        assert!(text.contains("name=\"guitar-layer-1\", length=2, muted=false"));
+        assert!(text.contains("{name=\"Chorus\", time=1.8}"));
+        assert!(!text.contains("Beyond take"));
+        assert!(text.contains("time=0.5, status=144, pitch=45, velocity=100"));
+        assert!(text.contains("Verse \\\"one\\\"\\010ø"));
+        assert!(!text.contains(&report.dir)); // relative media paths survive moving Windows -> Mac
+        report.copied_stems.retain(|p| !p.ends_with("-drums.wav"));
+        write_reaper_import(&dir, &job, &report, &[]).unwrap();
+        assert!(std::fs::read_to_string(&script)
+            .unwrap()
+            .contains("name=\"band\", length=2, muted=false"));
+        report.missing_stems.push("lost.wav".into());
+        assert!(write_reaper_import(&dir, &job, &report, &[]).is_err());
+        assert_eq!(lua_string("\"\\\n\0"), "\"\\\"\\\\\\010\\000\"");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn test_tempo_map_smf1_generation() {

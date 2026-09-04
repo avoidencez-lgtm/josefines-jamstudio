@@ -135,3 +135,19 @@ The step-by-step guide is [songwriting.md](guide/songwriting.md).
 
 The older recipes below describe the broader architecture plan; use the actual
 module paths above for the implemented songwriting slice.
+
+## Extend the REAPER handoff
+
+`crates/jam-audio/src/export.rs::write_reaper_import` derives session data from the
+completed export and actual scheduled MIDI. `reaper_import.lua` is the single
+consumer of that data, using the official ReaScript API. It is included in complete
+DAW bundles, not a second recorder or a live audio bridge. Add supported changes
+there; do not write REAPER's internal project format or add an extension framework.
+Keep text Lua-escaped, file references relative, reference mixes muted, and import
+into an empty project with one undo step. The exporter does not save user projects.
+
+`tests/fixtures/seams/reaper-export.json` covers meter, Unicode/quoted section names,
+stem roles and actual MIDI. Run `cargo test -p jam-audio reaper_bundle` for packaging
+and `lua tests/reaper-import.lua` for script behavior against the API boundary.
+The Lua check is a standalone test, not an application runtime dependency. Both
+checks complement the real Mac/REAPER owner acceptance session in the guide.

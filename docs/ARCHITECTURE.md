@@ -455,3 +455,12 @@ unchanged. A missing port, mismatched profile, invalid scene or ambiguous sectio
 name is rejected before playback. Selecting another hardware profile clears this
 override. Guitar audition reuses the clip renderer and ends at the trim boundary;
 it never passes PCM through IPC and is stopped before a new recording.
+
+Complete DAW exports also carry an optional REAPER session builder. Rust generates
+escaped session data from validated WAV headers, tempo/meter, markers and recorded
+MIDI; a bundled Lua consumer calls REAPER's documented API in an empty project.
+Audio has explicit time-based placement; separate MIDI channels remain editable.
+Reference mixes and MIDI alternatives start muted. Relative file references allow
+moving the export folder between Windows and Mac. Import never opens a network,
+modifies the original audio, or saves over a project. Logic-compatible WAV/MIDI
+exports remain available. This is a one-way performance handoff, not a hosted DAW.

@@ -776,8 +776,7 @@ fn chart_sections(chart: &Chart) -> Vec<(String, u32)> {
     out
 }
 
-/// Bundles a take for a DAW: its three stems, an SMF tempo map at the tempo it was
-/// recorded at with markers from the chart it was played against, and a JSON sidecar.
+/// Exports recorded stems, layers, MIDI, markers and an optional REAPER session builder.
 #[tauri::command]
 fn takes_export_daw(
     take_id: String,
@@ -862,12 +861,19 @@ fn takes_export_daw(
         }
     }
     let info_path = export_path.join(format!("{}-info.json", take.id));
+    if report.missing_stems.is_empty() {
+        report.reaper_script = Some(
+            jam_audio::export::write_reaper_import(&export_path, &job, &report, &take.midi)
+                .map_err(|e| e.to_string())?,
+        );
+    }
     let mut info: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&info_path).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
     info["schemaVersion"] = serde_json::json!(1);
     info["stems"] = serde_json::json!(report.copied_stems);
     info["missingStems"] = serde_json::json!(report.missing_stems);
+    info["reaperScript"] = serde_json::json!(report.reaper_script);
     info["howTo"] = serde_json::json!("Import the tempo map first. Put the individual guitar, drums, bass, comp and guitar-layer stems at bar 1. Band and master are reference mixes: mute them while mixing the individual stems. Import band-notes.mid on separate instrument tracks if wanted.");
     std::fs::write(
         info_path,

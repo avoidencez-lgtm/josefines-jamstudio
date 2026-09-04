@@ -76,7 +76,7 @@ The global Rig mappings remain intact when leaving songwriting. Switching hardwa
 profiles clears the active song override; press Play in Write to validate and load
 the song again. This slice controls one selected rig profile/output at a time.
 
-## Record and continue in Logic
+## Record and continue in Logic or REAPER
 
 **Record / overdub** saves the song, starts from bar 1, and captures a new guitar take
 while the band and existing guitar layers play. **Save take** finishes it. Recording
@@ -95,6 +95,41 @@ not implemented in this slice. Use Settings to choose the intended channel. Guit
 monitoring stays in hardware. The existing manual latency offset remains available.
 The input is shifted and padded to preserve equal stem durations; measure alignment
 on the real rig before relying on an export for production.
+
+### Optional REAPER session builder
+
+**Export for Logic / REAPER** includes `Import into REAPER.lua` and
+`REAPER-START-HERE.txt` when every stem is available. REAPER is a separate application;
+the app does not install it, purchase a license or embed it. Keep Logic if it suits
+you. The same folder still contains standard WAV and MIDI files for other DAWs.
+
+1. In REAPER, open a **new empty project tab** and stop playback.
+2. Open **Actions → Show action list → New action → Load ReaScript**.
+3. Select `Import into REAPER.lua` in the export folder and **Run** it.
+4. Save the resulting REAPER project in that same folder. Keep the whole folder
+   together when transferring it to the Mac or backing it up.
+
+The script creates named audio tracks at time zero, restores the take's tempo,
+meter and section markers, and adds separate editable MIDI tracks for each recorded
+band channel. Master is muted; the band reference is also muted when all three
+individual instrument stems exist. MIDI tracks start muted and have no instrument
+plug-ins: choose instruments, mute the matching audio stems, then enable the MIDI.
+Older takes without individual band stems retain the band mix. No guitar notes
+are inferred from audio. Audio keeps its original speed/pitch when project tempo changes.
+
+No REAPER extensions are required. The importer refuses projects with existing
+tracks, markers or tempo automation and checks audio sources before changing the
+project. Import is one undo step; an unexpected failure reports how to remove the
+partial import. It never automatically saves over a project. This is a one-way
+handoff of the recorded performance, not live synchronization or round-trip editing.
+Manual clip trims, effects, comping and mixing can continue inside REAPER.
+
+Why REAPER: its documented scripting interface fits a customizable handoff well.
+That is an integration choice, not a claim that it sounds better than Logic.
+Primary references checked 2026-09-04: [REAPER capabilities](https://www.reaper.fm/about.php),
+[loading ReaScripts](https://www.reaper.fm/sdk/reascript/reascript.php),
+[API contract](https://www.reaper.fm/sdk/reascript/reascripthelp.html).
+Actual REAPER import/playback on the friend's Mac remains an owner check.
 
 ## Files and recovery
 
@@ -125,5 +160,7 @@ are owner checks, not things a passing software test proves.
 7. Learn each real pedal; confirm press/release behaviour, disconnect/reconnect and
    absence of feedback when the app changes rig scenes.
 8. Save contrasting section tones and verify their timing on the intended rig.
+9. Optionally import the same take in REAPER: confirm section markers, aligned audio,
+   muted reference mixes, editable band notes and save/reopen without missing media.
 
 Record the build commit, device settings, measured offset and any drift. These checks remain pending until performed with the friend.

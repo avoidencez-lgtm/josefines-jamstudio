@@ -894,6 +894,12 @@ export function Originals() {
             Refresh takes
           </Button>
         </div>
+        <p className="song-help">
+          Export for Logic or REAPER. REAPER gets a session builder with aligned
+          tracks, section markers and editable band MIDI. Read
+          REAPER-START-HERE.txt in the export folder; REAPER is installed
+          separately.
+        </p>
         {!takes.length && (
           <p className="song-help">
             Your saved ideas and recorded takes appear here.
@@ -956,11 +962,15 @@ export function Originals() {
                   run(async () => {
                     const r = await exportTakeDaw(t.id);
                     if (r)
-                      useWriting.setState({ message: `Exported to ${r.dir}` });
+                      useWriting.setState({
+                        message: r.missingStems.length
+                          ? `Export incomplete: ${r.missingStems.length} stems missing. Check ${r.dir}.`
+                          : `Exported to ${r.dir}.${r.reaperScript ? " For REAPER, follow REAPER-START-HERE.txt in that folder." : ""}`,
+                      });
                   })
                 }
               >
-                Export to Logic
+                Export for Logic / REAPER
               </Button>
             </div>
           </div>

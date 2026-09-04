@@ -727,7 +727,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
           missing ? "error" : "info",
           missing
             ? `Exported ${stems} stem(s) + tempo map to ${report.dir}; ${missing} stem file(s) were missing on disk`
-            : `Exported ${stems} stems + tempo map to ${report.dir}`,
+            : `Exported ${stems} stems + tempo map${report.reaperScript ? " + REAPER session builder" : ""} to ${report.dir}`,
         );
       }
       return report;
