@@ -8,6 +8,48 @@ export function parseNaturalIntent(text: string): {
   const toolCalls: JoToolCall[] = [];
   const reply = "Got it!";
 
+  if (/^(jo[, ]+)?keep (that|what i just played)[.!]?$/.test(lower))
+    return {
+      reply: "Keeping the idea.",
+      toolCalls: [{ name: "songwriting", arguments: { action: "keep" } }],
+    };
+  if (lower === "save song")
+    return {
+      reply: "Saving the song.",
+      toolCalls: [{ name: "songwriting", arguments: { action: "save" } }],
+    };
+  if (lower === "undo that" || lower === "undo")
+    return {
+      reply: "Undoing the last song edit.",
+      toolCalls: [{ name: "songwriting", arguments: { action: "undo" } }],
+    };
+  const version =
+    /^(?:keep|save)(?: this as)? (?:a )?version(?: called)? (.+)$/.exec(lower);
+  if (version)
+    return {
+      reply: "Keeping this version.",
+      toolCalls: [
+        {
+          name: "songwriting",
+          arguments: { action: "version", name: version[1] },
+        },
+      ],
+    };
+  const lock = /^(lock|unlock|keep) (?:the )?(drums|bass|comp)$/.exec(lower);
+  if (lock)
+    return {
+      reply: "Updating the part lock.",
+      toolCalls: [
+        {
+          name: "songwriting",
+          arguments: {
+            action: "lock",
+            part: lock[2],
+            locked: lock[1] !== "unlock",
+          },
+        },
+      ],
+    };
   // 1. Recording takes (highest priority so "stop recording" isn't caught by generic "stop")
   if (
     lower.includes("record a take") ||

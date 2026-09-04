@@ -412,3 +412,31 @@ Recorded, scrubbed fixtures under `tests/fixtures/providers/<provider>/` capture
 ## 12. Errors and logging
 
 `AppError { code, message, detail?, fatal }` with codes in `src-tauri/src/ipc/errors.rs` mirrored in `src/ipc/errors.ts`; every code has a user-facing message and a next step in the UI. Logs via `tauri-plugin-log` to `~/JosefinesJamstudio/logs/` with rotation; levels info by default, debug with `JAM_LOG=debug`; never bodies, never keys, never raw audio.
+# Implemented songwriting workflow
+
+The Write screen adds a file-backed original-song document (`schemaVersion: 1`),
+reusing `Chart` for chords/arrangement and the existing style registry for each
+section's three independent parts. `src/lib/originals.ts` holds editable state,
+50 body-level undo steps and named versions. Changes reach audio on Play or Record.
+Locks preserve a part's settings when trying another groove; direct edits remain available.
+
+`originals_save/list/load/record`, `capture_arm/keep` and `takes_favourite` are
+additive commands. `src-tauri/src/originals.rs` bounds and validates documents,
+preserves unknown JSON fields, checks revisions and retains a backup when saving.
+Playback resolves the same document into the Rust sequencer and guitar clips.
+Supported scope is 4/4, 40–240 BPM, 256 arranged bars, 16 clips and 20 UI versions.
+
+Rust owns the rolling buffer (opt-in, at most 60 seconds), selected mono input,
+clip playback, per-part buses and MIDI note collection. Guitar clips keep their
+recorded pitch/speed; fitting tempo changes the band. Recording starts atomically
+at bar 1, without a count-in. Timing and chart changes are refused until the take
+is saved. A bounded disk queue writes WAVs and checkpoints headers every second.
+Every completed take has a JSON manifest containing its song snapshot and actual
+scheduled notes. File manifests override the legacy SQLite cache on discovery.
+
+DAW export includes the take snapshot, separate stems, rendered guitar layers,
+tempo/section map and scheduled band MIDI when available. Band/master WAVs are
+reference mixes, not additional instrument layers. Capture-only ideas have no
+musical grid or reconstructed MIDI. The current single input and synthetic
+instruments are unchanged; real rig alignment and Logic import remain owner gates.
+See [the user workflow](guide/songwriting.md) and [extension recipe](EXTENDING.md).

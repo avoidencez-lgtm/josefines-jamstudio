@@ -69,7 +69,29 @@ struct PendingNoteOff {
     key: u8,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MidiNote {
+    pub frame: u64,
+    pub bytes: [u8; 3],
+}
+
+/// A section's three independently editable parts. Existing Style JSON is reused.
+#[derive(Clone)]
+pub struct SectionBand {
+    pub styles: [Style; 3],
+    pub intensity: [f32; 3],
+    pub gains: [f32; 3],
+    pub muted: [bool; 3],
+    pub swing: f32,
+}
+
 pub struct BandSequencer {
+    pub section_bands: std::collections::BTreeMap<String, SectionBand>,
+    section_applied: String,
+    part_gains: [f32; 3],
+    pub part_audio: [Vec<f32>; 4],
+    pub note_events: Vec<MidiNote>,
     pub style: Style,
     pub intensity: f32,
     pub active_cue: Cue,
@@ -111,6 +133,11 @@ impl BandSequencer {
         });
 
         let mut seq = Self {
+            section_bands: Default::default(),
+            section_applied: String::new(),
+            part_gains: [1.0; 3],
+            part_audio: std::array::from_fn(|_| Vec::with_capacity(256)),
+            note_events: Vec::new(),
             style,
             intensity: 0.5,
             active_cue: Cue::None,
@@ -140,6 +167,15 @@ impl BandSequencer {
         };
         seq.update_pattern_for_intensity();
         seq
+    }
+
+    pub fn clear_song(&mut self) {
+        self.section_bands.clear();
+        self.section_applied.clear();
+        self.part_gains = [1.0; 3];
+        self.set_parts(false, false, false);
+        self.reset();
+        self.update_pattern_for_intensity();
     }
 
     pub fn set_style(&mut self, style: Style) {
@@ -218,6 +254,7 @@ impl BandSequencer {
 
     /// Transport stop: silence everything and forget queued state.
     pub fn reset(&mut self) {
+        self.section_applied.clear();
         self.sampler.all_off();
         self.synth.all_notes_off();
         self.pending_note_offs.clear();
@@ -281,6 +318,7 @@ impl BandSequencer {
                     self.set_intensity(int);
                 }
 
+                self.section_applied.clear();
                 self.refresh_chord_display(*bar, 1);
 
                 let cue_to_apply = std::mem::replace(&mut self.pending_cue, Cue::None);
@@ -381,6 +419,7 @@ impl BandSequencer {
             return;
         }
 
+        self.apply_song_section((span.start_beats / beats_per_bar).floor() as u32 + 1);
         let range_start = match self.cursor_beats {
             Some(c) if (c - span.start_beats).abs() < CONTINUITY_EPS => c,
             _ => span.start_beats,
@@ -447,15 +486,122 @@ impl BandSequencer {
         self.render_tails(output_left, output_right);
     }
 
+    pub fn begin_block(&mut self) {
+        for bus in &mut self.part_audio {
+            bus.clear();
+        }
+        self.note_events.clear();
+    }
+
+    fn apply_song_section(&mut self, bar: u32) {
+        let id = self
+            .current_chart
+            .as_ref()
+            .and_then(|c| c.section_at(bar))
+            .map(|b| b.section_id.clone())
+            .unwrap_or_default();
+        if id == self.section_applied {
+            return;
+        }
+        self.section_applied = id.clone();
+        if let Some(settings) = self.section_bands.get(&id).cloned() {
+            self.style = settings.styles[0].clone();
+            self.style.feel.swing = settings.swing;
+            let selected: Vec<_> = settings
+                .styles
+                .iter()
+                .enumerate()
+                .map(|(i, s)| {
+                    s.patterns
+                        .iter()
+                        .find(|p| {
+                            settings.intensity[i] >= p.intensity.0
+                                && settings.intensity[i] <= p.intensity.1
+                        })
+                        .or_else(|| s.patterns.first())
+                        .cloned()
+                        .unwrap_or_default()
+                })
+                .collect();
+            self.current_pattern = PatternEntry {
+                intensity: (0.0, 1.0),
+                drums: selected[0].drums.clone(),
+                bass: selected[1].bass.clone(),
+                comp: selected[2].comp.clone(),
+            };
+            // Keep note timing and velocity stable when trying other parts.
+            self.style.humanize.timing_ms = 0.0;
+            self.style.humanize.velocity = 0.0;
+            self.intensity = 0.5;
+            self.part_gains = settings.gains;
+            self.set_parts(settings.muted[0], settings.muted[1], settings.muted[2]);
+        }
+    }
+
     fn render_tails(&mut self, left: &mut [f32], right: &mut [f32]) {
         if left.is_empty() {
             return;
         }
-        self.sampler.render(left, right);
-        self.synth.render(left, right);
+        let n = left.len().min(right.len());
+        let mut d = vec![0.0; n];
+        let mut dr = vec![0.0; n];
+        let mut b = vec![0.0; n];
+        let mut c = vec![0.0; n];
+        let mut scratch = vec![0.0; n];
+        self.sampler.render(&mut d, &mut dr);
+        self.synth.render_channel(0, &mut b, &mut scratch);
+        scratch.fill(0.0);
+        self.synth.render_channel(1, &mut c, &mut scratch);
+        for i in 0..n {
+            d[i] *= self.part_gains[0];
+            dr[i] *= self.part_gains[0];
+            b[i] *= self.part_gains[1];
+            c[i] *= self.part_gains[2];
+            left[i] += d[i] + b[i] + c[i];
+            right[i] += dr[i] + b[i] + c[i];
+        }
+        for (bus, samples) in self.part_audio.iter_mut().zip([d, dr, b, c]) {
+            bus.extend(samples);
+        }
     }
 
     fn fire(&mut self, kind: SpanEventKind) {
+        let frame = self.part_audio[0].len() as u64;
+        let event = match &kind {
+            SpanEventKind::NoteOn {
+                channel,
+                key,
+                velocity,
+                ..
+            } => Some([0x90 | channel, *key, (velocity * 127.0).round() as u8]),
+            SpanEventKind::NoteOff { channel, key } => Some([0x80 | channel, *key, 0]),
+            SpanEventKind::Drum {
+                instrument,
+                velocity,
+            } => {
+                let key = match instrument.as_str() {
+                    "kick" => 36,
+                    "snare" => 38,
+                    "hihat_closed" => 42,
+                    "hihat_open" => 46,
+                    "pedal_hihat" => 44,
+                    "ride" => 51,
+                    "crash" => 49,
+                    "tom_high" => 50,
+                    "tom_mid" => 47,
+                    "tom_low" => 45,
+                    _ => 37,
+                };
+                self.note_events.push(MidiNote {
+                    frame: frame + self.sample_rate as u64 / 10,
+                    bytes: [0x89, key, 0],
+                });
+                Some([0x99, key, (velocity * 127.0).round() as u8])
+            }
+        };
+        if let Some(bytes) = event {
+            self.note_events.push(MidiNote { frame, bytes });
+        }
         match kind {
             SpanEventKind::Drum {
                 instrument,

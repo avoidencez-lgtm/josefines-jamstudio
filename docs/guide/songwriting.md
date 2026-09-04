@@ -1,0 +1,84 @@
+# From a riff to an original song
+
+Open **Write**. Create a song, name it, and save it. The first song has a verse and chorus
+you can immediately change. Audio operations require the desktop app; browser preview is an editor demonstration.
+
+## Capture an idea
+
+Choose 15, 30 or 60 seconds and press **Arm capture** before playing.
+Press **H**, **Keep that**, or tell Jo “keep that” to save the recent audio.
+Capture stays local. Disarming clears only the unsaved buffer; saved takes remain.
+
+Add the take as a guitar layer. Trim its start/end in seconds. Set how many bars the
+trimmed riff contains and use **Fit tempo to riff**. This changes the band's tempo;
+the guitar is never silently retuned or stretched. Choose the first bar and repeats.
+
+## Shape the song
+
+Select a section. Edit its name and chords, then **Apply chords**. For example:
+
+```text
+Am | F | C G | Am
+```
+
+Use `Dm:3 G:1` for unequal beats. The current writing mode is 4/4, 40–240 BPM.
+Add sections, repeat them, and move them earlier or later. Adding an existing section
+reuses it: editing that section updates all its appearances.
+
+Each section has independent drums, bass and comp settings: groove, intensity,
+volume, mute, and groove lock. “Try a groove” changes only unlocked parts.
+Locks do not block deliberate edits to a part's own controls. Intensity selects the
+style's sparse, medium or full pattern. Swing is shared by the section.
+
+Press **Play / hear changes** to audition from bar 1. Editing does not unexpectedly
+change the performance while you are playing. **Undo** and **Redo** cover the last 50 edits.
+Keep a named version before experimenting; restore a version and press Play to compare.
+Save the song to persist versions. Up to 20 versions, 256 arranged bars and 16 guitar layers are supported.
+
+## Record and continue in Logic
+
+**Record / overdub** saves the song, starts from bar 1, and captures a new guitar take
+while the band and existing guitar layers play. **Save take** finishes it. Recording
+currently starts without a count-in. Stop recording before changing the song.
+
+Mark favourite takes. Add a favourite as another guitar layer or export it to Logic.
+New recordings include individual drums, bass and comp WAVs, selected guitar input,
+band mix, master mix, actual scheduled band notes in MIDI, a tempo map, and the
+song snapshot used for the performance. Referenced guitar layers are rendered as
+separate aligned WAVs on export. Import the tempo map first and place stems at bar 1.
+Band and master are reference mixes: mute them when mixing the individual stems.
+Capture-only ideas do not contain a reconstructed musical grid or band MIDI.
+
+The selected input is recorded; simultaneous dry and processed HeadRush capture is
+not implemented in this slice. Use Settings to choose the intended channel. Guitar
+monitoring stays in hardware. The existing manual latency offset remains available.
+The input is shifted and padded to preserve equal stem durations; measure alignment
+on the real rig before relying on an export for production.
+
+## Files and recovery
+
+Songs live in `~/JosefinesJamstudio/originals/*.json`; audio and take manifests live
+in `~/JosefinesJamstudio/takes/`. Song saves retain a `.json.bak` copy. Conflicting
+saves from another window are rejected. Unknown JSON fields survive song saves.
+Use **Save copy** to keep edits if another window changed the original.
+Take discovery reads the files, so deleting the SQLite cache does not lose new recordings.
+
+Recording uses a bounded disk queue and checkpoints WAV headers every second.
+Disk failure is reported and partial WAVs are kept; a partial recording is not reported
+as a successful take. Guitar clips are decoded in memory with a 100 MB per-file limit.
+Audio files remain separate from song documents; move/copy the whole user folder for backup.
+
+The instrument sounds are still the existing synthetic kit/bass/comp. No new cloud
+service is required. Musical quality, real interface continuity and Logic import
+are owner checks, not things a passing software test proves.
+
+## Owner acceptance session
+
+1. Capture a riff with the real guitar input and trim a clean loop.
+2. Make contrasting verse and chorus settings, lock bass, and change drums.
+3. Save two versions, compare them, and undo an edit.
+4. Record a second guitar part over the first.
+5. Close/reopen the desktop app and resume the saved song.
+6. Export a favourite take; verify all guitar/band stems, notes and markers in Logic.
+
+Record the build commit, device settings, measured offset and any drift. These checks remain pending until performed with the friend.

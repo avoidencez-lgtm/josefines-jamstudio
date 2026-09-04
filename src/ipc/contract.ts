@@ -174,6 +174,9 @@ export interface AppSettings {
 }
 
 export interface TakeMetadata {
+  favourite?: boolean;
+  stems?: Record<string, string>;
+  snapshot?: unknown;
   id: string;
   sessionId: string;
   timestamp: string;

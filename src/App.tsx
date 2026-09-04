@@ -21,6 +21,7 @@ import { handleShortcut } from "./lib/shortcuts";
 import { AiMusic } from "./screens/AiMusic";
 import { Jo } from "./screens/Jo";
 import { Library } from "./screens/Library";
+import { Originals } from "./screens/Originals";
 import { Rig } from "./screens/Rig";
 import { Sessions } from "./screens/Sessions";
 import { Settings } from "./screens/Settings";
@@ -82,6 +83,8 @@ export const App: React.FC = () => {
 
   const renderScreen = () => {
     switch (currentScreen) {
+      case "originals":
+        return <Originals />;
       case "stage":
         return <Stage />;
       case "library":

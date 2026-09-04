@@ -19,3 +19,5 @@ pub use export::*;
 pub use io::*;
 pub use recorder::*;
 pub use stems::*;
+
+pub mod workstation;

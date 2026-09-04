@@ -104,3 +104,27 @@ Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, 
 ## Future directions (backlog, not promises)
 
 User-installable style and rig packs from a folder, a community styles repository, WASM instruments and tools behind the same traits, more voice sessions (ElevenLabs Agents, Gemini Live), local models. Each will be a seam added by this document's rules, not a rewrite.
+# Tweak the implemented songwriting workflow
+
+Start in **Write**: sections, chords, tempo, key, repeats, instrument grooves,
+intensity, gain, mute, swing, guitar trims and versions are ordinary controls.
+The step-by-step guide is [songwriting.md](guide/songwriting.md).
+
+- Song defaults live together in `newOriginal()` and `defaultSection()` in
+  `src/lib/originals.ts`. Keep the starter chart and section IDs consistent.
+- A new groove is an existing style JSON, shared with Stage. Put a compatible
+  style under the user folder's `styles/` directory and restart the app. No new
+  engine branch is needed. Writing uses three style choices per section.
+- Saved originals are ordinary JSON under `~/JosefinesJamstudio/originals/`.
+  `body.chart` uses the chart format; `body.sections[id]` holds swing and the
+  drums/bass/comp settings; `body.clips` references take IDs, trim times and bars.
+  Keep audio under `takes/`; back up the whole user folder. Unknown fields survive.
+  Do not hand-edit a song while it is open; revisions reject competing saves.
+- The `songwriting` Jo declaration is in `src/lib/jo/tools.ts`, its dispatcher in
+  `dispatcher.ts`, and local phrases in `intent.ts`. It uses the same editor state.
+  H works with keyboard-emulating foot pedals; raw MIDI pedal input is not added.
+- `tests/fixtures/seams/original.json` demonstrates the document. Run
+  `pnpm test -- originals` and `cargo test -p src-tauri originals` for its round trip.
+
+The older recipes below describe the broader architecture plan; use the actual
+module paths above for the implemented songwriting slice.

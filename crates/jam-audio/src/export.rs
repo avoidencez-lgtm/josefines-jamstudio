@@ -152,6 +152,79 @@ fn write_var_len(buf: &mut Vec<u8>, mut val: u32) {
     buf.push(buffer[0]);
 }
 
+/// Actual scheduled notes, not inferred notes from the recorded guitar.
+pub fn write_performance_midi(
+    path: &Path,
+    take: &crate::recorder::TakeMetadata,
+) -> std::io::Result<()> {
+    let mut notes = take.midi.clone();
+    notes.sort_by_key(|n| (n.frame, n.bytes[0]));
+    let mut track = vec![0, 0xff, 0x51, 3];
+    let tempo = (60_000_000.0 / take.tempo.max(20.0)).round() as u32;
+    track.extend_from_slice(&tempo.to_be_bytes()[1..]);
+    let mut previous = 0;
+    let rate = take.sample_rate.max(1) as f64;
+    for n in notes {
+        let tick = (n.frame.min(take.sample_count as u64) as f64 / rate * take.tempo / 60.0 * 480.0)
+            .round() as u32;
+        write_var_len(&mut track, tick.saturating_sub(previous));
+        track.extend_from_slice(&n.bytes);
+        previous = tick;
+    }
+    let end = (take.sample_count as f64 / rate * take.tempo / 60.0 * 480.0).round() as u32;
+    write_var_len(&mut track, end.saturating_sub(previous));
+    track.extend_from_slice(&[
+        0xb0, 123, 0, 0, 0xb1, 123, 0, 0, 0xb9, 123, 0, 0, 0xff, 0x2f, 0,
+    ]);
+    let mut out = b"MThd".to_vec();
+    out.extend_from_slice(&6u32.to_be_bytes());
+    out.extend_from_slice(&[0, 0, 0, 1, 1, 224]);
+    out.extend_from_slice(b"MTrk");
+    out.extend_from_slice(&(track.len() as u32).to_be_bytes());
+    out.extend(track);
+    std::fs::write(path, out)
+}
+
+pub fn write_clip_stem(
+    path: &Path,
+    clip: &crate::workstation::Clip,
+    frames: usize,
+    rate: u32,
+    bpm: f64,
+) -> std::io::Result<()> {
+    let mut writer = hound::WavWriter::create(
+        path,
+        hound::WavSpec {
+            channels: 1,
+            sample_rate: rate,
+            bits_per_sample: 24,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .map_err(std::io::Error::other)?;
+    for offset in (0..frames).step_by(256) {
+        let n = (frames - offset).min(256);
+        let mut block = vec![0.0; n];
+        clip.render(
+            &[jam_core::timeline::Span {
+                offset: 0,
+                frames: n,
+                start_beats: offset as f64 / rate as f64 * bpm / 60.0,
+            }],
+            bpm,
+            4.0,
+            rate,
+            &mut block,
+        );
+        for x in block {
+            writer
+                .write_sample((x.clamp(-1.0, 1.0) * 8_388_607.0) as i32)
+                .map_err(std::io::Error::other)?;
+        }
+    }
+    writer.finalize().map_err(std::io::Error::other)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -22,6 +22,36 @@ export interface JoToolDeclaration {
 
 export const JO_TOOLS: JoToolDeclaration[] = [
   {
+    name: "songwriting",
+    description:
+      "Work on the original song in Write. Keep captures, save or compare versions, select a section, lock a part, change its groove, undo or record. Changes need play to audition.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: [
+            "keep",
+            "save",
+            "version",
+            "restore",
+            "undo",
+            "play",
+            "record",
+            "select",
+            "lock",
+            "groove",
+          ],
+        },
+        name: { type: "string", description: "Section or version name" },
+        part: { type: "string", enum: ["drums", "bass", "comp"] },
+        styleId: { type: "string" },
+        locked: { type: "boolean" },
+      },
+      required: ["action"],
+    },
+  },
+  {
     name: "transport_control",
     description: "Start, pause or stop the band.",
     parameters: {

@@ -7,6 +7,7 @@ import { dispatchJoToolCall, speakJoReply } from "../lib/jo/dispatcher";
 import { JO_MODEL, type JoContext, askGemini } from "../lib/jo/gemini";
 import { parseNaturalIntent } from "../lib/jo/intent";
 import type { JoMessage, JoToolCall } from "../lib/jo/persona";
+import { useWriting } from "../lib/originals";
 import { useEngineStore } from "../store/engine";
 
 interface SpeechResultEvent {
@@ -51,6 +52,7 @@ export const Jo: React.FC = () => {
   const snapshotContext = (): JoContext => {
     const s = useEngineStore.getState();
     const t = s.telemetry;
+    const w = useWriting.getState();
     return {
       transportState: t.transport.state,
       bpm: t.transport.bpm,
@@ -68,6 +70,18 @@ export const Jo: React.FC = () => {
       },
       styles: s.styles.map((x) => ({ id: x.id, name: x.name })),
       charts: s.charts.map((x) => ({ id: x.id, name: x.name })),
+      writing: w.song
+        ? {
+            name: w.song.body.chart.name,
+            selected: w.selected,
+            sections: w.song.body.chart.sections.map((section) => ({
+              name: section.name,
+              id: section.id,
+              ...w.song?.body.sections[section.id],
+            })),
+            versions: w.song.versions.map((v) => v.name),
+          }
+        : undefined,
     };
   };
 

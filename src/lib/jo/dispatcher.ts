@@ -1,10 +1,85 @@
 import { useEngineStore } from "../../store/engine";
+import { PARTS, changeGroove, useWriting } from "../originals";
 import type { JoToolCall } from "./persona";
 
 export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
   const store = useEngineStore.getState();
 
   switch (call.name) {
+    case "songwriting": {
+      const w = useWriting.getState();
+      if (w.busy)
+        throw new Error("Wait for the current song action to finish.");
+      const a = call.arguments;
+      const name = String(a.name ?? "");
+      if (a.action === "keep") {
+        await w.keep();
+        return "Idea saved.";
+      }
+      if (!w.song) throw new Error("Create or open a song in Write first.");
+      if (a.action === "save") {
+        await w.save();
+        return "Song saved.";
+      }
+      if (a.action === "play") {
+        await w.play();
+        return "Playing the song.";
+      }
+      if (a.action === "record") {
+        await w.record();
+        return "Recording updated.";
+      }
+      if (store.isRecording)
+        throw new Error("Save the recording before editing.");
+      if (a.action === "version") {
+        if (w.song.versions.length >= 20)
+          throw new Error("Remove an unused version first.");
+        w.version(name);
+        return "Version kept. Save the song to keep it on disk.";
+      }
+      if (a.action === "restore") {
+        const v = w.song.versions.find(
+          (v) => v.name.toLowerCase() === name.toLowerCase(),
+        );
+        if (!v) throw new Error("Version not found.");
+        w.restore(v.id);
+        return "Version restored. Press Play to hear it.";
+      }
+      if (a.action === "undo") {
+        if (!w.past.length) throw new Error("No edit to undo.");
+        w.undo();
+        return "Last edit undone.";
+      }
+      const section = w.song.body.chart.sections.find((s) =>
+        name
+          ? s.name.toLowerCase() === name.toLowerCase()
+          : s.id === w.selected,
+      );
+      if (!section)
+        throw new Error("Section not found. Choose its name in Write.");
+      w.select(section.id);
+      if (a.action === "select") return "Section selected.";
+      if (a.action === "lock") {
+        const i = PARTS.findIndex((p) => p.toLowerCase() === a.part);
+        if (i < 0) throw new Error("Choose drums, bass or comp.");
+        w.edit((b) => {
+          b.sections[section.id].parts[i].locked = a.locked !== false;
+        });
+        return "Part lock updated.";
+      }
+      if (a.action === "groove") {
+        if (!store.styles.some((s) => s.id === a.styleId))
+          throw new Error("Choose an available groove.");
+        w.edit((b) => {
+          b.sections[section.id] = changeGroove(
+            b.sections[section.id],
+            String(a.styleId),
+          );
+        });
+        return "Unlocked parts changed. Press Play to compare.";
+      }
+      throw new Error("Unknown songwriting action.");
+    }
     case "transport_control": {
       const action = call.arguments.action as string;
       if (action === "play") {

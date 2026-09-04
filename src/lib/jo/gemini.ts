@@ -24,6 +24,12 @@ export interface JoContext {
   muted: { drums: boolean; bass: boolean; comp: boolean };
   styles: Array<{ id: string; name: string }>;
   charts: Array<{ id: string; name: string }>;
+  writing?: {
+    name: string;
+    selected: string;
+    sections: unknown;
+    versions: string[];
+  };
 }
 
 interface GeminiPart {
@@ -65,6 +71,7 @@ export function contextSummary(ctx: JoContext): string {
     `Muted parts: ${muted.length ? muted.join(", ") : "none"}.`,
     `Available style ids: ${ctx.styles.map((s) => `${s.id} (${s.name})`).join(", ")}.`,
     `Available chart ids: ${ctx.charts.map((c) => `${c.id} (${c.name})`).join(", ")}.`,
+    `Songwriting document: ${ctx.writing ? JSON.stringify(ctx.writing) : "none"}. Use the songwriting tool for this document.`,
   ].join("\n");
 }
 

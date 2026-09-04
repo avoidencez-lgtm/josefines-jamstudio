@@ -28,6 +28,7 @@ import type {
 import { transposeChart } from "../lib/chart/transpose";
 
 export type ScreenId =
+  | "originals"
   | "stage"
   | "library"
   | "jo"
@@ -226,7 +227,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
   };
 
   return {
-    currentScreen: "stage",
+    currentScreen: "originals",
     isPreview,
     activeSource: "band",
     toneOn: false,

@@ -130,6 +130,7 @@ impl IndexStore {
                     path_master: row.get(10)?,
                     waveform_peaks: peaks,
                     notes: row.get(12)?,
+                    ..Default::default()
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -218,6 +219,7 @@ mod tests {
             path_master: "/tmp/master.wav".into(),
             waveform_peaks: vec![0.1, 0.5, 0.9],
             notes: "Great first take".into(),
+            ..Default::default()
         };
 
         store.insert_take(&take).expect("insert succeeds");

@@ -3,6 +3,7 @@
 pub mod keys;
 pub mod library;
 pub mod net;
+pub mod originals;
 pub mod settings;
 pub mod store;
 
@@ -162,14 +163,16 @@ fn tone_set(on: bool, hz: f32, state: State<'_, AppState>) {
 }
 
 #[tauri::command]
-fn metronome_set(on: bool, bpm: f64, state: State<'_, AppState>) {
+fn metronome_set(on: bool, bpm: f64, state: State<'_, AppState>) -> Result<(), String> {
     let eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
     if on {
         eng.transport_set_tempo(bpm);
         eng.transport_play();
     } else {
         eng.transport_stop();
     }
+    Ok(())
 }
 
 #[tauri::command]
@@ -183,51 +186,78 @@ fn audio_get_telemetry(state: State<'_, AppState>) -> EngineTelemetry {
 }
 
 #[tauri::command]
-fn transport_play(state: State<'_, AppState>) {
-    state.engine.lock().transport_play();
+fn transport_play(state: State<'_, AppState>) -> Result<(), String> {
+    let eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
+    eng.transport_play();
     // A fresh run should fire the first section's scene again.
     state.rig.lock().reset_section_tracking();
+    Ok(())
 }
 
 #[tauri::command]
-fn transport_pause(state: State<'_, AppState>) {
-    state.engine.lock().transport_pause();
+fn transport_pause(state: State<'_, AppState>) -> Result<(), String> {
+    let eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
+    eng.transport_pause();
+    Ok(())
 }
 
 #[tauri::command]
-fn transport_stop(state: State<'_, AppState>) {
-    state.engine.lock().transport_stop();
+fn transport_stop(state: State<'_, AppState>) -> Result<(), String> {
+    let eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
+    eng.transport_stop();
+    Ok(())
 }
 
 #[tauri::command]
-fn transport_seek_bar(bar: u32, state: State<'_, AppState>) {
-    state.engine.lock().transport_seek_bar(bar);
+fn transport_seek_bar(bar: u32, state: State<'_, AppState>) -> Result<(), String> {
+    let eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
+    eng.transport_seek_bar(bar);
+    Ok(())
 }
 
 #[tauri::command]
-fn transport_set_loop(start_bar: u32, end_bar: u32, enabled: bool, state: State<'_, AppState>) {
-    state
-        .engine
-        .lock()
-        .transport_set_loop(start_bar, end_bar, enabled);
+fn transport_set_loop(
+    start_bar: u32,
+    end_bar: u32,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
+    eng.transport_set_loop(start_bar, end_bar, enabled);
+    Ok(())
 }
 
 #[tauri::command]
-fn transport_set_count_in(bars: u32, state: State<'_, AppState>) {
-    state.engine.lock().transport_set_count_in(bars);
+fn transport_set_count_in(bars: u32, state: State<'_, AppState>) -> Result<(), String> {
+    let eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
+    eng.transport_set_count_in(bars);
+    Ok(())
 }
 
 #[tauri::command]
-fn transport_set_tempo(bpm: f64, state: State<'_, AppState>) {
-    state.engine.lock().transport_set_tempo(bpm);
+fn transport_set_tempo(bpm: f64, state: State<'_, AppState>) -> Result<(), String> {
+    let eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
+    eng.transport_set_tempo(bpm);
+    Ok(())
 }
 
 #[tauri::command]
-fn transport_set_time_signature(numerator: u8, denominator: u8, state: State<'_, AppState>) {
-    state
-        .engine
-        .lock()
-        .transport_set_time_signature((numerator, denominator));
+fn transport_set_time_signature(
+    numerator: u8,
+    denominator: u8,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
+    eng.transport_set_time_signature((numerator, denominator));
+    Ok(())
 }
 
 #[tauri::command]
@@ -274,8 +304,13 @@ struct BandSetArgs {
 }
 
 #[tauri::command]
-fn recorder_start(session_id: String, state: State<'_, AppState>) -> String {
-    state.engine.lock().recorder_start(session_id)
+fn recorder_start(session_id: String, state: State<'_, AppState>) -> Result<String, String> {
+    let eng = state.engine.lock();
+    if eng.song_snapshot.is_null() {
+        eng.recorder_start(session_id)
+    } else {
+        eng.record_song(session_id)
+    }
 }
 
 #[tauri::command]
@@ -310,11 +345,18 @@ fn recorder_get_latency() -> u32 {
 fn takes_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<jam_audio::recorder::TakeMetadata>, String> {
-    state.store.lock().list_takes()
+    Ok(all_takes(&state)?
+        .into_iter()
+        .filter(|t| t.extra.get("hidden") != Some(&serde_json::Value::Bool(true)))
+        .collect())
 }
 
 #[tauri::command]
 fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut take = find_take(&state, &take_id)?;
+    take.extra
+        .insert("hidden".into(), serde_json::Value::Bool(true));
+    jam_audio::recorder::save_manifest(&take)?;
     state.store.lock().delete_take(&take_id)
 }
 #[tauri::command]
@@ -350,7 +392,8 @@ fn band_load_chart(
     state: State<'_, AppState>,
 ) -> Result<Chart, String> {
     let chart = state.library.lock().chart(&chart_id)?;
-    let eng = state.engine.lock();
+    let mut eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
     if follow_chart.unwrap_or(true) {
         eng.transport_set_time_signature(chart.time_sig);
         if chart.default_bpm > 0.0 {
@@ -370,7 +413,8 @@ fn band_load_chart(
 #[tauri::command]
 fn band_load_chart_inline(chart: Chart, state: State<'_, AppState>) -> Result<(), String> {
     library::validate_chart(&chart)?;
-    let eng = state.engine.lock();
+    let mut eng = state.engine.lock();
+    eng.ensure_timing_editable()?;
     eng.transport_set_time_signature(chart.time_sig);
     eng.band_load_chart(chart.resolve());
     Ok(())
@@ -669,12 +713,25 @@ fn rig_clear_monitor(state: State<'_, AppState>) -> RigStateDto {
     rig.clear_monitor();
     rig_state_dto(&rig)
 }
-#[tauri::command]
-fn find_take(state: &AppState, take_id: &str) -> Result<jam_audio::recorder::TakeMetadata, String> {
-    state
+fn all_takes(state: &AppState) -> Result<Vec<jam_audio::recorder::TakeMetadata>, String> {
+    let mut takes: std::collections::BTreeMap<_, _> = state
         .store
         .lock()
         .list_takes()?
+        .into_iter()
+        .map(|t| (t.id.clone(), t))
+        .collect();
+    for t in originals::file_takes()? {
+        takes.insert(t.id.clone(), t);
+    }
+    let mut list: Vec<_> = takes.into_values().collect();
+    list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    Ok(list)
+}
+
+#[tauri::command]
+fn find_take(state: &AppState, take_id: &str) -> Result<jam_audio::recorder::TakeMetadata, String> {
+    all_takes(state)?
         .into_iter()
         .find(|t| t.id == take_id)
         .ok_or_else(|| format!("take {take_id} is not in the library"))
@@ -726,22 +783,33 @@ fn takes_export_daw(
     });
     let export_path = base_dir.join(&take_id);
 
-    let chart = state.library.lock().chart(&take.chart_id).ok();
+    let chart: Option<Chart> = serde_json::from_value(take.snapshot["body"]["chart"].clone())
+        .ok()
+        .or_else(|| state.library.lock().chart(&take.chart_id).ok());
     let sections_owned = chart.as_ref().map(chart_sections).unwrap_or_default();
     let sections: Vec<(&str, u32)> = sections_owned
         .iter()
         .map(|(n, b)| (n.as_str(), *b))
         .collect();
     let time_sig = chart.as_ref().map(|c| c.time_sig).unwrap_or((4, 4));
-    let sample_rate = jam_audio::recorder::read_wav_mono(std::path::Path::new(&take.path_master))
-        .map(|(_, rate)| rate)
-        .unwrap_or_else(|_| state.engine.lock().sample_rate());
+    let sample_rate = if take.sample_rate > 0 {
+        take.sample_rate
+    } else {
+        jam_audio::recorder::wav_sample_rate(std::path::Path::new(&take.path_master))?
+    };
 
-    let stems = [
-        ("guitar-di", std::path::Path::new(&take.path_input)),
-        ("band", std::path::Path::new(&take.path_band)),
-        ("master", std::path::Path::new(&take.path_master)),
-    ];
+    let mut stem_paths = take.stems.clone();
+    if stem_paths.is_empty() {
+        stem_paths.extend([
+            ("guitar-di".into(), take.path_input.clone()),
+            ("band".into(), take.path_band.clone()),
+            ("master".into(), take.path_master.clone()),
+        ]);
+    }
+    let stems: Vec<_> = stem_paths
+        .iter()
+        .map(|(name, p)| (name.as_str(), std::path::Path::new(p)))
+        .collect();
     let job = jam_audio::export::ExportJob {
         take_id: &take.id,
         tempo: take.tempo,
@@ -750,8 +818,53 @@ fn takes_export_daw(
         sections: &sections,
         stems: &stems,
     };
-    jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
-        .map_err(|e| e.to_string())
+    let mut report = jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
+        .map_err(|e| e.to_string())?;
+    if !take.midi.is_empty() {
+        jam_audio::export::write_performance_midi(&export_path.join("band-notes.mid"), &take)
+            .map_err(|e| e.to_string())?;
+    }
+    std::fs::write(
+        export_path.join("song-snapshot.json"),
+        serde_json::to_vec_pretty(&take.snapshot).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    if let Ok(clips) = serde_json::from_value::<Vec<jam_audio::workstation::ClipSpec>>(
+        take.snapshot["body"]["clips"].clone(),
+    ) {
+        for (i, spec) in clips.into_iter().enumerate() {
+            if spec.muted {
+                continue;
+            }
+            let clip = originals::read_clip(spec, &state)?;
+            let path = export_path.join(format!("guitar-layer-{}.wav", i + 1));
+            jam_audio::export::write_clip_stem(
+                &path,
+                &clip,
+                take.sample_count,
+                sample_rate,
+                take.tempo,
+            )
+            .map_err(|e| e.to_string())?;
+            report
+                .copied_stems
+                .push(path.to_string_lossy().into_owned());
+        }
+    }
+    let info_path = export_path.join(format!("{}-info.json", take.id));
+    let mut info: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&info_path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    info["schemaVersion"] = serde_json::json!(1);
+    info["stems"] = serde_json::json!(report.copied_stems);
+    info["missingStems"] = serde_json::json!(report.missing_stems);
+    info["howTo"] = serde_json::json!("Import the tempo map first. Put the individual guitar, drums, bass, comp and guitar-layer stems at bar 1. Band and master are reference mixes: mute them while mixing the individual stems. Import band-notes.mid on separate instrument tracks if wanted.");
+    std::fs::write(
+        info_path,
+        serde_json::to_vec_pretty(&info).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(report)
 }
 
 /// Restores the rig from settings: the saved profile (HeadRush by default, since that
@@ -885,6 +998,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            originals::originals_record,
+            originals::originals_save,
+            originals::originals_list,
+            originals::originals_load,
+            originals::capture_arm,
+            originals::capture_keep,
+            originals::takes_favourite,
             keys_set,
             keys_has,
             keys_delete,
