@@ -643,13 +643,9 @@ fn daw_export_writes_tempo_map_stems_info_and_reaper_script() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let take = synthetic_take(0.5, "1800000000.000");
-    let out = user_dir().join(unique("exports"));
-    let report = studio.ok(
-        "takes_export_daw",
-        json!({"takeId": take.id, "outputDir": out.to_string_lossy()}),
-    );
+    let report = studio.ok("takes_export_daw", json!({"takeId": take.id}));
     let dir = PathBuf::from(report["dir"].as_str().unwrap());
-    assert_eq!(dir, out.join(&take.id));
+    assert_eq!(dir, user_dir().join("exports").join(&take.id));
 
     let midi = PathBuf::from(report["midiFile"].as_str().unwrap());
     assert_eq!(midi, dir.join(format!("{}-tempo-map.mid", take.id)));
@@ -712,10 +708,7 @@ fn daw_export_writes_tempo_map_stems_info_and_reaper_script() {
 
     let ghost = unique("no-such-take");
     assert_eq!(
-        studio.err(
-            "takes_export_daw",
-            json!({"takeId": ghost, "outputDir": out.to_string_lossy()})
-        ),
+        studio.err("takes_export_daw", json!({"takeId": ghost})),
         format!("take {ghost} is not in the library")
     );
 }
@@ -726,10 +719,10 @@ fn daw_export_reports_a_missing_stem_and_skips_the_reaper_script() {
     let studio = Studio::boot();
     let take = synthetic_take(0.5, "1800000000.001");
     std::fs::remove_file(&take.band).unwrap();
-    let out = user_dir().join(unique("exports"));
-    let report = studio.ok(
-        "takes_export_daw",
-        json!({"takeId": take.id, "outputDir": out.to_string_lossy()}),
+    let report = studio.ok("takes_export_daw", json!({"takeId": take.id}));
+    assert_eq!(
+        PathBuf::from(report["dir"].as_str().unwrap()),
+        user_dir().join("exports").join(&take.id)
     );
     assert_eq!(
         report["missingStems"],
@@ -739,6 +732,23 @@ fn daw_export_reports_a_missing_stem_and_skips_the_reaper_script() {
     assert_eq!(report["copiedStems"].as_array().unwrap().len(), 2);
     assert_eq!(report["reaperScript"], Value::Null);
     assert!(Path::new(report["midiFile"].as_str().unwrap()).is_file());
+}
+
+#[test]
+fn daw_export_does_not_honour_a_folder_outside_the_user_root() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = synthetic_take(0.5, "1800000000.002");
+    let outside = std::env::temp_dir().join(unique("not-jam-exports"));
+    let report = studio.ok(
+        "takes_export_daw",
+        json!({"takeId": take.id, "outputDir": outside.to_string_lossy()}),
+    );
+    assert_eq!(
+        PathBuf::from(report["dir"].as_str().unwrap()),
+        user_dir().join("exports").join(&take.id)
+    );
+    assert!(!outside.exists(), "{}", outside.display());
 }
 
 #[test]
