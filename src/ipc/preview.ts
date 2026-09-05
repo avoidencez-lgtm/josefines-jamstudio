@@ -690,6 +690,8 @@ export function createPreviewEngine(
     originals_list: () => structuredClone(originals),
     originals_save: (a) => {
       const doc = structuredClone(a.document) as Original;
+      if (!Array.isArray(doc?.versions))
+        throw new Error("Song version list must be an array.");
       const idx = originals.findIndex((s) => s.id === doc.id);
       if (idx >= 0 && originals[idx].revision !== doc.revision)
         throw new Error("Reopen the song before saving.");

@@ -909,7 +909,6 @@ fn audition_of_a_take_whose_audio_file_is_missing_names_the_take_or_file() {
 }
 
 #[test]
-#[ignore = "app bug: originals_save accepts a document without `versions`, which originals_list then reports as damaged"]
 fn save_refuses_a_document_without_a_version_list() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
@@ -919,4 +918,22 @@ fn save_refuses_a_document_without_a_version_list() {
     let err = studio.err("originals_save", json!({ "document": doc }));
     assert!(err.contains("version"), "{err}");
     assert!(!song_file(&id).exists());
+}
+
+#[test]
+fn invalid_version_lists_do_not_overwrite_a_saved_song() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let id = unique("song");
+    let saved = studio.ok("originals_save", json!({"document": song(&id)}));
+    let before = std::fs::read(song_file(&id)).unwrap();
+    for versions in [Value::Null, json!({}), json!("bad"), json!(1)] {
+        let mut doc = saved.clone();
+        doc["versions"] = versions;
+        let err = studio.err("originals_save", json!({"document": doc}));
+        assert!(err.contains("version"), "{err}");
+        assert_eq!(std::fs::read(song_file(&id)).unwrap(), before);
+    }
+    let listed = studio.ok("originals_list", json!({}));
+    assert!(listed.as_array().unwrap().iter().any(|doc| doc == &saved));
 }
