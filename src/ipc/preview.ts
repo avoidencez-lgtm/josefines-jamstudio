@@ -641,7 +641,10 @@ export function createPreviewEngine(
       loadChart(c, a.followChart !== false);
       return c;
     },
-    band_load_chart_inline: (a) => loadChart(a.chart as Chart, true),
+    band_load_chart_inline: (a) => {
+      loadChart(a.chart as Chart, true);
+      return null;
+    },
     charts_save: (a) => {
       const c = a.chart as Chart;
       charts.set(c.id, c);
@@ -658,6 +661,7 @@ export function createPreviewEngine(
       const bundled = bundledCharts().find((c) => c.id === id);
       if (bundled) charts.set(id, bundled);
       else charts.delete(id);
+      return null;
     },
     library_reload: (): LibraryInfo => ({
       stylesDir: "(preview) ~/JosefinesJamstudio/styles",
@@ -766,6 +770,7 @@ export function createPreviewEngine(
     takes_list: () => takes,
     takes_delete: (a) => {
       takes = takes.filter((t) => t.id !== a.takeId);
+      return null;
     },
     takes_analyze: (a) => {
       const take = takes.find((t) => t.id === a.takeId);

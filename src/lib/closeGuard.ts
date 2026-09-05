@@ -30,3 +30,15 @@ export function closeDecision(): "refuse" | "ask" | "close" {
   if (hasUnsavedWork()) return "ask";
   return "close";
 }
+
+/**
+ * Tauri always `prevent_close` when a JS `onCloseRequested` listener exists.
+ * Returning without `preventDefault` + `app_exit` leaves the window open (#127).
+ */
+export function windowCloseAction(
+  decision: ReturnType<typeof closeDecision>,
+  preventDefault: () => void,
+): "refuse" | "ask" | "exit" {
+  preventDefault();
+  return decision === "close" ? "exit" : decision;
+}
