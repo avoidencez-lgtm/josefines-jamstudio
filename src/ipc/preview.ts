@@ -509,6 +509,7 @@ export function createPreviewEngine(
       config = { ...config, ...s };
     },
     settings_recovery_notice: () => null,
+    app_exit: () => undefined,
     keys_set: () => undefined,
     keys_has: () => false,
     provider_fetch: () => {

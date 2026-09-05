@@ -13,12 +13,15 @@ import { EngineStatusPill } from "./components/EngineStatusPill";
 import { Notices } from "./components/Notices";
 import { RoomTools } from "./components/RoomTools";
 import { StudioAssistant } from "./components/StudioAssistant";
+import { ipc } from "./ipc/client";
+import {
+  ACTIVE_WORK_MESSAGE,
+  closeDecision,
+  hasActiveWork,
+  hasUnsavedWork,
+} from "./lib/closeGuard";
 import { listenToController } from "./lib/controller";
 import { useAi } from "./lib/jo/providers";
-import { useLibraryDraft } from "./lib/libraryDraft";
-import { useMedia } from "./lib/media";
-import { useWriting } from "./lib/originals";
-import { useRoomOperation } from "./lib/roomActions";
 import { handleShortcut } from "./lib/shortcuts";
 import { SCREENS, SCREEN_ICONS } from "./screens/registry";
 import { useEngineStore } from "./store/engine";
@@ -60,16 +63,6 @@ const ShortcutsHelp = lazy(() =>
   })),
 );
 
-const hasUnsavedWork = () =>
-  useLibraryDraft.getState().dirty ||
-  useMedia.getState().dirty ||
-  useWriting.getState().dirty;
-const hasActiveWork = () =>
-  useRoomOperation.getState().blocking ||
-  useEngineStore.getState().isRecording ||
-  useWriting.getState().busy ||
-  Boolean(useMedia.getState().busy);
-
 export const App: React.FC = () => {
   const {
     currentScreen,
@@ -108,18 +101,12 @@ export const App: React.FC = () => {
     void import("@tauri-apps/api/window")
       .then(async ({ getCurrentWindow }) => {
         const off = await getCurrentWindow().onCloseRequested((event) => {
-          if (hasActiveWork()) {
-            event.preventDefault();
-            useEngineStore
-              .getState()
-              .notify(
-                "error",
-                "Finish the recording or current operation before closing.",
-              );
-          } else if (hasUnsavedWork()) {
-            event.preventDefault();
-            setShowClose(true);
-          }
+          const decision = closeDecision();
+          if (decision === "close") return;
+          event.preventDefault();
+          if (decision === "refuse")
+            useEngineStore.getState().notify("error", ACTIVE_WORK_MESSAGE);
+          else setShowClose(true);
         });
         if (disposed) off();
         else cleanup = off;
@@ -130,6 +117,34 @@ export const App: React.FC = () => {
     return () => {
       disposed = true;
       cleanup?.();
+    };
+  }, [isPreview]);
+  // An app-level quit (Cmd+Q on macOS) arrives from Rust and takes the same road (#35).
+  useEffect(() => {
+    if (isPreview) return;
+    let disposed = false;
+    let off: (() => void) | undefined;
+    void ipc
+      .listen("app.exit-requested", () => {
+        const decision = closeDecision();
+        if (decision === "refuse")
+          useEngineStore.getState().notify("error", ACTIVE_WORK_MESSAGE);
+        else if (decision === "ask") setShowClose(true);
+        else
+          void ipc
+            .invoke("app_exit")
+            .catch((e) => useEngineStore.getState().notify("error", String(e)));
+      })
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else off = cleanup;
+      })
+      .catch((e) =>
+        useEngineStore.getState().notify("error", `Quit guard: ${String(e)}`),
+      );
+    return () => {
+      disposed = true;
+      off?.();
     };
   }, [isPreview]);
   const [showHelp, setShowHelp] = useState(false);
@@ -460,10 +475,8 @@ export const App: React.FC = () => {
               onClick={async () => {
                 if (hasActiveWork()) return;
                 try {
-                  const { getCurrentWindow } = await import(
-                    "@tauri-apps/api/window"
-                  );
-                  await getCurrentWindow().destroy();
+                  // Rust exits for real; the WebView never destroys its own window.
+                  await ipc.invoke("app_exit");
                 } catch (e) {
                   useEngineStore.getState().notify("error", String(e));
                 }
