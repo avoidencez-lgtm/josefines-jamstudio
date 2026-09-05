@@ -35,6 +35,10 @@ pub trait AudioInput: Send + Sync {
     fn start(&mut self, callback: InputCallback) -> Result<(), String>;
     fn stop(&mut self) -> Result<(), String>;
     fn is_running(&self) -> bool;
+    /// Synthetic producers may wait for the scheduler instead of losing input frames.
+    fn is_synthetic(&self) -> bool {
+        false
+    }
     fn info(&self) -> Option<StreamInfo> {
         None
     }
@@ -216,6 +220,10 @@ impl FileInput {
 }
 
 impl AudioInput for FileInput {
+    fn is_synthetic(&self) -> bool {
+        true
+    }
+
     fn start(&mut self, mut callback: InputCallback) -> Result<(), String> {
         if self.running.load(Ordering::SeqCst) {
             return Ok(());
@@ -231,10 +239,16 @@ impl AudioInput for FileInput {
         let block_duration =
             Duration::from_secs_f64(buffer_size as f64 / self.sample_rate.max(1) as f64);
 
+        // A late scheduler used to reset the clock and skip the missed blocks.
+        // Produce those immediately, and start a few blocks ahead so the render
+        // thread can prime without recording silence.
+        const LEAD_BLOCKS: u32 = 8;
         let handle = thread::spawn(move || {
             let mut read_idx = 0;
             let mut buffer = vec![0.0f32; buffer_size];
-            let mut next_tick = Instant::now();
+            let mut next_tick = Instant::now()
+                .checked_sub(block_duration.saturating_mul(LEAD_BLOCKS))
+                .unwrap_or_else(Instant::now);
 
             while running.load(Ordering::SeqCst) {
                 for sample in buffer.iter_mut() {
@@ -248,8 +262,6 @@ impl AudioInput for FileInput {
                 let now = Instant::now();
                 if next_tick > now {
                     thread::sleep(next_tick - now);
-                } else {
-                    next_tick = now;
                 }
             }
         });
@@ -717,6 +729,33 @@ impl AudioInput for CpalInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_input_emits_a_lead_burst_before_the_wall_clock() {
+        // One-second blocks distinguish a burst from paced delivery without
+        // requiring the OS to schedule this thread within two milliseconds.
+        let mut input = FileInput::from_samples(vec![0.5; 4096], 48_000);
+        assert!(input.is_synthetic());
+        let (ready, received) = mpsc::channel();
+        let mut blocks = 0;
+        let mut valid = true;
+        input
+            .start(Box::new(move |buf| {
+                valid &= buf.len() == 48_000 && buf.iter().all(|s| *s == 0.5);
+                blocks += 1;
+                if blocks == 8 {
+                    let _ = ready.send(valid);
+                }
+            }))
+            .unwrap();
+        let burst = received.recv_timeout(Duration::from_secs(3));
+        input.stop().unwrap();
+        assert_eq!(
+            burst,
+            Ok(true),
+            "eight paced blocks would take seven seconds"
+        );
+    }
 
     #[test]
     fn file_input_loops_samples() {

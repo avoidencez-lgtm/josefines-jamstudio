@@ -252,6 +252,8 @@ Angi lydsporets BPM, klippavstand i taktslag og hvor første slag starter (0–1
 
 Søk blant opptak, filtrer favoritter og oppdater etter innspilling. Listen to guitar spiller valgt inngang uten bandet. Marker en favoritt, legg gitaren til åpen Write-låt eller eksporter. Sletting krever en bevisst handling; kontroller om en låt/versjon bruker opptaket først. Opptaksanalyse beregner lokale heuristikker for timing, dynamikk og intonasjon; den lytter ikke som en produsent. Øvingsrekke og opptakstid viser aktivitet, ikke kvalitet.
 
+Anslagsdeteksjonen venter på 5 ms med lavt nivå før et nytt anslag kan telles, og krever minst 20 ms mellom kandidatene. Dermed telles ikke nullgjennomgangene i en vedvarende tone som nye anslag. Svake opptak, overlappende toner og legato uten et stille mellomrom kan fortsatt bli oversett; resultatet er et anslag, ikke en notetranskripsjon.
+
 ### Justering og separate spor
 
 Guitar offset er et manuelt antall sampler som brukes til å justere inngangen mot bandet. Automatisk kalibrering via kabelsløyfe er ikke tilgjengelig. Mål justeringen i DAW på den faktiske riggen. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.

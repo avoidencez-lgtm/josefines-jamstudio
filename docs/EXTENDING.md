@@ -1,6 +1,6 @@
 # Extending Josefines Jamstudio
 
-The product is built to be extended without limit. The rule that makes this possible: **every capability is a seam** (a definition, one registry, consumers), and adding to a seam never touches core files. The invariant test in `tests/invariants/` proves it: every fixture under `tests/fixtures/seams/` must appear in its registry while `tests/invariants/core-files.snapshot.json` stays untouched.
+The extension rule is **every capability is a seam** (a definition, one registry, consumers), and adding to an existing seam must not require edits to core consumers. Review the PR diff for that requirement. The current `tests/invariants/seams.test.ts` checks bundled manifest fields, and `crates/jam-core/tests/seams.rs` checks bundled style, chart and control registries. Neither checks changed-file scope or automatically discovers every fixture under `tests/fixtures/seams/`. Per-extension fixture and registry coverage remains required; do not treat these two tests alone as proof that an extension recipe works.
 
 Each recipe below names the exact files to add and the test that proves it worked. When a milestone adds a seam, it adds the recipe here and a fixture there, in the same PR. Recipes are executed once by the builder as a test before they are considered true.
 
