@@ -310,7 +310,7 @@ With an original open, Capture current tone stores the current profile ID, scene
 
 ### Audio devices
 
-Choose input/output device names, the input channel and a supported buffer size. The UI numbers channels from 1; stored configuration is zero-based. HeadRush dry channel 3 is therefore stored as 2, when the driver actually exposes it. Device changes restart audio and are saved after success. Use one interface for input/output where possible. Smaller buffers may lower latency but increase dropouts; use larger buffers if stream errors or input gaps grow. The engine uses 48 kHz internally. Unsupported device formats fail explicitly rather than silently resampling.
+Choose input/output device names, the input channel and a supported buffer size. The UI numbers channels from 1; stored configuration is zero-based. HeadRush dry channel 3 is therefore stored as 2, when the driver actually exposes it. Device changes restart audio and are saved after success. Use one interface for input/output where possible. Smaller buffers may lower latency but increase dropouts; use larger buffers if stream errors or input gaps grow. The engine currently follows the output device sample rate; fixed 48 kHz conversion is unfinished. If input and output rates differ, the input is closed and the status names both rates. Jam recording, song recording and Keep recent idea refuse that input. Select matching devices/rates and use Restart audio; the refusal clears after a matching restart. No automatic resampling is performed.
 
 ### Mac and Windows setup
 

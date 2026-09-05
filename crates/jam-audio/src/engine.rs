@@ -280,6 +280,7 @@ pub struct AudioEngine {
     recorder: Arc<Mutex<crate::recorder::TakeRecorder>>,
     latest_telemetry: Arc<Mutex<EngineTelemetry>>,
     status: Arc<Mutex<EngineStatus>>,
+    input_rate_error: Option<String>,
     input_driver: Option<Box<dyn AudioInput>>,
     output_driver: Option<Box<dyn AudioOutput>>,
     render_handle: Option<JoinHandle<()>>,
@@ -317,6 +318,17 @@ fn headless_requested() -> bool {
         .unwrap_or(false)
 }
 
+/// Different in/out rates starve or overrun the input queue: the DI is damaged.
+/// Refuse the input (invariant 7) instead of recording a bad take. Resampling
+/// is the longer-term invariant-2 work.
+fn input_rate_mismatch(input_hz: u32, output_hz: u32) -> Option<String> {
+    (input_hz != output_hz && input_hz > 0 && output_hz > 0).then(|| {
+        format!(
+            "Cannot record: input is {input_hz} Hz and output is {output_hz} Hz. Use one interface for both; a take would be damaged."
+        )
+    })
+}
+
 impl AudioEngine {
     pub fn new(config: AudioConfig) -> Self {
         let sample_rate = config.sample_rate;
@@ -324,6 +336,7 @@ impl AudioEngine {
         let recorder = crate::recorder::TakeRecorder::new(sample_rate, dirs_base().join("takes"));
 
         Self {
+            input_rate_error: None,
             render_gate: Arc::new(Mutex::new(())),
             recording_operation: Mutex::new(()),
             recording_clock: Arc::new(RecordingClock::default()),
@@ -514,6 +527,7 @@ impl AudioEngine {
         if !self.status().running {
             return Err("Start a working audio device before recording.".into());
         }
+        self.ensure_recordable_input()?;
         self.audition.lock().take();
         let (style_id, chart_id) = {
             let seq = self.sequencer.lock();
@@ -591,6 +605,7 @@ impl AudioEngine {
         &self,
         session_id: String,
     ) -> Result<crate::recorder::TakeMetadata, String> {
+        self.ensure_recordable_input()?;
         let frames = self.capture.lock().snapshot()?;
         let mut r =
             crate::recorder::TakeRecorder::new(self.sample_rate(), dirs_base().join("takes"));
@@ -603,6 +618,10 @@ impl AudioEngine {
         )?;
         r.push_capture(&frames)?;
         r.stop_and_save()
+    }
+
+    fn ensure_recordable_input(&self) -> Result<(), String> {
+        self.input_rate_error.clone().map_or(Ok(()), Err)
     }
 
     pub fn configure_song(
@@ -851,7 +870,7 @@ impl AudioEngine {
                 requested_buffer,
             )),
         };
-        let input_driver: Box<dyn AudioInput> = match input_driver.start(input_callback) {
+        let mut input_driver: Box<dyn AudioInput> = match input_driver.start(input_callback) {
             Ok(()) => input_driver,
             Err(e) => {
                 problems.push(format!("input: {e}; tuner and recording input are silent"));
@@ -861,13 +880,15 @@ impl AudioEngine {
             }
         };
         status.input = input_driver.info().filter(|_| input_driver.is_running());
-        if let Some(inp) = &status.input {
-            if inp.sample_rate != effective_rate {
-                problems.push(format!(
-                    "input runs at {} Hz but output at {effective_rate} Hz; tuner pitch will be off. Use one interface for both.",
-                    inp.sample_rate
-                ));
-            }
+        self.input_rate_error = status
+            .input
+            .as_ref()
+            .and_then(|input| input_rate_mismatch(input.sample_rate, effective_rate));
+        if let Some(msg) = &self.input_rate_error {
+            problems.push(msg.clone());
+            let _ = input_driver.stop();
+            input_driver = Box::new(FileInput::silent(requested_buffer as usize, effective_rate));
+            status.input = None;
         }
 
         // --- clock and instruments follow the device rate ---
@@ -1735,5 +1756,15 @@ mod tests {
         assert!((t.hz - 440.0).abs() < 5.0, "got {} Hz", t.hz);
         assert!(t.note.starts_with('A'));
         engine.stop().unwrap();
+    }
+
+    #[test]
+    fn input_rate_mismatch_names_both_rates_and_the_recording() {
+        let msg = super::input_rate_mismatch(44_100, 48_000).unwrap();
+        assert!(msg.contains("44100"), "{msg}");
+        assert!(msg.contains("48000"), "{msg}");
+        assert!(msg.contains("Cannot record"), "{msg}");
+        assert!(super::input_rate_mismatch(48_000, 48_000).is_none());
+        assert!(super::input_rate_mismatch(0, 48_000).is_none());
     }
 }
