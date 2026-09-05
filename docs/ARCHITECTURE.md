@@ -238,6 +238,18 @@ export type LyriaState = { active: boolean; buffering: boolean; bufferMs: number
 
 ## 6. AI layer
 
+Current execution contract (2026-09-05, issue #166): the engine store returns
+`CommandResult` for Jo's transport, band and recording actions. Errors remain
+visible UI notices and are carried on that specific result; the dispatcher
+requires success before confirming the action. Tauri's `null` unit response is
+successful. Tempo/intensity results contain the value submitted after clamping;
+they acknowledge the command, not an audio or later-telemetry measurement. Queued
+band changes are described as accepted. Refused actions appear in Jo's transcript
+instead of the model's proposed success wording; the inline assistant also retains
+the failure in conversation history. Unchanged song/film edits are reported as
+unchanged and do not create extra undo/version entries. This does not implement
+the voice pipeline described below.
+
 ### 6.1 Providers (Rust, `src-tauri/src/net/`)
 
 ```rust
@@ -508,6 +520,17 @@ refused so credentials cannot be forwarded to another endpoint. Usage entries
 add optional model/estimatedCostUsd while retaining compatibility with old logs.
 Estimates are approximate metadata, not provider invoices or spending caps.
 
+Credential presence is fallible: `keys_has` resolves to a boolean only after a
+successful keychain read, otherwise it rejects. `providers_list` keeps all
+providers available and adds optional `keyError` per entry; when present,
+`hasKey: false` means unavailable to this app, not proven absent. Settings shows
+the error and offers **Check key status** after unlocking/allowing OS keychain
+access. Successful check/save/delete clears that provider's cached error.
+Jo and media preflight preserve errors instead of requesting a replacement key;
+local Comfy workflows do not require keychain access. A failed Jo provider
+request reports the error without executing the offline parser. Keyring errors
+are mapped to fixed guidance, never credential payloads or platform details.
+
 Song Lab sends text context only, without take/clip audio. It parses bounded
 proposals, validates chords and checks song identity plus the original body before
 applying. The existing version/edit operations preserve the original; recording
@@ -584,6 +607,39 @@ Original and Film save completions preserve newer in-memory edits while advancin
 Song documents gain optional `body.referenceBlueprint` (reference name, optional media asset ID, mapped form) and `body.rigSnapshot` (profile ID, scene index, known controller values). Existing schema version 1 and unknown-field preservation carry these additive values. Settings gain `rehearsalSetlist` (entries name a chart, an optional groove checked against the chart's meter, tempo and count-in) and `audioProfiles`; other settings survive updates and profiles never include API credentials. Imported malformed presets are shown as errors rather than silently replaced.
 
 Offline melody extraction is a Rust worker: saved take ID → bounded WAV decode → existing DSP pitch tracker → sustained note events → editable UI sketch. Harmony ranking and film grid calculations are pure TypeScript; actual audio, playback, capture, MIDI, keys and disk writes remain native. The new Jo actions enter the same reviewed song-edit boundary as existing tools. See `docs/research/room-capabilities.md` and the current recipe in `docs/EXTENDING.md` for scope and limits. Older target architecture below is not a claim that all roadmap seams are implemented.
+
+## Recording interruption recovery
+
+Recording alignment: each fixed-size output-ring item carries the stereo output,
+reference stems, a render index and a take generation. The output callback copies
+the audible frame and pairs its references with DI from a separate input ring;
+synthetic FileInput retains its render-synchronous sample. Completed frames pass
+through a bounded ring back to the worker. The callback does not allocate, lock,
+write files or emit IPC. The worker matches MIDI to the completed frame index and
+updates retrospective capture. Queue loss or a hardware input/output gap interrupts
+the take rather than silently compressing its timeline. Device round-trip latency
+remains a separate manual guitar offset; no physical calibration is claimed.
+
+Starting tags subsequent rendered frames with a new take generation. Stopping
+disarms tagging under the render gate, then waits outside that gate for the queued
+tail to reach the recorder, with a two-second deadline for failed outputs. Old
+queued audio cannot leak into a new take. WAV finalisation follows tail delivery.
+Transport telemetry still describes the render timeline; no varying lead is
+subtracted from stopped, paused, counting-in or tempo-changing positions.
+
+Recording failure reporting: the render worker queues audio and its MIDI as one
+accepted block. A rejected audio block neither advances the accepted-frame count
+nor appends MIDI; later blocks are ignored. The writer remains pending so a new
+take, device change or close cannot discard the partial recording. The 30 Hz
+control thread emits `recorder:error` (string or null) when that error changes,
+plus `app:error` once for a new failure. The UI stops its recording animation,
+shows the interruption and offers Save partial take. `isRecording` retains its
+existing pending-take/close-guard meaning until finalisation; `recordingError`
+distinguishes interrupted capture. WAV finalisation remains on the command thread,
+never the audio callback. Blocking disk I/O during explicit start remains a
+separate follow-up (issue #136). Alignment is covered by an exact 10,000-frame
+callback test with variable buffer sizes and a native WAV/MIDI onset check with
+a two-sample tolerance.
 
 ## Current take-analysis evidence
 

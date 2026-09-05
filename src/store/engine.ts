@@ -39,6 +39,16 @@ export type ScreenId =
 
 export type Cue = "none" | "fill" | "crash" | "stop" | "ending";
 
+export type CommandResult<T = void> =
+  | { ok: true; value: T }
+  | { ok: false; error: string };
+
+/** Automated callers must check the same outcome that produced the UI notice. */
+export function requireCommand<T>(result: CommandResult<T>): T {
+  if (!result.ok) throw new Error(result.error);
+  return result.value;
+}
+
 /** A message the UI shows in the toast rail; errors from the engine land here. */
 export interface Notice {
   id: number;
@@ -75,6 +85,7 @@ export interface EngineState {
   devices: AudioDevices;
   settings: AppSettings | null;
   keysPresent: Record<string, boolean>;
+  keyErrors: Record<string, string | undefined>;
   notices: Notice[];
 
   setScreen: (screen: ScreenId) => void;
@@ -86,17 +97,17 @@ export interface EngineState {
   setBandVolume: (volume: number) => Promise<void>;
 
   // Transport
-  transportPlay: () => Promise<void>;
-  transportPause: () => Promise<void>;
-  transportStop: () => Promise<void>;
+  transportPlay: () => Promise<CommandResult>;
+  transportPause: () => Promise<CommandResult>;
+  transportStop: () => Promise<CommandResult>;
   transportSeekBar: (bar: number) => Promise<void>;
   transportSetLoop: (
     startBar: number,
     endBar: number,
     enabled: boolean,
-  ) => Promise<void>;
+  ) => Promise<CommandResult>;
   transportSetCountIn: (bars: number) => Promise<void>;
-  transportSetTempo: (bpm: number) => Promise<void>;
+  transportSetTempo: (bpm: number) => Promise<CommandResult<number>>;
   transportSetTimeSignature: (
     numerator: number,
     denominator: number,
@@ -109,11 +120,14 @@ export interface EngineState {
   setTempoTrainer: (patch: Partial<TempoTrainer>) => void;
 
   // Band
-  bandSetStyle: (styleId: string) => Promise<void>;
-  bandSetIntensity: (intensity: number) => Promise<void>;
-  bandCue: (cue: Cue) => Promise<void>;
-  bandLoadChart: (chartId: string, followChart?: boolean) => Promise<void>;
-  bandSet: (patch: BandPatch) => Promise<void>;
+  bandSetStyle: (styleId: string) => Promise<CommandResult>;
+  bandSetIntensity: (intensity: number) => Promise<CommandResult<number>>;
+  bandCue: (cue: Cue) => Promise<CommandResult>;
+  bandLoadChart: (
+    chartId: string,
+    followChart?: boolean,
+  ) => Promise<CommandResult<Chart>>;
+  bandSet: (patch: BandPatch) => Promise<CommandResult>;
   togglePart: (part: "drums" | "bass" | "comp") => Promise<void>;
   toggleFollowEnergy: () => Promise<void>;
 
@@ -134,10 +148,12 @@ export interface EngineState {
   // Recorder & Takes
   takes: TakeMetadata[];
   isRecording: boolean;
+  /** Capture stopped, but the partial take still needs finalising. */
+  recordingError: string | null;
   /** Round-trip offset trimmed from the guitar stem, set by hand (no auto-calibration yet). */
   latencySamples: number;
-  startRecording: (sessionId?: string) => Promise<string>;
-  stopRecording: () => Promise<TakeMetadata | null>;
+  startRecording: (sessionId?: string) => Promise<CommandResult<string>>;
+  stopRecording: () => Promise<CommandResult<TakeMetadata>>;
   setLatencySamples: (samples: number) => Promise<number>;
   loadTakes: () => Promise<void>;
   deleteTake: (id: string) => Promise<void>;
@@ -191,23 +207,27 @@ function errorText(e: unknown): string {
 }
 
 export const useEngineStore = create<EngineState>((set, get) => {
-  const fail = (label: string, e: unknown): null => {
-    const text = `${label}: ${errorText(e)}`;
-    console.error(text);
-    get().notify("error", text);
-    return null;
+  /** Retain each command's error for its caller, including Tauri's null unit success. */
+  const command = async <T>(
+    label: string,
+    fn: () => Promise<T>,
+  ): Promise<CommandResult<T>> => {
+    try {
+      return { ok: true, value: await fn() };
+    } catch (e) {
+      const error = `${label}: ${errorText(e)}`;
+      console.error(error);
+      get().notify("error", error);
+      return { ok: false, error };
+    }
   };
 
-  /** Runs an engine command; failures become visible notices instead of console noise. */
   const run = async <T>(
     label: string,
     fn: () => Promise<T>,
   ): Promise<T | null> => {
-    try {
-      return await fn();
-    } catch (e) {
-      return fail(label, e);
-    }
+    const result = await command(label, fn);
+    return result.ok ? result.value : null;
   };
 
   /** Tauri serialises `()` as JSON `null`, so `run` cannot tell success from failure (#165). */
@@ -215,13 +235,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
     label: string,
     fn: () => Promise<unknown>,
   ): Promise<boolean> => {
-    try {
-      await fn();
-      return true;
-    } catch (e) {
-      fail(label, e);
-      return false;
-    }
+    return (await command(label, fn)).ok;
   };
 
   return {
@@ -272,6 +286,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
     devices: { inputs: [], outputs: [] },
     settings: null,
     keysPresent: {},
+    keyErrors: {},
     notices: [],
     tapTimes: [],
     tempoTrainer: {
@@ -289,6 +304,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
     libraryInfo: null,
     takes: [],
     isRecording: false,
+    recordingError: null,
     latencySamples: 0,
     rigState: null,
     availableProfiles: [],
@@ -339,23 +355,24 @@ export const useEngineStore = create<EngineState>((set, get) => {
     transportPlay: async () => {
       const trainer = get().tempoTrainer;
       if (trainer.enabled && get().telemetry.transport.state === "stopped") {
-        await get().transportSetTempo(trainer.startBpm);
+        const tempo = await get().transportSetTempo(trainer.startBpm);
+        if (!tempo.ok) return tempo;
         set({ tempoTrainer: { ...trainer, playedBars: 0 } });
       }
-      await run("Play", () => ipc.invoke("transport_play"));
+      return command("Play", () => ipc.invoke<void>("transport_play"));
     },
     transportPause: async () => {
-      await run("Pause", () => ipc.invoke("transport_pause"));
+      return command("Pause", () => ipc.invoke<void>("transport_pause"));
     },
     transportStop: async () => {
-      await run("Stop", () => ipc.invoke("transport_stop"));
+      return command("Stop", () => ipc.invoke<void>("transport_stop"));
     },
     transportSeekBar: async (bar) => {
       await run("Seek", () => ipc.invoke("transport_seek_bar", { bar }));
     },
     transportSetLoop: async (startBar, endBar, enabled) => {
-      await run("Loop", () =>
-        ipc.invoke("transport_set_loop", { startBar, endBar, enabled }),
+      return command("Loop", () =>
+        ipc.invoke<void>("transport_set_loop", { startBar, endBar, enabled }),
       );
     },
     transportSetCountIn: async (bars) => {
@@ -365,9 +382,10 @@ export const useEngineStore = create<EngineState>((set, get) => {
     },
     transportSetTempo: async (bpm) => {
       const clamped = Math.max(20, Math.min(300, Math.round(bpm * 10) / 10));
-      await run("Tempo", () =>
-        ipc.invoke("transport_set_tempo", { bpm: clamped }),
-      );
+      return command("Tempo", async () => {
+        await ipc.invoke("transport_set_tempo", { bpm: clamped });
+        return clamped;
+      });
     },
     transportSetTimeSignature: async (numerator, denominator) => {
       await run("Time signature", () =>
@@ -387,8 +405,8 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
       const bpm = Math.round(60_000 / avg);
       if (bpm >= 20 && bpm <= 300) {
-        await get().transportSetTempo(bpm);
-        return bpm;
+        const result = await get().transportSetTempo(bpm);
+        return result.ok ? result.value : null;
       }
       return null;
     },
@@ -397,25 +415,31 @@ export const useEngineStore = create<EngineState>((set, get) => {
       set((s) => ({ tempoTrainer: { ...s.tempoTrainer, ...patch } })),
 
     bandSetStyle: async (styleId) => {
-      await run("Style", () => ipc.invoke("band_set_style", { styleId }));
+      return command("Style", () =>
+        ipc.invoke<void>("band_set_style", { styleId }),
+      );
     },
     bandSetIntensity: async (intensity) => {
       const clamped = Math.max(0, Math.min(1, intensity));
-      await run("Intensity", () =>
-        ipc.invoke("band_set_intensity", { intensity: clamped }),
-      );
+      return command("Intensity", async () => {
+        await ipc.invoke("band_set_intensity", { intensity: clamped });
+        return clamped;
+      });
     },
     bandCue: async (cue) => {
-      await run("Cue", () => ipc.invoke("band_cue", { cue }));
+      return command("Cue", () => ipc.invoke<void>("band_cue", { cue }));
     },
     bandLoadChart: async (chartId, followChart = true) => {
-      const chart = await run("Load chart", () =>
+      const result = await command("Load chart", () =>
         ipc.invoke<Chart>("band_load_chart", { chartId, followChart }),
       );
-      if (chart) set({ currentChart: chart, loadedOriginal: null });
+      if (result.ok) set({ currentChart: result.value, loadedOriginal: null });
+      return result;
     },
     bandSet: async (patch) => {
-      await run("Band", () => ipc.invoke("band_set", { args: patch }));
+      return command("Band", () =>
+        ipc.invoke<void>("band_set", { args: patch }),
+      );
     },
     togglePart: async (part) => {
       const band = get().telemetry.band;
@@ -484,25 +508,27 @@ export const useEngineStore = create<EngineState>((set, get) => {
     },
 
     startRecording: async (sessionId = "default-session") => {
-      const takeId = await run("Record", () =>
+      const result = await command("Record", () =>
         ipc.invoke<string>("recorder_start", { sessionId }),
       );
-      if (takeId) set({ isRecording: true });
-      return takeId ?? "";
+      if (result.ok) set({ isRecording: true, recordingError: null });
+      return result;
     },
     stopRecording: async () => {
-      const meta = await run("Stop recording", () =>
+      const result = await command("Stop recording", () =>
         ipc.invoke<TakeMetadata>("recorder_stop"),
       );
+      const meta = result.ok ? result.value : null;
       set((state) => ({
         isRecording: false,
+        recordingError: null,
         takes: meta ? [meta, ...state.takes] : state.takes,
       }));
       if (meta?.notes.includes("interrupted")) {
         get().notify("error", meta.notes);
       }
       if (!meta) await get().loadTakes();
-      return meta;
+      return result;
     },
     setLatencySamples: async (samples) => {
       const clamped = Math.max(0, Math.min(48_000, Math.round(samples)));
@@ -688,22 +714,28 @@ export const useEngineStore = create<EngineState>((set, get) => {
         const has = await ipc.invoke<boolean>("keys_has", { provider });
         set((state) => ({
           keysPresent: { ...state.keysPresent, [provider]: has },
+          keyErrors: { ...state.keyErrors, [provider]: undefined },
         }));
         return has;
-      } catch {
-        return false;
+      } catch (error) {
+        set((state) => ({
+          keyErrors: { ...state.keyErrors, [provider]: String(error) },
+        }));
+        throw new Error(String(error));
       }
     },
     setKey: async (provider, key) => {
       await ipc.invoke("keys_set", { provider, key });
       set((state) => ({
         keysPresent: { ...state.keysPresent, [provider]: true },
+        keyErrors: { ...state.keyErrors, [provider]: undefined },
       }));
     },
     deleteKey: async (provider) => {
       await ipc.invoke("keys_delete", { provider });
       set((state) => ({
         keysPresent: { ...state.keysPresent, [provider]: false },
+        keyErrors: { ...state.keyErrors, [provider]: undefined },
       }));
     },
 
@@ -769,6 +801,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
           set({ rigState });
         }),
         ipc.listen<string>("app.error", (text) => get().notify("error", text)),
+        ipc.listen<string | null>("recorder.error", (recordingError) => {
+          set({ recordingError });
+        }),
         ipc.listen<string>("rig.error", (text) => {
           get().notify("error", `Rig: ${text}`);
         }),

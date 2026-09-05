@@ -85,15 +85,21 @@ pub struct ProviderInfo {
     pub id: String,
     pub description: String,
     pub has_key: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_error: Option<String>,
 }
 
 pub fn providers_info(store: &dyn SecretStore) -> Vec<ProviderInfo> {
     PROVIDERS
         .iter()
-        .map(|p| ProviderInfo {
-            id: p.id.to_string(),
-            description: p.description.to_string(),
-            has_key: store.has(p.id),
+        .map(|p| {
+            let status = store.has(p.id);
+            ProviderInfo {
+                id: p.id.to_string(),
+                description: p.description.to_string(),
+                has_key: status.as_ref().copied().unwrap_or(false),
+                key_error: status.err(),
+            }
         })
         .collect()
 }
@@ -315,13 +321,19 @@ pub async fn provider_fetch(
     store: &dyn SecretStore,
     log: &CostLog,
 ) -> Result<FetchResponse, String> {
+    provider_fetch_notifying(req, store, log, |_| {}).await
+}
+
+/// Same as [`provider_fetch`], and tells the desktop command when the usage
+/// log could not be written so it can emit `app:error`.
+pub async fn provider_fetch_notifying(
+    req: FetchRequest,
+    store: &dyn SecretStore,
+    log: &CostLog,
+    on_log_error: impl FnOnce(&str),
+) -> Result<FetchResponse, String> {
     let (entry, url) = validate(&req)?;
-    let key = store.get(entry.id).ok_or_else(|| {
-        format!(
-            "no API key for \"{}\": add it under Settings → API credentials",
-            entry.id
-        )
-    })?;
+    let key = store.require(entry.id)?;
     live_guard(&format!("provider \"{}\"", entry.id))?;
 
     let client = provider_client().build().map_err(|e| e.to_string())?;
@@ -403,16 +415,21 @@ pub async fn provider_fetch(
         }
         Err(e) => cost.error = Some(e.clone()),
     }
-    if let Err(e) = log.append(&cost) {
-        tracing::warn!("usage log: {e}");
-    }
+    persist_cost(log, &cost, on_log_error);
     result
+}
+
+fn persist_cost(log: &CostLog, cost: &CostEntry, on_log_error: impl FnOnce(&str)) {
+    if let Err(e) = log.append(cost) {
+        tracing::warn!("usage log: {e}");
+        on_log_error(&e);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keys::MemoryStore;
+    use crate::keys::{FailingStore, MemoryStore};
 
     fn req(provider: &str, path: &str) -> FetchRequest {
         FetchRequest {
@@ -512,6 +529,26 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[tokio::test]
+    async fn keychain_failure_is_not_reported_as_missing_key() {
+        let store = FailingStore {
+            get_error: Some("keychain unavailable: locked".into()),
+            delete_error: None,
+        };
+        let dir = std::env::temp_dir().join(format!("jam-net-keychain-{}", std::process::id()));
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        let err = provider_fetch(req("gemini", "/v1beta/models"), &store, &log)
+            .await
+            .unwrap_err();
+        assert!(err.contains("keychain unavailable"), "{err}");
+        assert!(!err.contains("no API key"), "{err}");
+        assert!(
+            log.list(10).is_empty(),
+            "nothing is logged when the keychain cannot be read"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A saved key on a test or headless machine must not be billed (issue #59).
     #[tokio::test]
     async fn headless_runs_never_send_a_keyed_request() {
@@ -576,6 +613,40 @@ mod tests {
         assert_eq!(g.calls, 3);
         assert_eq!(g.failures, 1);
         assert_eq!(g.bytes_in, 600);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn usage_log_write_failure_is_reported() {
+        let dir = std::env::temp_dir().join(format!("jam-costlog-fail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let blocker = dir.join("not-a-folder");
+        std::fs::write(&blocker, b"x").unwrap();
+        let log = CostLog::new(blocker.join("usage.jsonl"));
+        let mut reported = None;
+        persist_cost(
+            &log,
+            &CostEntry {
+                at_ms: 1,
+                provider: "gemini".into(),
+                method: "POST".into(),
+                path: "/v1/x".into(),
+                status: 200,
+                duration_ms: 1,
+                bytes_out: 0,
+                bytes_in: 0,
+                error: None,
+                model: None,
+                estimated_cost_usd: None,
+            },
+            |e| reported = Some(e.to_string()),
+        );
+        let err = reported.expect("append failure is reported");
+        assert!(
+            err.contains("not-a-folder") || err.contains("usage.jsonl"),
+            "{err}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { ipc } from "../ipc/client";
 import type { Chart, TakeMetadata } from "../ipc/contract";
-import { useEngineStore } from "../store/engine";
+import { requireCommand, useEngineStore } from "../store/engine";
 import { parseChartText } from "./chart/text";
 import type { Blueprint, RigSnapshot } from "./roomTools";
 import { checkWritingForm } from "./writingTools";
@@ -154,14 +154,14 @@ interface WritingState {
    * Applies one reversible change. Edits that pass the same `coalesce` key within
    * COALESCE_MS of each other share one Undo entry: the body before the first of them.
    */
-  edit: (fn: (body: SongBody) => void, coalesce?: string) => void;
+  edit: (fn: (body: SongBody) => void, coalesce?: string) => boolean;
   createSong: () => void;
   openSong: (song: Original) => void;
   select: (id: string) => void;
   undo: () => void;
   redo: () => void;
   version: (name?: string) => void;
-  restore: (id: string) => void;
+  restore: (id: string) => boolean;
   refresh: () => Promise<void>;
   save: () => Promise<void>;
   saveCopy: () => Promise<void>;
@@ -170,7 +170,7 @@ interface WritingState {
   arm: (seconds: number) => Promise<void>;
   keep: () => Promise<void>;
   attach: (take: TakeMetadata) => void;
-  action: (fn: () => Promise<void>) => Promise<void>;
+  action: (fn: () => Promise<unknown>) => Promise<void>;
 }
 
 /** Edits with the same coalesce key closer than this share one Undo entry. */
@@ -203,20 +203,24 @@ export const useWriting = create<WritingState>((set, get) => ({
   },
   edit: (fn, coalesce) => {
     const song = get().song;
-    if (!song) return;
+    if (!song) {
+      set({ message: "Create or open a song first." });
+      return false;
+    }
     if (useEngineStore.getState().isRecording) {
       set({ message: "Save the take before editing the song." });
-      return;
+      return false;
     }
     const body = structuredClone(song.body);
+    set({ message: "" });
     try {
       fn(body);
       checkWritingForm(body);
     } catch (e) {
       set({ message: String(e) });
-      return;
+      return false;
     }
-    if (JSON.stringify(body) === JSON.stringify(song.body)) return;
+    if (JSON.stringify(body) === JSON.stringify(song.body)) return false;
     const now = Date.now();
     const last = get().lastEdit;
     const grouped =
@@ -232,6 +236,7 @@ export const useWriting = create<WritingState>((set, get) => ({
       message: "",
       lastEdit: coalesce === undefined ? null : { key: coalesce, at: now },
     });
+    return true;
   },
   createSong: () => {
     if (get().dirty || useEngineStore.getState().isRecording) {
@@ -314,11 +319,12 @@ export const useWriting = create<WritingState>((set, get) => ({
   restore: (id) => {
     const v = get().song?.versions.find((v) => v.id === id);
     if (v)
-      get().edit((b) => {
+      return get().edit((b) => {
         for (const key of Object.keys(b))
           delete (b as unknown as Record<string, unknown>)[key];
         Object.assign(b, structuredClone(v.body));
       });
+    return false;
   },
   refresh: async () => {
     const saved = await ipc.invoke<Original[]>("originals_list");
@@ -417,11 +423,7 @@ export const useWriting = create<WritingState>((set, get) => ({
   record: async () => {
     const engine = useEngineStore.getState();
     if (engine.isRecording) {
-      const take = await engine.stopRecording();
-      if (!take)
-        throw new Error(
-          "The take could not be saved. Check the recording error.",
-        );
+      requireCommand(await engine.stopRecording());
       await ipc.invoke("transport_stop");
       return;
     }
@@ -435,6 +437,7 @@ export const useWriting = create<WritingState>((set, get) => ({
     await ipc.invoke("originals_record", { sessionId: saved.id });
     useEngineStore.setState({
       isRecording: true,
+      recordingError: null,
     });
   },
   arm: async (seconds) => {

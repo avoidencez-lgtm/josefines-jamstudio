@@ -33,16 +33,20 @@ export const Jo: React.FC = () => {
   const { messages, inputValue, busy, pending, lastBrain } =
     useJoConversation();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const { keysPresent, isPreview, notify } = useEngineStore(
+  const { keysPresent, keyErrors, isPreview, notify } = useEngineStore(
     useShallow((s) => ({
       keysPresent: s.keysPresent,
+      keyErrors: s.keyErrors,
       isPreview: s.isPreview,
       notify: s.notify,
     })),
   );
   const { preferences, loaded } = useAi();
+  const keyError =
+    !BRAINS[preferences.selected].local && keyErrors[preferences.selected];
   const useLlm =
     loaded &&
+    !keyError &&
     Boolean(
       BRAINS[preferences.selected].local || keysPresent[preferences.selected],
     ) &&
@@ -99,7 +103,7 @@ export const Jo: React.FC = () => {
     };
   };
 
-  /** Only the selected provider is contacted; failures fall back to local commands. */
+  /** Failed provider requests never become unrelated offline commands. */
   const think = async (
     history: JoMessage[],
     query: string,
@@ -107,24 +111,19 @@ export const Jo: React.FC = () => {
     const current = useAi.getState();
     const selected = current.preferences.selected;
     const engine = useEngineStore.getState();
+    if (!BRAINS[selected].local && engine.keyErrors[selected])
+      throw new Error(engine.keyErrors[selected]);
     if (
       current.loaded &&
       (BRAINS[selected].local || engine.keysPresent[selected]) &&
       !engine.isPreview
     ) {
-      try {
-        const out = await askBrain(
-          joRequest(history, query, snapshotContext()),
-          current.preferences,
-        );
-        setLastBrain(BRAINS[selected].name);
-        return out;
-      } catch (e) {
-        notify(
-          "error",
-          `Jo (${BRAINS[selected].name}): ${String(e)}. Using the offline parser.`,
-        );
-      }
+      const out = await askBrain(
+        joRequest(history, query, snapshotContext()),
+        current.preferences,
+      );
+      setLastBrain(BRAINS[selected].name);
+      return out;
     }
     setLastBrain("offline");
     return parseNaturalIntent(query);
@@ -161,7 +160,8 @@ export const Jo: React.FC = () => {
       const { reply, toolCalls } = await think(history, query);
 
       const results: string[] = [];
-      if (toolCalls.some(joNeedsReview)) {
+      const needsReview = toolCalls.some(joNeedsReview);
+      if (needsReview) {
         useJoConversation.setState({
           pending: { calls: toolCalls, expected: expectedSong },
         });
@@ -178,7 +178,9 @@ export const Jo: React.FC = () => {
       const joMsg: JoMessage = {
         id: crypto.randomUUID(),
         sender: "jo",
-        text: reply,
+        // Replies are generated before execution. Preserve actual outcomes in
+        // both the visible conversation and the history sent on the next turn.
+        text: toolCalls.length && !needsReview ? results.join("\n") : reply,
         timestamp: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -211,11 +213,17 @@ export const Jo: React.FC = () => {
       <div className="workspace-summary">
         <span>
           <strong>
-            {useLlm ? BRAINS[preferences.selected].name : "Offline commands"}
+            {keyError
+              ? "Keychain unavailable"
+              : useLlm
+                ? BRAINS[preferences.selected].name
+                : "Offline commands"}
           </strong>
-          {useLlm
-            ? preferences.models[preferences.selected].model
-            : "Tempo, cues, styles & recording"}
+          {keyError
+            ? "Open AI settings to check key access"
+            : useLlm
+              ? preferences.models[preferences.selected].model
+              : "Tempo, cues, styles & recording"}
         </span>
         {lastBrain && <span>Last reply: {lastBrain}</span>}
         <span>Text commands · native voice is not available in this build</span>

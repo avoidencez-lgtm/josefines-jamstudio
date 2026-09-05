@@ -126,8 +126,22 @@ impl Timeline {
     }
 
     pub fn set_time_signature(&mut self, ts: (u8, u8)) {
-        if ts.0 > 0 && ts.1 > 0 {
-            self.time_signature = ts;
+        if ts.0 == 0 || ts.1 == 0 || ts == self.time_signature {
+            return;
+        }
+        self.time_signature = ts;
+        // Count-in length is `samples_per_bar() * total_bars` from the *current*
+        // meter. A shorter meter can make `count_in_sample` already past the new
+        // end, so the surplus in this block exceeds `frames` and
+        // `frames - surplus` underflows (#128). Restart so the clicks match
+        // the loaded chart.
+        if let TransportState::CountingIn { total_bars, .. } = self.state {
+            self.count_in_sample = 0;
+            self.state = TransportState::CountingIn {
+                bar: 1,
+                beat: 1,
+                total_bars,
+            };
         }
     }
 
@@ -261,12 +275,19 @@ impl Timeline {
                 if end_sample >= total_count_in_samples {
                     self.state = TransportState::Playing;
                     events.push(TimelineEvent::CountInComplete);
-                    self.current_sample = 0;
+                    // Keep the pre-count-in playhead (seek / practice range).
+                    // After Stop the playhead is 0; come in at the loop start
+                    // when a loop is armed, instead of always bar 1 (#134).
+                    if self.current_sample == 0 && self.loop_enabled {
+                        self.seek_bar(self.loop_start_bar);
+                    }
                     self.count_in_sample = 0;
 
-                    let surplus = (end_sample - total_count_in_samples) as usize;
+                    let surplus = end_sample
+                        .saturating_sub(total_count_in_samples)
+                        .min(frames as u64) as usize;
                     if surplus > 0 {
-                        let block_offset = frames - surplus;
+                        let block_offset = frames.saturating_sub(surplus);
                         let (sub_events, sub_spans) = self.advance_with_spans(surplus);
                         events.extend(sub_events.into_iter().map(|e| match e {
                             TimelineEvent::Beat {
@@ -467,6 +488,141 @@ mod tests {
         let ev2 = tl.advance(48_000);
         assert_eq!(tl.state, TransportState::Playing);
         assert!(ev2.contains(&TimelineEvent::CountInComplete));
+    }
+
+    #[test]
+    fn count_in_keeps_the_seek_position() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(1);
+        tl.seek_bar(9);
+        tl.play();
+        tl.advance(96_000);
+        assert_eq!(tl.state, TransportState::Playing);
+        assert_eq!(tl.current_position().bar, 9);
+    }
+
+    #[test]
+    fn count_in_comes_in_at_the_loop_start_when_stopped_at_the_top() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(1);
+        tl.set_loop(5, 9, true);
+        tl.play();
+        tl.advance(96_000);
+        assert_eq!(tl.state, TransportState::Playing);
+        assert_eq!(tl.current_position().bar, 5);
+    }
+
+    #[test]
+    fn count_in_surplus_renders_the_current_seek_once_at_the_correct_offset() {
+        for destination in [5, 9] {
+            let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+            tl.seek_bar(9);
+            tl.play();
+            assert!(tl.advance_with_spans(95_900).1.is_empty());
+            tl.play(); // Repeated Play cannot restart an active count-in.
+            if destination == 5 {
+                tl.seek_bar(5); // A later seek replaces the destination.
+            }
+            let (events, spans) = tl.advance_with_spans(256);
+            assert_eq!(
+                spans,
+                vec![Span {
+                    offset: 100,
+                    frames: 156,
+                    start_beats: f64::from((destination - 1) * 4),
+                }]
+            );
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|e| **e == TimelineEvent::CountInComplete)
+                    .count(),
+                1
+            );
+            assert!(events.contains(&TimelineEvent::Beat {
+                bar: destination,
+                beat: 1,
+                is_count_in: false,
+                offset: 100,
+            }));
+            assert_eq!(tl.current_sample, u64::from(destination - 1) * 96_000 + 156);
+            assert!(tl.advance(256).is_empty());
+        }
+    }
+
+    #[test]
+    fn shrinking_the_meter_during_count_in_does_not_panic() {
+        let mut tl = Timeline::new(48_000, 120.0, (6, 8));
+        tl.set_count_in(1);
+        tl.play();
+
+        // Five elapsed beats exceed the new four-beat duration: the old code
+        // underflowed the next block offset here (exactly four beats did not).
+        tl.advance(120_000);
+
+        tl.set_time_signature((4, 4));
+        assert_eq!(
+            tl.state,
+            TransportState::CountingIn {
+                bar: 1,
+                beat: 1,
+                total_bars: 1
+            }
+        );
+        let (events, spans) = tl.advance_with_spans(95_900);
+        assert!(spans.is_empty());
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(
+                    e,
+                    TimelineEvent::Beat {
+                        is_count_in: true,
+                        ..
+                    }
+                ))
+                .count(),
+            4
+        );
+        let (events, spans) = tl.advance_with_spans(256);
+        assert_eq!(tl.state, TransportState::Playing);
+        assert_eq!(tl.current_sample, 156);
+        assert_eq!(
+            spans,
+            vec![Span {
+                offset: 100,
+                frames: 156,
+                start_beats: 0.0
+            }]
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| **e == TimelineEvent::CountInComplete)
+                .count(),
+            1
+        );
+        assert!(events.contains(&TimelineEvent::Beat {
+            bar: 1,
+            beat: 1,
+            is_count_in: false,
+            offset: 100
+        }));
+        assert!(!tl.advance(256).contains(&TimelineEvent::CountInComplete));
+    }
+
+    #[test]
+    fn same_or_invalid_meter_does_not_restart_count_in() {
+        let mut tl = Timeline::new(48_000, 120.0, (6, 8));
+        tl.play();
+        tl.advance(120_000);
+        let state = tl.state;
+        for meter in [(6, 8), (0, 4), (4, 0)] {
+            tl.set_time_signature(meter);
+            assert_eq!(tl.state, state);
+            assert_eq!(tl.count_in_sample, 120_000);
+            assert_eq!(tl.time_signature, (6, 8));
+        }
     }
 
     #[test]

@@ -79,7 +79,19 @@ impl TakeRecorder {
         Ok(())
     }
     pub fn is_recording(&self) -> bool {
+        // Includes a failed capture whose writer still needs finalising.
         self.writer.is_some()
+    }
+    pub fn error(&self) -> Option<&str> {
+        self.failure.as_deref().filter(|_| self.is_recording())
+    }
+    pub(crate) fn interrupt(&mut self, reason: &str) {
+        if self.is_recording() && self.failure.is_none() {
+            self.failure = Some(format!(
+                "Recording interrupted: {reason} Save the partial take."
+            ));
+            self.sender = None;
+        }
     }
     pub fn start_take(
         &mut self,
@@ -210,14 +222,21 @@ impl TakeRecorder {
         self.frames_written = 0;
         Ok(id)
     }
-    pub fn push_frames(&mut self, frames: Vec<Frame>) {
+    pub fn push_frames(&mut self, frames: Vec<Frame>, notes: Vec<crate::workstation::MidiNote>) {
         if let Some(tx) = &self.sender {
-            self.frames_written += frames.len() as u64;
+            let count = frames.len() as u64;
             if let Err(e) = tx.try_send(frames) {
                 self.failure = Some(format!(
-                    "Recording interrupted by disk backpressure: {e}. Partial WAVs kept."
+                    "Recording interrupted: the disk writer stopped accepting audio ({e}). Save the partial take; partial WAVs remain on disk."
                 ));
                 self.sender = None;
+            } else {
+                let base = self.frames_written;
+                self.midi.extend(notes.into_iter().map(|mut n| {
+                    n.frame += base;
+                    n
+                }));
+                self.frames_written += count;
             }
         }
     }
@@ -358,6 +377,35 @@ mod tests {
             .join("take.json")
             .exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejected_audio_does_not_advance_the_recording() {
+        let mut r = TakeRecorder::new(48_000, PathBuf::new());
+        let (tx, _rx) = mpsc::sync_channel(1);
+        r.sender = Some(tx);
+        r.writer = Some(thread::spawn(|| Ok(TakeMetadata::default())));
+        let note = crate::workstation::MidiNote {
+            frame: 1,
+            bytes: [0x90, 60, 100],
+        };
+        r.push_frames(vec![[0.1; 9]; 4], vec![note.clone()]);
+        assert_eq!(r.frames_written, 4);
+        assert_eq!(r.midi.len(), 1);
+        assert_eq!(r.midi[0].frame, 1);
+        for _ in 0..3 {
+            r.push_frames(vec![[0.1; 9]; 4], vec![note.clone()]);
+            assert!(r.error().unwrap().contains("interrupted"));
+            assert!(
+                r.is_recording(),
+                "partial take must still block close/device changes"
+            );
+            assert!(r.sender.is_none(), "capture stopped");
+            assert_eq!(r.frames_written, 4, "rejected frames are not recorded");
+            assert_eq!(r.midi.len(), 1, "no MIDI from rejected or later blocks");
+        }
+        r.writer.take().unwrap().join().unwrap().unwrap();
+        assert!(r.error().is_none());
     }
 
     #[test]

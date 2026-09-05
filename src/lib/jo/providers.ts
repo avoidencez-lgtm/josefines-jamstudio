@@ -340,6 +340,7 @@ export const useAi = create<{
     const providers = await ipc.invoke<ProviderInfo[]>("providers_list");
     useEngineStore.setState({
       keysPresent: Object.fromEntries(providers.map((p) => [p.id, p.hasKey])),
+      keyErrors: Object.fromEntries(providers.map((p) => [p.id, p.keyError])),
     });
     set({ preferences: readPreferences(settings.ai), loaded: true });
   },
@@ -378,6 +379,8 @@ export async function askBrain(
   const engine = useEngineStore.getState();
   if (engine.isPreview) throw new Error("AI requests require the desktop app.");
   const p = readPreferences(preferences);
+  if (!BRAINS[p.selected].local && engine.keyErrors[p.selected])
+    throw new Error(engine.keyErrors[p.selected]);
   if (!BRAINS[p.selected].local && !engine.keysPresent[p.selected])
     throw new Error(`Add a ${BRAINS[p.selected].name} API key in Settings.`);
   if (JSON.stringify(input).length > 64_000)

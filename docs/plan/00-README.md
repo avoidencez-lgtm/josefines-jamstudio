@@ -65,6 +65,21 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-05 build integration: PRs #200 (chart duration precision), #204 (count-in
+destination) and #207 (native logging) are merged. PR #192 replaces estimated
+render-lead delays with output-callback frame pairing and drains the queued take
+tail before finalisation. Synthetic callback alignment and WAV/MIDI onset checks
+cover the implementation; current-head Windows/macOS CI remains the merge gate.
+This does not complete the remaining V1 capabilities or signing, and friend-led
+hardware checks remain deferred to V2.
+
+2026-09-05 Jo action results (issue #166): transport, band and recording refusals
+reach Jo as explicit failures while retaining the normal UI notice. Success uses
+the accepted command value, including clamped tempo, and unchanged document edits
+are reported without claiming a change. Failing-IPC regressions cover every legacy
+engine action. This advances reliable AI control; voice and other unbuilt V1
+capabilities remain unfinished. Friend-led testing remains deferred to V2.
+
 2026-09-05 Write follow-up ([PR #119](https://github.com/avoidencez-lgtm/josefines-jamstudio/pull/119), merged): the workspace names the arrangement loaded in the band and distinguishes it from the current draft, including band settings and guitar layers. Play, loop and record share the accepted-snapshot update; failed loads preserve the previous indicator. Contextual help and both exported manuals explain Save versus Play versus Space.
 
 2026-09-05 rig persistence follow-up ([PR #117](https://github.com/avoidencez-lgtm/josefines-jamstudio/pull/117), merged): profile, section mapping, follow-section and MIDI connection changes save before replacing the active configuration. IPC regression coverage verifies corrupt-file and write failures leave the previous runtime state and settings file intact, including an existing synthetic MIDI connection. Hardware verification is not claimed.
@@ -207,3 +222,47 @@ Saved analysis advances to analyzer version 2; older evidence offers Analyze aga
 This applies to the tuner, melody extraction and take analysis. It does not
 complete bend exclusion, noisy-sweep acceptance, chord agreement or structured
 provider feedback. Friend-led testing remains deferred to V2.
+
+### Count-in meter changes (PR #167)
+
+A different meter restarts an active count-in so its clicks match the new chart.
+An unchanged or invalid meter preserves progress. The regression advances beyond
+the shortened boundary that caused the original underflow, then verifies four
+restarted clicks, exact playback spans and one completion event. This developer
+verification is separate from the friend-led checks deferred to V2.
+
+The destination follow-up (PR #204, awaiting review and CI) preserves the selected
+bar when the count-in completes. At the song beginning an armed loop supplies the
+entry bar. Preview playback reads the existing song position instead of caching
+the count-in display bar, so repeated Play, late seeks and newly armed loops do
+not lose the destination. Native tests verify the surplus render span and one
+downbeat at the correct offset. English/Bokmål Stage help documents this behavior.
+
+### Recording interruption feedback (issue #137)
+
+Rejected disk-queue blocks no longer advance the accepted-frame count or collect
+MIDI. The native control thread reports a capture failure while preserving the
+pending take for finalisation. Transport, Sessions and Write offer Save partial
+take and stop presenting capture as live. The close/device guards stay active
+until finalisation. Native backpressure and frontend failure/recovery regressions
+cover this path; alignment and start/stop disk-lock work remain separate.
+
+### Chart duration precision (PR #200, awaiting review and CI)
+
+The shared text formatter preserves numeric beat durations instead of rounding
+each chord to two decimals. Mixed thirds and dense bars survive repeated
+format/parse cycles without losing a bar or accumulating drift. Short scientific
+notation emitted for tiny durations is readable by the parser. Explicit bar
+totals retain the existing 1e-6 tolerance. English/Bokmål chart help explains
+mixed counted/shared beats. This does not complete the separate tempo-range or
+schema-validation work.
+
+### Credential recovery (PR #194, merged)
+
+Keychain read failures remain distinct from missing keys through provider status,
+Jo and media preflight. Settings shows unavailable access and offers Check key
+status after unlocking the OS keychain; successful retry restores availability.
+Failed removal is reported, and a failed Jo provider request cannot run offline
+commands. English/Bokmål help explains recovery. Developer checks cover failed
+stores, production error mapping, provider/preflight results and browser controls;
+no live keychain or paid-provider verification is claimed. Friend checks remain V2.

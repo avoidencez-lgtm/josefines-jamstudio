@@ -132,6 +132,8 @@ Lagre før du lukker. Skrivebordsappen hindrer lukking under opptak/arbeid og sp
 
 Transportlinjen øverst spiller av, pauser, stopper, tar opp, velger opptelling og slår av/på løkker. Stage viser gjeldende/neste akkord og posisjon. Chart & band settings velger skjema og passende stil, endrer intensitet og band-/klikkvolum og aktiverer stemmeapparat eller referansetone. Cues ber om Fill, Crash, Stop eller Ending. Noen endringer venter til neste takt og vises som ventende. Mute gjelder trommer, bass eller komp; follow-energy følger målt gitarnivå, ikke musikalsk hensikt. Shapes viser et spillbart grep for gjeldende akkord og, mindre, neste akkord, med grunntonen i gult; nummerknappene velger et annet grep. Dette er teoriforslag i standardstemming, ikke en transkripsjon av det som ble spilt.
 
+Hvis du laster et akkordskjema med en annen taktart under opptelling, starter opptellingen på nytt i den nye taktarten før bandet kommer inn. Samme taktart beholder posisjonen i opptellingen. Etter opptellingen starter avspillingen ved den valgte takten. Hvis spillehodet står ved begynnelsen og en løkke er aktiv, starter bandet ved løkkens start. Et nytt trykk på Play under opptelling starter den ikke på nytt; velger du en annen takt, endres stedet der bandet kommer inn.
+
 ### Øving og tempotrening
 
 Practice viser partier fra det innlastede skjemaet. Velg ett for å repetere taktintervallet, inkludert gjentakelser. Exit loop går tilbake til hele formen. Velg Start, Target, Step og Every i Tempo Trainer, aktiver og trykk Play fra stopp. Tempoet justeres etter valgt antall spilte takter, også i korte løkker; et aktivt opptak endres ikke. Styringen bruker UI-telemetri og er ikke et samplenøyaktig spor for tempoautomasjon.
@@ -154,7 +156,7 @@ Søk på tittel, toneart eller tempo, og filtrer mellom medfølgende og egne skj
 
 ### Syntaks for akkordskjema
 
-En tittel starter med #. Metadata bruker key: A minor, bpm: 100, time: 4/4 og eventuelt style: rock-straight. En seksjonsoverskrift som [Verse x2] gjentar seksjonen. Taktlinjer kan være | Am | F | C G | Am:3 G:1 |. Tegnet % gjentar forrige takt. Hver takt må inneholde taktartens antall slag. Feilmeldinger peker på ugyldig innhold; rett det før lagring/avspilling. Ctrl/Cmd+Enter spiller av fra redigeringsfeltet, og Ctrl/Cmd+S lagrer.
+En tittel starter med #. Metadata bruker key: A minor, bpm: 100, time: 4/4 og eventuelt style: rock-straight. En seksjonsoverskrift som [Verse x2] gjentar seksjonen. Taktlinjer kan være | Am | F | C G | Am:3 G:1 |. Tegnet % gjentar forrige takt. Akkorder uten et slagtall deler slagene som gjenstår: C:2 F G A gir C to slag og fordeler de andre to likt. Varighetene bevares når du åpner eller transponerer skjemaet; blandede fordelinger kan vises med flere desimaler. Hver takt må inneholde taktartens antall slag. Feilmeldinger peker på ugyldig innhold; rett det før lagring/avspilling. Ctrl/Cmd+Enter spiller av fra redigeringsfeltet, og Ctrl/Cmd+S lagrer.
 
 ### Lagret innhold
 
@@ -183,6 +185,8 @@ CLI-en beholder sine egne innloggingsdata. Codex kan bruke ChatGPT-pålogging el
 ### Personvern og nyttige forespørsler
 
 Tekstassistenter får låttekst/struktur, innstillinger, riggnavn og mellomlagrede opptaksmål etter behov, ikke rå opptakslyd eller nøkler. Prøv «Add a quiet eight-bar bridge», «Leave locked bass alone and thin out verse drums» eller «Append three concrete chorus images to this section’s lyrics». Lokale opptaksmål er heuristikker, ikke en AI-lyttevurdering. Bare mediegenereringskommandoer sender sine uttrykkelig valgte genereringsdata.
+
+Les handlingsresultatet: Jo viser motorens avvisning i stedet for å melde at handlingen lyktes. Et tempo utenfor tillatt område begrenses til området, og godkjent BPM vises. Bandendringer kan vente til neste takt. En uendret låt eller scene meldes som uendret; låste stemmer forblir låst.
 
 ### Tre perspektiver på låten
 
@@ -264,9 +268,11 @@ Hvis lagring melder at take.json.tmp allerede finnes, lukk appen og sikkerhetsko
 
 Den oppdaterte tonedetektoren måler stabile testtoner mer nøyaktig. Bruk Analyze again for eldre resultater. Bend, vibrato og akkorder krever fortsatt en musikalsk vurdering; målingen skiller ikke tilsiktede tonebevegelser fra stemmingsfeil.
 
+Hvis diskskrivingen ikke kan ta imot lyd, slutter opptaksindikatoren å pulsere, og en melding om avbrudd vises. Save partial take fullfører lyden som ble mottatt før avbruddet; opptaket fortsetter ikke automatisk. Hold appen åpen til dette er ferdig. En diskfeil kan også hindre fullføring: feilen vises, og delvise WAV-filer blir liggende i opptaksmappen for gjenoppretting. Frigjør diskplass eller løs diskproblemet før du starter et nytt opptak.
+
 ### Justering og separate spor
 
-Guitar offset er et manuelt antall sampler som brukes til å justere inngangen mot bandet. Automatisk kalibrering via kabelsløyfe er ikke tilgjengelig. Mål justeringen i DAW på den faktiske riggen. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.
+Opptaket kobler gitarinngangen til bandrammene som sendes til lydutgangen. Save take venter kort på lyd som allerede ligger i kø før filene lukkes. Hvis lydstrømmen eller opptakskøen mister rammer, lagrer du det delvise opptaket og løser det meldte problemet før du tar opp igjen. Guitar offset er fortsatt den manuelle samplejusteringen for forsinkelsen gjennom det fysiske lydkortet. Automatisk kalibrering via kabelsløyfe er ikke tilgjengelig. Mål justeringen i DAW på den faktiske riggen. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.
 
 ### Logic og andre musikkprogrammer
 
@@ -312,7 +318,7 @@ Tillat mikrofontilgang for Jamstudio på Mac når du blir spurt; valgt lydinngan
 
 ### Nøkler, modeller og forbruk
 
-AI & models inneholder leverandørvalg, redigerbare modell-ID-er, deteksjon av installerte agenter og API-nøkler. Nøkler lagres i Windows-legitimasjon eller Mac Keychain, aldri i låtdokumenter. Nøkkelfeltet tømmes etter lagring; appen viser at nøkkelen finnes uten å returnere hemmeligheten. Save AI settings lagrer valgt modell/grenser. Modellbytte tømmer gamle prisanslag.
+AI & models inneholder leverandørvalg, redigerbare modell-ID-er, deteksjon av installerte agenter og API-nøkler. Nøkler lagres i Windows-legitimasjon eller Mac Keychain, aldri i låtdokumenter. Nøkkelfeltet tømmes etter lagring; appen viser at nøkkelen finnes uten å returnere hemmeligheten. Save AI settings lagrer valgt modell/grenser. Modellbytte tømmer gamle prisanslag. Keychain unavailable betyr at den lagrede nøkkelen ikke kunne kontrolleres, ikke at den mangler. Lås opp eller tillat tilgang til operativsystemets nøkkellager, og bruk Check key status under API keys. Kontrollen leser bare om nøkkelen finnes og sender ingen betalt forespørsel. Mislykket sletting vises som en feil; appen hevder ikke at nøkkelen er fjernet. Jo viser feil ved mislykkede leverandørforespørsler uten å kjøre frakoblede kommandoer.
 
 Usage registrerer leverandør/modell/status/tid/byte og eventuelle anslag, ikke prompter eller innloggingsdata. Tokengrenser og anslag i USD per million hjelper planlegging; de er ikke håndhevede kontobudsjetter eller sluttfakturaer. Sett budsjettgrenser hos leverandøren og kontroller dens kontrollpanel. Medieforespørsler og installert CLI-bruk har egne faktureringsregler.
 

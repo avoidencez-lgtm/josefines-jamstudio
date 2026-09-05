@@ -15,12 +15,26 @@ pub enum ChordQuality {
     Sus4,
 }
 
+/// Chart tokens that mean "no chord": keep drums, skip bass and comp.
+/// Same set as `isRestSymbol` in `src/lib/chart/text.ts` (`n.?c.?`, `rest`, `-`).
+pub fn is_rest_symbol(symbol: &str) -> bool {
+    let s = symbol.trim();
+    if s == "-" {
+        return true;
+    }
+    matches!(
+        s.to_ascii_lowercase().as_str(),
+        "rest" | "nc" | "n.c" | "nc." | "n.c."
+    )
+}
+
 /// Parses a chord symbol (e.g. "A7", "D7", "Em", "Cmaj7", "G", "F#m7")
 /// into root semitone (0 = C, 1 = C#, ... 11 = B) and ChordQuality.
-pub fn parse_chord(symbol: &str) -> (i32, ChordQuality) {
+/// Rests (`N.C.`, `NC`, `rest`, `-`) and empty symbols return `None`.
+pub fn parse_chord(symbol: &str) -> Option<(i32, ChordQuality)> {
     let s = symbol.trim();
-    if s.is_empty() {
-        return (0, ChordQuality::Major);
+    if s.is_empty() || is_rest_symbol(s) {
+        return None;
     }
 
     let mut chars = s.chars();
@@ -48,11 +62,47 @@ pub fn parse_chord(symbol: &str) -> (i32, ChordQuality) {
         quality_str = &quality_str[accidental.len_utf8()..];
     }
 
-    // Slash chords ("C/G") keep the upper structure; the bass player reads the root.
+    // Slash chords ("C/G") keep the upper structure; written bass is `slash_bass`.
     let quality_str = quality_str.split('/').next().unwrap_or("");
     let quality = classify_quality(quality_str);
 
-    (root, quality)
+    Some((root, quality))
+}
+
+/// Pitch class written after `/` (`C/E` → 4). Same letters and accidentals as the root.
+pub fn slash_bass(symbol: &str) -> Option<i32> {
+    let after = symbol.trim().split_once('/')?.1.trim();
+    parse_note_pc(after)
+}
+
+fn parse_note_pc(s: &str) -> Option<i32> {
+    let s = s.trim();
+    let letter = s.chars().next()?.to_ascii_uppercase();
+    let mut pc = match letter {
+        'C' => 0,
+        'D' => 2,
+        'E' => 4,
+        'F' => 5,
+        'G' => 7,
+        'A' => 9,
+        'B' => 11,
+        _ => return None,
+    };
+    let mut rest = &s[letter.len_utf8()..];
+    while let Some(accidental) = rest.chars().next() {
+        let delta = match accidental {
+            '#' => 1,
+            'b' => -1,
+            'x' => 2,
+            _ => break,
+        };
+        pc = (pc + delta + 12) % 12;
+        rest = &rest[accidental.len_utf8()..];
+    }
+    if !rest.is_empty() {
+        return None;
+    }
+    Some(pc)
 }
 
 /// Maps a chord-symbol suffix onto the closest quality the band can voice. Extensions
@@ -115,7 +165,9 @@ fn classify_quality(suffix: &str) -> ChordQuality {
 
 /// Computes a comping voicing as a list of MIDI note numbers constrained to C3 (48) .. C6 (84).
 pub fn voice_chord(chord_symbol: &str, voicing_kind: &str) -> Vec<u8> {
-    let (root, quality) = parse_chord(chord_symbol);
+    let Some((root, quality)) = parse_chord(chord_symbol) else {
+        return Vec::new();
+    };
 
     let intervals: &[i32] = match (voicing_kind, quality) {
         ("shell", ChordQuality::Dominant7) => &[0, 4, 10], // Root, 3, b7
@@ -245,45 +297,66 @@ mod tests {
     fn double_accidentals_preserve_pitch_and_quality() {
         assert_eq!(
             super::parse_chord("F##dim"),
-            (7, super::ChordQuality::Diminished)
+            Some((7, super::ChordQuality::Diminished))
         );
         assert_eq!(
             super::parse_chord("Bbbm7"),
-            (9, super::ChordQuality::Minor7)
+            Some((9, super::ChordQuality::Minor7))
         );
-        assert_eq!(super::parse_chord("Cxm"), (2, super::ChordQuality::Minor));
+        assert_eq!(
+            super::parse_chord("Cxm"),
+            Some((2, super::ChordQuality::Minor))
+        );
     }
 
     use super::*;
 
     #[test]
     fn test_chord_parsing() {
-        assert_eq!(parse_chord("A7"), (9, ChordQuality::Dominant7));
-        assert_eq!(parse_chord("D7"), (2, ChordQuality::Dominant7));
-        assert_eq!(parse_chord("E7"), (4, ChordQuality::Dominant7));
-        assert_eq!(parse_chord("Am"), (9, ChordQuality::Minor));
-        assert_eq!(parse_chord("Cmaj7"), (0, ChordQuality::Major7));
-        assert_eq!(parse_chord("F#m7"), (6, ChordQuality::Minor7));
-        assert_eq!(parse_chord("Bb7"), (10, ChordQuality::Dominant7));
+        assert_eq!(parse_chord("A7"), Some((9, ChordQuality::Dominant7)));
+        assert_eq!(parse_chord("D7"), Some((2, ChordQuality::Dominant7)));
+        assert_eq!(parse_chord("E7"), Some((4, ChordQuality::Dominant7)));
+        assert_eq!(parse_chord("Am"), Some((9, ChordQuality::Minor)));
+        assert_eq!(parse_chord("Cmaj7"), Some((0, ChordQuality::Major7)));
+        assert_eq!(parse_chord("F#m7"), Some((6, ChordQuality::Minor7)));
+        assert_eq!(parse_chord("Bb7"), Some((10, ChordQuality::Dominant7)));
+    }
+
+    #[test]
+    fn rest_tokens_are_not_c_major() {
+        for symbol in ["N.C.", "N.C", "NC", "NC.", "n.c.", "rest", "REST", "-", ""] {
+            assert_eq!(parse_chord(symbol), None, "{symbol}");
+            assert!(voice_chord(symbol, "shell").is_empty(), "{symbol}");
+        }
+        assert!(parse_chord("A7").is_some());
+        assert!(!is_rest_symbol("Am"));
+        assert!(!is_rest_symbol("C"));
     }
 
     #[test]
     fn extended_and_slash_chords_fold_onto_their_family() {
-        assert_eq!(parse_chord("A9"), (9, ChordQuality::Dominant7));
-        assert_eq!(parse_chord("A7#9"), (9, ChordQuality::Dominant7));
-        assert_eq!(parse_chord("E13"), (4, ChordQuality::Dominant7));
-        assert_eq!(parse_chord("Dm9"), (2, ChordQuality::Minor7));
-        assert_eq!(parse_chord("Dm6"), (2, ChordQuality::Minor));
-        assert_eq!(parse_chord("Cmaj9"), (0, ChordQuality::Major7));
-        assert_eq!(parse_chord("C6"), (0, ChordQuality::Major));
-        assert_eq!(parse_chord("Cadd9"), (0, ChordQuality::Major));
-        assert_eq!(parse_chord("Bm7b5"), (11, ChordQuality::HalfDiminished));
-        assert_eq!(parse_chord("Bø"), (11, ChordQuality::HalfDiminished));
-        assert_eq!(parse_chord("G#dim7"), (8, ChordQuality::Diminished));
-        assert_eq!(parse_chord("C/G"), (0, ChordQuality::Major));
-        assert_eq!(parse_chord("D7/F#"), (2, ChordQuality::Dominant7));
-        assert_eq!(parse_chord("Esus"), (4, ChordQuality::Sus4));
-        assert_eq!(parse_chord("E5"), (4, ChordQuality::Power5));
+        assert_eq!(parse_chord("A9"), Some((9, ChordQuality::Dominant7)));
+        assert_eq!(parse_chord("A7#9"), Some((9, ChordQuality::Dominant7)));
+        assert_eq!(parse_chord("E13"), Some((4, ChordQuality::Dominant7)));
+        assert_eq!(parse_chord("Dm9"), Some((2, ChordQuality::Minor7)));
+        assert_eq!(parse_chord("Dm6"), Some((2, ChordQuality::Minor)));
+        assert_eq!(parse_chord("Cmaj9"), Some((0, ChordQuality::Major7)));
+        assert_eq!(parse_chord("C6"), Some((0, ChordQuality::Major)));
+        assert_eq!(parse_chord("Cadd9"), Some((0, ChordQuality::Major)));
+        assert_eq!(
+            parse_chord("Bm7b5"),
+            Some((11, ChordQuality::HalfDiminished))
+        );
+        assert_eq!(parse_chord("Bø"), Some((11, ChordQuality::HalfDiminished)));
+        assert_eq!(parse_chord("G#dim7"), Some((8, ChordQuality::Diminished)));
+        assert_eq!(parse_chord("C/G"), Some((0, ChordQuality::Major)));
+        assert_eq!(parse_chord("D7/F#"), Some((2, ChordQuality::Dominant7)));
+        assert_eq!(slash_bass("C/E"), Some(4));
+        assert_eq!(slash_bass("D7/F#"), Some(6));
+        assert_eq!(slash_bass("C"), None);
+        assert_eq!(voice_chord("C/E", "shell"), voice_chord("C", "shell"));
+        assert_eq!(parse_chord("Esus"), Some((4, ChordQuality::Sus4)));
+        assert_eq!(parse_chord("E5"), Some((4, ChordQuality::Power5)));
     }
 
     #[test]

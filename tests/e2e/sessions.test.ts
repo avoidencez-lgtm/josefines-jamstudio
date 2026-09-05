@@ -33,7 +33,7 @@ import {
   practiceStreakDays,
   takeDate,
 } from "../../src/lib/sessions/stats";
-import { useEngineStore } from "../../src/store/engine";
+import { requireCommand, useEngineStore } from "../../src/store/engine";
 
 /** A Friday evening jam; every test starts here so timestamps and ids are stable. */
 const TODAY = new Date(2026, 8, 5, 18, 0, 0);
@@ -58,10 +58,10 @@ const lastNotice = () => store().notices.at(-1)?.text ?? "";
 /** What "Record New Take" then "Stop Recording" do, with `seconds` of simulated time between. */
 async function recordTake(at: Date, seconds: number): Promise<TakeMetadata> {
   vi.setSystemTime(at);
-  const id = await store().startRecording();
+  const id = requireCommand(await store().startRecording());
   expect(id).toMatch(/^preview-\d+$/);
   engine.tick(seconds);
-  const meta = await store().stopRecording();
+  const meta = requireCommand(await store().stopRecording());
   if (!meta) throw new Error(`stopRecording returned nothing for ${id}`);
   expect(meta.id).toBe(id);
   return meta;
@@ -114,7 +114,7 @@ it("records a jam: load a chart, pick a style, press play, hear the chord change
     current_chord: "A7",
   });
 
-  const id = await s.startRecording("evening-jam");
+  const id = requireCommand(await s.startRecording("evening-jam"));
   expect(id).toMatch(/^preview-\d+$/);
   expect(store().isRecording).toBe(true);
   expect(closeDecision()).toBe("refuse");
@@ -124,7 +124,7 @@ it("records a jam: load a chart, pick a style, press play, hear the chord change
   expect(store().telemetry.transport.bar).toBe(5);
   expect(store().telemetry.band.current_chord).toBe("D7");
 
-  const meta = await s.stopRecording();
+  const meta = requireCommand(await s.stopRecording());
   expect(meta).toMatchObject({
     id,
     chartId: "blues-12-bar",
@@ -196,28 +196,34 @@ it("refuses stopping without an active recording", async () => {
   const before = (await engineTakes()).map((t) => t.id);
   expect(store().isRecording).toBe(false);
   const meta = await store().stopRecording();
-  expect(meta).toBeNull();
+  expect(meta).toMatchObject({
+    ok: false,
+    error: expect.stringContaining("No active recording"),
+  });
   expect(lastNotice()).toMatch(/No active recording/);
   expect((await engineTakes()).map((t) => t.id)).toEqual(before);
   expect(store().takes.some((t) => t.durationSecs === 0)).toBe(false);
 });
 
 it("preserves the active take when a duplicate start is refused", async () => {
-  const first = await store().startRecording();
+  const first = requireCommand(await store().startRecording());
   engine.tick(1.5);
   const second = await store().startRecording();
-  expect(second).toBe("");
+  expect(second).toMatchObject({
+    ok: false,
+    error: expect.stringContaining("already recording"),
+  });
   expect(lastNotice()).toMatch(/already recording/);
   engine.tick(0.5);
-  const meta = await store().stopRecording();
+  const meta = requireCommand(await store().stopRecording());
   expect(meta?.id).toBe(first);
   expect(meta?.durationSecs).toBeCloseTo(2, 6);
 });
 
 it("records the requested session ID", async () => {
-  const id = await store().startRecording("song-evening-jam");
+  const id = requireCommand(await store().startRecording("song-evening-jam"));
   engine.tick(1);
-  const meta = await store().stopRecording();
+  const meta = requireCommand(await store().stopRecording());
   expect(meta).toMatchObject({ id, sessionId: "song-evening-jam" });
 });
 

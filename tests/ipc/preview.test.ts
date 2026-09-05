@@ -119,6 +119,62 @@ describe("browser preview engine", () => {
     expect(seen.band?.next_chord).toBe("D7");
   });
 
+  it("comes in at the seeked bar after the count-in", async () => {
+    const seen: { transport?: TransportTelemetry } = {};
+    await engine.listen<TransportTelemetry>("transport.state", (t) => {
+      seen.transport = t;
+    });
+    await engine.invoke("band_load_chart", { chartId: "blues-12-bar" });
+    await engine.invoke("transport_set_count_in", { bars: 1 });
+    await engine.invoke("transport_set_tempo", { bpm: 240 });
+    await engine.invoke("transport_seek_bar", { bar: 9 });
+    await engine.invoke("transport_play", {});
+    engine.tick(0.01);
+    expect(seen.transport?.state).toBe("counting_in");
+    // One bar at 240 BPM is 1 second.
+    for (let i = 0; i < 12; i++) engine.tick(0.1);
+    expect(seen.transport?.state).toBe("playing");
+    expect(seen.transport?.bar).toBe(9);
+  });
+
+  it.each(["transport_play", "transport_seek_bar"])(
+    "keeps the count-in destination after %s",
+    async (command) => {
+      await engine.invoke("transport_set_count_in", { bars: 1 });
+      await engine.invoke("transport_set_tempo", { bpm: 240 });
+      await engine.invoke("transport_seek_bar", { bar: 9 });
+      await engine.invoke("transport_play", {});
+      engine.tick(0.1);
+      await engine.invoke(command, { bar: 5 });
+      for (let i = 0; i < 9; i++) engine.tick(0.1);
+      engine.tick(0.01); // Past the original deadline, before a restarted count-in could end.
+      const state = await engine.invoke<{ transport: TransportTelemetry }>(
+        "audio_get_telemetry",
+        {},
+      );
+      expect(state.transport.state).toBe("playing");
+      expect(state.transport.bar).toBe(command === "transport_play" ? 9 : 5);
+    },
+  );
+
+  it("uses the loop armed during count-in when the song position is still zero", async () => {
+    await engine.invoke("transport_set_count_in", { bars: 1 });
+    await engine.invoke("transport_set_tempo", { bpm: 240 });
+    await engine.invoke("transport_play", {});
+    engine.tick(0.1);
+    await engine.invoke("transport_set_loop", {
+      startBar: 5,
+      endBar: 9,
+      enabled: true,
+    });
+    for (let i = 0; i < 12; i++) engine.tick(0.1);
+    const state = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(state.transport.bar).toBe(5);
+  });
+
   it("applies style changes at the next bar while playing", async () => {
     const seen: { band?: BandTelemetry } = {};
     await engine.listen<BandTelemetry>("band.state", (b) => {

@@ -11,7 +11,7 @@
 
 use crate::instruments::Sf2Synth;
 use crate::sampler::Sampler;
-use crate::voicing::{bass_note_for_chord, parse_chord, voice_chord};
+use crate::voicing::{bass_note_for_chord, parse_chord, slash_bass, voice_chord};
 use jam_core::chart::ResolvedChart;
 use jam_core::style::{DrumPattern, PatternEntry, Style};
 use jam_core::timeline::{Span, TimelineEvent};
@@ -735,8 +735,15 @@ impl BandSequencer {
                 let at = self.swung(note.at_beats);
                 for t in Self::occurrences(at, len, start, end) {
                     let chord = self.chord_at_abs_beats(t, beats_per_bar);
-                    let (root, quality) = parse_chord(&chord);
-                    let key = bass_note_for_chord(root, quality, note.degree, note.octave);
+                    let Some((root, quality)) = parse_chord(&chord) else {
+                        continue;
+                    };
+                    let bass_root = slash_bass(&chord).unwrap_or(root);
+                    let key = if note.degree <= 1 {
+                        bass_note_for_chord(bass_root, quality, 1, note.octave)
+                    } else {
+                        bass_note_for_chord(root, quality, note.degree, note.octave)
+                    };
                     let nominal = (t - start) * samples_per_beat;
                     let offset = self.humanize_offset(nominal, frames);
                     let velocity = self.humanize_velocity(note.velocity);
@@ -1077,6 +1084,112 @@ mod tests {
             7,
             "C then G"
         );
+    }
+
+    #[test]
+    fn slash_bass_plays_the_written_note() {
+        use jam_core::chart::{BarChord, ResolvedBar, ResolvedChart};
+        let style = style_with(
+            0.0,
+            vec![],
+            vec![BassNote {
+                degree: 1,
+                octave: 0,
+                at_beats: 0.0,
+                dur_beats: 0.5,
+                velocity: 0.9,
+            }],
+            vec![],
+        );
+        let bar = |chord: &str| ResolvedBar {
+            bar_index: 1,
+            section_id: "a".into(),
+            section_name: "A".into(),
+            chords: vec![BarChord {
+                chord: chord.into(),
+                beats: 4.0,
+            }],
+        };
+        let key_of = |chord: &str| {
+            let mut seq = BandSequencer::new(style.clone(), 48_000, 1);
+            seq.load_chart(ResolvedChart {
+                id: "slash".into(),
+                name: "slash".into(),
+                key_tonic: 0,
+                time_sig: (4, 4),
+                default_bpm: 120.0,
+                bars: vec![bar(chord)],
+            });
+            let mut events = Vec::new();
+            seq.collect_pattern_events(0.0, 4.0, 24_000.0, 4.0, 96_000, &mut events);
+            events.iter().find_map(|e| match &e.kind {
+                SpanEventKind::NoteOn { key, .. } => Some(*key),
+                _ => None,
+            })
+        };
+        let c = key_of("C").expect("C bass");
+        let ce = key_of("C/E").expect("C/E bass");
+        assert_eq!((c as i32) % 12, 0, "C is still C");
+        assert_eq!((ce as i32) % 12, 4, "C/E bass is E");
+    }
+
+    #[test]
+    fn rest_bar_skips_bass_and_comp_but_keeps_drums() {
+        use jam_core::chart::{BarChord, ResolvedBar, ResolvedChart};
+        let style = style_with(
+            0.0,
+            vec![kick(0.0)],
+            vec![BassNote {
+                degree: 1,
+                octave: 0,
+                at_beats: 0.0,
+                dur_beats: 0.5,
+                velocity: 0.9,
+            }],
+            vec![CompStrum {
+                at_beats: 0.0,
+                dur_beats: 1.0,
+                velocity: 0.8,
+                direction: "down".into(),
+            }],
+        );
+        let mut seq = BandSequencer::new(style, 48_000, 1);
+        let bar = |i: u32, chord: &str| ResolvedBar {
+            bar_index: i,
+            section_id: "a".into(),
+            section_name: "A".into(),
+            chords: vec![BarChord {
+                chord: chord.into(),
+                beats: 4.0,
+            }],
+        };
+        seq.load_chart(ResolvedChart {
+            id: "nc".into(),
+            name: "nc".into(),
+            key_tonic: 9,
+            time_sig: (4, 4),
+            default_bpm: 120.0,
+            bars: vec![bar(1, "A7"), bar(2, "N.C."), bar(3, "A7")],
+        });
+        let mut events = Vec::new();
+        seq.collect_pattern_events(0.0, 12.0, 24_000.0, 4.0, 288_000, &mut events);
+
+        let mut drums = [0usize; 3];
+        let mut pitched = [0usize; 3];
+        for e in &events {
+            let bar_i = (e.offset / 96_000).min(2);
+            match &e.kind {
+                SpanEventKind::Drum { .. } => drums[bar_i] += 1,
+                SpanEventKind::NoteOn { .. } => pitched[bar_i] += 1,
+                SpanEventKind::NoteOff { .. } => {}
+            }
+        }
+        assert!(
+            drums.iter().all(|&n| n > 0),
+            "drums should keep time through the rest: {drums:?}"
+        );
+        assert!(pitched[0] > 0 && pitched[2] > 0, "A7 bars: {pitched:?}");
+        assert_eq!(pitched[1], 0, "N.C. bar must not voice bass or comp");
     }
 
     #[test]

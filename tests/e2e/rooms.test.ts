@@ -49,7 +49,7 @@ import {
 } from "../../src/lib/roomActions";
 import { validateAudioProfile } from "../../src/lib/roomTools";
 import { openAiSettings, useSettingsView } from "../../src/lib/settingsView";
-import { useEngineStore } from "../../src/store/engine";
+import { requireCommand, useEngineStore } from "../../src/store/engine";
 
 type PreviewHolder = { __jamPreviewEngine?: Promise<PreviewEngine> };
 
@@ -197,7 +197,9 @@ describe("rooms, end to end through the preview engine", () => {
   });
 
   it("refuses to close while a take is recording or a room operation is blocking, and asks for every unsaved draft", async () => {
-    const takeId = await useEngineStore.getState().startRecording();
+    const takeId = requireCommand(
+      await useEngineStore.getState().startRecording(),
+    );
     expect(takeId).toMatch(/^preview-/);
     expect(useEngineStore.getState().isRecording).toBe(true);
     expect(closeDecision()).toBe("refuse");
@@ -208,7 +210,9 @@ describe("rooms, end to end through the preview engine", () => {
     await discardAndClose();
     expect(exits).toEqual([]);
 
-    const take = await useEngineStore.getState().stopRecording();
+    const take = requireCommand(
+      await useEngineStore.getState().stopRecording(),
+    );
     expect(take?.id).toBe(takeId);
     expect(useEngineStore.getState().takes[0]?.id).toBe(takeId);
     expect(useEngineStore.getState().isRecording).toBe(false);

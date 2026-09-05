@@ -104,7 +104,7 @@ fn keys_round_trip_on_the_memory_store_and_show_up_in_providers_list() {
     );
     assert_eq!(has_key("elevenlabs"), json!(true));
     assert_eq!(
-        state.secret_store.get("elevenlabs").as_deref(),
+        state.secret_store.get("elevenlabs").unwrap().as_deref(),
         Some(key.as_str())
     );
     assert_eq!(providers_with_keys(), ["elevenlabs"]);
@@ -116,7 +116,7 @@ fn keys_round_trip_on_the_memory_store_and_show_up_in_providers_list() {
         json!({"provider": "elevenlabs", "key": replacement}),
     );
     assert_eq!(
-        state.secret_store.get("elevenlabs").as_deref(),
+        state.secret_store.get("elevenlabs").unwrap().as_deref(),
         Some(replacement.as_str())
     );
     assert_eq!(providers_with_keys(), ["elevenlabs"]);
@@ -127,7 +127,7 @@ fn keys_round_trip_on_the_memory_store_and_show_up_in_providers_list() {
         Value::Null
     );
     assert_eq!(has_key("elevenlabs"), json!(false));
-    assert_eq!(state.secret_store.get("elevenlabs"), None);
+    assert_eq!(state.secret_store.get("elevenlabs").unwrap(), None);
     assert!(providers_with_keys().is_empty());
     assert_eq!(
         studio.ok("keys_delete", json!({"provider": "elevenlabs"})),
@@ -158,7 +158,10 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
         );
     }
     for provider in ["bogus", "Gemini", "", "gemini"] {
-        assert!(!state.secret_store.has(provider), "{provider:?} got a key");
+        assert!(
+            !state.secret_store.has(provider).unwrap(),
+            "{provider:?} got a key"
+        );
         assert_eq!(
             studio.ok("keys_has", json!({"provider": provider})),
             json!(false)
@@ -175,7 +178,7 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
         Value::Null
     );
     assert_eq!(
-        state.secret_store.get("openrouter").as_deref(),
+        state.secret_store.get("openrouter").unwrap().as_deref(),
         Some(longest.as_str())
     );
     let too_long = "k".repeat(4097);
@@ -191,7 +194,7 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
         json!(false)
     );
     assert_eq!(
-        state.secret_store.get("openrouter").as_deref(),
+        state.secret_store.get("openrouter").unwrap().as_deref(),
         Some(longest.as_str()),
         "a refused key leaves the other providers alone"
     );
@@ -217,7 +220,7 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
     assert!(err.contains("missing required key provider"), "{err}");
     let err = studio.err("keys_delete", json!({}));
     assert!(err.contains("missing required key provider"), "{err}");
-    assert!(!state.secret_store.has("gemini"));
+    assert!(!state.secret_store.has("gemini").unwrap());
     assert_offline();
 }
 
@@ -240,7 +243,8 @@ fn keys_set_names_the_length_limit_when_the_key_is_too_long() {
             .app()
             .state::<app_lib::AppState>()
             .secret_store
-            .get("gemini"),
+            .get("gemini")
+            .unwrap(),
         Some(saved)
     );
     assert_offline();
@@ -881,6 +885,47 @@ fn agent_cancel_is_a_harmless_no_op_without_a_running_agent() {
             .unwrap()
             .len(),
         7
+    );
+    assert_offline();
+}
+
+#[test]
+fn tracing_warn_lands_in_the_user_log() {
+    let _scenario = common::scenario();
+    let mut app = app_lib::configure(
+        tauri::test::mock_builder().plugin(app_lib::jam_log_plugin()),
+        app_lib::build_state(),
+    )
+    .build(tauri::test::mock_context(tauri::test::noop_assets()))
+    .expect("app builds with the jam log plugin");
+    #[allow(deprecated)]
+    app.run_iteration(|_, _| {});
+
+    tracing::warn!("jam-log-canary-140");
+    tauri_plugin_log::log::logger().flush();
+
+    let dir = user_dir().join("logs");
+    assert_eq!(app_lib::logs_dir(), dir);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut text = String::new();
+    while Instant::now() < deadline {
+        text.clear();
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                if let Ok(chunk) = std::fs::read_to_string(entry.path()) {
+                    text.push_str(&chunk);
+                }
+            }
+        }
+        if text.contains("jam-log-canary-140") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        text.contains("jam-log-canary-140"),
+        "expected the canary in {}: {text}",
+        dir.display()
     );
     assert_offline();
 }

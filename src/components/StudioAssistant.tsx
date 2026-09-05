@@ -133,6 +133,12 @@ export const StudioAssistant = memo(function StudioAssistant() {
       setBase(studioFingerprint());
     } catch (e) {
       setMessage(String(e));
+      setHistory((h) =>
+        [
+          ...h,
+          { role: "user" as const, content: `Action failed: ${String(e)}` },
+        ].slice(-8),
+      );
     } finally {
       running.current = false;
       setBusy(false);

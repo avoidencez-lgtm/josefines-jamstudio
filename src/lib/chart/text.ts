@@ -74,6 +74,13 @@ export function slugify(text: string): string {
   return slug.length > 0 ? slug : "chart";
 }
 
+/** `[Chorus x2]` repeats; `[Mix 2]` is just a name — the x must be its own token. */
+function sectionRepeat(label: string): { name: string; repeats: number } {
+  const m = /^(.+?)\s+[x×]\s*(\d+)$/i.exec(label.trim());
+  if (!m) return { name: label.trim(), repeats: 1 };
+  return { name: m[1].trim(), repeats: Math.max(1, Number.parseInt(m[2], 10)) };
+}
+
 interface WorkingSection {
   id: string;
   name: string;
@@ -131,10 +138,7 @@ export function parseChartText(
 
     const header = /^\[(.+?)\]$/.exec(line);
     if (header) {
-      const inner = header[1].trim();
-      const rep = /^(.*?)\s*[xX×]\s*(\d+)$/.exec(inner);
-      const name = (rep ? rep[1] : inner).trim();
-      const repeats = rep ? Math.max(1, Number.parseInt(rep[2], 10)) : 1;
+      const { name, repeats } = sectionRepeat(header[1]);
       if (name.length === 0) {
         problems.push({ line: lineNo, message: "section needs a name" });
         return;
@@ -332,7 +336,7 @@ function parseBar(
   const tokens = cell.split(/\s+/).filter((t) => t.length > 0);
   const parsed: { chord: string; beats: number | null }[] = [];
   for (const tok of tokens) {
-    const m = /^(.+?)(?::(\d+(?:\.\d+)?))?$/.exec(tok);
+    const m = /^(.+?)(?::(\d+(?:\.\d+)?(?:e[+-]?\d+)?))?$/i.exec(tok);
     if (!m) continue;
     const chord = m[1];
     const beats = m[2] !== undefined ? Number.parseFloat(m[2]) : null;
@@ -372,8 +376,13 @@ function parseBar(
   return parsed.map((c) => ({ chord: c.chord, beats: c.beats ?? share }));
 }
 
+/** Tokens the band treats as silence. Keep in lockstep with jam-band `is_rest_symbol`. */
+export function isRestSymbol(tok: string): boolean {
+  return /^(n\.?c\.?|rest|-)$/i.test(tok.trim());
+}
+
 function isChordToken(tok: string): boolean {
-  if (/^(n\.?c\.?|rest|-)$/i.test(tok)) return true;
+  if (isRestSymbol(tok)) return true;
   const chord = splitChord(tok);
   return (
     chord !== null &&
@@ -395,10 +404,8 @@ function buildArrangement(
     .split(/[,;]+/)
     .map((p) => p.trim())
     .filter(Boolean)) {
-    const m = /^(.*?)\s*(?:[xX×]\s*(\d+))?$/.exec(part);
-    if (!m) continue;
-    const ref = m[1].trim();
-    const repeats = m[2] ? Math.max(1, Number.parseInt(m[2], 10)) : 1;
+    const { name: ref, repeats } = sectionRepeat(part);
+    if (!ref) continue;
     const target =
       sections.find((s) => s.id === slugify(ref)) ??
       sections.find((s) => s.name.toLowerCase() === ref.toLowerCase());
@@ -421,7 +428,7 @@ export function chartToText(chart: Chart): string {
   out.push(`id: ${chart.id}`);
   out.push(`key: ${keyName(chart.keyTonic, chart.mode)}`);
   out.push(`time: ${chart.timeSig[0]}/${chart.timeSig[1]}`);
-  out.push(`bpm: ${formatNumber(chart.defaultBpm)}`);
+  out.push(`bpm: ${chart.defaultBpm}`);
   if (chart.defaultStyleId) out.push(`style: ${chart.defaultStyleId}`);
 
   const inOrder =
@@ -460,16 +467,10 @@ export function chartToText(chart: Chart): string {
 }
 
 function formatBar(bar: BarChord[], beatsPerBar: number): string {
-  const even = bar.every(
-    (c) => Math.abs(c.beats - beatsPerBar / bar.length) < 1e-6,
-  );
-  return bar
-    .map((c) => (even ? c.chord : `${c.chord}:${formatNumber(c.beats)}`))
-    .join(" ");
-}
-
-function formatNumber(n: number): string {
-  return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+  const even = bar.every((c) => c.beats === beatsPerBar / bar.length);
+  if (even) return bar.map((c) => c.chord).join(" ");
+  // Keep numeric precision: rounding each duration can change or erase the bar.
+  return bar.map((c) => `${c.chord}:${c.beats}`).join(" ");
 }
 
 export interface FlatBar {
