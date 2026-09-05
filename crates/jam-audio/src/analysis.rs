@@ -33,26 +33,8 @@ impl TakeAnalyzer {
             };
         }
 
-        // 1. Transient detection (pick attacks)
-        let mut transients = Vec::new();
-        let threshold = 0.05f32;
-        let mut in_transient = false;
-        let min_gap = (self.sample_rate as f32 * 0.08) as usize; // 80ms minimum note gap
-        let mut last_idx = 0;
-
-        for (i, &sample) in di_samples.iter().enumerate() {
-            let amp = sample.abs();
-            if amp > threshold
-                && !in_transient
-                && (transients.is_empty() || i.saturating_sub(last_idx) >= min_gap)
-            {
-                transients.push((i, amp));
-                in_transient = true;
-                last_idx = i;
-            } else if amp < threshold * 0.5 {
-                in_transient = false;
-            }
-        }
+        // 1. Attack candidates separated by a quiet interval.
+        let transients = self.transients(di_samples);
 
         // 2. Timing accuracy: offset from beat grid
         let beat_samples = self.sample_rate as f64 * 60.0 / tempo.max(40.0);
@@ -118,6 +100,32 @@ impl TakeAnalyzer {
         }
     }
 
+    fn transients(&self, samples: &[f32]) -> Vec<(usize, f32)> {
+        let mut attacks = Vec::new();
+        let mut armed = true;
+        let mut quiet = 0;
+        // A zero crossing is not a new pick. Require 5 ms continuously below
+        // half the attack threshold before rearming; allow attacks 20 ms apart.
+        // ponytail: this gate misses legato/re-picks without a quiet gap; use an
+        // envelope/spectral onset detector if those performances need analysis.
+        let release = (self.sample_rate as usize / 200).max(1);
+        let min_gap = (self.sample_rate as usize / 50).max(1);
+        let mut last = 0;
+        for (i, &sample) in samples.iter().enumerate() {
+            let amp = sample.abs();
+            quiet = if amp < 0.025 { quiet + 1 } else { 0 };
+            if quiet >= release {
+                armed = true;
+            }
+            if armed && amp > 0.05 && (attacks.is_empty() || i - last >= min_gap) {
+                attacks.push((i, amp));
+                armed = false;
+                last = i;
+            }
+        }
+        attacks
+    }
+
     /// Mean absolute cents deviation and the number of frames it was measured on, or
     /// `None` when nothing pitched and confident was found (silence, noise, chords).
     fn intonation(&self, samples: &[f32]) -> Option<(f32, usize)> {
@@ -177,6 +185,36 @@ mod tests {
         (0..(secs * rate as f32) as usize)
             .map(|i| 0.5 * (2.0 * std::f32::consts::PI * hz * i as f32 / rate as f32).sin())
             .collect()
+    }
+
+    #[test]
+    fn a_sustained_note_is_one_attack_not_repeated_zero_crossings() {
+        let analyzer = TakeAnalyzer::new(48_000);
+        for hz in [70.0, 220.0, 440.0, 1400.0] {
+            let result = analyzer.analyze(&tone(hz, 1.0, 48_000), 120.0);
+            assert_eq!(result.detected_transients, 1, "{hz} Hz: {}", result.summary);
+        }
+    }
+
+    #[test]
+    fn separated_fast_notes_keep_attack_times_within_two_ms() {
+        for rate in [44_100, 48_000, 96_000] {
+            let analyzer = TakeAnalyzer::new(rate);
+            let mut samples = Vec::new();
+            let mut expected = Vec::new();
+            // 20 notes/second, faster than the old 80 ms dead time allowed.
+            for _ in 0..8 {
+                expected.push(samples.len());
+                samples.extend(tone(220.0, 0.035, rate));
+                samples.extend(vec![0.0; (rate as f32 * 0.015) as usize]);
+            }
+            let attacks = analyzer.transients(&samples);
+            assert_eq!(attacks.len(), expected.len());
+            for ((actual, _), start) in attacks.iter().zip(expected) {
+                assert!(actual.abs_diff(start) <= rate as usize / 500);
+            }
+            assert!(analyzer.transients(&vec![0.0; rate as usize]).is_empty());
+        }
     }
 
     #[test]
