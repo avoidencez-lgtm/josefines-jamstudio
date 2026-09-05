@@ -29,6 +29,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
   const {
     takes,
     isRecording,
+    recordingError,
     latencySamples,
     startRecording,
     stopRecording,
@@ -43,6 +44,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
     useShallow((s) => ({
       takes: s.takes,
       isRecording: s.isRecording,
+      recordingError: s.recordingError,
       latencySamples: s.latencySamples,
       startRecording: s.startRecording,
       stopRecording: s.stopRecording,
@@ -115,8 +117,14 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
               Sessions, Takes & DAW Export
             </h2>
             <StatusPill
-              status={isRecording ? "live" : "idle"}
-              label={isRecording ? "Recording Take" : "Idle"}
+              status={recordingError ? "error" : isRecording ? "live" : "idle"}
+              label={
+                recordingError
+                  ? "Recording stopped"
+                  : isRecording
+                    ? "Recording Take"
+                    : "Idle"
+              }
             />
           </div>
           <div className="flex items-center gap-4 text-xs font-mono text-[var(--fg-2)] mt-1">
@@ -161,7 +169,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
 
           {isRecording ? (
             <Button size="sm" variant="danger" onClick={() => stopRecording()}>
-              Stop Recording
+              {recordingError ? "Save partial take" : "Stop Recording"}
             </Button>
           ) : (
             <Button

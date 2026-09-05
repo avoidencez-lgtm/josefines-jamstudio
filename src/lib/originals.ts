@@ -435,6 +435,7 @@ export const useWriting = create<WritingState>((set, get) => ({
     await ipc.invoke("originals_record", { sessionId: saved.id });
     useEngineStore.setState({
       isRecording: true,
+      recordingError: null,
     });
   },
   arm: async (seconds) => {

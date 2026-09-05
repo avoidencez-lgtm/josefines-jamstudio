@@ -207,3 +207,12 @@ Saved analysis advances to analyzer version 2; older evidence offers Analyze aga
 This applies to the tuner, melody extraction and take analysis. It does not
 complete bend exclusion, noisy-sweep acceptance, chord agreement or structured
 provider feedback. Friend-led testing remains deferred to V2.
+
+### Recording interruption feedback (issue #137)
+
+Rejected disk-queue blocks no longer advance the accepted-frame count or collect
+MIDI. The native control thread reports a capture failure while preserving the
+pending take for finalisation. Transport, Sessions and Write offer Save partial
+take and stop presenting capture as live. The close/device guards stay active
+until finalisation. Native backpressure and frontend failure/recovery regressions
+cover this path; alignment and start/stop disk-lock work remain separate.

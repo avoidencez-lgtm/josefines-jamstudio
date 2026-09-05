@@ -11,6 +11,7 @@ export function TransportBar() {
     engineStatus,
     isPreview,
     isRecording,
+    recordingError,
     transportPlay,
     transportPause,
     transportStop,
@@ -26,6 +27,7 @@ export function TransportBar() {
       engineStatus: s.engineStatus,
       isPreview: s.isPreview,
       isRecording: s.isRecording,
+      recordingError: s.recordingError,
       transportPlay: s.transportPlay,
       transportPause: s.transportPause,
       transportStop: s.transportStop,
@@ -40,6 +42,11 @@ export function TransportBar() {
   const transport = telemetry.transport;
   const isPlaying =
     transport.state === "playing" || transport.state === "counting_in";
+  const recordLabel = recordingError
+    ? "Save partial take"
+    : isRecording
+      ? "Stop recording"
+      : "Record a take";
 
   return (
     <header className="min-h-[56px] bg-[var(--bg-1)] border-b border-[var(--line)] flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 shrink-0">
@@ -73,13 +80,20 @@ export function TransportBar() {
             type="button"
             onClick={() => (isRecording ? stopRecording() : startRecording())}
             className={`w-9 h-9 rounded flex items-center justify-center cursor-pointer transition-colors ${
-              isRecording
-                ? "bg-[var(--record)] text-[var(--fg-0)] animate-pulse"
-                : "bg-[var(--bg-2)] text-[var(--record)] hover:bg-[var(--bg-3)]"
+              recordingError
+                ? "bg-[var(--bg-2)] text-[var(--record)] border border-[var(--record)]"
+                : isRecording
+                  ? "bg-[var(--record)] text-[var(--fg-0)] animate-pulse"
+                  : "bg-[var(--bg-2)] text-[var(--record)] hover:bg-[var(--bg-3)]"
             }`}
-            title={isRecording ? "Stop recording (R)" : "Record a take (R)"}
+            title={`${recordLabel} (R)`}
+            aria-label={recordLabel}
           >
-            <Record size={18} weight="fill" />
+            {recordingError ? (
+              <Stop size={18} />
+            ) : (
+              <Record size={18} weight="fill" />
+            )}
           </button>
         </div>
 
@@ -171,6 +185,11 @@ export function TransportBar() {
         />
         <StudioAssistant />
       </div>
+      {recordingError && (
+        <p role="alert" className="w-full text-sm text-[var(--record)]">
+          {recordingError}
+        </p>
+      )}
     </header>
   );
 }
