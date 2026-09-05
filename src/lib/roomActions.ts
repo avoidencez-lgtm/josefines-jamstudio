@@ -1,0 +1,104 @@
+import { create } from "zustand";
+import { ipc, isPreview } from "../ipc/client";
+import type { AppSettings, Chart, RigState } from "../ipc/contract";
+import { useEngineStore } from "../store/engine";
+import { songFingerprint } from "./jo/studioTools";
+import { type SongBody, useWriting } from "./originals";
+import {
+  type Setlist,
+  audioProfileSchema,
+  setlistSchema,
+  validateRigSnapshot,
+} from "./roomTools";
+import { checkWritingForm } from "./writingTools";
+
+/** One foreground room operation at a time, also consulted by the close guard. */
+export const useRoomOperation = create<{ busy: boolean }>(() => ({
+  busy: false,
+}));
+export function applySongIdea(body: SongBody, base: string, label: string) {
+  const w = useWriting.getState();
+  if (!w.song || w.busy || useEngineStore.getState().isRecording)
+    throw new Error("Open an original and finish the current operation first.");
+  if (songFingerprint() !== base)
+    throw new Error(
+      "The song changed. Preview the idea again before applying it.",
+    );
+  checkWritingForm(body);
+  if (JSON.stringify(body) === JSON.stringify(w.song.body))
+    throw new Error("This idea is already in the song.");
+  if (w.song.versions.length >= 20)
+    throw new Error(
+      "Remove an unused version to preserve the current song first.",
+    );
+  w.version(`Before ${label}`);
+  w.edit((b) => Object.assign(b, structuredClone(body)));
+  useWriting.setState({
+    message: `${label} applied. Undo and Versions preserve the previous song. Save to keep it on disk.`,
+  });
+}
+
+export async function saveRoomPreference(
+  key: "rehearsalSetlist" | "audioProfiles",
+  value: unknown,
+) {
+  if (key === "rehearsalSetlist") setlistSchema.parse(value);
+  else audioProfileSchema.parse(value);
+  // Merge into a fresh settings document; credentials are never part of these presets.
+  const current = await ipc.invoke<AppSettings>("settings_get");
+  const next = { ...current, [key]: value };
+  await ipc.invoke("settings_set", { settings: next });
+  useEngineStore.setState({ settings: next });
+}
+
+export async function cueSetlistItem(item: Setlist[number]) {
+  setlistSchema.parse([item]);
+  if (isPreview)
+    throw new Error("Setlist playback needs the desktop audio engine.");
+  const e = useEngineStore.getState();
+  if (e.isRecording)
+    throw new Error("Save the recording before changing the setlist song.");
+  if (!e.charts.some((c) => c.id === item.chartId))
+    throw new Error(
+      "This chart is missing. Restore it in Library or remove the setlist entry.",
+    );
+  await ipc.invoke("transport_stop");
+  const chart = await ipc.invoke<Chart>("band_load_chart", {
+    chartId: item.chartId,
+    followChart: true,
+  });
+  // Reflect the successful load even if a later setup command fails.
+  useEngineStore.setState({ currentChart: chart });
+  await ipc.invoke("transport_set_tempo", { bpm: item.bpm });
+  await ipc.invoke("transport_set_loop", {
+    startBar: 1,
+    endBar: 2,
+    enabled: false,
+  });
+  await ipc.invoke("transport_set_count_in", { bars: item.countIn });
+  await ipc.invoke("transport_seek_bar", { bar: 1 });
+  e.setTempoTrainer({ enabled: false });
+}
+
+export async function recallRig(value: unknown) {
+  if (isPreview) throw new Error("Hardware recall needs the desktop app.");
+  const e = useEngineStore.getState();
+  if (e.isRecording)
+    throw new Error("Finish the recording before recalling a rig.");
+  const { snap } = validateRigSnapshot(value, e.availableProfiles);
+  const invoke = async (cmd: string, args: Record<string, unknown>) => {
+    const rigState = await ipc.invoke<RigState>(cmd, args);
+    useEngineStore.setState({ rigState });
+  };
+  try {
+    await invoke("rig_set_follow_sections", { enabled: false });
+    await invoke("rig_select_profile", { profileId: snap.profileId });
+    await invoke("rig_select_scene", { sceneIdx: snap.scene });
+    for (const [cc, value] of Object.entries(snap.controls))
+      await invoke("rig_set_control", { cc: Number(cc), value });
+  } catch (e) {
+    throw new Error(
+      `Rig recall stopped: ${String(e)}. Earlier MIDI commands may already have reached the rig; inspect its controls before retrying.`,
+    );
+  }
+}

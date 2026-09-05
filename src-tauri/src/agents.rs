@@ -188,6 +188,11 @@ impl AgentRunner {
         }
     }
     pub async fn run(&self, req: AgentRequest, log: &CostLog) -> Result<Value, String> {
+        if (cfg!(test) || std::env::var("JAM_HEADLESS").as_deref() == Ok("1"))
+            && std::env::var("JAM_LIVE").as_deref() != Ok("1")
+        {
+            return Err("Headless tests cannot call a signed-in agent. An explicitly authorised live check requires JAM_LIVE=1.".into());
+        }
         let _guard = self
             .gate
             .try_lock()
@@ -348,6 +353,25 @@ mod tests {
                 .await
                 .installed
         );
+    }
+
+    #[tokio::test]
+    async fn tests_block_agent_requests_before_executable_lookup() {
+        if std::env::var("JAM_LIVE").as_deref() == Ok("1") {
+            return;
+        }
+        let result = AgentRunner::default()
+            .run(
+                AgentRequest {
+                    provider: "codex".into(),
+                    prompt: "must not be sent".into(),
+                    model: "default".into(),
+                    executable: "/missing/test-agent".into(),
+                },
+                &CostLog::new(std::env::temp_dir().join("jam-blocked-agent-test.jsonl")),
+            )
+            .await;
+        assert!(result.unwrap_err().contains("Headless tests cannot call"));
     }
 
     /// Explicit manual acceptance only; uses the installed CLI's signed-in account.

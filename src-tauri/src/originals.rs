@@ -21,6 +21,42 @@ use tauri::{Emitter, State};
 
 static SAVE_LOCK: Mutex<()> = Mutex::new(());
 
+#[tauri::command]
+pub async fn takes_melody(
+    take_id: String,
+    start_seconds: f64,
+    length_seconds: f64,
+) -> Result<Vec<jam_audio::melody::MelodyNote>, String> {
+    if !start_seconds.is_finite()
+        || start_seconds < 0.0
+        || !length_seconds.is_finite()
+        || !(0.1..=60.0).contains(&length_seconds)
+    {
+        return Err("Choose a nonnegative start and 0.1–60 seconds of melody.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let take = file_takes()?
+            .0
+            .into_iter()
+            .find(|t| t.id == take_id)
+            .ok_or("Take is not in the recording library.")?;
+        let path = Path::new(&take.path_input);
+        if fs::metadata(path).map_err(|e| e.to_string())?.len() > 64 * 1024 * 1024 {
+            return Err("Use a short recording (at most 64 MB and two minutes).".into());
+        }
+        let (samples, rate) = jam_audio::recorder::read_wav_mono(path)?;
+        let duration = samples.len() as f64 / rate as f64;
+        if duration > 120.0 || start_seconds >= duration {
+            return Err("Choose a start inside a recording no longer than two minutes.".into());
+        }
+        let start = (start_seconds * rate as f64) as usize;
+        let end = (((start_seconds + length_seconds) * rate as f64) as usize).min(samples.len());
+        Ok(jam_audio::melody::extract(&samples[start..end], rate))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Part {

@@ -11,12 +11,14 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "./components/Button";
 import { EngineStatusPill } from "./components/EngineStatusPill";
 import { Notices } from "./components/Notices";
+import { RoomTools } from "./components/RoomTools";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { StudioAssistant } from "./components/StudioAssistant";
 import { listenToController } from "./lib/controller";
 import { useAi } from "./lib/jo/providers";
 import { useMedia } from "./lib/media";
 import { useWriting } from "./lib/originals";
+import { useRoomOperation } from "./lib/roomActions";
 import { handleShortcut } from "./lib/shortcuts";
 import { AiMusic } from "./screens/AiMusic";
 import { Jo } from "./screens/Jo";
@@ -37,6 +39,7 @@ const hasUnsavedWork = () =>
   useMedia.getState().dirty ||
   useWriting.getState().dirty;
 const hasActiveWork = () =>
+  useRoomOperation.getState().busy ||
   useEngineStore.getState().isRecording ||
   useWriting.getState().busy ||
   Boolean(useMedia.getState().busy);
@@ -388,7 +391,10 @@ export const App: React.FC = () => {
         </header>
 
         <main className="flex-1 overflow-y-auto p-8 relative">
-          <div hidden={showHelp}>{renderScreen()}</div>
+          <div hidden={showHelp}>
+            <RoomTools screen={currentScreen} />
+            {renderScreen()}
+          </div>
           <ShortcutsHelp
             open={showHelp}
             room={currentScreen}

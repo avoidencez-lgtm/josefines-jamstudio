@@ -157,3 +157,7 @@ no milestone is marked complete by a headless or browser-only check.
 ## Documentation and original-song finishing
 
 The 2026-09-05 pass adds searchable English/Bokmål help, generated manuals for all rooms, save/recovery/trainer fixes, and Write → Finish (structural review, transition variants and compatible section comps). [Verification and remaining owner gates](../reviews/studio-verification-2026-09-05.md) and [research decisions](../research/song-finishing.md) describe the scope. This pass does not complete the unbuilt voice, stem/stretch, realtime generation or hardware acceptance milestones.
+
+## One capability per studio room
+
+The next 2026-09-05 pass adds melody-to-harmony sketches, rehearsal setlists, harmonic discovery, three-perspective coaching, reference forms, arrangement briefs, beat-grid cuts, blind take comparisons, song tone snapshots and audio setup profiles. English/Bokmål help covers all ten; [validation, the live-test incident and remaining owner gates](../reviews/room-capabilities-2026-09-05.md) distinguish browser, native headless, live CLI and physical-hardware evidence. The existing roadmap and signing/owner gates remain open.
