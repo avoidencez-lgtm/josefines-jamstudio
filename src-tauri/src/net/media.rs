@@ -172,9 +172,10 @@ pub async fn fetch(
         );
     if !local {
         let entry = entry.ok_or("Provider missing")?;
-        let key = store
-            .get(entry.id)
-            .ok_or_else(|| format!("Add a {} API key in Settings.", entry.id))?;
+        let key = match store.get(entry.id)? {
+            Some(key) => key,
+            None => return Err(format!("Add a {} API key in Settings.", entry.id)),
+        };
         req = match entry.auth {
             AuthScheme::Bearer => req.bearer_auth(key),
             AuthScheme::HeaderKey(h) => req.header(h, key),
@@ -375,7 +376,7 @@ pub async fn download(m: &Model, uri: &str, store: &dyn SecretStore) -> Result<V
     if m.protocol == "interaction" {
         req = req.header(
             "x-goog-api-key",
-            store.get("gemini").ok_or("Google API key missing")?,
+            store.get("gemini")?.ok_or("Google API key missing")?,
         );
     }
     // Runway's signed CDN URL needs no API key. Never forward credentials or follow redirects.

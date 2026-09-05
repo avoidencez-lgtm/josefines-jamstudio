@@ -104,7 +104,7 @@ fn keys_round_trip_on_the_memory_store_and_show_up_in_providers_list() {
     );
     assert_eq!(has_key("elevenlabs"), json!(true));
     assert_eq!(
-        state.secret_store.get("elevenlabs").as_deref(),
+        state.secret_store.get("elevenlabs").unwrap().as_deref(),
         Some(key.as_str())
     );
     assert_eq!(providers_with_keys(), ["elevenlabs"]);
@@ -116,7 +116,7 @@ fn keys_round_trip_on_the_memory_store_and_show_up_in_providers_list() {
         json!({"provider": "elevenlabs", "key": replacement}),
     );
     assert_eq!(
-        state.secret_store.get("elevenlabs").as_deref(),
+        state.secret_store.get("elevenlabs").unwrap().as_deref(),
         Some(replacement.as_str())
     );
     assert_eq!(providers_with_keys(), ["elevenlabs"]);
@@ -127,7 +127,7 @@ fn keys_round_trip_on_the_memory_store_and_show_up_in_providers_list() {
         Value::Null
     );
     assert_eq!(has_key("elevenlabs"), json!(false));
-    assert_eq!(state.secret_store.get("elevenlabs"), None);
+    assert_eq!(state.secret_store.get("elevenlabs").unwrap(), None);
     assert!(providers_with_keys().is_empty());
     assert_eq!(
         studio.ok("keys_delete", json!({"provider": "elevenlabs"})),
@@ -175,7 +175,7 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
         Value::Null
     );
     assert_eq!(
-        state.secret_store.get("openrouter").as_deref(),
+        state.secret_store.get("openrouter").unwrap().as_deref(),
         Some(longest.as_str())
     );
     let too_long = "k".repeat(4097);
@@ -191,7 +191,7 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
         json!(false)
     );
     assert_eq!(
-        state.secret_store.get("openrouter").as_deref(),
+        state.secret_store.get("openrouter").unwrap().as_deref(),
         Some(longest.as_str()),
         "a refused key leaves the other providers alone"
     );
@@ -240,7 +240,8 @@ fn keys_set_names_the_length_limit_when_the_key_is_too_long() {
             .app()
             .state::<app_lib::AppState>()
             .secret_store
-            .get("gemini"),
+            .get("gemini")
+            .unwrap(),
         Some(saved)
     );
     assert_offline();
