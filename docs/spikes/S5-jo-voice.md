@@ -50,7 +50,7 @@ interrupting speech does not erase samples already queued for the device.
 
 The JSON fixture is authored from the documented response shape, not a recorded
 provider response. The planned recorded
-30-utterance script, speech usage units and first-audio latency measurement remain
+30-utterance script, provider-reported LLM tokens and first-audio latency measurement remain
 M2 work. A live headset run must record ten release-to-first-audio measurements,
 their median and duck recovery; the target is median ≤2.5 s. Full-response TTS
 buffering is the present ceiling; stream PCM if live evidence misses that target.
@@ -69,3 +69,15 @@ and Jo AI now share the conversation implementation and review boundary.
 Automated checks prove command registration/validation, state transitions and
 shared dispatcher outcomes. They do not prove physical keyboard interception,
 MIDI wiring, microphone permissions or paid-provider latency on the user's rig.
+
+## Submitted speech usage (2026-09-06)
+
+The [official API pricing page](https://elevenlabs.io/pricing/api) and
+[billing documentation](https://elevenlabs.io/docs/overview/administration/billing)
+were checked on 2026-09-06. Speech recognition is priced by duration and Flash/Turbo
+by characters; account plans and offers affect rates. The app assumes no rate:
+the user supplies nullable USD/hour and USD/1000-character estimates in voice setup.
+Submitted seconds and Unicode scalar character counts are measured locally and
+logged without text/audio. Failed attempts remain in totals; charges may have
+occurred. The estimate is fixed per request and excludes allowances, taxes and
+voice-specific charges. This is not a provider invoice or a live billing check.

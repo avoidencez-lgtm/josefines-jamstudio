@@ -4,6 +4,27 @@ use crate::keys::SecretStore;
 use serde_json::{json, Value};
 use std::time::Instant;
 
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Prices {
+    pub stt_usd_per_hour: Option<f64>,
+    pub tts_usd_per1k: Option<f64>,
+}
+
+impl Prices {
+    pub fn validate(&self) -> Result<(), String> {
+        for rate in [self.stt_usd_per_hour, self.tts_usd_per1k]
+            .into_iter()
+            .flatten()
+        {
+            if !rate.is_finite() || !(0.0..=10_000.0).contains(&rate) {
+                return Err("Speech prices must be blank or between 0 and 10000 USD.".into());
+            }
+        }
+        Ok(())
+    }
+}
+
 fn request(path: &str, store: &dyn SecretStore) -> Result<reqwest::RequestBuilder, String> {
     let entry = provider("elevenlabs").ok_or("Voice provider is not registered.")?;
     let key = store.require(entry.id)?;
@@ -18,9 +39,7 @@ fn request(path: &str, store: &dyn SecretStore) -> Result<reqwest::RequestBuilde
 
 async fn send(
     req: reqwest::RequestBuilder,
-    path: &str,
-    model: &str,
-    bytes_out: u64,
+    mut entry: CostEntry,
     limit: usize,
     content_type: &str,
     log: &CostLog,
@@ -46,19 +65,13 @@ async fn send(
         }
         Ok(bytes)
     }.await;
-    let entry = CostEntry {
-        at_ms: super::now_ms(),
-        provider: "elevenlabs".into(),
-        method: "POST".into(),
-        path: path.into(),
-        status,
-        duration_ms: started.elapsed().as_millis() as u64,
-        bytes_out,
-        bytes_in: result.as_ref().map_or(0, |b: &Vec<u8>| b.len() as u64),
-        error: result.as_ref().err().cloned(),
-        model: Some(model.into()),
-        estimated_cost_usd: None,
-    };
+    entry.at_ms = super::now_ms();
+    entry.provider = "elevenlabs".into();
+    entry.method = "POST".into();
+    entry.status = status;
+    entry.duration_ms = started.elapsed().as_millis() as u64;
+    entry.bytes_in = result.as_ref().map_or(0, |b: &Vec<u8>| b.len() as u64);
+    entry.error = result.as_ref().err().cloned();
     // Failure to record usage is a visible error; it never triggers a paid retry.
     log.append(&entry).map_err(|_| {
         "Could not save voice usage. Check the data folder; do not retry automatically."
@@ -68,11 +81,14 @@ async fn send(
 
 pub async fn transcribe(
     wav: Vec<u8>,
+    seconds: f64,
+    prices: &Prices,
     store: &dyn SecretStore,
     log: &CostLog,
 ) -> Result<String, String> {
     let size = wav.len() as u64;
-    if size > 192_000 * 20 * 2 + 44 {
+    prices.validate()?;
+    if !seconds.is_finite() || !(0.1..=20.0).contains(&seconds) || size > 192_000 * 20 * 2 + 44 {
         return Err("Microphone recording exceeds 20 seconds.".into());
     }
     let part = reqwest::multipart::Part::bytes(wav)
@@ -87,9 +103,14 @@ pub async fn transcribe(
     let req = request("/v1/speech-to-text", store)?.multipart(form);
     let bytes = send(
         req,
-        "/v1/speech-to-text",
-        "scribe_v2",
-        size,
+        CostEntry {
+            path: "/v1/speech-to-text".into(),
+            model: Some("scribe_v2".into()),
+            bytes_out: size,
+            stt_seconds: Some(seconds),
+            estimated_cost_usd: prices.stt_usd_per_hour.map(|rate| seconds * rate / 3600.0),
+            ..CostEntry::default()
+        },
         64 * 1024,
         "application/json",
         log,
@@ -116,9 +137,11 @@ pub fn transcript(bytes: &[u8]) -> Result<String, String> {
 pub async fn speak(
     text: &str,
     voice_id: &str,
+    prices: &Prices,
     store: &dyn SecretStore,
     log: &CostLog,
 ) -> Result<Vec<u8>, String> {
+    prices.validate()?;
     if text.trim().is_empty() || text.chars().count() > 2000 {
         return Err("Spoken replies must contain 1–2000 characters.".into());
     }
@@ -135,9 +158,16 @@ pub async fn speak(
     let req = request(&format!("{path}?output_format=pcm_24000"), store)?.json(&body);
     send(
         req,
-        &path,
-        "eleven_flash_v2_5",
-        body.to_string().len() as u64,
+        CostEntry {
+            path,
+            model: Some("eleven_flash_v2_5".into()),
+            bytes_out: body.to_string().len() as u64,
+            tts_characters: Some(text.chars().count() as u64),
+            estimated_cost_usd: prices
+                .tts_usd_per1k
+                .map(|rate| text.chars().count() as f64 * rate / 1000.0),
+            ..CostEntry::default()
+        },
         48_000 * 60,
         "audio/pcm",
         log,
@@ -182,19 +212,49 @@ mod tests {
                 .unwrap()
                 .post(format!("http://{address}/voice"));
             assert_eq!(
-                send(req, "/voice", "fixture", 0, limit, "audio/pcm", &log)
-                    .await
-                    .is_ok(),
+                send(
+                    req,
+                    CostEntry {
+                        path: "/voice".into(),
+                        model: Some("fixture".into()),
+                        tts_characters: Some(3),
+                        estimated_cost_usd: Some(0.0015),
+                        ..CostEntry::default()
+                    },
+                    limit,
+                    "audio/pcm",
+                    &log
+                )
+                .await
+                .is_ok(),
                 succeeds
             );
             server.join().unwrap();
         }
         let entries = log.list(10);
         assert_eq!(entries.len(), 4);
+        assert_eq!(log.totals()[0].tts_characters, 12);
+        assert_eq!(log.totals()[0].unpriced_calls, 0);
         assert!(!serde_json::to_string(&entries)
             .unwrap()
             .contains("private transcript"));
         let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn speech_prices_reject_invalid_values_and_allow_explicit_zero() {
+        assert!(Prices::default().validate().is_ok());
+        for rate in [-1.0, f64::NAN, f64::INFINITY, 10001.0] {
+            assert!(Prices {
+                stt_usd_per_hour: Some(rate),
+                tts_usd_per1k: None
+            }
+            .validate()
+            .is_err());
+        }
+        let prices: Prices =
+            serde_json::from_str(r#"{"sttUsdPerHour":0,"ttsUsdPer1k":0.5}"#).unwrap();
+        assert_eq!(prices.tts_usd_per1k, Some(0.5));
+        assert!(prices.validate().is_ok());
     }
     #[test]
     fn documented_transcript_fixture_and_empty_speech() {

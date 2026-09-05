@@ -10,6 +10,7 @@ import {
   startVoice,
   useVoice,
 } from "../lib/jo/voice";
+import { openExternal } from "../lib/openUrl";
 import { openAiSettings } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
@@ -20,9 +21,15 @@ const configSchema = z
     voiceId: z.string().max(100).default(""),
     duckDb: z.number().min(-24).max(0).default(-9),
     shortcut: z.string().max(100).default("CommandOrControl+Shift+J"),
+    sttUsdPerHour: z.number().min(0).max(10_000).nullable().default(null),
+    ttsUsdPer1k: z.number().min(0).max(10_000).nullable().default(null),
   })
   .passthrough();
 type VoiceConfig = z.infer<typeof configSchema>;
+const priceFields = [
+  ["sttUsdPerHour", "Scribe v2 · USD per hour"],
+  ["ttsUsdPer1k", "Flash v2.5 · USD per 1,000 characters"],
+] as const;
 const labels = {
   idle: "Ready",
   opening: "Opening microphone…",
@@ -45,6 +52,7 @@ export function JoVoice() {
   );
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [prices, setPrices] = useState({ sttUsdPerHour: "", ttsUsdPer1k: "" });
   useEffect(() => {
     let mounted = true;
     void Promise.all([
@@ -56,6 +64,10 @@ export function JoVoice() {
         const voice = configSchema.parse(settings.voice ?? {});
         setDraft(voice);
         setSaved(voice);
+        setPrices({
+          sttUsdPerHour: voice.sttUsdPerHour?.toString() ?? "",
+          ttsUsdPer1k: voice.ttsUsdPer1k?.toString() ?? "",
+        });
         setInputs(devices.inputs.map((d) => d.name));
       })
       .catch((e) => {
@@ -186,7 +198,15 @@ export function JoVoice() {
                 if (!/^[\w-]{1,100}$/.test(draft.voiceId))
                   throw new Error("Enter a valid ElevenLabs voice ID.");
                 const settings = await ipc.invoke<AppSettings>("settings_get");
-                const voice = configSchema.parse(draft);
+                const voice = configSchema.parse({
+                  ...draft,
+                  ...Object.fromEntries(
+                    priceFields.map(([key]) => [
+                      key,
+                      prices[key].trim() ? Number(prices[key]) : null,
+                    ]),
+                  ),
+                });
                 await ipc.invoke("settings_set", {
                   settings: { ...settings, voice },
                 });
@@ -198,6 +218,38 @@ export function JoVoice() {
             Save voice setup
           </Button>
         </div>
+        <div className="flex flex-wrap items-end gap-3 py-2">
+          {priceFields.map(([key, label]) => (
+            <label className="room-tool-field" key={key}>
+              {label}
+              <input
+                inputMode="decimal"
+                placeholder="Unknown"
+                maxLength={16}
+                value={prices[key]}
+                disabled={active || saving}
+                onChange={(e) =>
+                  setPrices({ ...prices, [key]: e.target.value })
+                }
+              />
+            </label>
+          ))}
+          <Button
+            onClick={() =>
+              void openExternal("https://elevenlabs.io/pricing/api")
+            }
+          >
+            Check ElevenLabs prices
+          </Button>
+        </div>
+        <p className="text-sm text-[var(--fg-1)]">
+          Optional estimates: enter your account's rates and Save voice setup.
+          Blank means unknown; 0 means an explicit zero estimate. Settings shows
+          submitted seconds, characters and estimated cost, including
+          interrupted requests. These estimates exclude subscription allowances,
+          taxes and voice-specific charges; the provider's invoice is
+          authoritative.
+        </p>
         <div className="flex flex-wrap items-end gap-3 py-3">
           <label className="room-tool-field">
             Global hold shortcut

@@ -284,3 +284,13 @@ entry in `PEDAL_ACTIONS`, native `controller_save` validation and an IPC fixture
 Global keys stay inside `platform/voice_shortcut.rs` and are session-only opt-ins.
 `tests/jo/conversation.test.ts`, `tests/invariants/voice.test.ts` and `ipc_voice`
 cover draft preservation, review, repeat suppression and controller persistence.
+
+### Extending speech usage
+
+Reuse `net::CostEntry` and `CostLog`, never a separate speech ledger. Add optional
+unit fields with serde defaults so existing JSONL survives; total only recorded
+units. Capture rates at request time and retain unknown cost as `None`. Keep failed
+attempts visible without automatic retries. `net::tests::speech_units_include_uncertain_requests_and_old_logs_stay_readable`,
+`net::voice::tests` and `tests/ipc_voice.rs` cover compatibility, uncertain requests,
+rate validation and persisted settings. Update the Settings usage view and both
+manual languages when adding a unit.
