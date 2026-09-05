@@ -324,6 +324,8 @@ export function applyStudioEdits(
     STUDIO_TOOLS[c.name].edit(body, c.arguments);
   }
   checkWritingForm(body);
+  if (JSON.stringify(body) === JSON.stringify(w.song.body))
+    return "Song unchanged. The requested settings already match.";
   w.version("Before assistant edits");
   w.edit((b) => Object.assign(b, body));
   return "Song updated; previous version kept. Save to keep it, Play to hear it. Guitar layers keep their bar positions and recorded pitch.";

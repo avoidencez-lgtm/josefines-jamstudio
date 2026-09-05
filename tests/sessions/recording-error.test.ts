@@ -36,7 +36,10 @@ it("keeps a failed take guarded until saving and clears its error before another
         .notices.some((n) => n.text.includes("Disk unavailable")),
     ).toBe(true);
     vi.mocked(ipc.invoke).mockResolvedValue("next-take");
-    expect(await useEngineStore.getState().startRecording()).toBe("next-take");
+    expect(await useEngineStore.getState().startRecording()).toEqual({
+      ok: true,
+      value: "next-take",
+    });
     expect(useEngineStore.getState().recordingError).toBeNull();
     expect(useEngineStore.getState().isRecording).toBe(true);
   } finally {

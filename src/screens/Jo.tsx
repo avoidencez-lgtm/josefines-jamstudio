@@ -161,6 +161,7 @@ export const Jo: React.FC = () => {
       const { reply, toolCalls } = await think(history, query);
 
       const results: string[] = [];
+      let actionFailed = false;
       if (toolCalls.some(joNeedsReview)) {
         useJoConversation.setState({
           pending: { calls: toolCalls, expected: expectedSong },
@@ -171,6 +172,7 @@ export const Jo: React.FC = () => {
           try {
             results.push(await dispatchJoToolCall(call));
           } catch (e) {
+            actionFailed = true;
             results.push(`${call.name} failed: ${String(e)}`);
           }
         }
@@ -178,7 +180,9 @@ export const Jo: React.FC = () => {
       const joMsg: JoMessage = {
         id: crypto.randomUUID(),
         sender: "jo",
-        text: reply,
+        text: actionFailed
+          ? "Some actions could not be completed. See the results below."
+          : reply,
         timestamp: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
