@@ -6,4 +6,4 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-pitch-detection.workspace = true
+pitch-estimate.workspace = true

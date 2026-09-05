@@ -1,7 +1,6 @@
 //! pitch: McLeod pitch detection method and musical note estimation for tuner.
 
-use pitch_detection::detector::mcleod::McLeodDetector;
-use pitch_detection::detector::PitchDetector;
+use pitch_estimate::{McLeodDetector, PitchDetector};
 
 const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
@@ -24,7 +23,11 @@ pub struct PitchTracker {
 impl PitchTracker {
     pub fn new(window_size: usize, sample_rate: u32) -> Self {
         Self {
-            detector: McLeodDetector::new(window_size, window_size / 2),
+            detector: McLeodDetector::new(window_size, window_size / 2)
+                .expect("supported pitch window")
+                // The previous gate was total energy 5; this API uses mean square.
+                .with_power_threshold(5.0 / window_size as f32)
+                .with_clarity_threshold(0.7),
             window_size,
             sample_rate,
         }
@@ -38,10 +41,7 @@ impl PitchTracker {
         // Window the latest samples
         let window = &samples[samples.len() - self.window_size..];
 
-        // Power and clarity thresholds
-        let pitch = self
-            .detector
-            .get_pitch(window, self.sample_rate as usize, 5.0, 0.7)?;
+        let pitch = self.detector.detect(window, self.sample_rate)?;
 
         let hz = pitch.frequency;
         let confidence = pitch.clarity;
@@ -71,6 +71,66 @@ impl PitchTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn invalid_or_unpitched_frames_do_not_poison_the_next_detection() {
+        let mut tracker = PitchTracker::new(2048, 48_000);
+        for samples in [
+            vec![],
+            vec![0.0; 100],
+            vec![0.0; 2048],
+            vec![0.2; 2048],
+            vec![f32::NAN; 2048],
+            vec![f32::INFINITY; 2048],
+            vec![f32::MAX; 2048],
+        ] {
+            assert!(tracker.detect(&samples).is_none());
+        }
+        let good: Vec<f32> = (0..2048)
+            .map(|i| (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48_000.0).sin())
+            .collect();
+        let quiet: Vec<f32> = good.iter().map(|x| x * 0.0001).collect();
+        assert!(tracker.detect(&quiet).is_none());
+        assert!(PitchTracker::new(2048, 0).detect(&good).is_none());
+        assert!((tracker.detect(&good).unwrap().hz - 440.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn guitar_range_pitch_errors_stay_within_three_cents() {
+        let mut worst = 0.0f32;
+        for rate in [44_100, 48_000] {
+            let mut tracker = PitchTracker::new(2048, rate);
+            for hz in [
+                82.4069f32, 110.0, 146.8324, 196.0, 220.0, 329.6276, 440.0, 659.2551, 1318.51,
+            ] {
+                for detune in [-35.0f32, 0.0, 35.0] {
+                    let target = hz * 2f32.powf(detune / 1200.0);
+                    for phase in [0.0f32, 0.8, 2.4] {
+                        for amplitude in [0.1f32, 0.5] {
+                            for harmonic in [0.0f32, 0.3] {
+                                let samples: Vec<f32> = (0..2048)
+                                    .map(|i| {
+                                        let p = 2.0 * std::f32::consts::PI * target * i as f32
+                                            / rate as f32
+                                            + phase;
+                                        amplitude * (p.sin() + harmonic * (2.0 * p).sin())
+                                    })
+                                    .collect();
+                                let pitch = tracker
+                                    .detect(&samples)
+                                    .expect("pitched guitar-range signal");
+                                let error = (1200.0 * (pitch.hz / target).log2()).abs();
+                                worst = worst.max(error);
+                                assert!(error <= 3.0, "{target} Hz at {rate}, phase {phase}, amplitude {amplitude}, harmonic {harmonic}: {error} cents");
+                                assert!((0.0..=1.0).contains(&pitch.confidence));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!("worst synthetic guitar-range error: {worst:.4} cents");
+    }
 
     #[test]
     fn test_detect_sine_440() {

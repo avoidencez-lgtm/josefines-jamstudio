@@ -3,7 +3,7 @@ import { savedTakeAnalysis } from "../../src/lib/sessions/analysis";
 
 const saved = {
   schemaVersion: 1,
-  analyzerVersion: 1,
+  analyzerVersion: 2,
   analyzedAtMs: 1_700_000_000_000,
   sourceSampleRate: 48_000,
   sourceSampleCount: 96_000,
@@ -35,7 +35,8 @@ it("rejects damaged, stale-version and nonfinite evidence without throwing", () 
     null,
     "broken",
     {},
-    { ...saved, analyzerVersion: 2 },
+    { ...saved, analyzerVersion: 1 },
+    { ...saved, analyzerVersion: 3 },
     { ...saved, meanGridDistanceMs: "0" },
     { ...saved, meanAbsCents: Number.NaN },
     { ...saved, detectedTransients: -1 },

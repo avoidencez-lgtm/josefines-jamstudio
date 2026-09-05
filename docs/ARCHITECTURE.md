@@ -602,7 +602,7 @@ for intentional swing, syncopation, latency or changing tempo. Dynamics uses RMS
 windows of up to 20 ms after each attack. Pitch uses the existing McLeod tracker
 without bend exclusion. These are explicit limitations, not musical judgments.
 Successful analysis is saved into `take.json.analysis` before the IPC reports
-success. The flat object includes schema/analyzer version 1, `analyzedAtMs`,
+success. The flat object includes schema version 1 and analyzer version 2, `analyzedAtMs`,
 `sourceSampleRate`, `sourceSampleCount` and `sourceTempo` alongside the measurements.
 Re-analysis replaces known fields and preserves unknown ones. The existing
 manifest writer uses a temporary file and rename; an error leaves the prior
@@ -618,4 +618,6 @@ The frontend validates the analysis version, finite numbers and coverage counts;
 unsupported or damaged analysis leaves its take visible with Analyze again.
 Evidence is a snapshot, not automatic file-change tracking: re-analyse after
 replacing a DI file. Structured provider reviews, chord agreement, bend handling
-and the full M6 pitch tolerance remain unfinished.
+and the full M6 pitch acceptance remain unfinished. Stationary synthetic pitch
+now meets ±3 cents; [ADR 0011](adr/0011-pitch-measurement-precision.md) records
+the detector change and limits. Version-1 evidence requires Analyze again.

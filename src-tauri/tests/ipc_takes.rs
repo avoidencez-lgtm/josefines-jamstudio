@@ -481,9 +481,8 @@ fn analysis_of_a_synthetic_a3_sine_finds_pitched_frames_in_tune() {
     assert!(analysis["attackLevelCvPct"].is_null());
     assert!(analysis["pitchedFrames"].as_u64().unwrap() > 0);
     let cents = analysis["meanAbsCents"].as_f64().unwrap();
-    // Expose the unchanged detector measurement behind the existing >=90 score.
-    // Rounding that score permits up to 5.25 cents; this is not M6's ±3-cent gate.
-    assert!((0.0..=5.25).contains(&cents), "{analysis}");
+    // M6 stationary-tone precision: within three cents of the generated A3.
+    assert!((0.0..=3.0).contains(&cents), "{analysis}");
     assert_eq!(((1.0 - cents / 50.0) * 100.0).round(), intonation);
 
     let ghost = unique("no-such-take");
@@ -510,7 +509,7 @@ fn take_analysis_survives_restart_and_failed_reanalysis_preserves_the_manifest()
     assert_eq!(saved["futureField"], original["futureField"]);
     assert_eq!(saved["analysis"]["futureMeasurement"], 17);
     assert_eq!(saved["analysis"]["schemaVersion"], 1);
-    assert_eq!(saved["analysis"]["analyzerVersion"], 1);
+    assert_eq!(saved["analysis"]["analyzerVersion"], 2);
     assert_eq!(saved["analysis"]["sourceSampleRate"], RATE);
     assert_eq!(saved["analysis"]["sourceSampleCount"], take.frames);
     assert_eq!(saved["analysis"]["sourceTempo"], 120.0);

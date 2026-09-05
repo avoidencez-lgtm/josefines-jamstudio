@@ -289,7 +289,7 @@ it("analyses a take honestly in the preview (no audio, all zeros), caches it per
   const savedTake = store().takes.find((t) => t.id === meta.id);
   expect(savedTake?.analysis).toMatchObject({
     schemaVersion: 1,
-    analyzerVersion: 1,
+    analyzerVersion: 2,
     analyzedAtMs: TODAY.getTime(),
   });
   if (!analysis) throw new Error("no analysis");
