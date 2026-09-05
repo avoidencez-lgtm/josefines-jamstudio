@@ -160,9 +160,19 @@ describe("browser preview engine", () => {
     expect(info.userChartIds).toEqual(["my-tune"]);
     const after = await engine.invoke<Chart[]>("band_list_charts", {});
     expect(after.some((c) => c.id === "my-tune")).toBe(true);
-    await engine.invoke("charts_delete_user", { chartId: "my-tune" });
+    expect(
+      await engine.invoke("charts_delete_user", { chartId: "my-tune" }),
+    ).toBeNull();
     const gone = await engine.invoke<Chart[]>("band_list_charts", {});
     expect(gone.some((c) => c.id === "my-tune")).toBe(false);
+  });
+
+  it("returns null for unit commands the way Tauri serialises () (#165)", async () => {
+    const charts = await engine.invoke<Chart[]>("band_list_charts", {});
+    expect(
+      await engine.invoke("band_load_chart_inline", { chart: charts[0] }),
+    ).toBeNull();
+    expect(await engine.invoke("takes_delete", { takeId: "gone" })).toBeNull();
   });
 
   it("ships the real rig profiles and renders scenes to MIDI like jam-rig", async () => {
