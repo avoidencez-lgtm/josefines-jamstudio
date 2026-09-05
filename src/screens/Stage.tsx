@@ -5,6 +5,7 @@ import { BigReadout } from "../components/BigReadout";
 import { Button } from "../components/Button";
 import { ChordShapes } from "../components/ChordShapes";
 import { ChordStrip } from "../components/ChordStrip";
+import { JoStage } from "../components/JoStage";
 import { Meter } from "../components/Meter";
 import { Panel } from "../components/Panel";
 import { SoloHelper } from "../components/SoloHelper";
@@ -94,6 +95,7 @@ export const Stage: React.FC = () => {
         title="Your band. Your lead."
         description="Steer the band live, loop a passage, or build up a difficult part."
       />
+      <JoStage />
       <WorkspaceViews
         labels={["Perform", "Practice", "Levels"]}
         value={view}

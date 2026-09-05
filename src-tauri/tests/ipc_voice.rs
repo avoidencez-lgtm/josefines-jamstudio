@@ -9,6 +9,20 @@ fn voice_commands_are_registered_guarded_and_cancelled_by_generation() {
     let studio = Studio::boot();
     let initial = studio.ok("voice_status", json!({}));
     assert_eq!(initial["phase"], "idle");
+    assert!(initial["shortcut"].is_null());
+    assert!(studio
+        .invoke(
+            "voice_shortcut",
+            json!({"shortcut":"CommandOrControl+Shift+J"})
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("headless"));
+    studio.ok("controller_save", json!({"document":{"schemaVersion":1,"bindings":[{"action":"voice","press":{"kind":"program","channel":1,"number":12}}]}}));
+    assert_eq!(
+        studio.ok("controller_config", json!({}))["bindings"][0]["action"],
+        "voice"
+    );
     assert!(studio.invoke("voice_ptt", json!({"down": false})).is_err());
     studio.ok(
         "keys_set",

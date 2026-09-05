@@ -2,21 +2,27 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ipc } from "../../src/ipc/client";
 import {
   cancelVoice,
+  listenToVoice,
   releaseVoice,
   startVoice,
+  toggleVoice,
   useVoice,
 } from "../../src/lib/jo/voice";
 
-vi.mock("../../src/ipc/client", () => ({ ipc: { invoke: vi.fn() } }));
+vi.mock("../../src/ipc/client", () => ({
+  isPreview: false,
+  ipc: { invoke: vi.fn(), listen: vi.fn() },
+}));
 const turn = { generation: 7, transcript: "Set the tempo to 100", seconds: 2 };
 beforeEach(() => {
   vi.useFakeTimers();
   vi.mocked(ipc.invoke).mockReset();
-  useVoice.setState({ phase: "idle", error: null, seconds: 0 });
+  useVoice.setState({ phase: "idle", error: null, seconds: 0, shortcut: null });
 });
 afterEach(async () => {
   await cancelVoice();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 it("sends the transcript through the existing dispatcher and speaks its actual outcome", async () => {
@@ -139,4 +145,56 @@ it("drains a cancelled device startup before allowing another turn", async () =>
   expect(useVoice.getState().phase).toBe("idle");
   expect(ipc.invoke).toHaveBeenCalledWith("voice_cancel", { generation: 7 });
   expect(query).not.toHaveBeenCalled();
+});
+
+it("coalesces global key repeat and cleans up capture on window blur", async () => {
+  const window = new EventTarget();
+  vi.stubGlobal("window", window);
+  let event!: (down: boolean) => void;
+  const off = vi.fn();
+  vi.mocked(ipc.listen).mockImplementation(async (_name, callback) => {
+    event = callback as (down: boolean) => void;
+    return off;
+  });
+  vi.mocked(ipc.invoke).mockImplementation(async (cmd) =>
+    cmd === "voice_ptt" ? turn : undefined,
+  );
+  const query = vi.fn(async () => "Done");
+  const cleanup = await listenToVoice(query);
+  event(true);
+  expect(ipc.invoke).not.toHaveBeenCalled();
+  useVoice.setState({ shortcut: "CommandOrControl+Shift+J" });
+  event(true);
+  await Promise.resolve();
+  expect(useVoice.getState().phase).toBe("listening");
+  event(true);
+  expect(
+    vi.mocked(ipc.invoke).mock.calls.filter(([cmd]) => cmd === "voice_ptt"),
+  ).toHaveLength(1);
+  window.dispatchEvent(new Event("blur"));
+  await cancelVoice();
+  event(true);
+  expect(useVoice.getState().phase).toBe("idle");
+  event(false);
+  event(true);
+  await Promise.resolve();
+  expect(useVoice.getState().phase).toBe("listening");
+  cleanup();
+  await cancelVoice();
+  expect(off).toHaveBeenCalledOnce();
+  expect(query).not.toHaveBeenCalled();
+});
+
+it("uses two MIDI presses to capture and send, and cancels a waiting turn", async () => {
+  vi.mocked(ipc.invoke).mockImplementation(async (cmd) =>
+    cmd === "voice_ptt" ? turn : undefined,
+  );
+  const query = vi.fn(async () => "Done");
+  await toggleVoice(query);
+  expect(useVoice.getState().phase).toBe("listening");
+  await toggleVoice(query);
+  expect(query).toHaveBeenCalledOnce();
+  useVoice.setState({ phase: "transcribing" });
+  await toggleVoice(query);
+  expect(useVoice.getState().phase).toBe("idle");
 });

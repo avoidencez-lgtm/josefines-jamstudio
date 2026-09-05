@@ -5,6 +5,7 @@ import {
   describePress,
   useController,
 } from "../lib/controller";
+import { cancelVoice } from "../lib/jo/voice";
 import { Button } from "./Button";
 
 export function FootControls() {
@@ -15,7 +16,10 @@ export function FootControls() {
       <p className="song-help">
         Keep playing while a pedal saves the idea, starts a take or loops a
         section. Select a MIDI input, click Learn, then press the pedal. Each
-        press has one action.
+        press has one action. Talk / send to Jo uses one press to start
+        listening and another to send; a press while waiting cancels. Voice
+        setup is in Jo AI and provider charges apply. The microphone stops after
+        20 seconds.
       </p>
       <div className="song-controls">
         <label>
@@ -41,12 +45,13 @@ export function FootControls() {
             type="checkbox"
             checked={c.enabled}
             disabled={!c.port || c.busy}
-            onChange={(e) =>
+            onChange={(e) => {
+              if (!e.target.checked) void cancelVoice();
               useController.setState({
                 enabled: e.target.checked,
                 learning: null,
-              })
-            }
+              });
+            }}
           />
           Enable pedal actions
         </label>

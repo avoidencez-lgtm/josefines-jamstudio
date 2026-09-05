@@ -31,8 +31,7 @@ TTS uses 24 kHz PCM and existing interpolation into 48 kHz output. A separate
 voice bus attenuates the generated band over 150 ms; guitar and recorder stems
 are unaffected. Hardware output is required; headless fallback is refused.
 Cancelled requests may still incur provider cost. The existing render-ahead queue
-bounds interruption responsiveness. Global/MIDI PTT and live latency acceptance
-are pending; see [S5 evidence](spikes/S5-jo-voice.md).
+bounds interruption responsiveness. Live latency acceptance is pending; see [S5 evidence](spikes/S5-jo-voice.md).
 
 ## 1. The governing rule
 
@@ -714,3 +713,16 @@ replacing a DI file. Structured provider reviews, chord agreement, bend handling
 and the full M6 pitch acceptance remain unfinished. Stationary synthetic pitch
 now meets ±3 cents; [ADR 0011](adr/0011-pitch-measurement-precision.md) records
 the detector change and limits. Version-1 evidence requires Analyze again.
+
+Native voice controls (2026-09-06): `voice_shortcut({shortcut: string|null})`
+registers/disables a session-only OS shortcut; `voice_status.shortcut` reports
+what is actually registered. `settings.voice.shortcut` remembers the preferred
+combination without enabling it at launch. `platform::voice_shortcut` uses the
+Tauri global-shortcut plugin and emits boolean `voice:ptt` down/up events. One
+app-lifetime listener coalesces key repeat and calls the same capture lifecycle.
+Controller action `voice` reuses the existing learned PC/CC/note press registry:
+first press starts, second sends, and a waiting-turn press cancels. There is no
+fabricated MIDI release edge. The shared `handleJoQuery` in `conversation.ts`
+serves Jo AI, Stage and voice; results/history/review rules remain identical.
+The toolbar exposes hold/cancel throughout navigation. An unrelated typed draft
+is preserved when a global voice command arrives.

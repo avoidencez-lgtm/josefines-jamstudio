@@ -1,5 +1,6 @@
 //! Native child-process behavior is isolated from the agent protocol.
 use std::path::PathBuf;
+pub mod voice_shortcut;
 
 /// Hosts the UI may open in the OS browser. Keep in lockstep with `https://` links in `src/`.
 const ALLOWED_HOSTS: &[&str] = &[

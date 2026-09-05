@@ -275,3 +275,12 @@ the shared turn seam; native IPC coverage is `src-tauri/tests/ipc_voice.rs`.
 The authored transcript fixture is `src-tauri/tests/fixtures/voice-transcript.json`.
 Do not convert it into claimed live-provider evidence. Never store raw microphone
 recordings, keys or provider bodies in usage logs. See [S5](spikes/S5-jo-voice.md).
+
+Voice control additions reuse `handleJoQuery` in `src/lib/jo/conversation.ts` and
+`startVoice`/`releaseVoice`/`toggleVoice`. Never duplicate dispatch logic in a
+room or bypass song-edit review. The app installs one `voice.ptt` listener;
+components only render the shared state. New pedal actions need a registry
+entry in `PEDAL_ACTIONS`, native `controller_save` validation and an IPC fixture.
+Global keys stay inside `platform/voice_shortcut.rs` and are session-only opt-ins.
+`tests/jo/conversation.test.ts`, `tests/invariants/voice.test.ts` and `ipc_voice`
+cover draft preservation, review, repeat suppression and controller persistence.
