@@ -74,3 +74,28 @@ it("records the draft accepted after saving and retains it if recording fails", 
   expect(useEngineStore.getState().currentChart?.name).toBe("Saved title");
   expect(useEngineStore.getState().isRecording).toBe(false);
 });
+
+it("refuses to load or record a different song opened while saving", async () => {
+  const song = newOriginal();
+  const next = newOriginal();
+  const commands: string[] = [];
+  useWriting.getState().openSong(song);
+  useEngineStore.setState({ isRecording: false, loadedOriginal: null });
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      if (command === "originals_save") {
+        useWriting.setState({ song: next });
+        return { ...song, revision: 1 } as T;
+      }
+      return [] as T;
+    },
+  });
+  await expect(useWriting.getState().record()).rejects.toThrow(
+    "The open song changed while saving",
+  );
+  expect(commands).toEqual(["originals_save", "originals_list"]);
+  expect(useWriting.getState().song?.id).toBe(next.id);
+  expect(useEngineStore.getState().loadedOriginal).toBeNull();
+  expect(useEngineStore.getState().isRecording).toBe(false);
+});
