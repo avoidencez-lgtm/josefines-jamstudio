@@ -20,6 +20,7 @@ import { applySongIdea, saveRoomPreference } from "../../src/lib/roomActions";
 import {
   audioProfileSchema,
   captureRig,
+  coachBrief,
   coachSchema,
   generationBrief,
   harmonicNeighbours,
@@ -158,6 +159,30 @@ it("builds a reference form from the artist's own chords, preserving locked part
       "unsafe",
     ),
   ).toThrow(/timeline/);
+});
+
+it("sends the coaches the writing only, and refuses an oversized brief before any request (#62)", () => {
+  const body = newOriginal().body;
+  body.lyrics = { verse: "Words the coaches may read" };
+  body.notes = "A note";
+  body.clips.push({
+    takeId: "private-take",
+    label: "Guitar 1",
+    trimStart: 0,
+    trimEnd: 4,
+    startBar: 1,
+    repeats: 1,
+    gain: 1,
+    muted: false,
+  });
+  body.rigSnapshot = { profileId: "black-spirit-200", scene: 0, controls: {} };
+  const brief = coachBrief(body, "Make the chorus land");
+  expect(brief).toContain("Words the coaches may read");
+  expect(brief).toContain("Am:4");
+  expect(brief).not.toContain("private-take");
+  expect(brief).not.toContain("black-spirit-200");
+  body.notes = "x".repeat(50_000);
+  expect(() => coachBrief(body, "goal")).toThrow(/48,000/);
 });
 
 it("requires all three bounded coach perspectives and forbids executable actions", () => {

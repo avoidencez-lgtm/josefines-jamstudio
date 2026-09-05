@@ -23,6 +23,7 @@ import {
   applyStudioEdits,
   songFingerprint,
 } from "../lib/jo/studioTools";
+import { useMedia } from "../lib/media";
 import { useWriting } from "../lib/originals";
 import { openAiSettings } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
@@ -76,6 +77,18 @@ export const Jo: React.FC = () => {
             versions: w.song.versions.map((v) => v.name),
           }
         : undefined,
+      film: (() => {
+        const p = useMedia.getState().project;
+        return {
+          id: p.id,
+          title: p.title,
+          shots: p.shots.map(({ id, title, seconds }) => ({
+            id,
+            title,
+            seconds,
+          })),
+        };
+      })(),
     };
   };
 

@@ -136,9 +136,15 @@ interface WritingState {
   captureSeconds: number;
   rehearsalIndex: number;
   view: "compose" | "lyrics" | "record" | "finish" | "versions";
+  /** The last coalescing edit, so a slider drag or a run of typing is one Undo step. */
+  lastEdit: { key: string; at: number } | null;
   loopRange: (startBar: number, endBar: number) => Promise<void>;
   rehearse: (next?: boolean) => Promise<void>;
-  edit: (fn: (body: SongBody) => void) => void;
+  /**
+   * Applies one reversible change. Edits that pass the same `coalesce` key within
+   * COALESCE_MS of each other share one Undo entry: the body before the first of them.
+   */
+  edit: (fn: (body: SongBody) => void, coalesce?: string) => void;
   createSong: () => void;
   openSong: (song: Original) => void;
   select: (id: string) => void;
@@ -157,6 +163,9 @@ interface WritingState {
   action: (fn: () => Promise<void>) => Promise<void>;
 }
 
+/** Edits with the same coalesce key closer than this share one Undo entry. */
+export const COALESCE_MS = 1500;
+
 export const useWriting = create<WritingState>((set, get) => ({
   song: null,
   saved: [],
@@ -169,6 +178,7 @@ export const useWriting = create<WritingState>((set, get) => ({
   captureSeconds: 0,
   rehearsalIndex: -1,
   view: "compose",
+  lastEdit: null,
   action: async (fn) => {
     if (get().busy) return;
     set({ busy: true, message: "" });
@@ -181,7 +191,7 @@ export const useWriting = create<WritingState>((set, get) => ({
       set({ busy: false });
     }
   },
-  edit: (fn) => {
+  edit: (fn, coalesce) => {
     const song = get().song;
     if (!song) return;
     if (useEngineStore.getState().isRecording) {
@@ -197,12 +207,20 @@ export const useWriting = create<WritingState>((set, get) => ({
       return;
     }
     if (JSON.stringify(body) === JSON.stringify(song.body)) return;
+    const now = Date.now();
+    const last = get().lastEdit;
+    const grouped =
+      coalesce !== undefined &&
+      last?.key === coalesce &&
+      now - last.at < COALESCE_MS &&
+      get().past.length > 0;
     set({
       song: { ...song, body },
-      past: [...get().past, song.body].slice(-50),
+      past: grouped ? get().past : [...get().past, song.body].slice(-50),
       future: [],
       dirty: true,
       message: "",
+      lastEdit: coalesce === undefined ? null : { key: coalesce, at: now },
     });
   },
   createSong: () => {
@@ -216,6 +234,7 @@ export const useWriting = create<WritingState>((set, get) => ({
       dirty: true,
       past: [],
       future: [],
+      lastEdit: null,
       message: "",
     });
   },
@@ -229,6 +248,7 @@ export const useWriting = create<WritingState>((set, get) => ({
       selected: song.body.chart.sections[0].id,
       past: [],
       future: [],
+      lastEdit: null,
       message: "",
     });
   },
@@ -241,6 +261,7 @@ export const useWriting = create<WritingState>((set, get) => ({
       past: past.slice(0, -1),
       future: [song.body, ...get().future],
       dirty: true,
+      lastEdit: null,
     });
   },
   redo: () => {
@@ -252,6 +273,7 @@ export const useWriting = create<WritingState>((set, get) => ({
       future: future.slice(1),
       past: [...get().past, song.body],
       dirty: true,
+      lastEdit: null,
     });
   },
   version: (name) => {

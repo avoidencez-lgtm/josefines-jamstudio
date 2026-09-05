@@ -63,7 +63,7 @@ const EngineStatusView: React.FC<{
     ],
     [
       "Clock",
-      `${status.sample_rate} Hz · ${status.output?.buffer_frames ?? "driver-default"} frame buffer`,
+      `${status.sample_rate} Hz · driver buffer ${status.output?.buffer_frames ?? "default"} frames · rendered in blocks of at most 1024 frames`,
     ],
     ["Stream errors", String(status.stream_errors)],
     ["Input gaps", String(status.input_gaps)],

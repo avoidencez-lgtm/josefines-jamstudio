@@ -114,7 +114,7 @@ Each kept variation or guitar comp first adds a named version of the previous so
 
 ### Three different safety nets
 
-Undo/Redo cover recent body edits in memory. Named Versions are checkpoints saved inside the song, including chords, settings, lyrics and layer references. Save song writes the current document and its versions to disk. Keeping a version without saving does not make it durable. Restoring a version is itself undoable. Remove an unused version when the 20-version limit is reached.
+Undo/Redo cover recent body edits in memory. Named Versions are checkpoints saved inside the song, including chords, settings, lyrics and layer references. Save song writes the current document and its versions to disk. Keeping a version without saving does not make it durable. Restoring a version is itself undoable. Remove an unused version when the 20-version limit is reached. A slider drag or a run of typing in one field counts as one Undo step, so real edits are not pushed out of the 50-step history.
 
 ### Conflicts and concurrent edits
 
@@ -184,7 +184,7 @@ Text assistants receive song text/structure, settings, rig name and cached take 
 
 ### Three perspectives
 
-Enter a specific goal and Ask three perspectives. One request goes to the selected Jo provider or installed agent and returns composition, arrangement and performance experiments. Your chart, lyrics, notes and band settings are sent; no audio is sent or heard. API billing or subscription usage limits can apply. Draft in Jo places one experiment in the conversation input for your review; it never sends automatically and will not overwrite an existing draft. Keep in song notes appends one suggestion with version and Undo protection. Ask again after the song changes. Missing configuration and malformed replies show an error; there is no paid fallback call.
+Enter a specific goal and Ask three perspectives. One request goes to the selected Jo provider or installed agent and returns composition, arrangement and performance experiments. Your chart, form, lyrics, notes and band settings are sent, never guitar clips, tone snapshots or blueprints; no audio is sent or heard. A request above 48,000 characters is refused before anything is sent. Cancel stops waiting: an installed agent is stopped, while an API answer already submitted is discarded but not refunded. The window can close while a request is waiting. API billing or subscription usage limits can apply. Draft in Jo places one experiment in the conversation input for your review; it never sends automatically and will not overwrite an existing draft. Keep in song notes appends one suggestion with version and Undo protection. Ask again after the song changes. Missing configuration and malformed replies show an error; there is no paid fallback call.
 
 ## Songs: mixes and references
 

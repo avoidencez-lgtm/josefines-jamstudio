@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ipc, isPreview } from "../ipc/client";
 import {
   buildSectionComp,
@@ -31,24 +31,39 @@ export function FinishingDesk() {
     sectionId: string;
   } | null>(null);
   const song = w.song;
+  const ranges = song ? arrangementRanges(song.body.chart) : [];
+  const selectedIndex = Math.min(index, Math.max(0, ranges.length - 1));
+  // The review and every take's comp are only recomputed when their inputs change,
+  // not on every slider frame (issue #52).
+  const issues = useMemo(
+    () => (song ? finishingReview(song.body, takes, vocal) : []),
+    [song, takes, vocal],
+  );
+  const choices = useMemo(
+    () =>
+      song
+        ? takes.map((take) => {
+            try {
+              return {
+                take,
+                body: buildSectionComp(song, take, selectedIndex),
+                reason: "",
+              };
+            } catch (e) {
+              return {
+                take,
+                body: null,
+                reason: String(e).replace(/^Error: /, ""),
+              };
+            }
+          })
+        : [],
+    [song, takes, selectedIndex],
+  );
   if (!song) return null;
-  const ranges = arrangementRanges(song.body.chart);
-  const selectedIndex = Math.min(index, ranges.length - 1);
   const range = ranges[selectedIndex];
   const loop = transitionRange(song.body.chart, selectedIndex, context);
   const fingerprint = JSON.stringify([song.id, song.body]);
-  const issues = finishingReview(song.body, takes, vocal);
-  const choices = takes.map((take) => {
-    try {
-      return {
-        take,
-        body: buildSectionComp(song, take, selectedIndex),
-        reason: "",
-      };
-    } catch (e) {
-      return { take, body: null, reason: String(e).replace(/^Error: /, "") };
-    }
-  });
   const choice =
     choices.find((c) => c.take.id === takeId && c.body) ??
     choices.find((c) => c.body);

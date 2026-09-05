@@ -14,10 +14,14 @@ import {
 } from "./roomTools";
 import { checkWritingForm } from "./writingTools";
 
-/** One foreground room operation at a time, also consulted by the close guard. */
-export const useRoomOperation = create<{ busy: boolean }>(() => ({
-  busy: false,
-}));
+/**
+ * One foreground room operation at a time. `blocking` marks work the window must
+ * not close during (an edit, save or recall in flight); a request that only waits
+ * for advice is `busy` but not blocking, so the close guard lets the window go.
+ */
+export const useRoomOperation = create<{ busy: boolean; blocking: boolean }>(
+  () => ({ busy: false, blocking: false }),
+);
 export function applySongIdea(body: SongBody, base: string, label: string) {
   const w = useWriting.getState();
   if (!w.song || w.busy || useEngineStore.getState().isRecording)
