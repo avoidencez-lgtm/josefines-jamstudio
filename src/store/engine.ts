@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import { ipc, isPreview } from "../ipc/client";
 import type {
-  AiMusicConfig,
-  AiMusicState,
   AppSettings,
   AudioConfig,
   AudioDevices,
@@ -17,8 +15,6 @@ import type {
   MidiPortInfo,
   RigProfile,
   RigState,
-  SongMetadata,
-  StemSettings,
   StyleSummary,
   TakeAnalysis,
   TakeMetadata,
@@ -143,23 +139,6 @@ export interface EngineState {
   setLatencySamples: (samples: number) => Promise<number>;
   loadTakes: () => Promise<void>;
   deleteTake: (id: string) => Promise<void>;
-
-  // Real Song & Stem Separation (M3)
-  currentSong: SongMetadata | null;
-  songSpeed: number;
-  songTranspose: number;
-  stemSettings: StemSettings;
-  importSong: (filePath: string) => Promise<SongMetadata | null>;
-  setSongSpeed: (speed: number) => Promise<void>;
-  setSongTranspose: (semitones: number) => Promise<void>;
-  updateStemSettings: (patch: Partial<StemSettings>) => Promise<void>;
-
-  // AI Music Streaming (M4)
-  aiMusic: AiMusicState;
-  startAiMusic: (config?: Partial<AiMusicConfig>) => Promise<void>;
-  stopAiMusic: () => Promise<void>;
-  steerAiMusic: (delta: string) => Promise<void>;
-  setAiMusicVolume: (volume: number) => Promise<void>;
 
   // Rig Orchestration (M5)
   rigState: RigState | null;
@@ -292,30 +271,6 @@ export const useEngineStore = create<EngineState>((set, get) => {
     takes: [],
     isRecording: false,
     latencySamples: 0,
-    currentSong: null,
-    songSpeed: 1.0,
-    songTranspose: 0,
-    stemSettings: {
-      vocalsVolume: 1.0,
-      drumsVolume: 1.0,
-      bassVolume: 1.0,
-      otherVolume: 1.0,
-      vocalsMute: false,
-      drumsMute: false,
-      bassMute: false,
-      otherMute: false,
-      vocalsSolo: false,
-      drumsSolo: false,
-      bassSolo: false,
-      otherSolo: false,
-    },
-    aiMusic: {
-      active: false,
-      provider: "offline-synthetic",
-      currentPrompt: "Neo-soul groove with rhodes and pocket drums",
-      promptDelta: "",
-      mixVolume: 0.8,
-    },
     rigState: null,
     availableProfiles: [],
     midiPorts: [],
@@ -555,77 +510,6 @@ export const useEngineStore = create<EngineState>((set, get) => {
       );
       if (ok !== null)
         set((state) => ({ takes: state.takes.filter((t) => t.id !== takeId) }));
-    },
-
-    importSong: async (filePath) => {
-      const song = await run("Import song", () =>
-        ipc.invoke<SongMetadata>("song_import", { filePath }),
-      );
-      if (song) set({ currentSong: song });
-      return song;
-    },
-    setSongSpeed: async (speed) => {
-      const clamped = Math.max(0.5, Math.min(1.5, speed));
-      const ok = await run("Song speed", () =>
-        ipc.invoke("song_set_speed", { speed: clamped }),
-      );
-      if (ok !== null) set({ songSpeed: clamped });
-    },
-    setSongTranspose: async (semitones) => {
-      const clamped = Math.max(-12, Math.min(12, semitones));
-      const ok = await run("Song transpose", () =>
-        ipc.invoke("song_set_transpose", { semitones: clamped }),
-      );
-      if (ok !== null) set({ songTranspose: clamped });
-    },
-    updateStemSettings: async (patch) => {
-      const updated = { ...get().stemSettings, ...patch };
-      const ok = await run("Stems", () =>
-        ipc.invoke("song_set_stem_settings", { settings: updated }),
-      );
-      if (ok !== null) set({ stemSettings: updated });
-    },
-
-    startAiMusic: async (config) => {
-      const fullConfig: AiMusicConfig = {
-        provider: config?.provider ?? "offline-synthetic",
-        prompt: config?.prompt ?? get().aiMusic.currentPrompt,
-        tempo: config?.tempo ?? 120,
-        key: config?.key ?? "A",
-        mixVolume: config?.mixVolume ?? get().aiMusic.mixVolume,
-      };
-      const ok = await run("AI music", () =>
-        ipc.invoke("ai_music_start", { config: fullConfig }),
-      );
-      if (ok !== null) {
-        set((state) => ({
-          aiMusic: {
-            ...state.aiMusic,
-            active: true,
-            provider: fullConfig.provider,
-            currentPrompt: fullConfig.prompt,
-          },
-        }));
-      }
-    },
-    stopAiMusic: async () => {
-      const ok = await run("AI music", () => ipc.invoke("ai_music_stop"));
-      if (ok !== null)
-        set((state) => ({ aiMusic: { ...state.aiMusic, active: false } }));
-    },
-    steerAiMusic: async (delta) => {
-      const ok = await run("AI music", () =>
-        ipc.invoke("ai_music_steer", { delta }),
-      );
-      if (ok !== null)
-        set((state) => ({ aiMusic: { ...state.aiMusic, promptDelta: delta } }));
-    },
-    setAiMusicVolume: async (volume) => {
-      const ok = await run("AI music volume", () =>
-        ipc.invoke("ai_music_set_volume", { volume }),
-      );
-      if (ok !== null)
-        set((state) => ({ aiMusic: { ...state.aiMusic, mixVolume: volume } }));
     },
 
     loadRigProfiles: async () => {

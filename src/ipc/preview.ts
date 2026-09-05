@@ -7,7 +7,6 @@
 import { resolveChart } from "../lib/chart/text";
 import type { Original } from "../lib/originals";
 import type {
-  AiMusicState,
   AudioConfig,
   BandPatch,
   BandTelemetry,
@@ -214,13 +213,6 @@ export function createPreviewEngine(
   let recordingId: string | null = null;
   let previewLatency = 0;
   let clock = 0;
-  const aiMusic: AiMusicState = {
-    active: false,
-    provider: "offline-synthetic",
-    currentPrompt: "Neo-soul groove with rhodes and pocket drums",
-    promptDelta: "",
-    mixVolume: 0.8,
-  };
   const rigProfiles = bundledRigs();
   const rigStart = Date.now();
   const rig: RigState = {
@@ -779,27 +771,6 @@ export function createPreviewEngine(
     takes_export_daw: () => {
       throw new Error("export is only available in the desktop app");
     },
-    song_import: () => {
-      throw new Error("song import is only available in the desktop app");
-    },
-    song_set_speed: () => undefined,
-    song_set_transpose: () => undefined,
-    song_set_stem_settings: () => undefined,
-    ai_music_start: () => {
-      throw new Error(
-        "Generative AI music is not connected yet (milestone M4); nothing would be heard.",
-      );
-    },
-    ai_music_stop: () => {
-      aiMusic.active = false;
-    },
-    ai_music_steer: (a) => {
-      aiMusic.promptDelta = String(a.delta);
-    },
-    ai_music_set_volume: (a) => {
-      aiMusic.mixVolume = Number(a.volume);
-    },
-    ai_music_get_state: () => aiMusic,
     rig_list_profiles: () => rigProfiles,
     rig_select_profile: (a) => {
       const p = rigProfiles.find((r) => r.id === a.profileId);
