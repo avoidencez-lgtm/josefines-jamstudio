@@ -723,7 +723,11 @@ impl AudioEngine {
         *self.status.lock() = status;
 
         self.running.store(true, Ordering::SeqCst);
-        self.spawn_render_thread(output_prod, input_cons, effective_rate);
+        let wait_for_input = input_driver.is_running()
+            && input_driver
+                .info()
+                .is_some_and(|info| info.device_name == "file");
+        self.spawn_render_thread(output_prod, input_cons, effective_rate, wait_for_input);
 
         self.output_driver = Some(output_driver);
         self.input_driver = Some(input_driver);
@@ -745,6 +749,7 @@ impl AudioEngine {
         mut prod: rtrb::Producer<f32>,
         mut input_cons: rtrb::Consumer<f32>,
         sample_rate: u32,
+        wait_for_input: bool,
     ) {
         let running = Arc::clone(&self.running);
         let tone_active = Arc::clone(&self.tone_active);
@@ -771,25 +776,31 @@ impl AudioEngine {
                 let mut primed = false;
 
                 while running.load(Ordering::SeqCst) {
-                    while let Ok(s) = input_cons.pop() {
-                        input_queue.push_back(s);
-                    }
-                    // Bound the backlog so a drifting input clock cannot add latency
-                    // forever; keep two blocks so the recorder sees continuous audio.
-                    if input_queue.len() > block_len * 16 {
-                        let drop = input_queue.len() - block_len * 2;
-                        input_queue.drain(..drop);
-                    }
-                    if !primed && input_queue.len() >= block_len * 2 {
-                        primed = true;
-                    }
-
                     let mut rendered = false;
                     while prod.slots() >= block_len * 2 {
+                        while let Ok(s) = input_cons.pop() {
+                            input_queue.push_back(s);
+                        }
+                        // Bound the backlog so a drifting input clock cannot add latency
+                        // forever; keep two blocks so the recorder sees continuous audio.
+                        if input_queue.len() > block_len * 16 {
+                            let drop = input_queue.len() - block_len * 2;
+                            input_queue.drain(..drop);
+                        }
+                        if !primed && input_queue.len() >= block_len * 2 {
+                            primed = true;
+                        }
+
                         let _gate = gate.lock();
                         // Input for this block.
                         ctx.in_block.fill(0.0);
                         let available = input_queue.len();
+                        if wait_for_input && (!primed || available < block_len) {
+                            if primed {
+                                input_gaps.fetch_add(1, Ordering::Relaxed);
+                            }
+                            break;
+                        }
                         if primed && available >= block_len {
                             for s in ctx.in_block.iter_mut() {
                                 *s = input_queue.pop_front().unwrap_or(0.0);

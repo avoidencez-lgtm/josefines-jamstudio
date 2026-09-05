@@ -254,10 +254,16 @@ fn a_headless_recording_writes_six_stems_a_manifest_and_the_sine_input() {
         .iter()
         .map(|n| n["midi"].as_u64().unwrap())
         .collect();
+    let (samples, rate) = jam_audio::recorder::read_wav_mono(&dir.join("guitar-di.wav")).unwrap();
+    let window = &samples[..samples.len().min(rate as usize / 4)];
+    assert!(
+        window
+            .chunks(512)
+            .all(|block| block.iter().any(|s| *s != 0.0)),
+        "headless guitar DI must not contain a silent block; input_gaps={}",
+        state.engine.lock().status().input_gaps
+    );
     if midi.is_empty() || midi.iter().any(|m| *m != 69) {
-        let (samples, rate) =
-            jam_audio::recorder::read_wav_mono(&dir.join("guitar-di.wav")).unwrap();
-        let window = &samples[..samples.len().min(rate as usize / 4)];
         // Synthetic input only: retain compact signal evidence in CI logs, not user audio.
         let blocks: Vec<_> = window
             .chunks(512)

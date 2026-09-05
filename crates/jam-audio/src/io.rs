@@ -231,10 +231,16 @@ impl AudioInput for FileInput {
         let block_duration =
             Duration::from_secs_f64(buffer_size as f64 / self.sample_rate.max(1) as f64);
 
+        // A late scheduler used to reset the clock and skip the missed blocks.
+        // Produce those immediately, and start a few blocks ahead so the render
+        // thread can prime without recording silence.
+        const LEAD_BLOCKS: u32 = 8;
         let handle = thread::spawn(move || {
             let mut read_idx = 0;
             let mut buffer = vec![0.0f32; buffer_size];
-            let mut next_tick = Instant::now();
+            let mut next_tick = Instant::now()
+                .checked_sub(block_duration.saturating_mul(LEAD_BLOCKS))
+                .unwrap_or_else(Instant::now);
 
             while running.load(Ordering::SeqCst) {
                 for sample in buffer.iter_mut() {
@@ -248,8 +254,6 @@ impl AudioInput for FileInput {
                 let now = Instant::now();
                 if next_tick > now {
                     thread::sleep(next_tick - now);
-                } else {
-                    next_tick = now;
                 }
             }
         });
@@ -717,6 +721,29 @@ impl AudioInput for CpalInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_input_emits_a_lead_burst_before_the_wall_clock() {
+        let mut input = FileInput::from_samples(vec![0.5; 4096], 256);
+        let collected = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = Arc::clone(&collected);
+        input
+            .start(Box::new(move |buf| {
+                sink.lock().unwrap().extend_from_slice(buf);
+            }))
+            .unwrap();
+        // One paced 256-frame block at 48 kHz is ~5.3 ms. Less than that must
+        // already contain the lead burst, not a single block.
+        thread::sleep(Duration::from_millis(2));
+        input.stop().unwrap();
+        let got = collected.lock().unwrap();
+        assert!(
+            got.len() >= 256 * 4,
+            "lead burst should emit several blocks immediately, got {}",
+            got.len()
+        );
+        assert!(got.iter().all(|s| *s == 0.5));
+    }
 
     #[test]
     fn file_input_loops_samples() {
