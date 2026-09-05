@@ -44,3 +44,22 @@ export const setInputValue = (inputValue: string) =>
   useJoConversation.setState({ inputValue });
 export const setLastBrain = (lastBrain: string) =>
   useJoConversation.setState({ lastBrain });
+
+/**
+ * A new message supersedes a proposal still waiting for review (#41): the
+ * composer stays usable and the conversation records that nothing was applied.
+ */
+export function discardPendingProposal(reason: string): boolean {
+  if (!useJoConversation.getState().pending) return false;
+  useJoConversation.setState({ pending: null });
+  setMessages((previous) => [
+    ...previous,
+    {
+      id: crypto.randomUUID(),
+      sender: "jo",
+      text: reason,
+      timestamp: "Review",
+    },
+  ]);
+  return true;
+}
