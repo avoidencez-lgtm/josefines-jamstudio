@@ -71,13 +71,13 @@ Band and Lyria never run together and nothing tries to synchronise Lyria to a ch
 ## People
 
 - **The guitarist.** Plays blues, rock, funk and metal at a high level, owns the rig, uses a Mac and Logic Pro. Wants to pick up the guitar and be playing within ten seconds, hands on the instrument, eyes two metres from the screen. Does not want to configure anything twice.
-- **Vegar.** Owner of the project. Runs the builder (Antigravity) on Windows, has no audio interface, tests with the file-backed virtual input, and ticks the owner gates together with the guitarist on the Mac. Reads reports in English; conversation with Claude is in Norwegian.
+- **Vegar.** Owner of the project. Runs the builder on Windows and tests with the file-backed virtual input. Sessions with the guitarist on his Mac and rig are deferred to V2; they do not block V1. Developer verification and packaging remain V1 requirements ([delivery decision](00-README.md)). Reads reports in English; conversation with Claude is in Norwegian.
 - **Jo.** The AI bandleader. English. Confirms actions in at most twelve words ("Blues in A, ninety, shuffle. Counting in."), asks at most one question when something is ambiguous, never lectures unless asked, uses musicians' vocabulary (turnaround, quick change, four on the floor, half-time), and coaches from evidence (the recorded take), not from guesses. Her persona file is `src/ai/jo/persona.md` (M2).
 
 ## Development reality
 
 - Windows PC: Node 24, Visual Studio 2022 Build Tools with MSVC, WebView2 runtime, no Rust yet (install in M0), no audio interface. The engine's `FileInput` (looping WAV) and `NullOutput` (fake clock) make every milestone testable here and in CI.
-- macOS: only reachable through GitHub Actions (`macos-latest`, Apple Silicon) and the owner gates. Keep macOS-affecting changes small and frequent.
+- macOS: GitHub Actions (`macos-latest`) provides automated verification. Developer package/startup verification remains required for V1; personal Mac and rig sessions with the guitarist are deferred to V2. Keep macOS-affecting changes small and frequent.
 - Windows audio is a non-goal beyond stereo: WASAPI most likely exposes the HeadRush as a stereo device, so channel 3 (DI) is a Mac-only feature. Document, do not fight it.
 
 ## Glossary
@@ -92,5 +92,5 @@ Band and Lyria never run together and nothing tries to synchronise Lyria to a ch
 | Take | One recording: aligned WAVs for DI, amp, band buses and the mix |
 | Session | A jam: a chart or song, a style, the takes, an LLM review |
 | Seam | A definition plus a registry plus consumers; the only allowed abstraction |
-| Owner gate | A verification only the real rig on the Mac can perform |
+| Owner gate | A personal Mac/rig verification with the guitarist, deferred to V2; not a V1 release blocker |
 | Spike | A time-boxed experiment on a throwaway branch whose findings are recorded in `docs/spikes/` |
