@@ -13,6 +13,66 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 
 const NO_PORT: &str = "no MIDI port open (messages are only logged)";
+
+#[test]
+fn failed_rig_persistence_keeps_the_runtime_state_unchanged() {
+    struct ConnectedSink;
+    impl jam_rig::MidiSink for ConnectedSink {
+        fn send(&mut self, _: &[u8]) -> Result<(), String> {
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "test MIDI connection".into()
+        }
+        fn is_live(&self) -> bool {
+            true
+        }
+    }
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio
+        .app()
+        .state::<app_lib::AppState>()
+        .rig
+        .lock()
+        .set_sink(Box::new(ConnectedSink));
+    studio.ok(
+        "rig_set_section_mapping",
+        json!({"section": "Verse", "sceneIdx": 1}),
+    );
+    let before = studio.ok("rig_get_state", json!({}));
+    let path = user_dir().join("settings.json");
+    let valid = std::fs::read_to_string(&path).unwrap();
+    for corrupt in [true, false] {
+        let original = if corrupt { "broken settings" } else { &valid };
+        std::fs::write(&path, original).unwrap();
+        if !corrupt {
+            std::fs::create_dir(path.with_extension("json.tmp")).unwrap();
+        }
+        for (command, args) in [
+            ("rig_set_follow_sections", json!({"enabled": false})),
+            (
+                "rig_set_section_mapping",
+                json!({"section": "Verse", "sceneIdx": null}),
+            ),
+            ("rig_select_profile", json!({"profileId": "quad-cortex"})),
+            ("rig_open_port", json!({"port": null})),
+        ] {
+            let error = studio.err(command, args);
+            assert!(!error.is_empty());
+            if corrupt {
+                assert!(error.contains("settings.json"), "{error}");
+            }
+            assert_eq!(studio.ok("rig_get_state", json!({})), before, "{command}");
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        }
+        if !corrupt {
+            std::fs::remove_dir(path.with_extension("json.tmp")).unwrap();
+        }
+    }
+    std::fs::write(&path, valid).unwrap();
+}
+
 fn read_json(path: &Path) -> Value {
     let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     serde_json::from_slice(&bytes).unwrap_or_else(|e| panic!("{}: {e}", path.display()))

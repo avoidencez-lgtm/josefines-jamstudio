@@ -65,6 +65,8 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-05 rig persistence follow-up ([PR #117](https://github.com/avoidencez-lgtm/josefines-jamstudio/pull/117), pending merge): profile, section mapping, follow-section and MIDI connection changes save before replacing the active configuration. IPC regression coverage verifies corrupt-file and write failures leave the previous runtime state and settings file intact, including an existing synthetic MIDI connection. Hardware verification is not claimed.
+
 2026-09-05: PR #77 completes the IPC/store test harness and built-app startup smoke.
 See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-completion.md); this does not close physical owner gates.
 
