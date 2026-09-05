@@ -298,7 +298,9 @@ manual languages when adding a unit.
 ### Reference practice processing
 
 Reuse `media_stretch`, the media operation gate, local path validation and
-`media_cancel` for a new library-processing action. Publish a new asset receipt
+`media_cancel` for a new library-processing action. Provider fetch, poll and
+download must go through the same `cancellable` helper as FFmpeg `run()`; do
+not add a second cancel flag. Publish a new asset receipt
 only after the complete output is synced; never replace the source. Native PCM
 work belongs in `jam-audio`, pure DSP in `jam-dsp`, and both must accept bounded
 inputs and cancellation. The synthetic stretch/WAV tests and `ipc_rig_media`

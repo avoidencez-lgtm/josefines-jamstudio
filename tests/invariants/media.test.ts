@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Chart } from "../../src/ipc/contract";
 import { dispatchJoToolCall } from "../../src/lib/jo/dispatcher";
@@ -6,6 +8,7 @@ import {
   applyShotIdeas,
   clampGenerationSeconds,
   fitShots,
+  isCancellableMediaWork,
   newVideo,
   shotsFromChart,
   useMedia,
@@ -87,6 +90,28 @@ describe("music video seam", () => {
     );
   });
 
+  it("offers cancel for generation, refresh, render and practice copy", () => {
+    const film = fs.readFileSync(
+      path.resolve(process.cwd(), "src/screens/MusicVideo.tsx"),
+      "utf8",
+    );
+    const songs = fs.readFileSync(
+      path.resolve(process.cwd(), "src/screens/Songs.tsx"),
+      "utf8",
+    );
+    expect(film).toContain("isCancellableMediaWork");
+    expect(songs).toContain("isCancellableMediaWork");
+    expect(
+      isCancellableMediaWork(
+        "Generating video · this can take several minutes",
+      ),
+    ).toBe(true);
+    expect(isCancellableMediaWork("Refreshing existing job")).toBe(true);
+    expect(isCancellableMediaWork("Rendering the film locally")).toBe(true);
+    expect(isCancellableMediaWork("Preparing practice copy")).toBe(true);
+    expect(isCancellableMediaWork("Saving video")).toBe(false);
+    expect(isCancellableMediaWork("Directing with Gemini")).toBe(false);
+  });
   it("snaps Veo generate seconds onto the backend allow-list", () => {
     expect(clampGenerationSeconds("veo", 2)).toBe(4);
     expect(clampGenerationSeconds("veo", 10)).toBe(8);

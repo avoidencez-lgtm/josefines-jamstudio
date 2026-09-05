@@ -10,7 +10,11 @@ import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { WorkspaceHeader } from "../components/Workspace";
 import { ipc, isPreview } from "../ipc/client";
-import { type MediaAsset, useMedia } from "../lib/media";
+import {
+  type MediaAsset,
+  isCancellableMediaWork,
+  useMedia,
+} from "../lib/media";
 import { useEngineStore } from "../store/engine";
 
 export function Songs() {
@@ -132,7 +136,7 @@ export function Songs() {
       {(m.busy || m.message) && (
         <output className="workspace-note">{m.busy || m.message}</output>
       )}
-      {m.busy === "Preparing practice copy" && (
+      {isCancellableMediaWork(m.busy) && (
         <Button
           onClick={() =>
             void ipc

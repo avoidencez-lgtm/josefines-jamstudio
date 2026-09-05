@@ -8,7 +8,10 @@ The music-video extension is governed by [ADR 0008](adr/0008-music-video-workspa
 additive IPC commands. They exchange JSON project/job/asset metadata and paths,
 never binary audio/video. Projects use schemaVersion 1 and revision conflict checks.
 The shared media catalog defines cloud and fixed-loopback ComfyUI protocols;
-all HTTP remains under `net/media.rs`. Tauri asset access is limited to media
+all HTTP remains under `net/media.rs`. `media_cancel` races FFmpeg, native
+stretch, and provider fetch/poll/download against one `CANCEL` flag; the media
+GATE drops when the selected future ends. Work already submitted to a provider
+is not refunded or automatically retried. Tauri asset access is limited to media
 assets and exports, excluding generation receipts. Native preview is silent;
 FFmpeg and the user's external media player own exported audiovisual playback.
 See [music-video setup and acceptance](guide/music-video.md).
@@ -747,7 +750,8 @@ separately from the known estimate subtotal. No account budget or invoice is imp
 
 `media_stretch(assetId, speed, semitones)` extends the existing media registry and
 returns a new `Asset`. The media operation gate excludes other media jobs; normal
-`media_cancel` cancellation covers FFmpeg decoding and the native block loop.
+`media_cancel` cancellation covers FFmpeg decoding, the native block loop, and
+the provider fetch/poll/download wait.
 The source must be an existing audio asset inside the canonical media library,
 up to ten minutes. The existing user-installed FFmpeg decodes local file/pipe
 protocols only, to 48 kHz stereo float WAV in a private work directory.

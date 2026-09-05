@@ -32,8 +32,10 @@
 
 The soundtrack's pitch/speed are unchanged. Generated clip audio is discarded.
 Export is 720p/30 fps, cropped to fill landscape or portrait, with 48 kHz AAC audio.
-Use the original source/stems for lossless audio work. Rendering can be canceled;
-earlier completed renders remain. Retained intermediate files use disk space.
+Use the original source/stems for lossless audio work. Generation, job refresh,
+download and rendering can be canceled; earlier completed renders remain.
+Retained intermediate files use disk space. A cancel after a provider has
+already accepted the request does not refund that request.
 
 ## Implemented model catalog
 
