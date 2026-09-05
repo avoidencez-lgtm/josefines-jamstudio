@@ -221,7 +221,7 @@ impl BandSequencer {
     pub fn update_energy(&mut self, energy: f32) {
         self.current_energy = energy;
         if self.follow_energy && !self.is_playing_fill && !self.is_playing_ending {
-            self.set_intensity(energy);
+            self.queue_intensity_at_next_bar(energy);
         }
     }
 
@@ -1238,6 +1238,42 @@ mod tests {
         assert!(seq.take_ending_complete());
         assert!(seq.is_stopped);
         assert!(!seq.take_ending_complete(), "flag is consumed once");
+    }
+
+    #[test]
+    fn follow_energy_waits_for_the_next_bar() {
+        let mut style = style_with(0.0, vec![kick(0.0)], vec![], vec![]);
+        style.patterns[0].intensity = (0.0, 0.34);
+        style.patterns.push(PatternEntry {
+            intensity: (0.34, 0.67),
+            drums: DrumPattern {
+                length_beats: 4.0,
+                hits: vec![kick(1.0)],
+            },
+            ..Default::default()
+        });
+        style.patterns.push(PatternEntry {
+            intensity: (0.67, 1.0),
+            drums: DrumPattern {
+                length_beats: 4.0,
+                hits: vec![kick(2.0)],
+            },
+            ..Default::default()
+        });
+        let mut seq = BandSequencer::new(style, 48_000, 1);
+        seq.set_intensity(0.2);
+        seq.set_follow_energy(true);
+        assert_eq!(seq.current_pattern.intensity, (0.0, 0.34));
+        seq.update_energy(0.8);
+        assert!((seq.current_energy - 0.8).abs() < f32::EPSILON);
+        assert_eq!(seq.current_pattern.intensity, (0.0, 0.34));
+        assert!((seq.intensity - 0.2).abs() < f32::EPSILON);
+        seq.handle_timeline_event(&TimelineEvent::Bar {
+            bar: 2,
+            is_count_in: false,
+        });
+        assert!((seq.intensity - 0.8).abs() < f32::EPSILON);
+        assert_eq!(seq.current_pattern.intensity, (0.67, 1.0));
     }
 
     #[test]
