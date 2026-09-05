@@ -211,10 +211,7 @@ impl CostLog {
     }
 
     pub fn default_path() -> PathBuf {
-        let mut dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        dir.push("JosefinesJamstudio");
-        dir.push("usage-log.jsonl");
-        dir
+        crate::library::Library::default_user_root().join("usage-log.jsonl")
     }
 
     pub fn path(&self) -> &PathBuf {

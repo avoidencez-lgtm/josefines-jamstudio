@@ -435,7 +435,14 @@ fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), Strin
     let mut take = find_take(&state, &take_id)?;
     take.extra
         .insert("hidden".into(), serde_json::Value::Bool(true));
-    jam_audio::recorder::save_manifest(&take)?;
+    // Files are truth: when the folder is already gone there is nothing to hide,
+    // but the cache row must still go or the take is listed forever (#88).
+    if std::path::Path::new(&take.path_input)
+        .parent()
+        .is_some_and(|dir| dir.exists())
+    {
+        jam_audio::recorder::save_manifest(&take)?;
+    }
     state.store.lock().delete_take(&take_id)
 }
 #[tauri::command]
@@ -746,6 +753,7 @@ fn all_takes(
 }
 
 fn find_take(state: &AppState, take_id: &str) -> Result<jam_audio::recorder::TakeMetadata, String> {
+    originals::valid_id(take_id)?;
     all_takes(state)?
         .0
         .into_iter()
@@ -963,10 +971,17 @@ pub fn build_state() -> AppState {
         net::CostLog::default_path()
     }));
 
-    let index_store = if is_test {
-        store::IndexStore::open_in_memory().unwrap()
+    let (index_store, index_notice) = if is_test {
+        (
+            store::IndexStore::open_in_memory().expect("in-memory index"),
+            None,
+        )
     } else {
-        store::IndexStore::open().unwrap()
+        store::IndexStore::open_cache()
+    };
+    let recovery_notice = match (recovery_notice, index_notice) {
+        (Some(settings), Some(index)) => Some(format!("{settings} {index}")),
+        (settings, index) => settings.or(index),
     };
     let store_arc = Arc::new(Mutex::new(index_store));
 

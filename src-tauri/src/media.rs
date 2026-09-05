@@ -45,6 +45,22 @@ fn valid_id(s: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+fn job_id(job: &Value) -> Result<&str, String> {
+    let id = job["id"]
+        .as_str()
+        .ok_or_else(|| "Invalid media job document".to_string())?;
+    valid_id(id)?;
+    Ok(id)
+}
+
+fn media_extension(ext: &str) -> Result<&str, String> {
+    if MEDIA_EXTENSIONS.contains(&ext) {
+        Ok(ext)
+    } else {
+        Err("Invalid media extension".into())
+    }
+}
 fn read(path: &Path) -> Result<Value, String> {
     if fs::metadata(path).map_err(|e| e.to_string())?.len() > 2_000_000 {
         return Err("Media document exceeds 2 MB".into());
@@ -463,9 +479,7 @@ async fn finish_job(
             job["extension"] = json!(e);
             job["status"] = json!("download");
             write(
-                &base
-                    .join("jobs")
-                    .join(format!("{}.json", job["id"].as_str().unwrap())),
+                &base.join("jobs").join(format!("{}.json", job_id(job)?)),
                 job,
             )?;
             (
@@ -480,16 +494,14 @@ async fn finish_job(
     }
     let raw = base
         .join("assets")
-        .join(format!("{}-source.{ext}", job["id"].as_str().unwrap()));
+        .join(format!("{}-source.{ext}", job_id(job)?));
     fs::create_dir_all(raw.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::write(&raw, bytes).map_err(|e| e.to_string())?;
     // Keep the raw file even if decoding fails; the paid output is never discarded.
     job["rawPath"] = json!(raw.to_string_lossy());
     job["lyrics"] = json!(lyrics);
     write(
-        &base
-            .join("jobs")
-            .join(format!("{}.json", job["id"].as_str().unwrap())),
+        &base.join("jobs").join(format!("{}.json", job_id(job)?)),
         job,
     )?;
     let a = import(base, &raw, &m.kind, &m.name).await?;
@@ -566,8 +578,7 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
         let output=if let Some(task)=job["taskId"].as_str() {
             api::poll(&m,&request,task,state.secret_store.as_ref(),&state.cost_log).await?
         } else if let Some(uri)=job["downloadUri"].as_str() {
-            let ext=job["extension"].as_str().ok_or("Missing media extension")?;
-            if !["mp4","mp3","wav","webm","mov","mkv","flac","ogg"].contains(&ext){return Err("Invalid media extension".into());}
+            let ext=media_extension(job["extension"].as_str().ok_or("Missing media extension")?)?;
             api::Output::Download(uri.into(),ext.into())
         } else {return Err("No recoverable task ID. Check provider history and import the result; this button never starts another paid generation.".into());};
         finish_job(&base,&mut job,output,&m,&state).await
@@ -760,6 +771,31 @@ mod tests {
         }
         assert!(playable_file(&library, &library).is_err());
         fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn job_id_rejects_missing_or_empty_id() {
+        assert_eq!(
+            job_id(&json!({"status": "download"})).unwrap_err(),
+            "Invalid media job document"
+        );
+        assert_eq!(
+            job_id(&json!({"id": null})).unwrap_err(),
+            "Invalid media job document"
+        );
+        assert_eq!(job_id(&json!({"id": ""})).unwrap_err(), "Invalid media ID");
+        assert_eq!(job_id(&json!({"id": "job-1"})).unwrap(), "job-1");
+    }
+
+    #[test]
+    fn refresh_recovery_accepts_every_import_extension() {
+        for ext in MEDIA_EXTENSIONS {
+            assert_eq!(media_extension(ext).unwrap(), *ext);
+        }
+        assert_eq!(
+            media_extension("exe").unwrap_err(),
+            "Invalid media extension"
+        );
     }
     #[test]
     fn save_conflicts_unknown_fields_and_path_boundaries() {

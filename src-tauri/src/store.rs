@@ -4,7 +4,7 @@
 use jam_audio::recorder::TakeMetadata;
 use rusqlite::{params, Connection};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub fn db_path() -> PathBuf {
     crate::library::Library::default_user_root().join("index.sqlite")
@@ -14,16 +14,43 @@ pub struct IndexStore {
     conn: Connection,
 }
 
+fn sample_count_from_row(n: i64) -> Result<usize, rusqlite::Error> {
+    u64::try_from(n)
+        .ok()
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or(rusqlite::Error::IntegralValueOutOfRange(7, n))
+}
+
 impl IndexStore {
     pub fn open() -> Result<Self, String> {
-        let path = db_path();
+        Self::open_path(&db_path())
+    }
+
+    fn open_path(path: &Path) -> Result<Self, String> {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-
-        let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+        let conn = Connection::open(path).map_err(|e| e.to_string())?;
         Self::init_schema(&conn)?;
         Ok(Self { conn })
+    }
+
+    /// Opens the on-disk cache, or an empty in-memory one when the file cannot be
+    /// used. SQLite is a deletable cache (ADR 0005); a corrupt file must not prevent launch.
+    pub fn open_cache() -> (Self, Option<String>) {
+        Self::open_cache_path(&db_path())
+    }
+
+    pub fn open_cache_path(path: &Path) -> (Self, Option<String>) {
+        match Self::open_path(path) {
+            Ok(store) => (store, None),
+            Err(e) => (
+                Self::open_in_memory().expect("in-memory index"),
+                Some(format!(
+                    "Take index unavailable ({e}). Showing recordings found on disk; delete index.sqlite to rebuild the cache."
+                )),
+            ),
+        }
     }
 
     pub fn open_in_memory() -> Result<Self, String> {
@@ -128,7 +155,7 @@ impl IndexStore {
                     style_id: row.get(4)?,
                     chart_id: row.get(5)?,
                     tempo: row.get(6)?,
-                    sample_count: row.get::<_, i64>(7)? as usize,
+                    sample_count: sample_count_from_row(row.get(7)?)?,
                     path_input: row.get(8)?,
                     path_band: row.get(9)?,
                     path_master: row.get(10)?,
@@ -164,6 +191,40 @@ impl IndexStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_corrupt_index_file_does_not_prevent_launch() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-index-bad-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = root.join("index.sqlite");
+        std::fs::create_dir_all(&path).unwrap();
+        let (store, notice) = IndexStore::open_cache_path(&path);
+        let notice = notice.expect("corrupt index is reported");
+        assert!(notice.contains("Take index unavailable"), "{notice}");
+        store
+            .insert_take(&TakeMetadata {
+                id: "after-fallback".into(),
+                ..Default::default()
+            })
+            .expect("in-memory fallback accepts writes");
+        let good = root.join("good.sqlite");
+        let (ok, quiet) = IndexStore::open_cache_path(&good);
+        assert!(quiet.is_none());
+        ok.insert_take(&TakeMetadata {
+            id: "on-disk".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        drop(store);
+        drop(ok);
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     #[test]
     fn test_store_open_in_memory() {
@@ -250,6 +311,44 @@ mod tests {
         );
         assert_eq!(takes[0].duration_secs, 1.5);
         assert_eq!(takes[0].waveform_peaks, vec![0.5]);
+        assert_eq!(skipped.len(), 1);
+        assert!(skipped[0].contains("row 1"), "{}", skipped[0]);
+    }
+
+    #[test]
+    fn negative_sample_count_is_skipped_not_wrapped() {
+        let store = IndexStore::open_in_memory().expect("in-memory db opens");
+        store
+            .insert_take(&TakeMetadata {
+                id: "good".into(),
+                timestamp: "2026-09-05T10:00:00Z".into(),
+                sample_count: 48_000,
+                ..Default::default()
+            })
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "UPDATE takes SET sample_count = -1, manifest = NULL WHERE id = 'good'",
+                [],
+            )
+            .unwrap();
+        store
+            .insert_take(&TakeMetadata {
+                id: "ok".into(),
+                timestamp: "2026-09-05T09:00:00Z".into(),
+                sample_count: 100,
+                ..Default::default()
+            })
+            .unwrap();
+        let (takes, skipped) = store
+            .list_takes()
+            .expect("listing tolerates a negative count");
+        assert_eq!(
+            takes.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+            ["ok"]
+        );
+        assert_eq!(takes[0].sample_count, 100);
         assert_eq!(skipped.len(), 1);
         assert!(skipped[0].contains("row 1"), "{}", skipped[0]);
     }
