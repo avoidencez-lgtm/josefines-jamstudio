@@ -1025,7 +1025,6 @@ fn media_refresh_cancel_and_render_fail_safely_with_nothing_running() {
 }
 
 #[test]
-#[ignore = "app bug: media_refresh with an unknown job id answers with a raw OS error (\"os error 2\") that does not name the job"]
 fn media_refresh_names_an_unknown_job_id() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
@@ -1035,7 +1034,6 @@ fn media_refresh_names_an_unknown_job_id() {
 }
 
 #[test]
-#[ignore = "app bug: media_render with an audioId that has no asset document answers with a raw OS error (\"os error 2\") that does not name the asset"]
 fn media_render_names_a_missing_soundtrack_asset() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
