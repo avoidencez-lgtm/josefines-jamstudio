@@ -2,13 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Chart } from "../../src/ipc/contract";
+import { transposeChord } from "../../src/lib/chart/notes";
 import {
   chartToText,
   isRestSymbol,
   parseChartText,
   resolveChart,
 } from "../../src/lib/chart/text";
-import { transposeChord } from "../../src/lib/chart/notes";
 import { transposeChart } from "../../src/lib/chart/transpose";
 
 const BLUES = `# Blues in A
