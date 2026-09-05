@@ -239,9 +239,11 @@ impl TakeRecorder {
             .map_err(|_| "Recording writer failed; partial WAVs kept")??;
         meta.midi = std::mem::take(&mut self.midi);
         if let Some(e) = self.failure.take() {
-            meta.notes = e.clone();
+            meta.notes = e;
             save_manifest(&meta)?;
-            return Err(e);
+            // Files are truth: the take is on disk. Returning Err hid it from
+            // Sessions until a manual refresh (#92).
+            return Ok(meta);
         }
         save_manifest(&meta)?;
         Ok(meta)
@@ -330,5 +332,33 @@ mod tests {
             .join("take.json")
             .exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stop_after_backpressure_still_returns_the_saved_take() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-recording-bp-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut r = TakeRecorder::new(1000, root.clone());
+        r.start_take("song".into(), "rock".into(), "verse".into(), 100.0)
+            .unwrap();
+        r.push_capture(&vec![[0.1; 9]; 64]).unwrap();
+        r.failure =
+            Some("Recording interrupted by disk backpressure: full. Partial WAVs kept.".into());
+        let t = r
+            .stop_and_save()
+            .expect("saved take stays visible after backpressure");
+        assert!(t.notes.contains("interrupted"), "{}", t.notes);
+        assert!(Path::new(&t.path_input)
+            .parent()
+            .unwrap()
+            .join("take.json")
+            .exists());
+        let _ = fs::remove_dir_all(root);
     }
 }

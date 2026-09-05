@@ -6,6 +6,22 @@ import { askBrain } from "./jo/providers";
 import catalog from "./media-catalog.json";
 
 export const MEDIA_MODELS = catalog;
+
+/** Same allow-list as `src-tauri/src/net/media.rs` for `runway-veo`. */
+export const VEO_SECONDS = [4, 6, 8] as const;
+
+export function clampGenerationSeconds(
+  catalogId: string,
+  seconds: number,
+): number {
+  if (!Number.isFinite(seconds)) return 8;
+  if (catalogId === "veo") {
+    return VEO_SECONDS.reduce((best, n) =>
+      Math.abs(n - seconds) < Math.abs(best - seconds) ? n : best,
+    );
+  }
+  return Math.min(10, Math.max(2, Math.round(seconds)));
+}
 export interface MediaAsset {
   id: string;
   kind: string;
