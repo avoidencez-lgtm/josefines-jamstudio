@@ -191,6 +191,16 @@ complete by this UI slice alone.
 
 ## Build integration
 
+The licence-gate follow-up for #157 (awaiting review and CI) uses the existing
+SPDX evaluator so grouped AND/OR expressions retain their meaning. Malformed
+tables, package groups and records fail closed; records require a name and the
+non-empty `versions` array emitted by pinned pnpm 11. Existing allowlist entries,
+package-specific exceptions and the minimum inventory size are unchanged.
+The command-level regressions in `tests/invariants/js-licences.test.mjs` run with
+controlled pnpm output, including failed commands and malformed JSON. The real
+installed inventory is also checked; no generated licence report is trusted
+solely because it contains fifty records.
+
 The follow-up to merged PR #205 (awaiting current-head review and CI)
 routes Settings/Film links through the native browser opener and reports launch
 failures with a copyable URL. The shared macOS browser/player path checks opener
