@@ -362,7 +362,7 @@ A seam is a definition (trait or schema), one registry, and consumers. There is 
 | Screens | React component + nav entry | `src/screens/registry.ts` | router, nav |
 | IPC domains | one Rust file + one TS file | `src-tauri/src/ipc/mod.rs`, `src/ipc/index.ts` | everything |
 
-Proof: `tests/invariants/seams.test.ts` and `crates/jam-core/tests/seams.rs` load `tests/fixtures/seams/*` and assert each fixture is visible in its registry. Recipes in [EXTENDING.md](EXTENDING.md).
+Current verification: `tests/invariants/seams.test.ts` checks bundled manifest fields; `crates/jam-core/tests/seams.rs` loads bundled styles, charts and controls and checks representative IDs. They do not automatically register every `tests/fixtures/seams/*` fixture or check changed-file scope. An extension PR must demonstrate its fixture through the relevant registry and show that core consumers need no changes. Recipes and verification limits are in [EXTENDING.md](EXTENDING.md).
 
 ## 9. Verification strategy
 
