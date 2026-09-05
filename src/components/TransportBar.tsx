@@ -41,6 +41,7 @@ export function TransportBar() {
     })),
   );
   const transport = telemetry.transport;
+  const reference = telemetry.reference;
   const isPlaying =
     transport.state === "playing" || transport.state === "counting_in";
   const recordLabel = recordingError
@@ -100,85 +101,104 @@ export function TransportBar() {
 
         <div className="h-5 w-px bg-[var(--line)]" />
 
-        <div className="flex items-baseline gap-2 font-mono tabular-nums">
-          <span className="text-xs uppercase text-[var(--fg-2)] tracking-wider">
-            {transport.state === "counting_in" ? "Count" : "Bar"}
-          </span>
-          <span
-            className={`text-lg font-semibold ${
-              transport.state === "counting_in"
-                ? "text-[var(--accent)] animate-pulse"
-                : "text-[var(--fg-0)]"
-            }`}
+        {reference ? (
+          <button
+            type="button"
+            onClick={() => setScreen("songs")}
+            className="font-mono tabular-nums text-sm"
+            title="Open reference player"
           >
-            {transport.bar} : {transport.beat}
-          </span>
-        </div>
+            Reference · {reference.position.toFixed(1)} /{" "}
+            {reference.seconds.toFixed(1)} s
+          </button>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-2 font-mono tabular-nums">
+              <span className="text-xs uppercase text-[var(--fg-2)] tracking-wider">
+                {transport.state === "counting_in" ? "Count" : "Bar"}
+              </span>
+              <span
+                className={`text-lg font-semibold ${
+                  transport.state === "counting_in"
+                    ? "text-[var(--accent)] animate-pulse"
+                    : "text-[var(--fg-0)]"
+                }`}
+              >
+                {transport.bar} : {transport.beat}
+              </span>
+            </div>
 
-        <div className="h-5 w-px bg-[var(--line)]" />
+            <div className="h-5 w-px bg-[var(--line)]" />
 
-        <div className="flex items-baseline gap-2 font-mono tabular-nums">
-          <span className="text-xs uppercase text-[var(--fg-2)] tracking-wider">
-            Tempo
-          </span>
-          <span className="text-lg font-semibold text-[var(--fg-0)]">
-            {transport.bpm.toFixed(0)}
-          </span>
-          <span className="text-xs text-[var(--fg-2)]">BPM</span>
-        </div>
+            <div className="flex items-baseline gap-2 font-mono tabular-nums">
+              <span className="text-xs uppercase text-[var(--fg-2)] tracking-wider">
+                Tempo
+              </span>
+              <span className="text-lg font-semibold text-[var(--fg-0)]">
+                {transport.bpm.toFixed(0)}
+              </span>
+              <span className="text-xs text-[var(--fg-2)]">BPM</span>
+            </div>
 
-        <div className="h-5 w-px bg-[var(--line)]" />
+            <div className="h-5 w-px bg-[var(--line)]" />
 
-        <select
-          value={`${transport.time_signature[0]}/${transport.time_signature[1]}`}
-          onChange={(e) => {
-            const parts = e.target.value.split("/").map(Number);
-            transportSetTimeSignature(parts[0], parts[1]);
-          }}
-          className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1 rounded text-xs font-mono cursor-pointer"
-          title="Time Signature"
-        >
-          <option value="4/4">4/4</option>
-          <option value="3/4">3/4</option>
-          <option value="6/8">6/8</option>
-          <option value="12/8">12/8</option>
-        </select>
+            <select
+              value={`${transport.time_signature[0]}/${transport.time_signature[1]}`}
+              onChange={(e) => {
+                const parts = e.target.value.split("/").map(Number);
+                transportSetTimeSignature(parts[0], parts[1]);
+              }}
+              className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1 rounded text-xs font-mono cursor-pointer"
+              title="Time Signature"
+            >
+              <option value="4/4">4/4</option>
+              <option value="3/4">3/4</option>
+              <option value="6/8">6/8</option>
+              <option value="12/8">12/8</option>
+            </select>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-3 ml-auto">
-        <button
-          type="button"
-          onClick={() =>
-            transportSetLoop(
-              transport.loop_start_bar,
-              transport.loop_end_bar,
-              !transport.loop_enabled,
-            )
-          }
-          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono border cursor-pointer transition-colors ${
-            transport.loop_enabled
-              ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--accent)]"
-              : "bg-[var(--bg-2)] border-[var(--line)] text-[var(--fg-2)] hover:text-[var(--fg-0)]"
-          }`}
-          title="Toggle Loop (L)"
-        >
-          <Repeat size={14} />
-          <span>
-            Loop {transport.loop_start_bar}-{transport.loop_end_bar - 1}
-          </span>
-        </button>
+        {!reference && (
+          <>
+            <button
+              type="button"
+              onClick={() =>
+                transportSetLoop(
+                  transport.loop_start_bar,
+                  transport.loop_end_bar,
+                  !transport.loop_enabled,
+                )
+              }
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono border cursor-pointer transition-colors ${
+                transport.loop_enabled
+                  ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--accent)]"
+                  : "bg-[var(--bg-2)] border-[var(--line)] text-[var(--fg-2)] hover:text-[var(--fg-0)]"
+              }`}
+              title="Toggle Loop (L)"
+            >
+              <Repeat size={14} />
+              <span>
+                Loop {transport.loop_start_bar}-{transport.loop_end_bar - 1}
+              </span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => transportSetCountIn((transport.count_in_bars + 1) % 3)}
-          className="px-2.5 py-1 rounded text-xs font-mono border cursor-pointer transition-colors bg-[var(--bg-2)] border-[var(--line)] text-[var(--fg-0)]"
-          title="Count-in (C)"
-        >
-          {transport.count_in_bars > 0
-            ? `Count-in ${transport.count_in_bars} bar${transport.count_in_bars > 1 ? "s" : ""}`
-            : "Count-in off"}
-        </button>
-
+            <button
+              type="button"
+              onClick={() =>
+                transportSetCountIn((transport.count_in_bars + 1) % 3)
+              }
+              className="px-2.5 py-1 rounded text-xs font-mono border cursor-pointer transition-colors bg-[var(--bg-2)] border-[var(--line)] text-[var(--fg-0)]"
+              title="Count-in (C)"
+            >
+              {transport.count_in_bars > 0
+                ? `Count-in ${transport.count_in_bars} bar${transport.count_in_bars > 1 ? "s" : ""}`
+                : "Count-in off"}
+            </button>
+          </>
+        )}
         <EngineStatusPill
           status={engineStatus}
           isPreview={isPreview}

@@ -6,6 +6,34 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+pub fn read_stereo(
+    input: &Path,
+    max_frames: usize,
+    cancel: &AtomicBool,
+) -> Result<(Vec<f32>, hound::WavSpec), String> {
+    let mut reader = hound::WavReader::open(input).map_err(|e| e.to_string())?;
+    let spec = reader.spec();
+    if spec.channels != 2
+        || spec.sample_rate != 48_000
+        || spec.bits_per_sample != 32
+        || spec.sample_format != hound::SampleFormat::Float
+        || reader.duration() as usize > max_frames
+        || reader.duration() < 4800
+    {
+        return Err(
+            "Decoded audio must be 48 kHz stereo float WAV within the allowed duration.".into(),
+        );
+    }
+    let mut samples = Vec::with_capacity(reader.len() as usize);
+    for (i, sample) in reader.samples::<f32>().enumerate() {
+        if i % 8192 == 0 && cancel.load(Ordering::Relaxed) {
+            return Err("Audio preparation canceled.".into());
+        }
+        samples.push(sample.map_err(|e| e.to_string())?);
+    }
+    Ok((samples, spec))
+}
+
 pub fn render(
     input: &Path,
     output: &Path,
@@ -14,26 +42,7 @@ pub fn render(
     cancel: &AtomicBool,
 ) -> Result<f64, String> {
     validate(speed, semitones)?;
-    let mut reader = hound::WavReader::open(input).map_err(|e| e.to_string())?;
-    let spec = reader.spec();
-    if spec.channels != 2
-        || spec.sample_rate != 48_000
-        || spec.bits_per_sample != 32
-        || spec.sample_format != hound::SampleFormat::Float
-        || reader.duration() as usize > jam_dsp::stretch::MAX_FRAMES
-        || reader.duration() < 4800
-    {
-        return Err(
-            "Decode a 0.1-second to ten-minute song to 48 kHz stereo float WAV first.".into(),
-        );
-    }
-    let mut samples = Vec::with_capacity(reader.len() as usize);
-    for (i, sample) in reader.samples::<f32>().enumerate() {
-        if i % 8192 == 0 && cancel.load(Ordering::Relaxed) {
-            return Err("Practice copy canceled.".into());
-        }
-        samples.push(sample.map_err(|e| e.to_string())?);
-    }
+    let (samples, spec) = read_stereo(input, jam_dsp::stretch::MAX_FRAMES, cancel)?;
     let rendered = jam_dsp::stretch::stereo(&samples, speed, semitones, cancel)?;
     drop(samples);
     let seconds = rendered.len() as f64 / 96_000.0;

@@ -8,6 +8,7 @@ import {
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
+import { ReferencePlayer } from "../components/ReferencePlayer";
 import { WorkspaceHeader } from "../components/Workspace";
 import { ipc, isPreview } from "../ipc/client";
 import { type MediaAsset, useMedia } from "../lib/media";
@@ -18,6 +19,7 @@ export function Songs() {
   const engine = useEngineStore(
     useShallow((s) => ({
       isRecording: s.isRecording,
+      reference: s.telemetry.reference,
       setScreen: s.setScreen,
     })),
   );
@@ -56,7 +58,7 @@ export function Songs() {
       <WorkspaceHeader
         screen="songs"
         title="A shelf for your sound."
-        description="Keep finished mixes, reference tracks and generated songs together. Listen, then take a song into Film."
+        description="Keep finished mixes, reference tracks and generated songs together. Rehearse here or take a song into Film."
       >
         <Button onClick={() => engine.setScreen("ai-music")}>
           <MusicNotes size={18} aria-hidden="true" /> Generate a song
@@ -132,7 +134,8 @@ export function Songs() {
       {(m.busy || m.message) && (
         <output className="workspace-note">{m.busy || m.message}</output>
       )}
-      {m.busy === "Preparing practice copy" && (
+      {(m.busy === "Preparing practice copy" ||
+        m.busy === "Loading reference") && (
         <Button
           onClick={() =>
             void ipc
@@ -140,8 +143,16 @@ export function Songs() {
               .catch((e) => useMedia.setState({ message: String(e) }))
           }
         >
-          Cancel practice copy
+          {m.busy === "Loading reference"
+            ? "Cancel loading reference"
+            : "Cancel practice copy"}
         </Button>
+      )}
+      {engine.reference && (
+        <ReferencePlayer
+          key={engine.reference.asset_id}
+          song={engine.reference}
+        />
       )}
       {!visible.length ? (
         <div className="workspace-empty">
@@ -195,6 +206,26 @@ export function Songs() {
                 {song.seconds.toFixed(1)} seconds · plays as saved
               </p>
               <div className="workspace-actions">
+                <Button
+                  disabled={locked || isPreview || !tools.ready}
+                  onClick={() =>
+                    void m.work("Loading reference", async () => {
+                      await ipc.invoke("media_reference_load", {
+                        assetId: song.id,
+                      });
+                      useEngineStore.setState((s) => ({
+                        loadedOriginal: null,
+                        tempoTrainer: { ...s.tempoTrainer, enabled: false },
+                      }));
+                      useMedia.setState({
+                        message:
+                          "Reference loaded. Use Play reference or the top transport to start.",
+                      });
+                    })
+                  }
+                >
+                  Load in Jamstudio
+                </Button>
                 <Button
                   variant="primary"
                   disabled={locked || isPreview}
@@ -297,9 +328,10 @@ export function Songs() {
         </div>
       )}
       <p className="workspace-note">
-        Reference playback opens your system player. Practice copies support
-        local speed and pitch changes. Stem separation, automatic chord
-        detection and transport-synchronised reference playback are not
+        Load in Jamstudio plays the reference through the native audio engine,
+        with pause, seek and seconds loops. The system player is also available.
+        Practice copies support local speed and pitch changes. Stem separation,
+        automatic chord detection and beat-grid reference playback are not
         available yet. Use Library for chord charts and Stage for rehearsing
         them.
       </p>

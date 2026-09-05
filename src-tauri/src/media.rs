@@ -491,8 +491,6 @@ async fn practice_copy(
     {
         return Err("Choose an audio source up to ten minutes. Use the original when a practice copy is longer.".into());
     }
-    let exe = platform::find_agent("ffmpeg", "")
-        .map_err(|_| "Install FFmpeg and restart Jamstudio to prepare practice copies.")?;
     let new_id = id();
     let work = base.join("work").join(&new_id);
     fs::create_dir_all(work.parent().unwrap()).map_err(|e| e.to_string())?;
@@ -500,11 +498,7 @@ async fn practice_copy(
     let decoded = work.join("decoded.wav");
     let output = base.join("assets").join(format!("{new_id}.wav"));
     let result = async {
-        let args = ["-nostdin", "-n", "-v", "error", "-protocol_whitelist", "file,pipe", "-i"]
-            .map(String::from).into_iter().chain([source.path.clone()])
-            .chain(["-map", "0:a:0", "-vn", "-ar", "48000", "-ac", "2", "-c:a", "pcm_f32le", "-t", "600.2"].map(String::from))
-            .chain([decoded.to_string_lossy().into_owned()]).collect::<Vec<_>>();
-        run(&exe, &args, 120).await?;
+        decode_audio(&source.path, &decoded, "600.2").await?;
         let input = decoded.clone();
         let target = output.clone();
         let seconds = tauri::async_runtime::spawn_blocking(move || jam_audio::practice::render(&input, &target, speed, semitones, &CANCEL))
@@ -522,6 +516,111 @@ async fn practice_copy(
     let _ = fs::remove_file(&decoded);
     let _ = fs::remove_dir(&work);
     result
+}
+
+async fn decode_audio(source: &str, decoded: &Path, seconds: &str) -> Result<(), String> {
+    let exe = platform::find_agent("ffmpeg", "")
+        .map_err(|_| "Install FFmpeg and restart Jamstudio to prepare audio.")?;
+    let args = [
+        "-nostdin",
+        "-n",
+        "-v",
+        "error",
+        "-protocol_whitelist",
+        "file,pipe",
+        "-i",
+    ]
+    .map(String::from)
+    .into_iter()
+    .chain([source.into()])
+    .chain(
+        [
+            "-map",
+            "0:a:0",
+            "-vn",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-c:a",
+            "pcm_f32le",
+            "-t",
+            seconds,
+        ]
+        .map(String::from),
+    )
+    .chain([decoded.to_string_lossy().into_owned()])
+    .collect::<Vec<_>>();
+    run(&exe, &args, 120).await.map(|_| ())
+}
+
+async fn reference_source(
+    base: &Path,
+    asset_id: &str,
+) -> Result<jam_audio::song::ReferenceSong, String> {
+    let source = asset(base, asset_id)?;
+    if source.kind != "audio"
+        || !source.seconds.is_finite()
+        || !(0.1..=1200.2).contains(&source.seconds)
+    {
+        return Err("Choose an audio reference up to twenty minutes.".into());
+    }
+    let work = base.join("work").join(id());
+    fs::create_dir_all(work.parent().unwrap()).map_err(|e| e.to_string())?;
+    fs::create_dir(&work).map_err(|e| e.to_string())?;
+    let decoded = work.join("decoded.wav");
+    let result = async {
+        decode_audio(&source.path, &decoded, "1200.3").await?;
+        let path = decoded.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let (samples, _) =
+                jam_audio::practice::read_stereo(&path, 48_000 * 1200 + 9600, &CANCEL)?;
+            jam_audio::song::ReferenceSong::new(source.id, source.label, samples)
+        })
+        .await
+        .map_err(|_| "Reference loading worker stopped.")?
+    }
+    .await;
+    let _ = fs::remove_file(&decoded);
+    let _ = fs::remove_dir(&work);
+    result
+}
+
+#[tauri::command]
+pub async fn media_reference_load(
+    asset_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    state.engine.lock().ensure_timing_editable()?;
+    CANCEL.store(false, Ordering::Relaxed);
+    let song = reference_source(&root(), &asset_id).await?;
+    if CANCEL.load(Ordering::Relaxed) {
+        return Err("Reference loading canceled.".into());
+    }
+    state.engine.lock().load_reference(song)
+}
+
+#[tauri::command]
+pub fn media_reference_unload(state: State<'_, AppState>) -> Result<(), String> {
+    state.engine.lock().unload_reference()
+}
+
+#[tauri::command]
+pub fn media_reference_seek(seconds: f64, state: State<'_, AppState>) -> Result<(), String> {
+    state.engine.lock().reference_seek(seconds)
+}
+
+#[tauri::command]
+pub fn media_reference_loop(
+    start: f64,
+    end: f64,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.engine.lock().reference_loop(start, end, enabled)
 }
 
 #[tauri::command]
@@ -882,6 +981,14 @@ mod tests {
         assert_eq!(rate, 48000);
         assert_eq!(audio.len(), 192000);
         assert!(audio.iter().any(|s| s.abs() > 0.05));
+        let mut reference = reference_source(&base, &copy.id).await.unwrap();
+        assert_eq!(reference.info.seconds, 4.0);
+        reference.play();
+        let mut left = vec![0.0; 48000];
+        let mut right = left.clone();
+        reference.render(48000, &mut left, &mut right);
+        assert!(left.iter().any(|s| s.abs() > 0.05));
+        assert_eq!(reference.info.position, 1.0);
         assert_eq!(
             list_media(&base).unwrap()["assets"]
                 .as_array()

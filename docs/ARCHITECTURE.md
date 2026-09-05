@@ -765,3 +765,39 @@ it does not add a native reference transport, chord timeline, automatic analysis
 or stem bus. See [S3 evidence](spikes/S3-stretch-build.md). The in-memory source and
 result have a known approximately 660 MiB ceiling; streaming is the next step for
 longer/multi-stem preparation. Samples never cross IPC.
+
+### Native reference playback (2026-09-06)
+
+`media_reference_load(assetId)` reuses the media gate, local path validation,
+FFmpeg decoder and cancellation. It decodes up to twenty minutes to a temporary
+48 kHz stereo float WAV, reads a bounded source on a blocking worker, then installs
+`jam-audio::song::ReferenceSong` under the render gate. Normal completion/failure
+removes the temporary decode. No library document or source is rewritten. Loading
+refuses an active recording both before preparation and before installation.
+
+The existing Play/Pause/Stop commands control the loaded source. Its cursor advances
+only with frames prepared for the existing output queue; there is no wall-clock
+audio timer or JS audio. The chart timeline stays stopped. Reference stereo replaces
+the generated band bus before voice ducking, and travels with the same output frames
+and DI capture to the recorder. Generated instrument stems and MIDI stay empty.
+Source samples are fixed at 48 kHz; the existing negotiated output rate is handled
+by stereo interpolation, without changing pitch/speed. Two-millisecond fades cover
+file/loop edges. Position and edits lead audible output by the queued duration,
+as the existing render-ahead model does; no beat-alignment acceptance is claimed.
+
+`media_reference_seek(seconds)`, `media_reference_loop(start,end,enabled)` and
+`media_reference_unload()` refuse edits while recording. Loops must be at least
+0.1 seconds and inside the source. Bar/tempo/count-in commands explicitly refuse
+this unanalysed source. Loading a chart/original replaces it; returning to band
+does not restore discarded original guitar layers. The session must reload a
+reference after app restart. `reference:state` and optional telemetry `reference`
+carry only ID, label, duration, position, state and loop settings. Songs and Stage
+share one control component, and the top transport shows seconds instead of a
+fabricated musical grid. Section-bound rig changes are suppressed for references.
+
+One source uses at most about 440 MiB; replacement may temporarily hold two.
+The take snapshot records the reference identity, position and loop at preparation
+and marks `beatGrid: unanalysed`. The band WAV is the clean reference backing;
+the ordinary exported tempo map is not a detected map for it. Unmute that band
+track in the DAW when using the reference backing. Separate stems, automatic
+analysis and beat/section-synchronised reference transport remain M3 work.

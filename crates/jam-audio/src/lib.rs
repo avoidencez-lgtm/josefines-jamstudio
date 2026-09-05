@@ -8,6 +8,7 @@ pub mod io;
 pub mod melody;
 pub mod practice;
 pub mod recorder;
+pub mod song;
 pub mod voice;
 
 pub use analysis::*;

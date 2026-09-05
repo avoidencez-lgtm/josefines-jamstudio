@@ -8,6 +8,7 @@ import { ChordStrip } from "../components/ChordStrip";
 import { JoStage } from "../components/JoStage";
 import { Meter } from "../components/Meter";
 import { Panel } from "../components/Panel";
+import { ReferencePlayer } from "../components/ReferencePlayer";
 import { SoloHelper } from "../components/SoloHelper";
 import { StatusPill } from "../components/States";
 import { Toggle } from "../components/Toggle";
@@ -88,6 +89,22 @@ export const Stage: React.FC = () => {
   const outOfRange = bpmRange
     ? transport.bpm < bpmRange[0] || transport.bpm > bpmRange[1]
     : false;
+
+  if (telemetry.reference)
+    return (
+      <div className="workspace-stack max-w-6xl mx-auto w-full">
+        <WorkspaceHeader
+          screen="stage"
+          title="Play alongside your song."
+          description="A reference track through your studio output. Its saved pitch and speed stay intact."
+        />
+        <JoStage />
+        <ReferencePlayer
+          key={telemetry.reference.asset_id}
+          song={telemetry.reference}
+        />
+      </div>
+    );
 
   return (
     <div className="flex flex-col gap-6 max-w-6xl mx-auto w-full">

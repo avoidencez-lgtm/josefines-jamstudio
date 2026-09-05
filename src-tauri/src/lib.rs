@@ -289,6 +289,7 @@ fn metronome_set(on: bool, bpm: f64, state: State<'_, AppState>) -> Result<(), S
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     if on {
+        eng.ensure_band_grid()?;
         eng.transport_set_tempo(bpm);
         eng.transport_play();
     } else {
@@ -337,6 +338,7 @@ fn transport_stop(state: State<'_, AppState>) -> Result<(), String> {
 fn transport_seek_bar(bar: u32, state: State<'_, AppState>) -> Result<(), String> {
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
+    eng.ensure_band_grid()?;
     eng.transport_seek_bar(bar);
     Ok(())
 }
@@ -350,6 +352,7 @@ fn transport_set_loop(
 ) -> Result<(), String> {
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
+    eng.ensure_band_grid()?;
     eng.transport_set_loop(start_bar, end_bar, enabled);
     Ok(())
 }
@@ -358,6 +361,7 @@ fn transport_set_loop(
 fn transport_set_count_in(bars: u32, state: State<'_, AppState>) -> Result<(), String> {
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
+    eng.ensure_band_grid()?;
     eng.transport_set_count_in(bars);
     Ok(())
 }
@@ -366,6 +370,7 @@ fn transport_set_count_in(bars: u32, state: State<'_, AppState>) -> Result<(), S
 fn transport_set_tempo(bpm: f64, state: State<'_, AppState>) -> Result<(), String> {
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
+    eng.ensure_band_grid()?;
     eng.transport_set_tempo(bpm);
     Ok(())
 }
@@ -378,6 +383,7 @@ fn transport_set_time_signature(
 ) -> Result<(), String> {
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
+    eng.ensure_band_grid()?;
     eng.validate_transport_meter((numerator, denominator))?;
     eng.transport_set_time_signature((numerator, denominator));
     Ok(())
@@ -1157,7 +1163,10 @@ pub fn configure<R: tauri::Runtime>(
                     }
                     // Section-bound rig scenes: the orchestrator de-duplicates, so
                     // calling it every tick is cheap and only sends on a change.
-                    if tel.transport.state == "playing" && !tel.band.current_section.is_empty() {
+                    if tel.reference.is_none()
+                        && tel.transport.state == "playing"
+                        && !tel.band.current_section.is_empty()
+                    {
                         let mut rig = rig.lock();
                         match rig.on_section_change(&tel.band.current_section) {
                             Ok(Some(_)) => {
@@ -1178,6 +1187,7 @@ pub fn configure<R: tauri::Runtime>(
                         }
                     }
                     let _ = app_handle.emit("input:meters", &tel.input_level);
+                    let _ = app_handle.emit("reference:state", &tel.reference);
                     let _ = app_handle.emit("transport:state", &tel.transport);
                     let _ = app_handle.emit("band:state", &tel.band);
                     if let Some(t) = &tel.tuner {
@@ -1202,6 +1212,10 @@ pub fn configure<R: tauri::Runtime>(
             media::media_save,
             media::media_import,
             media::media_stretch,
+            media::media_reference_load,
+            media::media_reference_unload,
+            media::media_reference_seek,
+            media::media_reference_loop,
             media::media_from_take,
             media::media_generate,
             media::media_refresh,

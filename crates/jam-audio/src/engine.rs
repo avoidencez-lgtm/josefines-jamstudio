@@ -115,6 +115,8 @@ pub struct EngineTelemetry {
     pub transport: TransportTelemetry,
     pub band: BandTelemetry,
     pub status: EngineStatus,
+    #[serde(default)]
+    pub reference: Option<crate::song::ReferenceState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -269,6 +271,7 @@ pub struct AudioEngine {
     pub song_snapshot: serde_json::Value,
     pub audition: Arc<Mutex<Option<crate::workstation::Audition>>>,
     pub voice: Arc<Mutex<crate::voice::VoiceBus>>,
+    reference: Arc<Mutex<Option<crate::song::ReferenceSong>>>,
     config: AudioConfig,
     running: Arc<AtomicBool>,
     tone_active: Arc<AtomicBool>,
@@ -346,6 +349,7 @@ impl AudioEngine {
             song_snapshot: serde_json::Value::Null,
             audition: Arc::new(Mutex::new(None)),
             voice: Arc::new(Mutex::new(crate::voice::VoiceBus::default())),
+            reference: Arc::new(Mutex::new(None)),
             config: config.clone(),
             running: Arc::new(AtomicBool::new(false)),
             tone_active: Arc::new(AtomicBool::new(false)),
@@ -410,14 +414,24 @@ impl AudioEngine {
 
     pub fn transport_play(&self) {
         self.audition.lock().take();
+        if let Some(song) = self.reference.lock().as_mut() {
+            song.play();
+            return;
+        }
         self.timeline.lock().play();
     }
 
     pub fn transport_pause(&self) {
+        if let Some(song) = self.reference.lock().as_mut() {
+            song.pause();
+        }
         self.timeline.lock().pause();
     }
 
     pub fn transport_stop(&self) {
+        if let Some(song) = self.reference.lock().as_mut() {
+            song.stop();
+        }
         self.audition.lock().take();
         self.timeline.lock().stop();
         self.sequencer.lock().reset();
@@ -447,6 +461,50 @@ impl AudioEngine {
 
     pub fn transport_bpm(&self) -> f64 {
         self.timeline.lock().bpm
+    }
+
+    pub fn ensure_band_grid(&self) -> Result<(), String> {
+        if self.reference.lock().is_some() {
+            return Err("Reference playback has no analysed beat grid. Use its seconds loop in Songs; make a practice copy to change speed or pitch.".into());
+        }
+        Ok(())
+    }
+
+    pub fn load_reference(&mut self, song: crate::song::ReferenceSong) -> Result<(), String> {
+        self.ensure_timing_editable()?;
+        let _gate = self.render_gate.lock();
+        self.transport_stop();
+        self.clips.lock().clear();
+        self.song_snapshot = serde_json::json!({"reference": song.info, "beatGrid": "unanalysed"});
+        *self.reference.lock() = Some(song);
+        Ok(())
+    }
+
+    pub fn unload_reference(&mut self) -> Result<(), String> {
+        self.ensure_timing_editable()?;
+        let _gate = self.render_gate.lock();
+        self.transport_stop();
+        self.reference.lock().take();
+        self.song_snapshot = serde_json::Value::Null;
+        Ok(())
+    }
+
+    pub fn reference_seek(&self, seconds: f64) -> Result<(), String> {
+        self.ensure_timing_editable()?;
+        self.reference
+            .lock()
+            .as_mut()
+            .ok_or("Load a reference song first.")?
+            .seek(seconds)
+    }
+
+    pub fn reference_loop(&self, start: f64, end: f64, enabled: bool) -> Result<(), String> {
+        self.ensure_timing_editable()?;
+        self.reference
+            .lock()
+            .as_mut()
+            .ok_or("Load a reference song first.")?
+            .set_loop(start, end, enabled)
     }
 
     // ----- band ------------------------------------------------------------
@@ -481,6 +539,7 @@ impl AudioEngine {
     }
 
     pub fn band_load_chart(&mut self, chart: ResolvedChart) {
+        self.reference.lock().take();
         self.song_snapshot = serde_json::Value::Null;
         self.clips.lock().clear();
         let mut seq = self.sequencer.lock();
@@ -532,7 +591,7 @@ impl AudioEngine {
         }
         self.ensure_recordable_input()?;
         self.audition.lock().take();
-        let (style_id, chart_id) = {
+        let (mut style_id, mut chart_id) = {
             let seq = self.sequencer.lock();
             (
                 seq.style.id.clone(),
@@ -542,6 +601,10 @@ impl AudioEngine {
                     .unwrap_or_else(|| "blues-12-bar".into()),
             )
         };
+        if let Some(song) = self.reference.lock().as_ref() {
+            style_id = "reference".into();
+            chart_id = song.info.asset_id.clone();
+        }
         let (mut tempo, mut meter) = {
             let tl = self.timeline.lock();
             (tl.bpm, tl.time_signature)
@@ -564,6 +627,9 @@ impl AudioEngine {
             recorder.snapshot = serde_json::json!({});
         }
         recorder.snapshot["timeSignature"] = serde_json::json!(meter);
+        if let Some(song) = self.reference.lock().as_ref() {
+            recorder.snapshot["reference"] = serde_json::json!(song.info);
+        }
         let id = recorder.start_take(session_id, style_id, chart_id, tempo)?;
         Ok((recorder, id))
     }
@@ -600,7 +666,7 @@ impl AudioEngine {
             self.transport_set_loop(1, 257, false);
         }
         let id = self.install_recorder(prepared);
-        self.timeline.lock().play();
+        self.transport_play();
         Ok(id)
     }
 
@@ -638,6 +704,7 @@ impl AudioEngine {
             return Err("Save the recording before changing the song.".into());
         }
         self.transport_stop();
+        self.reference.lock().take();
         self.transport_set_tempo(chart.default_bpm);
         self.transport_set_time_signature(chart.time_sig);
         self.transport_set_loop(1, chart.bars.len() as u32 + 1, false);
@@ -658,6 +725,7 @@ impl AudioEngine {
         sections: std::collections::BTreeMap<String, jam_band::sequencer::SectionBand>,
         snapshot: serde_json::Value,
     ) -> Result<(), String> {
+        self.ensure_band_grid()?;
         if self.recorder_is_recording() {
             return Err("Save the recording before changing the song.".into());
         }
@@ -722,6 +790,15 @@ impl AudioEngine {
     pub fn get_telemetry(&self) -> EngineTelemetry {
         let mut tel = self.latest_telemetry.lock().clone();
         tel.status = self.status.lock().clone();
+        tel.reference = self.reference.lock().as_ref().map(|song| song.info.clone());
+        if let Some(reference) = &tel.reference {
+            tel.transport.state = reference.state.clone();
+            tel.band.current_chord.clear();
+            tel.band.next_chord = None;
+            tel.band.current_section.clear();
+            tel.band.style_id = "reference".into();
+            tel.band.style_name = "Reference audio".into();
+        }
         tel
     }
 
@@ -965,6 +1042,7 @@ impl AudioEngine {
         let clips = Arc::clone(&self.clips);
         let audition = Arc::clone(&self.audition);
         let voice_bus = Arc::clone(&self.voice);
+        let reference = Arc::clone(&self.reference);
         let telemetry = Arc::clone(&self.latest_telemetry);
         let status_arc = Arc::clone(&self.status);
 
@@ -1065,6 +1143,13 @@ impl AudioEngine {
                             tone_active.load(Ordering::SeqCst),
                             tuner_active.load(Ordering::SeqCst),
                         );
+                        let reference_loaded = {
+                            let mut reference = reference.lock();
+                            if let Some(song) = reference.as_mut() {
+                                ctx.render_reference(song);
+                            }
+                            reference.is_some()
+                        };
 
                         // Previously recorded clips are heard in Rust and never fed back to the input.
                         let mut playback = vec![0.0; block_len];
@@ -1094,10 +1179,16 @@ impl AudioEngine {
                         }
                         drop(preview);
                         ctx.render_voice(&mut voice_bus.lock());
-                        let (parts, notes) = {
+                        let (mut parts, mut notes) = {
                             let seq = sequencer_arc.lock();
                             (seq.part_audio.clone(), seq.note_events.clone())
                         };
+                        if reference_loaded {
+                            for part in &mut parts {
+                                part.fill(0.0);
+                            }
+                            notes.clear();
+                        }
                         let input_gain = 1.0 - mix.lock().input_monitor;
                         let frames: Vec<crate::workstation::Frame> = (0..block_len)
                             .map(|i| {
@@ -1193,6 +1284,9 @@ impl AudioEngine {
         self.timeline.lock().stop();
         self.sequencer.lock().reset();
         self.voice.lock().stop();
+        if let Some(song) = self.reference.lock().as_mut() {
+            song.stop();
+        }
         {
             let mut st = self.status.lock();
             st.running = false;
@@ -1258,6 +1352,18 @@ struct ClickVoice {
 }
 
 impl RenderContext {
+    fn render_reference(&mut self, song: &mut crate::song::ReferenceSong) {
+        for i in 0..self.out_left.len() {
+            self.out_left[i] -= self.band_left[i] * self.band_volume;
+            self.out_right[i] -= self.band_right[i] * self.band_volume;
+        }
+        song.render(self.sample_rate, &mut self.band_left, &mut self.band_right);
+        for i in 0..self.out_left.len() {
+            self.out_left[i] += self.band_left[i] * self.band_volume;
+            self.out_right[i] += self.band_right[i] * self.band_volume;
+        }
+    }
+
     fn render_voice(&mut self, voice: &mut crate::voice::VoiceBus) {
         voice.render(
             self.sample_rate,
@@ -1515,6 +1621,63 @@ fn dirs_base() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reference_transport_records_stereo_source_without_generated_parts_or_midi() {
+        let mut engine = headless_engine();
+        let root =
+            std::env::temp_dir().join(format!("jam-reference-engine-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        *engine.recorder.lock() = crate::recorder::TakeRecorder::new(48_000, root.clone());
+        let samples = (0..96_000).flat_map(|_| [0.25, -0.125]).collect();
+        engine
+            .load_reference(
+                crate::song::ReferenceSong::new("source".into(), "Reference".into(), samples)
+                    .unwrap(),
+            )
+            .unwrap();
+        assert!(engine.ensure_band_grid().is_err());
+        engine.start().unwrap();
+        engine.transport_play();
+        engine.recorder_start("reference".into()).unwrap();
+        assert!(engine.reference_seek(0.5).is_err());
+        assert!(engine.reference_loop(0.0, 1.0, true).is_err());
+        assert!(engine.unload_reference().is_err());
+        thread::sleep(Duration::from_millis(300));
+        let take = engine.recorder_stop().unwrap();
+        engine.stop().unwrap();
+        assert!(take.sample_count > 1000);
+        assert_eq!(take.snapshot["reference"]["asset_id"], "source");
+        assert_eq!(take.snapshot["beatGrid"], "unanalysed");
+        assert!(take.midi.is_empty());
+        let mut band = hound::WavReader::open(&take.path_band).unwrap();
+        assert_eq!(band.spec().channels, 2);
+        let samples: Vec<_> = band.samples::<i32>().map(Result::unwrap).collect();
+        let nonzero: Vec<_> = samples
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .filter(|p| p[0] > 1000)
+            .collect();
+        assert!(nonzero.len() > 1000);
+        assert!(
+            nonzero.iter().all(|p| (p[0] + 2 * p[1]).abs() <= 2),
+            "stereo channel ratio within two 24-bit units"
+        );
+        for name in ["drums", "bass", "comp"] {
+            let (samples, _) =
+                crate::recorder::read_wav_mono(std::path::Path::new(&take.stems[name])).unwrap();
+            assert!(
+                samples.iter().all(|v| *v == 0.0),
+                "generated {name} must be silent"
+            );
+        }
+        engine.unload_reference().unwrap();
+        assert!(engine.ensure_band_grid().is_ok());
+        assert!(engine.get_telemetry().reference.is_none());
+        drop(band);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn voice_ducking_preserves_monitor_and_does_not_unmute_the_band() {
