@@ -29,8 +29,8 @@ You are building Josefines Jamstudio in this repository. Work in English. Be tho
 3. Set the milestone to ⏳ and work through its tasks in order: read the files first, write the test first, one task = one commit with every gate green (pnpm lint, typecheck, test, licenses:check; cargo fmt, clippy -D warnings, test with JAM_HEADLESS=1, cargo deny), run ponytail-review on each diff, push on a short-lived branch, open a PR, wait for CI on Windows and macOS, squash-merge your own PR when green.
 4. Never guess a provider protocol, an audio format or a device behaviour: verify against the sources in docs/plan/04-research.md or the spike that owns the question, and record fixtures under tests/fixtures/ before code depends on them.
 5. Every new seam ships with a recipe in docs/EXTENDING.md and a fixture in tests/invariants/ in the same PR.
-6. When the milestone's acceptance criteria are met and the demo checklist passes on this PC with the file-backed input, set ✅ with the PR number in the status board, list any owner gates as pending, and commit.
-7. End the session with a short report: what is on main now, what was done, what failed or was skipped and why, what is pending owner, next step.
+6. When the milestone's acceptance criteria are met and the demo checklist passes on this PC with the file-backed input, set ✅ with the PR number in the status board, list friend-led owner gates as deferred to V2, and commit.
+7. End the session with a short report: what is on main now, what was done, what failed or was skipped and why, which friend checks are deferred to V2, next step.
 
 Rules that are never broken: no secrets in repo, logs, chat or the WebView; audio never plays from the WebView; the audio callback allocates, locks and logs nothing; 48 kHz internally; no GPL or LGPL dependencies; no --force, no --no-verify; no parallel agents; report honestly.
 ```
@@ -42,7 +42,7 @@ Rules that are never broken: no secrets in repo, logs, chat or the WebView; audi
 - **M2:** "Run S5 first and check in scrubbed fixtures. Then build the push-to-talk pipeline exactly as ARCHITECTURE §6 describes. Measure the latency and write the number in the PR."
 - **M3:** "Record Music.ai and ElevenLabs fixtures before writing the pipeline. The local fallback must pass its numbers on the synthetic chord fixture."
 - **M4:** "Run S4 first; the wire transcript is the client's unit-test fixture. Band and Lyria are mutually exclusive."
-- **M5:** "Everything through MidiSink; MemorySink in tests. Verify the Black Spirit CC map against the official manual before encoding it. Owner gate 5 stays pending."
+- **M5:** "Everything through MidiSink; MemorySink in tests. Verify the Black Spirit CC map against the official manual before encoding it. Friend-led owner gate 5 is deferred to V2."
 - **M6:** "The SMF must round-trip through midly. Analysis numbers from synthetic takes within tolerance."
 - **M7:** "Run the DESIGN.md pre-flight list and attach the screen recording. Tag v0.1.0 and check both installers."
 
@@ -50,7 +50,7 @@ Rules that are never broken: no secrets in repo, logs, chat or the WebView; audi
 
 - A spike runs out of its timebox: write what was learned and the fallback chosen; do not extend it without asking Vegar.
 - A provider behaves differently from the docs: capture the real response as a fixture, adjust the client, and note the difference in the fixture's README.
-- A device or platform behaviour cannot be tested here (macOS audio, the real rig): implement per the documented behaviour, add it to the pending owner list, and move on.
+- A device or platform behaviour cannot be tested here: implement per documented behaviour and record the missing evidence. Use available developer/CI checks for macOS behavior; only personal-rig sessions with the friend are deferred to V2. Do not claim unverified behavior passed.
 - The plan is ambiguous: pick the simplest choice that satisfies the acceptance criterion, write the choice in the commit message, continue. Do not wait.
 - CI is red on macOS only: read the log carefully; most cases are a missing `JAM_HEADLESS` guard or a path-separator assumption. Fix on the same branch.
 - An API key is missing: say clearly in the report which provider Vegar must configure; do not stop the milestone if other tasks remain.
@@ -59,6 +59,6 @@ Rules that are never broken: no secrets in repo, logs, chat or the WebView; audi
 
 - Buys the USB-MIDI interface (and optionally the pedal and a microphone) from [../hardware/shopping-list.md](../hardware/shopping-list.md).
 - Enters API keys in the app on the Mac (Gemini paid tier for Lyria RealTime; ElevenLabs plan with Music and Stems; Music.ai) and on the PC for live tests.
-- Runs the owner gates in [06-owner-verification.md](06-owner-verification.md) with the guitarist and ticks them.
+- May run the retained [owner checks](06-owner-verification.md) with the guitarist in V2 and record results then. The builder does not ask for these sessions to unblock V1.
 - Creates the `assets-v1` GitHub Release when the builder has prepared the packs, or approves the builder doing it with `gh`.
 - Decides on signing (Apple Developer account) when v0.1.0 is close.

@@ -50,7 +50,7 @@ corepack pnpm tauri build
 ## Git flow
 
 - Default branch `main`, protected by CI. Work on short-lived branches named `<milestone>/<slug>`, for example `m1b/drum-sampler`.
-- Open a PR with `gh pr create --fill`; the PR description lists what changed, what was verified (paste the gate output summary), and what is pending owner.
+- Open a PR with `gh pr create --fill`; the PR description lists what changed, what was verified (paste the gate output summary), and which friend checks are deferred to V2.
 - Wait for CI: `gh pr checks --watch`. Red CI is fixed on the same branch before anything else.
 - Merge your own PR when green: `gh pr merge --squash --delete-branch`. The squash commit keeps the prefix and the trailer.
 - Never `--force`, never `--no-verify`, never rewrite history, never commit directly to `main` after M0 lands.
@@ -70,11 +70,11 @@ A spike is a time-boxed experiment that decides an architectural question ([03-b
 
 ## Definition of "usable"
 
-Every milestone ends with a **demo checklist** in 03 that the builder runs on Windows with the file-backed input (and in CI headless). "Usable" means a guitarist could sit down and do the thing the milestone promises without reading docs. If the demo needs the real rig, the step is an owner gate and is listed as such.
+Every milestone ends with a **demo checklist** in 03 that the builder runs on Windows with the file-backed input (and in CI headless). "Usable" means a guitarist could sit down and do the thing the milestone promises without reading docs. If the demo needs the real rig, the friend-led step is deferred to V2; retain its procedure and keep developer checks separate.
 
 ## Reporting (end of every session)
 
-In English, in the PR description and as the last message of the session, in this order: (1) what is on `main` now (PR numbers, what a user can do), (2) what was done this session, (3) what failed or was skipped and why, (4) what is pending owner, (5) next step. Update the status board in [00-README.md](00-README.md).
+In English, in the PR description and as the last message of the session, in this order: (1) what is on `main` now (PR numbers, what a user can do), (2) what was done this session, (3) what failed or was skipped and why, (4) which friend checks are deferred to V2, (5) next step. Update the status board in [00-README.md](00-README.md).
 
 ## Per-task checklist
 
@@ -85,4 +85,4 @@ In English, in the PR description and as the last message of the session, in thi
 - [ ] `ponytail-review` run on the diff and acted on
 - [ ] Docs updated in the same commit (ARCHITECTURE, EXTENDING, or the hardware sheet) when a contract, seam or device fact changed
 - [ ] Commit with prefix and trailer; PR opened; CI green on both operating systems; squash-merged
-- [ ] (milestone) demo checklist run, status board updated, owner gates listed as pending
+- [ ] (milestone) demo checklist run, status board updated, friend checks listed as deferred to V2
