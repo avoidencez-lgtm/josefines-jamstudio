@@ -665,6 +665,31 @@ fn load_refuses_songs_the_band_cannot_play_and_keeps_the_previous_song() {
 }
 
 #[test]
+fn play_song_resolves_several_clips_from_one_take_catalog() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = record_take(&studio, &song(&unique("song")), &unique("session"));
+    let take_id = take["id"].as_str().unwrap().to_string();
+    let end = take["durationSecs"].as_f64().unwrap().min(1.0);
+    let mut doc = distinctive_song(&unique("layers"), "C", 100.0);
+    let mut second = clip_spec(&take_id, end);
+    second["startBar"] = json!(3);
+    second["label"] = json!("Guitar 2");
+    doc["body"]["clips"] = json!([clip_spec(&take_id, end), second]);
+    studio.ok("originals_load", json!({ "document": doc }));
+    let state = studio.app().state::<app_lib::AppState>();
+    let clips: Vec<(String, u32)> = {
+        let eng = state.engine.lock();
+        let clips = eng.clips.lock();
+        clips
+            .iter()
+            .map(|c| (c.spec.take_id.clone(), c.spec.start_bar))
+            .collect()
+    };
+    assert_eq!(clips, [(take_id.clone(), 1), (take_id, 3)]);
+}
+
+#[test]
 fn record_on_the_headless_engine_writes_a_take_with_the_song_snapshot() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

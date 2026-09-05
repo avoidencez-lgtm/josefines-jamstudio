@@ -333,9 +333,8 @@ fn scan_takes(root: &Path) -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
     Ok((takes, warnings))
 }
 
-pub fn read_clip(spec: ClipSpec, state: &AppState) -> Result<Clip, String> {
-    valid_id(&spec.take_id)?;
-    let take = crate::find_take(state, &spec.take_id)?;
+pub fn read_clip(spec: ClipSpec, state: &AppState, takes: &[TakeMetadata]) -> Result<Clip, String> {
+    let take = crate::take_from(takes, &spec.take_id)?;
     let p = Path::new(&take.path_input);
     // ponytail: decode each guitar clip in memory, max 10 min; stream if longer songs are needed.
     if fs::metadata(p)
@@ -414,10 +413,11 @@ pub async fn originals_load(
         state.rig.lock().song_mappings = Some(tones);
         return Ok(());
     }
+    let (takes, _) = crate::all_takes(&state)?;
     let clips = song
         .clips
         .into_iter()
-        .map(|s| read_clip(s, &state))
+        .map(|s| read_clip(s, &state, &takes))
         .collect::<Result<Vec<_>, _>>()?;
     state
         .engine
@@ -471,7 +471,8 @@ pub fn capture_arm(seconds: u32, state: State<'_, AppState>) -> Result<(), Strin
 
 #[tauri::command]
 pub fn clip_audition(spec: ClipSpec, state: State<'_, AppState>) -> Result<(), String> {
-    let clip = read_clip(spec, &state)?;
+    let (takes, _) = crate::all_takes(&state)?;
+    let clip = read_clip(spec, &state, &takes)?;
     let eng = state.engine.lock();
     if !eng.status().running {
         return Err("Start a working audio device before listening.".into());
