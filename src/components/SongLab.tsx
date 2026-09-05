@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { BRAINS, askBrain, estimateRequest, useAi } from "../lib/jo/providers";
 import {
   LAB_IDEAS,
@@ -15,7 +16,14 @@ import { Button } from "./Button";
 export function SongLab() {
   const { song, selected } = useWriting();
   const { preferences, loaded } = useAi();
-  const { keysPresent, isPreview, isRecording, setScreen } = useEngineStore();
+  const { keysPresent, isPreview, isRecording, setScreen } = useEngineStore(
+    useShallow((s) => ({
+      keysPresent: s.keysPresent,
+      isPreview: s.isPreview,
+      isRecording: s.isRecording,
+      setScreen: s.setScreen,
+    })),
+  );
   const [kind, setKind] = useState<LabKind>("chords");
   const [direction, setDirection] = useState("");
   const [proposal, setProposal] = useState<Proposal | null>(null);
