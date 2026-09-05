@@ -59,15 +59,20 @@ pub struct ClipSpec {
 
 pub struct Clip {
     pub spec: ClipSpec,
-    pub samples: Vec<f32>,
+    /// Decoded audio, shared with the app's clip cache so Play, Loop and Record
+    /// reuse one decode of the same take (validated finite when decoded).
+    pub samples: std::sync::Arc<Vec<f32>>,
     pub sample_rate: u32,
 }
 
 impl Clip {
-    pub fn new(spec: ClipSpec, samples: Vec<f32>, sample_rate: u32) -> Result<Self, String> {
+    pub fn new(
+        spec: ClipSpec,
+        samples: std::sync::Arc<Vec<f32>>,
+        sample_rate: u32,
+    ) -> Result<Self, String> {
         let duration = samples.len() as f64 / sample_rate.max(1) as f64;
         if sample_rate == 0
-            || samples.iter().any(|s| !s.is_finite())
             || !spec.trim_start.is_finite()
             || !spec.trim_end.is_finite()
             || spec.trim_start < 0.0
@@ -169,7 +174,7 @@ mod tests {
             muted: false,
             label: String::new(),
         };
-        let clip = Clip::new(spec, vec![1.0; 100], 1000).unwrap();
+        let clip = Clip::new(spec, std::sync::Arc::new(vec![1.0; 100]), 1000).unwrap();
         let mut out = vec![0.0; 250];
         clip.render(
             &[Span {
@@ -186,14 +191,15 @@ mod tests {
         assert!((out[20] - 0.5).abs() < 1e-6);
         assert!((out[120] - 0.5).abs() < 1e-6);
         assert_eq!(out[220], 0.0);
-        let mut audition =
-            Audition::new(Clip::new(clip.spec.clone(), vec![1.0; 100], 1000).unwrap());
+        let mut audition = Audition::new(
+            Clip::new(clip.spec.clone(), std::sync::Arc::new(vec![1.0; 100]), 1000).unwrap(),
+        );
         let mut first = vec![0.0; 50];
         assert!(audition.render(1000, &mut first));
         assert!(first[10] > 0.4);
         assert!(!audition.render(1000, &mut first));
         let mut invalid = clip.spec.clone();
         invalid.trim_end = 9.0;
-        assert!(Clip::new(invalid, vec![0.0; 100], 1000).is_err());
+        assert!(Clip::new(invalid, std::sync::Arc::new(vec![0.0; 100]), 1000).is_err());
     }
 }

@@ -309,8 +309,9 @@ pub fn read_clip(spec: ClipSpec, state: &AppState) -> Result<Clip, String> {
     if fs::metadata(p).map_err(|e| e.to_string())?.len() > 100_000_000 {
         return Err("Clip is too large. Use a take shorter than ten minutes.".into());
     }
-    let (samples, rate) = jam_audio::recorder::read_wav_mono(p)?;
-    Clip::new(spec, samples, rate)
+    // One decode per take file, shared by Play, Loop, Record, audition and export (#44).
+    let decoded = state.clips.lock().load(p)?;
+    Clip::new(spec, decoded.samples, decoded.sample_rate)
 }
 
 #[tauri::command]
