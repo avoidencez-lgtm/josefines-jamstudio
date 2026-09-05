@@ -13,6 +13,7 @@ import {
 import { ipc, isPreview } from "../ipc/client";
 import { transposeChart } from "../lib/chart/transpose";
 import { WRITING_HELP } from "../lib/help";
+import { committedNumber } from "../lib/numberField";
 import { PARTS, changeGroove, fitTempo, useWriting } from "../lib/originals";
 import { useEngineStore } from "../store/engine";
 import "./originals.css";
@@ -912,11 +913,7 @@ function NumberField({
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
   const commit = () => {
-    const v = Number(draft);
-    const next =
-      draft.trim() && Number.isFinite(v)
-        ? Math.max(min, Math.min(max, Math.round(v / step) * step))
-        : value;
+    const next = committedNumber(draft, value, min, max, step);
     setDraft(String(next));
     if (next !== value) change(next);
   };
