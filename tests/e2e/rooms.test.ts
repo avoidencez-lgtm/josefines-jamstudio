@@ -492,7 +492,7 @@ describe("rooms, end to end through the preview engine", () => {
     );
   });
 
-  it.skip("app bug: preview rig_set_section_mapping accepts sceneIdx -1 (the desktop rejects it) and then throws inside tick when the section plays", async () => {
+  it("refuses negative scene mappings", async () => {
     await useEngineStore.getState().loadRigProfiles();
     const store = useEngineStore.getState();
     await store.selectRigProfile("black-spirit-200");
@@ -618,7 +618,7 @@ describe("rooms, end to end through the preview engine", () => {
     expect((await ipc.invoke<RigState>("rig_get_state")).monitor).toEqual([]);
   });
 
-  it.skip("app bug: preview rig_set_control logs CC 200 as MIDI instead of rejecting it like the desktop (CC above 127)", async () => {
+  it("refuses CC numbers above 127 without changing the rig", async () => {
     await useEngineStore.getState().loadRigProfiles();
     const store = useEngineStore.getState();
     await store.selectRigProfile("quad-cortex");
