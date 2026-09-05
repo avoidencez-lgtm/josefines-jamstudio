@@ -200,19 +200,24 @@ impl IndexStore {
     }
 
     pub fn rebuild_index(&mut self) -> Result<usize, String> {
-        let mut count = 0;
-        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        let library_dir = home.join("JosefinesJamstudio");
+        let library_dir = crate::library::Library::default_user_root();
+        Self::rebuild_index_dir(&mut self.conn, &library_dir)
+    }
 
+    pub fn rebuild_index_dir(
+        conn: &mut Connection,
+        library_dir: &std::path::Path,
+    ) -> Result<usize, String> {
+        let mut count = 0;
         if !library_dir.exists() {
             return Ok(0);
         }
 
-        let tx = self.conn.transaction().map_err(|e| e.to_string())?;
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
         tx.execute("DELETE FROM library_index", [])
             .map_err(|e| e.to_string())?;
 
-        let subdirs = ["songs", "recordings", "backups"];
+        let subdirs = ["songs", "takes", "backups"];
         for sub in subdirs {
             let path = library_dir.join(sub);
             if let Ok(entries) = fs::read_dir(path) {
@@ -282,8 +287,15 @@ mod tests {
     #[test]
     fn test_store_open_and_rebuild() {
         let mut store = IndexStore::open_in_memory().expect("in-memory db opens");
-        let count = store.rebuild_index().expect("rebuild succeeds");
-        assert_eq!(count, 0);
+        let temp_dir =
+            std::env::temp_dir().join(format!("jam-rebuild-test-{}", std::process::id()));
+        let songs_dir = temp_dir.join("songs");
+        let _ = fs::create_dir_all(&songs_dir);
+        let _ = fs::write(songs_dir.join("test.json"), b"{}");
+        let count =
+            IndexStore::rebuild_index_dir(&mut store.conn, &temp_dir).expect("rebuild succeeds");
+        assert_eq!(count, 1);
+        let _ = fs::remove_dir_all(temp_dir);
     }
 
     #[test]
