@@ -484,6 +484,10 @@ export const useEngineStore = create<EngineState>((set, get) => {
         isRecording: false,
         takes: meta ? [meta, ...state.takes] : state.takes,
       }));
+      if (meta?.notes.includes("interrupted")) {
+        get().notify("error", meta.notes);
+      }
+      if (!meta) await get().loadTakes();
       return meta;
     },
     setLatencySamples: async (samples) => {

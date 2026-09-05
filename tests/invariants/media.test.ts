@@ -4,6 +4,7 @@ import { dispatchJoToolCall } from "../../src/lib/jo/dispatcher";
 import {
   MEDIA_MODELS,
   applyShotIdeas,
+  clampGenerationSeconds,
   fitShots,
   newVideo,
   shotsFromChart,
@@ -37,6 +38,24 @@ describe("music video seam", () => {
         },
       }),
     ).rejects.toThrow();
+    await expect(
+      dispatchJoToolCall({
+        name: "set_tempo",
+        arguments: {},
+      }),
+    ).rejects.toThrow(/bpm or a delta/);
+    await expect(
+      dispatchJoToolCall({
+        name: "transport_control",
+        arguments: { action: "status" },
+      }),
+    ).rejects.toThrow(/Invalid action|Unknown transport/);
+    await expect(
+      dispatchJoToolCall({
+        name: "record_take",
+        arguments: { action: "begin" },
+      }),
+    ).rejects.toThrow(/Invalid action|Unknown recording/);
     useMedia.getState().undoEdit();
     expect(useMedia.getState().project).toEqual(project);
   });
@@ -66,6 +85,13 @@ describe("music video seam", () => {
     expect(new Set(MEDIA_MODELS.map((m) => m.id)).size).toBe(
       MEDIA_MODELS.length,
     );
+  });
+
+  it("snaps Veo generate seconds onto the backend allow-list", () => {
+    expect(clampGenerationSeconds("veo", 2)).toBe(4);
+    expect(clampGenerationSeconds("veo", 10)).toBe(8);
+    expect(clampGenerationSeconds("veo", 6)).toBe(6);
+    expect(clampGenerationSeconds("omni", 2)).toBe(2);
   });
   it("director edits preserve clips and timing and reject missing or duplicated shots", () => {
     const p = newVideo();

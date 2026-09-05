@@ -11,6 +11,7 @@ import {
   type MediaJob,
   type MediaShot,
   applyShotIdeas,
+  clampGenerationSeconds,
   fitShots,
   newShot,
   newVideo,
@@ -958,13 +959,18 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   Generate seconds
                   <input
                     type="number"
-                    min={2}
-                    max={10}
+                    min={shot.catalogId === "veo" ? 4 : 2}
+                    max={shot.catalogId === "veo" ? 8 : 10}
                     step={shot.catalogId === "veo" ? 2 : 1}
                     disabled={locked}
                     value={shot.generationSeconds}
                     onChange={(e) =>
-                      editShot({ generationSeconds: Number(e.target.value) })
+                      editShot({
+                        generationSeconds: clampGenerationSeconds(
+                          shot.catalogId,
+                          Number(e.target.value),
+                        ),
+                      })
                     }
                   />
                 </label>
