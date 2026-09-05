@@ -71,9 +71,9 @@ export function splitChord(symbol: string): SplitChord | null {
   const slash = rest.indexOf("/");
   if (slash >= 0) {
     const bassPart = rest.slice(slash + 1).trim();
-    rest = rest.slice(0, slash);
     const bm = /^([A-Ga-g])(#{1,2}|b{1,2})?$/.exec(bassPart);
     if (bm) {
+      rest = rest.slice(0, slash);
       bass =
         (LETTER_PC[bm[1].toUpperCase()] + accidentalOffset(bm[2] ?? "") + 12) %
         12;
