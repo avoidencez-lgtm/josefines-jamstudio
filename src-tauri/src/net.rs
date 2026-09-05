@@ -298,6 +298,20 @@ fn provider_client() -> reqwest::ClientBuilder {
         .user_agent("josefines-jamstudio/0.1")
 }
 
+/// Automated and headless runs never bill an account: unit tests (`cfg!(test)`) and
+/// anything started with `JAM_HEADLESS=1` (CI, the smoke harness, `tauri dev` per
+/// AGENTS.md) are refused before a byte leaves the app. `JAM_LIVE=1` is the explicit
+/// opt-in for a manually authorised live check (docs/plan/02-working-method.md).
+pub fn live_guard(target: &str) -> Result<(), String> {
+    let headless = cfg!(test) || std::env::var("JAM_HEADLESS").as_deref() == Ok("1");
+    if headless && std::env::var("JAM_LIVE").as_deref() != Ok("1") {
+        return Err(format!(
+            "Headless tests cannot call {target}. An explicitly authorised live check requires JAM_LIVE=1."
+        ));
+    }
+    Ok(())
+}
+
 /// Performs the request. The key never leaves this function.
 pub async fn provider_fetch(
     req: FetchRequest,
@@ -311,6 +325,7 @@ pub async fn provider_fetch(
             entry.id
         )
     })?;
+    live_guard(&format!("provider \"{}\"", entry.id))?;
 
     let client = provider_client().build().map_err(|e| e.to_string())?;
     let method = reqwest::Method::from_bytes(req.method.to_ascii_uppercase().as_bytes())
@@ -497,6 +512,25 @@ mod tests {
             log.list(10).is_empty(),
             "nothing is logged when nothing was sent"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A saved key on a test or headless machine must not be billed (issue #59).
+    #[tokio::test]
+    async fn headless_runs_never_send_a_keyed_request() {
+        if std::env::var("JAM_LIVE").as_deref() == Ok("1") {
+            return;
+        }
+        let store = MemoryStore::default();
+        store.set("gemini", "test-only-key").unwrap();
+        let dir = std::env::temp_dir().join(format!("jam-net-guard-{}", std::process::id()));
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        let err = provider_fetch(req("gemini", "/v1beta/models"), &store, &log)
+            .await
+            .unwrap_err();
+        assert!(err.contains("Headless tests cannot call"), "{err}");
+        assert!(log.list(10).is_empty(), "the refused request is not logged");
+        assert!(live_guard("x").is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

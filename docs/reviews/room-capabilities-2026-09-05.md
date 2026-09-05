@@ -17,6 +17,8 @@ The intended native coach fixture interception did not replace Tauri's read-only
 
 `AgentRunner` now rejects requests in headless/test execution unless `JAM_LIVE=1` is explicitly set. Its regression test proves rejection happens before executable lookup. Normal desktop operation remains available with the user's explicit Ask action. Automated model tests remain fixture-based; future live acceptance must be separately authorised.
 
+Account: the request went through the Codex CLI's own saved login on the development PC (the ChatGPT account that `codex login` had stored; the app never reads or logs that identity). The owner can look for a 14-second request on 2026-09-05 under that account's usage. Since issue #59 the same headless guard covers `provider_fetch` (Gemini, OpenAI, Anthropic, OpenRouter) and the media adapters (Runway, Eleven Music, MiniMax, Google media, including downloads), so a test or headless smoke on a machine with saved keys cannot bill an account either. `cfg(test)` only covers unit tests inside the crate; a smoke harness that starts the real binary must set `JAM_HEADLESS=1`.
+
 ## Review and remaining gates
 
 Ponytail diff review: **Lean already. Ship.** Native `<details>`, current stores, existing IPC, existing Tonal/DSP and existing Undo replace any new framework. A regular correctness pass checked file bounds, stale previews, recording guards, preset validation, partial MIDI errors and source preservation.

@@ -188,11 +188,7 @@ impl AgentRunner {
         }
     }
     pub async fn run(&self, req: AgentRequest, log: &CostLog) -> Result<Value, String> {
-        if (cfg!(test) || std::env::var("JAM_HEADLESS").as_deref() == Ok("1"))
-            && std::env::var("JAM_LIVE").as_deref() != Ok("1")
-        {
-            return Err("Headless tests cannot call a signed-in agent. An explicitly authorised live check requires JAM_LIVE=1.".into());
-        }
+        crate::net::live_guard("a signed-in agent")?;
         let _guard = self
             .gate
             .try_lock()
