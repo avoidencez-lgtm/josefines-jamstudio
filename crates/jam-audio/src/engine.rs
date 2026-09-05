@@ -723,10 +723,7 @@ impl AudioEngine {
         *self.status.lock() = status;
 
         self.running.store(true, Ordering::SeqCst);
-        let wait_for_input = input_driver.is_running()
-            && input_driver
-                .info()
-                .is_some_and(|info| info.device_name == "file");
+        let wait_for_input = input_driver.is_running() && input_driver.is_synthetic();
         self.spawn_render_thread(output_prod, input_cons, effective_rate, wait_for_input);
 
         self.output_driver = Some(output_driver);

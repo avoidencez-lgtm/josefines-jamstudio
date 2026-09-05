@@ -35,6 +35,10 @@ pub trait AudioInput: Send + Sync {
     fn start(&mut self, callback: InputCallback) -> Result<(), String>;
     fn stop(&mut self) -> Result<(), String>;
     fn is_running(&self) -> bool;
+    /// Synthetic producers may wait for the scheduler instead of losing input frames.
+    fn is_synthetic(&self) -> bool {
+        false
+    }
     fn info(&self) -> Option<StreamInfo> {
         None
     }
@@ -216,6 +220,10 @@ impl FileInput {
 }
 
 impl AudioInput for FileInput {
+    fn is_synthetic(&self) -> bool {
+        true
+    }
+
     fn start(&mut self, mut callback: InputCallback) -> Result<(), String> {
         if self.running.load(Ordering::SeqCst) {
             return Ok(());
@@ -724,25 +732,29 @@ mod tests {
 
     #[test]
     fn file_input_emits_a_lead_burst_before_the_wall_clock() {
-        let mut input = FileInput::from_samples(vec![0.5; 4096], 256);
-        let collected = Arc::new(std::sync::Mutex::new(Vec::new()));
-        let sink = Arc::clone(&collected);
+        // One-second blocks distinguish a burst from paced delivery without
+        // requiring the OS to schedule this thread within two milliseconds.
+        let mut input = FileInput::from_samples(vec![0.5; 4096], 48_000);
+        assert!(input.is_synthetic());
+        let (ready, received) = mpsc::channel();
+        let mut blocks = 0;
+        let mut valid = true;
         input
             .start(Box::new(move |buf| {
-                sink.lock().unwrap().extend_from_slice(buf);
+                valid &= buf.len() == 48_000 && buf.iter().all(|s| *s == 0.5);
+                blocks += 1;
+                if blocks == 8 {
+                    let _ = ready.send(valid);
+                }
             }))
             .unwrap();
-        // One paced 256-frame block at 48 kHz is ~5.3 ms. Less than that must
-        // already contain the lead burst, not a single block.
-        thread::sleep(Duration::from_millis(2));
+        let burst = received.recv_timeout(Duration::from_secs(3));
         input.stop().unwrap();
-        let got = collected.lock().unwrap();
-        assert!(
-            got.len() >= 256 * 4,
-            "lead burst should emit several blocks immediately, got {}",
-            got.len()
+        assert_eq!(
+            burst,
+            Ok(true),
+            "eight paced blocks would take seven seconds"
         );
-        assert!(got.iter().all(|s| *s == 0.5));
     }
 
     #[test]
