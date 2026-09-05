@@ -9,7 +9,7 @@ This is the standard every piece of work is measured against. It is short becaus
 3. **One task, one commit, all gates green.** No "fix later". Commit messages in English with a prefix (`feat:`, `fix:`, `docs:`, `ci:`, `engine:`, `band:`, `ui:`, `ai:`, `rig:`, `test:`), ending with the trailer `Co-authored-by: DeepMind Antigravity <antigravity@google.com>`.
 4. **Simplest thing that meets the acceptance criterion.** The Ponytail plugin is active in every Antigravity session on this machine. Run `ponytail-review` on the diff before each commit and act on it. Seams (see [EXTENDING.md](../EXTENDING.md)) are the only abstraction allowed; everything else stays concrete.
 5. **Verify on both operating systems.** A change is not done until CI is green on `windows-latest` and `macos-latest`. macOS is only reachable through CI; keep macOS-affecting changes small and push often.
-6. **Report honestly.** If something failed, say it first. If something was skipped, say so. Never write "should work". Owner gates are not ticked by the builder; they are recorded as pending owner.
+6. **Report honestly.** If something failed, say it first. If something was skipped, say so. Never write "should work". Friend-led owner gates are deferred to V2 by Vegar's 2026-09-05 decision in [00-README.md](00-README.md); never tick them as passed or ask the friend to unblock V1. Developer checks and unfinished implementation remain V1 work. Later references to "pending owner" in this method mean deferred V2 checks.
 7. **Work sequentially.** No parallel agents, no fan-out. One task at a time. Breadth comes from many small, correct steps.
 8. **Do not touch what is not yours.** `docs/adr/` records decisions; changing one requires a new ADR that supersedes it, never an edit in place. Secrets never enter chat, logs or the repository.
 
@@ -50,7 +50,7 @@ corepack pnpm tauri build
 ## Git flow
 
 - Default branch `main`, protected by CI. Work on short-lived branches named `<milestone>/<slug>`, for example `m1b/drum-sampler`.
-- Open a PR with `gh pr create --fill`; the PR description lists what changed, what was verified (paste the gate output summary), and what is pending owner.
+- Open a PR with `gh pr create --fill`; the PR description lists what changed, what was verified (paste the gate output summary), and which friend checks are deferred to V2.
 - Wait for CI: `gh pr checks --watch`. Red CI is fixed on the same branch before anything else.
 - Merge your own PR when green: `gh pr merge --squash --delete-branch`. The squash commit keeps the prefix and the trailer.
 - Never `--force`, never `--no-verify`, never rewrite history, never commit directly to `main` after M0 lands.
@@ -70,11 +70,11 @@ A spike is a time-boxed experiment that decides an architectural question ([03-b
 
 ## Definition of "usable"
 
-Every milestone ends with a **demo checklist** in 03 that the builder runs on Windows with the file-backed input (and in CI headless). "Usable" means a guitarist could sit down and do the thing the milestone promises without reading docs. If the demo needs the real rig, the step is an owner gate and is listed as such.
+Every milestone ends with a **demo checklist** in 03 that the builder runs on Windows with the file-backed input (and in CI headless). "Usable" means a guitarist could sit down and do the thing the milestone promises without reading docs. If the demo needs the real rig, the friend-led step is deferred to V2; retain its procedure and keep developer checks separate.
 
 ## Reporting (end of every session)
 
-In English, in the PR description and as the last message of the session, in this order: (1) what is on `main` now (PR numbers, what a user can do), (2) what was done this session, (3) what failed or was skipped and why, (4) what is pending owner, (5) next step. Update the status board in [00-README.md](00-README.md).
+In English, in the PR description and as the last message of the session, in this order: (1) what is on `main` now (PR numbers, what a user can do), (2) what was done this session, (3) what failed or was skipped and why, (4) which friend checks are deferred to V2, (5) next step. Update the status board in [00-README.md](00-README.md).
 
 ## Per-task checklist
 
@@ -85,4 +85,4 @@ In English, in the PR description and as the last message of the session, in thi
 - [ ] `ponytail-review` run on the diff and acted on
 - [ ] Docs updated in the same commit (ARCHITECTURE, EXTENDING, or the hardware sheet) when a contract, seam or device fact changed
 - [ ] Commit with prefix and trailer; PR opened; CI green on both operating systems; squash-merged
-- [ ] (milestone) demo checklist run, status board updated, owner gates listed as pending
+- [ ] (milestone) demo checklist run, status board updated, friend checks listed as deferred to V2
