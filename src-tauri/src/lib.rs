@@ -11,6 +11,7 @@ pub mod originals;
 pub mod platform;
 pub mod settings;
 pub mod store;
+pub mod voice;
 
 use jam_audio::devices::{list_devices, AudioConfig, AudioDevices};
 use jam_audio::engine::{AudioEngine, EngineStatus, EngineTelemetry};
@@ -42,6 +43,7 @@ impl WarnOnce {
 }
 
 pub struct AppState {
+    pub voice: Arc<Mutex<voice::VoiceSession>>,
     pub recovery_notice: Mutex<Option<String>>,
     pub warnings: WarnOnce,
     /// Decoded guitar clips, keyed by file and checked against size and mtime (#44).
@@ -1055,6 +1057,7 @@ pub fn build_state() -> AppState {
     let rig_orchestrator = Arc::new(Mutex::new(build_rig(&settings, &library_arc.lock())));
 
     AppState {
+        voice: Arc::new(Mutex::new(voice::VoiceSession::default())),
         recovery_notice: Mutex::new(recovery_notice),
         warnings: WarnOnce::default(),
         clips: Mutex::new(clips::ClipCache::new(clips::ClipCache::DEFAULT_BUDGET)),
@@ -1149,6 +1152,10 @@ pub fn configure<R: tauri::Runtime>(
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            voice::voice_ptt,
+            voice::voice_speak,
+            voice::voice_cancel,
+            voice::voice_status,
             media::media_list,
             media::media_save,
             media::media_import,

@@ -268,6 +268,7 @@ pub struct AudioEngine {
     pub clips: Arc<Mutex<Vec<crate::workstation::Clip>>>,
     pub song_snapshot: serde_json::Value,
     pub audition: Arc<Mutex<Option<crate::workstation::Audition>>>,
+    pub voice: Arc<Mutex<crate::voice::VoiceBus>>,
     config: AudioConfig,
     running: Arc<AtomicBool>,
     tone_active: Arc<AtomicBool>,
@@ -331,6 +332,7 @@ impl AudioEngine {
             clips: Arc::new(Mutex::new(Vec::new())),
             song_snapshot: serde_json::Value::Null,
             audition: Arc::new(Mutex::new(None)),
+            voice: Arc::new(Mutex::new(crate::voice::VoiceBus::default())),
             config: config.clone(),
             running: Arc::new(AtomicBool::new(false)),
             tone_active: Arc::new(AtomicBool::new(false)),
@@ -406,6 +408,7 @@ impl AudioEngine {
         self.audition.lock().take();
         self.timeline.lock().stop();
         self.sequencer.lock().reset();
+        self.voice.lock().stop();
     }
 
     pub fn transport_seek_bar(&self, bar: u32) {
@@ -940,6 +943,7 @@ impl AudioEngine {
         let capture = Arc::clone(&self.capture);
         let clips = Arc::clone(&self.clips);
         let audition = Arc::clone(&self.audition);
+        let voice_bus = Arc::clone(&self.voice);
         let telemetry = Arc::clone(&self.latest_telemetry);
         let status_arc = Arc::clone(&self.status);
 
@@ -1068,6 +1072,7 @@ impl AudioEngine {
                             }
                         }
                         drop(preview);
+                        ctx.render_voice(&mut voice_bus.lock());
                         let (parts, notes) = {
                             let seq = sequencer_arc.lock();
                             (seq.part_audio.clone(), seq.note_events.clone())
@@ -1166,6 +1171,7 @@ impl AudioEngine {
         }
         self.timeline.lock().stop();
         self.sequencer.lock().reset();
+        self.voice.lock().stop();
         {
             let mut st = self.status.lock();
             st.running = false;
@@ -1201,6 +1207,9 @@ impl Drop for AudioEngine {
 /// Per-thread render scratch state.
 struct RenderContext {
     sample_rate: u32,
+    band_volume: f32,
+    voice_audio: Vec<f32>,
+    voice_duck: Vec<f32>,
     in_block: Vec<f32>,
     band_left: Vec<f32>,
     band_right: Vec<f32>,
@@ -1228,9 +1237,26 @@ struct ClickVoice {
 }
 
 impl RenderContext {
+    fn render_voice(&mut self, voice: &mut crate::voice::VoiceBus) {
+        voice.render(
+            self.sample_rate,
+            &mut self.voice_audio,
+            &mut self.voice_duck,
+        );
+        for i in 0..self.out_left.len() {
+            self.out_left[i] += self.band_left[i] * self.band_volume * (self.voice_duck[i] - 1.0)
+                + self.voice_audio[i];
+            self.out_right[i] += self.band_right[i] * self.band_volume * (self.voice_duck[i] - 1.0)
+                + self.voice_audio[i];
+        }
+    }
+
     fn new(sample_rate: u32) -> Self {
         Self {
             sample_rate,
+            band_volume: 0.0,
+            voice_audio: vec![0.0; RENDER_BLOCK],
+            voice_duck: vec![1.0; RENDER_BLOCK],
             in_block: vec![0.0; RENDER_BLOCK],
             band_left: vec![0.0; RENDER_BLOCK],
             band_right: vec![0.0; RENDER_BLOCK],
@@ -1403,6 +1429,7 @@ impl RenderContext {
             (m.tone_hz, m.click_volume, m.band_volume, m.input_monitor)
         };
         let counting_in = transport.state == "counting_in";
+        self.band_volume = band_vol;
         let mut click_starts: Vec<(usize, f32)> = Vec::new();
         for ev in &events {
             if let TimelineEvent::Beat { beat, offset, .. } = ev {
@@ -1467,6 +1494,27 @@ fn dirs_base() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn voice_ducking_preserves_monitor_and_does_not_unmute_the_band() {
+        let mut ctx = RenderContext::new(48_000);
+        let mut voice = crate::voice::VoiceBus::default();
+        voice.play(&vec![0; 48_000], -9.0).unwrap();
+        ctx.band_left.fill(0.5);
+        ctx.band_right.fill(0.5);
+        for volume in [0.0, 0.5] {
+            ctx.band_volume = volume;
+            ctx.out_left.fill(0.25 + 0.5 * volume);
+            ctx.out_right.clone_from(&ctx.out_left);
+            ctx.render_voice(&mut voice);
+            for i in 0..ctx.out_left.len() {
+                let expected = 0.25 + 0.5 * volume * ctx.voice_duck[i];
+                assert!((ctx.out_left[i] - expected).abs() < 1e-6);
+                assert_eq!(ctx.out_left[i], ctx.out_right[i]);
+                assert_eq!(ctx.band_left[i], 0.5, "recorder band remains dry");
+            }
+        }
+    }
 
     #[test]
     fn output_tap_aligns_all_stems_with_live_di_despite_variable_render_lead() {

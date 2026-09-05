@@ -170,7 +170,15 @@ Choose the current original or a Library chart in Harmonic discovery. Results sh
 
 ### Commands and reviewed edits
 
-Jo AI accepts typed band commands. Suggestion buttons fill the input; Send executes supported direct transport/band commands. Song changes are presented for review; sending a new message while a proposal waits replaces that proposal, and nothing is applied. The top Assistant panel stays mounted as you navigate and can propose grouped song edits, take analysis or shot edits. Review the values before Apply; stale or invalid proposals are refused. Conversations survive room changes during the session, not app restarts. Native speech input/output is not built.
+Jo AI accepts typed band commands. Suggestion buttons fill the input; Send executes supported direct transport/band commands. Song changes are presented for review; sending a new message while a proposal waits replaces that proposal, and nothing is applied. The top Assistant panel stays mounted as you navigate and can propose grouped song edits, take analysis or shot edits. Review the values before Apply; stale or invalid proposals are refused. Conversations survive room changes during the session, not app restarts. Optional speech uses the same command and review flow.
+
+### Talk to Jo
+
+In the desktop app, save an ElevenLabs key in AI & models and start a working hardware audio output. Open Jo AI → Voice setup, choose a microphone, enter a voice ID (or Load voices), choose how much the band should duck, and Save voice setup. The microphone uses its first input channel. A guitar-only interface is not a speech microphone. Voice setup is separate from the guitar input.
+
+Hold to talk with the pointer, or hold Space/Enter while that button has focus. Release sends the recording to ElevenLabs for transcription, then Jo uses the selected text brain or offline English commands and speaks the actual result. Song-edit proposals still require review. A new press during speech interrupts Jo. Capture stops automatically after 20 seconds; Cancel discards pending results, and leaving Jo or switching away from the window cancels microphone capture. Already applied commands remain applied. Requests already sent may still be billed; the app never retries automatically.
+
+Captured audio stays in Rust memory and is sent only for speech recognition; it is not saved as a take. Transcript and reply appear in the conversation. The band ducks with a 150 ms ramp; guitar monitoring is unchanged. Speech and ducking are not written to dry guitar or band stems. Browser preview has no microphone or speech output. Global shortcuts, MIDI PTT and measured provider latency remain pending.
 
 ### Connect a text API
 
@@ -184,7 +192,7 @@ The CLI keeps its own credentials. Codex can use a ChatGPT login or API-key logi
 
 ### Privacy and useful prompts
 
-Text assistants receive song text/structure, settings, rig name and cached take metrics as needed, not raw take audio or keys. Try “Add a quiet eight-bar bridge”, “Leave locked bass alone and thin out verse drums”, or “Append three concrete chorus images to this section’s lyrics”. Local take metrics are heuristics, not an AI listening judgment. Only media-generation commands send their explicitly selected generation inputs.
+Text assistants receive song text/structure, settings, rig name and cached take metrics as needed, not raw take audio or keys. Try “Add a quiet eight-bar bridge”, “Leave locked bass alone and thin out verse drums”, or “Append three concrete chorus images to this section’s lyrics”. Local take metrics are heuristics, not an AI listening judgment. Media generation sends its selected inputs; Talk sends its microphone capture to ElevenLabs.
 
 Read the action result: Jo reports engine refusals instead of claiming success. A tempo request outside the allowed range is limited to that range and the accepted BPM is shown. Band changes may wait for the next bar. An unchanged song or shot is reported as unchanged; locked parts stay locked.
 
@@ -368,7 +376,7 @@ Report the build commit, OS, device names, channel/buffer, screen/action, exact 
 
 React/TypeScript owns editing text and UI state; Rust owns audio, files, MIDI, processes and provider byte streams. src/ipc/client.ts routes commands to Tauri or the explicit browser simulator. src/store/engine.ts holds telemetry; src/lib/originals.ts and media.ts hold drafts. src-tauri/src contains the native command handlers. crates/jam-audio owns recording/rendering, jam-band sequencing, jam-core charts/timeline, and jam-rig MIDI.
 
-The output callback advances the audio clock. It uses bounded buffers without allocation, locks or logging in the callback. There is no Web Audio playback, native voice implementation or software amp/plugin hosting in this build. Audio monitoring remains hardware-owned.
+The output callback advances the audio clock. It uses bounded buffers without allocation, locks or logging in the callback. There is no Web Audio playback or software amp/plugin hosting in this build. Audio monitoring remains hardware-owned.
 
 ### Build and verify
 

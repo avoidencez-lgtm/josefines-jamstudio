@@ -1,17 +1,56 @@
-# Spike S5: Jo Voice Architecture & Tool Calling Dispatcher
+# S5: native Jo voice, implementation evidence
 
-## Summary
-Jo is the AI bandmate in Josefine's JamStudio. She must understand guitarist jargon, execute audio engine commands with sample-accurate safety, and respond promptly with a musical, supportive bandmate persona.
+Updated 2026-09-05. This replaces the obsolete description of Web Speech and
+TypeScript-owned audio. No live provider or headset acceptance is claimed.
 
-## Invariants & Seams
-1. **Audio Independence**:
-   - Voice STT and LLM generation NEVER run inside the high-priority audio callback or render thread.
-   - Rust engine provides audio telemetry and executes atomic IPC commands; TypeScript handles STT transcription, LLM tool resolution, and TTS rendering.
-2. **Tool Seams**:
-   - `transport_play`, `transport_pause`, `transport_stop`, `transport_set_tempo`
-   - `band_set` (style, intensity, parts muting, follow_energy)
-   - `band_cue` (fill, crash, stop, ending)
-   - `band_load_chart` (chart presets)
-   - `recorder_start`, `recorder_stop`
-3. **Offline & Test Fallback**:
-   - If no cloud API key (Google Gemini / OpenAI / ElevenLabs) is present in the secure keychain, Jo uses an offline semantic intent matcher (`jam-intent`) and Web Speech synthesis for zero-network determinism in unit tests and offline jams.
+## Decision and primary evidence
+
+Use the existing Rust HTTP boundary and audio render worker. No speech SDK,
+browser audio, Python process or new DSP implementation is needed.
+
+- [ElevenLabs batch transcription](https://elevenlabs.io/docs/api-reference/speech-to-text/convert):
+  multipart WAV, `model_id=scribe_v2`, response `text`; recordings must be at least
+  100 ms. The second native input requests 16 kHz and preserves its negotiated
+  WAV rate (8–192 kHz) instead of silently mislabelling device samples.
+- [Speech conversion](https://elevenlabs.io/docs/api-reference/text-to-speech/convert)
+  and the [official format table](https://github.com/elevenlabs/skills/blob/main/text-to-speech/SKILL.md):
+  `eleven_flash_v2_5`, `output_format=pcm_24000`, signed 16-bit little-endian mono.
+  Existing clip interpolation converts this at the engine's 48 kHz edge.
+- [Voice search](https://elevenlabs.io/docs/api-reference/voices/search):
+  `GET /v2/voices?page_size=100`. The UI permits a pasted voice ID beyond this page.
+
+## Implemented flow
+
+Jo AI hold button → native microphone capture → Rust Scribe request → transcript
+through the existing text/tool dispatcher → actual outcome text → Rust Flash
+request → speech bus. Review-required song edits still wait for Apply.
+Only text and status cross IPC. Captured WAV and returned PCM stay in memory.
+
+Capture has both a 20-second sample ceiling and a native stream-close timer.
+Cancellation invalidates late results; device startup drains before another turn.
+The network timeout is 30 seconds, response limits are 64 KiB for transcripts and
+60 seconds for speech, and requests are not retried. Usage records model, status,
+time and bytes without bodies or secrets; monetary estimates remain unknown.
+
+Speech ducks the generated band by a configurable amount (default -9 dB), with
+150 ms attenuation and recovery ramps. Guitar monitor and recorded dry/stem
+signals remain unchanged. Speech uses the existing render-ahead output queue:
+interrupting speech does not erase samples already queued for the device.
+
+## Reproducible checks and remaining acceptance
+
+- `cargo test -p jam-audio voice::tests --lib`: capture, PCM decoding, stream
+  release and duck/recovery tolerance 0.0002 linear gain after 150 ms.
+- `cargo test -p src-tauri net::voice --lib`: synthetic transcript fixture,
+  loopback HTTP response limits/content type, body-free usage records.
+- `cargo test -p src-tauri --test ipc_voice`: registered commands, missing capture,
+  headless refusal and generation-bound cancellation through the real IPC table.
+- `pnpm test tests/invariants/voice.test.ts`: release during startup, automatic
+  stop, cancelled transcription/LLM, startup cancellation and actual-result speech.
+
+The JSON fixture is authored from the documented response shape, not a recorded
+provider response. Global/MIDI activation, Stage presence, the planned recorded
+30-utterance script, speech usage units and first-audio latency measurement remain
+M2 work. A live headset run must record ten release-to-first-audio measurements,
+their median and duck recovery; the target is median ≤2.5 s. Full-response TTS
+buffering is the present ceiling; stream PCM if live evidence misses that target.

@@ -6,6 +6,7 @@
 
 use crate::keys::SecretStore;
 pub mod media;
+pub mod voice;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
