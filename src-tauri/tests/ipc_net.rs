@@ -158,7 +158,10 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
         );
     }
     for provider in ["bogus", "Gemini", "", "gemini"] {
-        assert!(!state.secret_store.has(provider), "{provider:?} got a key");
+        assert!(
+            !state.secret_store.has(provider).unwrap(),
+            "{provider:?} got a key"
+        );
         assert_eq!(
             studio.ok("keys_has", json!({"provider": provider})),
             json!(false)
@@ -217,7 +220,7 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
     assert!(err.contains("missing required key provider"), "{err}");
     let err = studio.err("keys_delete", json!({}));
     assert!(err.contains("missing required key provider"), "{err}");
-    assert!(!state.secret_store.has("gemini"));
+    assert!(!state.secret_store.has("gemini").unwrap());
     assert_offline();
 }
 

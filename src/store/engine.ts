@@ -85,6 +85,7 @@ export interface EngineState {
   devices: AudioDevices;
   settings: AppSettings | null;
   keysPresent: Record<string, boolean>;
+  keyErrors: Record<string, string | undefined>;
   notices: Notice[];
 
   setScreen: (screen: ScreenId) => void;
@@ -285,6 +286,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
     devices: { inputs: [], outputs: [] },
     settings: null,
     keysPresent: {},
+    keyErrors: {},
     notices: [],
     tapTimes: [],
     tempoTrainer: {
@@ -712,22 +714,28 @@ export const useEngineStore = create<EngineState>((set, get) => {
         const has = await ipc.invoke<boolean>("keys_has", { provider });
         set((state) => ({
           keysPresent: { ...state.keysPresent, [provider]: has },
+          keyErrors: { ...state.keyErrors, [provider]: undefined },
         }));
         return has;
-      } catch {
-        return false;
+      } catch (error) {
+        set((state) => ({
+          keyErrors: { ...state.keyErrors, [provider]: String(error) },
+        }));
+        throw new Error(String(error));
       }
     },
     setKey: async (provider, key) => {
       await ipc.invoke("keys_set", { provider, key });
       set((state) => ({
         keysPresent: { ...state.keysPresent, [provider]: true },
+        keyErrors: { ...state.keyErrors, [provider]: undefined },
       }));
     },
     deleteKey: async (provider) => {
       await ipc.invoke("keys_delete", { provider });
       set((state) => ({
         keysPresent: { ...state.keysPresent, [provider]: false },
+        keyErrors: { ...state.keyErrors, [provider]: undefined },
       }));
     },
 

@@ -39,8 +39,12 @@ pub struct Generate {
     #[serde(default)]
     pub output_node: String,
 }
-pub fn configured(m: &Model, store: &dyn SecretStore) -> bool {
-    m.protocol == "comfy" || store.has(&m.provider)
+pub fn configured(m: &Model, store: &dyn SecretStore) -> Result<bool, String> {
+    if m.protocol == "comfy" {
+        Ok(true)
+    } else {
+        store.has(&m.provider)
+    }
 }
 pub fn request(r: &Generate) -> Result<(Model, String, Value), String> {
     let m = catalog()

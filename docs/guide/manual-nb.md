@@ -318,7 +318,7 @@ Tillat mikrofontilgang for Jamstudio på Mac når du blir spurt; valgt lydinngan
 
 ### Nøkler, modeller og forbruk
 
-AI & models inneholder leverandørvalg, redigerbare modell-ID-er, deteksjon av installerte agenter og API-nøkler. Nøkler lagres i Windows-legitimasjon eller Mac Keychain, aldri i låtdokumenter. Nøkkelfeltet tømmes etter lagring; appen viser at nøkkelen finnes uten å returnere hemmeligheten. Save AI settings lagrer valgt modell/grenser. Modellbytte tømmer gamle prisanslag.
+AI & models inneholder leverandørvalg, redigerbare modell-ID-er, deteksjon av installerte agenter og API-nøkler. Nøkler lagres i Windows-legitimasjon eller Mac Keychain, aldri i låtdokumenter. Nøkkelfeltet tømmes etter lagring; appen viser at nøkkelen finnes uten å returnere hemmeligheten. Save AI settings lagrer valgt modell/grenser. Modellbytte tømmer gamle prisanslag. Keychain unavailable betyr at den lagrede nøkkelen ikke kunne kontrolleres, ikke at den mangler. Lås opp eller tillat tilgang til operativsystemets nøkkellager, og bruk Check key status under API keys. Kontrollen leser bare om nøkkelen finnes og sender ingen betalt forespørsel. Mislykket sletting vises som en feil; appen hevder ikke at nøkkelen er fjernet. Jo viser feil ved mislykkede leverandørforespørsler uten å kjøre frakoblede kommandoer.
 
 Usage registrerer leverandør/modell/status/tid/byte og eventuelle anslag, ikke prompter eller innloggingsdata. Tokengrenser og anslag i USD per million hjelper planlegging; de er ikke håndhevede kontobudsjetter eller sluttfakturaer. Sett budsjettgrenser hos leverandøren og kontroller dens kontrollpanel. Medieforespørsler og installert CLI-bruk har egne faktureringsregler.
 

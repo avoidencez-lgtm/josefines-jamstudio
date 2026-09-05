@@ -520,6 +520,17 @@ refused so credentials cannot be forwarded to another endpoint. Usage entries
 add optional model/estimatedCostUsd while retaining compatibility with old logs.
 Estimates are approximate metadata, not provider invoices or spending caps.
 
+Credential presence is fallible: `keys_has` resolves to a boolean only after a
+successful keychain read, otherwise it rejects. `providers_list` keeps all
+providers available and adds optional `keyError` per entry; when present,
+`hasKey: false` means unavailable to this app, not proven absent. Settings shows
+the error and offers **Check key status** after unlocking/allowing OS keychain
+access. Successful check/save/delete clears that provider's cached error.
+Jo and media preflight preserve errors instead of requesting a replacement key;
+local Comfy workflows do not require keychain access. A failed Jo provider
+request reports the error without executing the offline parser. Keyring errors
+are mapped to fixed guidance, never credential payloads or platform details.
+
 Song Lab sends text context only, without take/clip audio. It parses bounded
 proposals, validates chords and checks song identity plus the original body before
 applying. The existing version/edit operations preserve the original; recording

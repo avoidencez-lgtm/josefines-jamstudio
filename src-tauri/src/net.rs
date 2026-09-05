@@ -85,15 +85,21 @@ pub struct ProviderInfo {
     pub id: String,
     pub description: String,
     pub has_key: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_error: Option<String>,
 }
 
 pub fn providers_info(store: &dyn SecretStore) -> Vec<ProviderInfo> {
     PROVIDERS
         .iter()
-        .map(|p| ProviderInfo {
-            id: p.id.to_string(),
-            description: p.description.to_string(),
-            has_key: store.has(p.id),
+        .map(|p| {
+            let status = store.has(p.id);
+            ProviderInfo {
+                id: p.id.to_string(),
+                description: p.description.to_string(),
+                has_key: status.as_ref().copied().unwrap_or(false),
+                key_error: status.err(),
+            }
         })
         .collect()
 }

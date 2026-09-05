@@ -5,7 +5,9 @@ use std::sync::Mutex;
 
 pub trait SecretStore: Send + Sync {
     fn set(&self, provider: &str, secret: &str) -> Result<(), String>;
-    fn has(&self, provider: &str) -> bool;
+    fn has(&self, provider: &str) -> Result<bool, String> {
+        self.get(provider).map(|secret| secret.is_some())
+    }
     fn delete(&self, provider: &str) -> Result<(), String>;
     /// The secret itself. Only `net::provider_fetch` (and media) may call this;
     /// no IPC command returns a key to the WebView.
@@ -25,8 +27,22 @@ pub trait SecretStore: Send + Sync {
     }
 }
 
-fn keychain_unavailable(err: impl std::fmt::Display) -> String {
-    format!("keychain unavailable: {err}")
+fn keychain_unavailable(err: keyring::Error) -> String {
+    // Never format credential payloads or platform error details into IPC/logs.
+    let reason = match err {
+        keyring::Error::NoStorageAccess(_) => "access denied or locked",
+        keyring::Error::BadEncoding(_) => "saved credential could not be decoded",
+        keyring::Error::Ambiguous(_) => "multiple matching credentials",
+        _ => "secure storage operation failed",
+    };
+    format!("keychain unavailable: {reason}. Unlock or allow access to the OS keychain, then retry in Settings.")
+}
+
+fn delete_result(result: keyring::Result<()>) -> Result<(), String> {
+    match result {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(error) => Err(keychain_unavailable(error)),
+    }
 }
 
 /// KeyringStore: Production implementation using OS Keychain via keyring crate.
@@ -44,24 +60,14 @@ impl Default for KeyringStore {
 
 impl SecretStore for KeyringStore {
     fn set(&self, provider: &str, secret: &str) -> Result<(), String> {
-        let entry = keyring::Entry::new(&self.service, provider)
-            .map_err(|e| format!("Keyring entry error: {}", e))?;
-        entry
-            .set_password(secret)
-            .map_err(|e| format!("Failed to set key for {}: {}", provider, e))?;
+        let entry = keyring::Entry::new(&self.service, provider).map_err(keychain_unavailable)?;
+        entry.set_password(secret).map_err(keychain_unavailable)?;
         Ok(())
-    }
-
-    fn has(&self, provider: &str) -> bool {
-        matches!(self.get(provider), Ok(Some(_)))
     }
 
     fn delete(&self, provider: &str) -> Result<(), String> {
         let entry = keyring::Entry::new(&self.service, provider).map_err(keychain_unavailable)?;
-        match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(format!("Could not remove the API key for {provider}: {e}")),
-        }
+        delete_result(entry.delete_credential())
     }
 
     fn get(&self, provider: &str) -> Result<Option<String>, String> {
@@ -85,11 +91,6 @@ impl SecretStore for MemoryStore {
         let mut map = self.secrets.lock().unwrap();
         map.insert(provider.to_string(), secret.to_string());
         Ok(())
-    }
-
-    fn has(&self, provider: &str) -> bool {
-        let map = self.secrets.lock().unwrap();
-        map.contains_key(provider)
     }
 
     fn delete(&self, provider: &str) -> Result<(), String> {
@@ -116,10 +117,6 @@ impl SecretStore for FailingStore {
         Err("FailingStore refuses set".into())
     }
 
-    fn has(&self, _provider: &str) -> bool {
-        false
-    }
-
     fn delete(&self, _provider: &str) -> Result<(), String> {
         match &self.delete_error {
             Some(error) => Err(error.clone()),
@@ -142,29 +139,32 @@ mod tests {
     #[test]
     fn test_memory_secret_store() {
         let store = MemoryStore::default();
-        assert!(!store.has("gemini"));
+        assert!(!store.has("gemini").unwrap());
 
         store.set("gemini", "secret_key_value").unwrap();
-        assert!(store.has("gemini"));
+        assert!(store.has("gemini").unwrap());
         assert_eq!(
             store.get("gemini").unwrap().as_deref(),
             Some("secret_key_value")
         );
 
         store.delete("gemini").unwrap();
-        assert!(!store.has("gemini"));
+        assert!(!store.has("gemini").unwrap());
         assert_eq!(store.get("gemini").unwrap(), None);
         store.delete("gemini").unwrap();
     }
 
     #[test]
     fn delete_propagates_store_errors() {
-        let store = FailingStore {
-            get_error: None,
-            delete_error: Some("Could not remove the API key for gemini: access denied".into()),
-        };
-        let err = store.delete("gemini").unwrap_err();
+        assert!(delete_result(Ok(())).is_ok());
+        assert!(delete_result(Err(keyring::Error::NoEntry)).is_ok());
+        let err = delete_result(Err(keyring::Error::NoStorageAccess(Box::new(
+            std::io::Error::other("secret platform details"),
+        ))))
+        .unwrap_err();
         assert!(err.contains("access denied"), "{err}");
+        assert!(!err.contains("secret"), "{err}");
+        let err = keychain_unavailable(keyring::Error::BadEncoding(b"secret".to_vec()));
         assert!(!err.contains("secret"), "{err}");
     }
 
@@ -187,5 +187,31 @@ mod tests {
         let store = MemoryStore::default();
         let err = store.require("gemini").unwrap_err();
         assert!(err.contains("no API key for \"gemini\""), "{err}");
+    }
+
+    #[test]
+    fn keychain_failure_survives_provider_status_and_media_preflight() {
+        let store = FailingStore {
+            get_error: Some("keychain unavailable: locked".into()),
+            delete_error: None,
+        };
+        let providers = serde_json::to_value(crate::net::providers_info(&store)).unwrap();
+        assert!(providers
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p["keyError"] == "keychain unavailable: locked"));
+        for model in crate::net::media::catalog() {
+            let result =
+                serde_json::to_value(crate::net::media::configured(&model, &store)).unwrap();
+            if model.protocol == "comfy" {
+                assert_eq!(result, serde_json::json!({"Ok": true}));
+            } else {
+                assert_eq!(
+                    result,
+                    serde_json::json!({"Err": "keychain unavailable: locked"})
+                );
+            }
+        }
     }
 }

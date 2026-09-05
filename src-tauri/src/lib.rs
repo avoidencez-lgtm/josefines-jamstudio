@@ -202,7 +202,7 @@ fn keys_set(provider: String, key: String, state: State<'_, AppState>) -> Result
 }
 
 #[tauri::command]
-fn keys_has(provider: String, state: State<'_, AppState>) -> bool {
+fn keys_has(provider: String, state: State<'_, AppState>) -> Result<bool, String> {
     state.secret_store.has(&provider)
 }
 
