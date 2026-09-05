@@ -88,7 +88,7 @@ struct SongBody {
 fn song_dir() -> PathBuf {
     Library::default_user_root().join("originals")
 }
-fn valid_id(id: &str) -> Result<(), String> {
+pub(crate) fn valid_id(id: &str) -> Result<(), String> {
     if id.is_empty()
         || id.len() > 100
         || !id

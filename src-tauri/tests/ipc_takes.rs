@@ -692,3 +692,41 @@ fn media_from_take_mixes_the_clean_stems_into_an_audio_asset() {
     assert_eq!(sidecar["id"], asset["id"]);
     assert_eq!(sidecar["path"], asset["path"]);
 }
+
+#[test]
+fn take_commands_refuse_path_like_ids() {
+    let studio = Studio::boot();
+    for id in ["../../saved", "a/b", "x:y", ""] {
+        let err = studio.err("takes_export_daw", json!({ "takeId": id }));
+        assert!(err.contains("Invalid"), "{id:?}: {err}");
+        let err = studio.err("takes_delete", json!({ "takeId": id }));
+        assert!(err.contains("Invalid"), "{id:?}: {err}");
+    }
+}
+
+#[test]
+fn a_cached_take_whose_folder_is_gone_can_still_be_deleted() {
+    let studio = Studio::boot();
+    let id = unique("take-gone-from-disk");
+    let gone = takes_root().join(&id);
+    // A cache row for a take folder that was deleted outside the app: listed
+    // forever, and delete used to fail on the manifest write before reaching
+    // the cache row (#88).
+    let meta = jam_audio::recorder::TakeMetadata {
+        id: id.clone(),
+        path_input: gone.join("guitar-di.wav").to_string_lossy().into_owned(),
+        ..Default::default()
+    };
+    studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .insert_take(&meta)
+        .unwrap();
+    let listed = studio.ok("takes_list", json!({}));
+    assert!(find(&listed, &id).is_some(), "ghost row is listed");
+    studio.ok("takes_delete", json!({ "takeId": id }));
+    let listed = studio.ok("takes_list", json!({}));
+    assert!(find(&listed, &id).is_none(), "ghost row is gone");
+}
