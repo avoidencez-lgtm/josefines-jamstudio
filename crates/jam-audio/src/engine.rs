@@ -63,7 +63,9 @@ impl OutputTap {
             let input = self.input.pop().ok();
             match self.playback.pop() {
                 Ok(mut frame) => {
-                    self.recording = frame.take != 0;
+                    // FileInput samples travel with their rendered frame;
+                    // timer scheduling gaps do not lose synthetic samples.
+                    self.recording = frame.take != 0 && !frame.synthetic;
                     stereo.copy_from_slice(&frame.output);
                     if !frame.synthetic {
                         if input.is_none() && frame.take != 0 {
@@ -751,6 +753,8 @@ impl AudioEngine {
         status.sample_rate = effective_rate;
 
         // --- input ---
+        let fake_wav = std::env::var("JAM_FAKE_INPUT").ok();
+        let live_input = fake_wav.is_none() && !headless_requested();
         let (mut input_prod, input_cons) = RingBuffer::<f32>::new(ring_capacity);
         let clock = Arc::clone(&self.recording_clock);
         let input_callback = Box::new(move |buffer: &[f32]| {
@@ -758,12 +762,14 @@ impl AudioEngine {
                 // Dropping on overflow is the right call: the render thread bounds
                 // the backlog anyway.
                 let _ = input_prod.push(sample);
-                if recording_input.push(sample).is_err() && clock.active.load(Ordering::Acquire) {
+                if live_input
+                    && recording_input.push(sample).is_err()
+                    && clock.active.load(Ordering::Acquire)
+                {
                     clock.lost.store(true, Ordering::Release);
                 }
             }
         });
-        let fake_wav = std::env::var("JAM_FAKE_INPUT").ok();
         let mut input_driver: Box<dyn AudioInput> = match (&fake_wav, headless_requested()) {
             (Some(path), _) => match FileInput::from_wav_file(path, requested_buffer as usize) {
                 Ok(f) => Box::new(f),
@@ -1470,6 +1476,22 @@ mod tests {
         // A missing output frame is visible to the recording worker, never hidden.
         tap.render(&mut [0.0; 2]);
         assert!(lost.load(Ordering::Acquire));
+        lost.store(false, Ordering::Release);
+        playback
+            .push(OutputFrame {
+                synthetic: true,
+                take: 8,
+                stems: [0.25; 9],
+                ..Default::default()
+            })
+            .unwrap();
+        tap.render(&mut [0.0; 2]);
+        assert_eq!(captured.pop().unwrap().stems, [0.25; 9]);
+        tap.render(&mut [0.0; 2]);
+        assert!(
+            !lost.load(Ordering::Acquire),
+            "synthetic timer gaps do not lose FileInput samples"
+        );
     }
 
     #[test]
