@@ -244,6 +244,17 @@ fn headless_requested() -> bool {
         .unwrap_or(false)
 }
 
+/// Different in/out rates starve or overrun the input queue: the DI is damaged.
+/// Refuse the input (invariant 7) instead of recording a bad take. Resampling
+/// is the longer-term invariant-2 work.
+fn input_rate_mismatch(input_hz: u32, output_hz: u32) -> Option<String> {
+    (input_hz != output_hz && input_hz > 0 && output_hz > 0).then(|| {
+        format!(
+            "Cannot record: input is {input_hz} Hz and output is {output_hz} Hz. Use one interface for both; a take would be damaged."
+        )
+    })
+}
+
 impl AudioEngine {
     pub fn new(config: AudioConfig) -> Self {
         let sample_rate = config.sample_rate;
@@ -427,6 +438,11 @@ impl AudioEngine {
     pub fn recorder_start(&self, session_id: String) -> Result<String, String> {
         if !self.status().running {
             return Err("Start a working audio device before recording.".into());
+        }
+        if let Some(err) = self.status().last_error {
+            if err.contains("Cannot record:") {
+                return Err(err);
+            }
         }
         self.audition.lock().take();
         let (style_id, chart_id) = {
@@ -684,7 +700,7 @@ impl AudioEngine {
                 requested_buffer,
             )),
         };
-        let input_driver: Box<dyn AudioInput> = match input_driver.start(input_callback) {
+        let mut input_driver: Box<dyn AudioInput> = match input_driver.start(input_callback) {
             Ok(()) => input_driver,
             Err(e) => {
                 problems.push(format!("input: {e}; tuner and recording input are silent"));
@@ -694,12 +710,13 @@ impl AudioEngine {
             }
         };
         status.input = input_driver.info().filter(|_| input_driver.is_running());
-        if let Some(inp) = &status.input {
-            if inp.sample_rate != effective_rate {
-                problems.push(format!(
-                    "input runs at {} Hz but output at {effective_rate} Hz; tuner pitch will be off. Use one interface for both.",
-                    inp.sample_rate
-                ));
+        if let Some(rate) = status.input.as_ref().map(|i| i.sample_rate) {
+            if let Some(msg) = input_rate_mismatch(rate, effective_rate) {
+                problems.push(msg);
+                let _ = input_driver.stop();
+                input_driver =
+                    Box::new(FileInput::silent(requested_buffer as usize, effective_rate));
+                status.input = None;
             }
         }
 
@@ -1248,6 +1265,21 @@ mod tests {
         AudioEngine::new(AudioConfig::default())
     }
 
+    fn write_mono_wav(path: &std::path::Path, rate: u32) {
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).unwrap();
+        for i in 0..(rate / 20) {
+            let s = (i as f32 * 440.0 * 2.0 * std::f32::consts::PI / rate as f32).sin() * 16_000.0;
+            writer.write_sample(s as i16).unwrap();
+        }
+        writer.finalize().unwrap();
+    }
+
     #[test]
     fn original_records_parts_notes_and_snapshot_then_clears_for_a_regular_chart() {
         let mut engine = headless_engine();
@@ -1395,5 +1427,52 @@ mod tests {
         assert!((t.hz - 440.0).abs() < 5.0, "got {} Hz", t.hz);
         assert!(t.note.starts_with('A'));
         engine.stop().unwrap();
+    }
+
+    #[test]
+    fn input_rate_mismatch_names_both_rates_and_the_recording() {
+        let msg = super::input_rate_mismatch(44_100, 48_000).unwrap();
+        assert!(msg.contains("44100"), "{msg}");
+        assert!(msg.contains("48000"), "{msg}");
+        assert!(msg.contains("Cannot record"), "{msg}");
+        assert!(super::input_rate_mismatch(48_000, 48_000).is_none());
+        assert!(super::input_rate_mismatch(0, 48_000).is_none());
+    }
+
+    #[test]
+    fn file_input_at_44100_is_refused_against_a_48k_output() {
+        std::env::set_var("JAM_HEADLESS", "1");
+        let dir = std::env::temp_dir().join(format!(
+            "jam-rate-mismatch-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wav = dir.join("di-44100.wav");
+        write_mono_wav(&wav, 44_100);
+        std::env::set_var("JAM_FAKE_INPUT", &wav);
+        let mut engine = AudioEngine::new(AudioConfig {
+            sample_rate: 48_000,
+            ..AudioConfig::default()
+        });
+        let started = engine.start();
+        std::env::remove_var("JAM_FAKE_INPUT");
+        started.unwrap();
+        let status = engine.status();
+        let err = status.last_error.expect("mismatch must be loud");
+        assert!(err.contains("44100"), "{err}");
+        assert!(err.contains("48000"), "{err}");
+        assert!(err.contains("Cannot record"), "{err}");
+        assert!(
+            status.input.is_none(),
+            "mismatched input must not stay open"
+        );
+        let rec = engine.recorder_start("mismatch".into()).unwrap_err();
+        assert!(rec.contains("Cannot record"), "{rec}");
+        engine.stop().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
