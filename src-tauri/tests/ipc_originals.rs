@@ -558,6 +558,54 @@ fn reloading_a_transposed_song_keeps_the_snapshot_and_section_bands() {
 }
 
 #[test]
+fn keep_playback_transpose_does_not_stop_or_clear_the_loop() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let id = unique("song");
+    let mut doc = distinctive_song(&id, "F#m7", 133.0);
+    studio.ok("originals_load", json!({ "document": doc }));
+    studio.ok("transport_set_count_in", json!({ "bars": 0 }));
+    studio.ok(
+        "transport_set_loop",
+        json!({ "startBar": 2, "endBar": 5, "enabled": true }),
+    );
+    studio.ok("transport_seek_bar", json!({ "bar": 3 }));
+    studio.ok("transport_play", json!({}));
+    wait_until("playing inside the loop", || {
+        let t = telemetry(&studio)["transport"].clone();
+        t["state"] == "playing" && t["bar"].as_u64() >= Some(2)
+    });
+
+    doc["body"]["chart"]["sections"][0]["bars"] =
+        json!([[{ "chord": "Gm7", "beats": 4 }], [{ "chord": "Eb", "beats": 4 }]]);
+    studio.ok(
+        "originals_load",
+        json!({ "document": doc, "keepPlayback": true }),
+    );
+
+    let tel = telemetry(&studio);
+    assert_eq!(tel["transport"]["state"], "playing", "{tel}");
+    assert_eq!(tel["transport"]["loop_enabled"], true);
+    assert_eq!(tel["transport"]["loop_start_bar"], 2);
+    assert_eq!(tel["transport"]["loop_end_bar"], 5);
+    assert_eq!(tel["transport"]["bpm"], 133.0);
+    assert!(
+        tel["transport"]["bar"].as_u64().unwrap_or(0) >= 2,
+        "playhead must stay in the loop, got {}",
+        tel["transport"]["bar"]
+    );
+    wait_until("the transposed chord at the playhead", || {
+        let tel = telemetry(&studio);
+        matches!(
+            tel["band"]["current_chord"].as_str(),
+            Some("Gm7") | Some("Eb")
+        )
+    });
+    let state = studio.app().state::<app_lib::AppState>();
+    assert_eq!(state.engine.lock().song_snapshot["id"], id);
+}
+
+#[test]
 fn load_refuses_songs_the_band_cannot_play_and_keeps_the_previous_song() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
