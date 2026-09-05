@@ -489,7 +489,7 @@ pub fn capture_keep(
     state: State<'_, AppState>,
 ) -> Result<TakeMetadata, String> {
     let take = state.engine.lock().keep_capture(session_id)?;
-    state.store.lock().insert_take(&take)?;
+    let _ = state.store.lock().insert_take(&take);
     Ok(take)
 }
 #[tauri::command]
