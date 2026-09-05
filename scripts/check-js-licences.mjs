@@ -1,7 +1,8 @@
 import { execSync } from "node:child_process";
+import satisfies from "spdx-satisfies";
 
-/** Same allowlist as AGENTS.md invariant 9 / deny.toml `allow`. */
-const ALLOWED = new Set([
+/** Base policy from AGENTS.md invariant 9; JS package exceptions are below. */
+const ALLOWED = [
   "Apache-2.0",
   "MIT",
   "BSD-2-Clause",
@@ -11,7 +12,7 @@ const ALLOWED = new Set([
   "Zlib",
   "Unicode-3.0",
   "CC0-1.0",
-]);
+];
 
 /**
  * Recorded exceptions (invariant 9). Names include optional platform packages
@@ -31,20 +32,13 @@ const EXCEPTIONS = {
 
 const MIN_PACKAGES = 50;
 
-function allowedFor(pkg, token) {
-  return ALLOWED.has(token) || (EXCEPTIONS[pkg] ?? []).includes(token);
-}
-
 function checkLicense(rawLicense, pkg) {
-  const clean = rawLicense.replace(/[()]/g, "").trim();
-  if (clean === "Unknown" || clean.length === 0) return false;
-  if (clean.includes(" OR ")) {
-    return clean.split(" OR ").some((part) => checkLicense(part.trim(), pkg));
+  const exceptions = Object.hasOwn(EXCEPTIONS, pkg) ? EXCEPTIONS[pkg] : [];
+  try {
+    return satisfies(rawLicense, [...ALLOWED, ...exceptions].join(" OR "));
+  } catch {
+    return false; // Invalid or unknown SPDX expressions are unverified.
   }
-  if (clean.includes(" AND ")) {
-    return clean.split(" AND ").every((part) => checkLicense(part.trim(), pkg));
-  }
-  return allowedFor(pkg, clean);
 }
 
 console.log("Checking JavaScript package licenses against allowlist...");
@@ -66,7 +60,11 @@ try {
   process.exit(1);
 }
 
-if (!licensesData || typeof licensesData !== "object") {
+if (
+  !licensesData ||
+  typeof licensesData !== "object" ||
+  Array.isArray(licensesData)
+) {
   console.error("JS licence check FAILED: pnpm reported no licence table.");
   process.exit(1);
 }
@@ -74,13 +72,35 @@ if (!licensesData || typeof licensesData !== "object") {
 let count = 0;
 let hasBanned = false;
 for (const [license, packages] of Object.entries(licensesData)) {
-  if (!Array.isArray(packages)) continue;
+  if (!Array.isArray(packages)) {
+    console.error(
+      `JS licence check FAILED: invalid package list for ${license}.`,
+    );
+    process.exit(1);
+  }
   for (const pkg of packages) {
+    if (
+      !pkg ||
+      typeof pkg !== "object" ||
+      Array.isArray(pkg) ||
+      typeof pkg.name !== "string" ||
+      !pkg.name.trim() ||
+      !Array.isArray(pkg.versions) ||
+      pkg.versions.length === 0 ||
+      !pkg.versions.every(
+        (version) => typeof version === "string" && version.trim(),
+      )
+    ) {
+      console.error(
+        `JS licence check FAILED: invalid package record for ${license}.`,
+      );
+      process.exit(1);
+    }
     count += 1;
-    const name = pkg?.name ?? "";
+    const name = pkg.name;
     if (!checkLicense(license, name)) {
       console.error(`BANNED or unverified license: ${license}`);
-      console.error(`  - ${name}@${pkg?.version ?? "?"} (${pkg?.path ?? ""})`);
+      console.error(`  - ${name}@${pkg.versions.join(", ")}`);
       hasBanned = true;
     }
   }
