@@ -284,6 +284,30 @@ pub fn file_takes() -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
     scan_takes(&takes_root())
 }
 
+/// Metadata paths are untrusted; updates belong only to root/<validated take id>.
+pub fn save_take_manifest(take: &TakeMetadata) -> Result<(), String> {
+    valid_id(&take.id)?;
+    let root = takes_root().canonicalize().map_err(|e| e.to_string())?;
+    let dir = root.join(&take.id);
+    let meta = fs::symlink_metadata(&dir).map_err(|e| e.to_string())?;
+    let input_dir = Path::new(&take.path_input)
+        .parent()
+        .ok_or("Take input directory missing")?
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    if !meta.is_dir()
+        || meta.file_type().is_symlink()
+        || dir.canonicalize().map_err(|e| e.to_string())? != dir
+        || input_dir != dir
+    {
+        return Err(format!(
+            "Take {} input is not inside its take directory",
+            take.id
+        ));
+    }
+    jam_audio::recorder::save_manifest(take)
+}
+
 fn scan_takes(root: &Path) -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
     if !root.exists() {
         return Ok((vec![], vec![]));
@@ -463,7 +487,7 @@ pub fn takes_favourite(
     let mut take = crate::find_take(&state, &take_id)?;
     take.extra
         .insert("favourite".into(), Value::Bool(favourite));
-    jam_audio::recorder::save_manifest(&take)?;
+    save_take_manifest(&take)?;
     Ok(take)
 }
 

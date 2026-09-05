@@ -65,7 +65,7 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
-2026-09-05 Write follow-up (pending review): the workspace names the arrangement loaded in the band and distinguishes it from the current draft, including band settings and guitar layers. Play, loop and record share the accepted-snapshot update; failed loads preserve the previous indicator. Contextual help and both exported manuals explain Save versus Play versus Space.
+2026-09-05 Write follow-up ([PR #119](https://github.com/avoidencez-lgtm/josefines-jamstudio/pull/119), merged): the workspace names the arrangement loaded in the band and distinguishes it from the current draft, including band settings and guitar layers. Play, loop and record share the accepted-snapshot update; failed loads preserve the previous indicator. Contextual help and both exported manuals explain Save versus Play versus Space.
 
 2026-09-05 rig persistence follow-up ([PR #117](https://github.com/avoidencez-lgtm/josefines-jamstudio/pull/117), merged): profile, section mapping, follow-section and MIDI connection changes save before replacing the active configuration. IPC regression coverage verifies corrupt-file and write failures leave the previous runtime state and settings file intact, including an existing synthetic MIDI connection. Hardware verification is not claimed.
 
@@ -184,7 +184,7 @@ The 2026-09-05 pass adds searchable English/Bokmål help, generated manuals for 
 
 The next 2026-09-05 pass adds melody-to-harmony sketches, rehearsal setlists, harmonic discovery, three-perspective coaching, reference forms, arrangement briefs, beat-grid cuts, blind take comparisons, song tone snapshots and audio setup profiles. English/Bokmål help covers all ten; [validation, the live-test incident and remaining owner gates](../reviews/room-capabilities-2026-09-05.md) distinguish browser, native headless, live CLI and physical-hardware evidence. The existing roadmap and signing/owner gates remain open.
 
-### 2026-09-05 take-analysis evidence (implementation branch)
+### 2026-09-05 take-analysis evidence (PR #125, merged)
 
 Sessions now presents measured grid distance, early/late bias, spread, attack-level
 variation and pitch coverage. Missing evidence is explicit. Local exercises do not
@@ -192,3 +192,10 @@ rate musical quality; Analysis help opens the English/Bokmål explanation beside
 the take. Existing cached scores can be reanalysed. The IPC adds raw measurements
 without removing legacy fields. This advances M6 but does not complete durable
 analysis, bend-aware precision, chord agreement or structured provider reviews.
+
+The persistence follow-up saves versioned measurements and source details into
+the take manifest before reporting success. Sessions restores them when reopened,
+including with an empty index, and offers Analyze again for damaged or unsupported
+evidence. Metadata writes stay inside the validated take directory and refuse
+pre-existing temporary files. This completes analysis persistence; structured
+provider reviews and the remaining M6 measurement targets are still unfinished.

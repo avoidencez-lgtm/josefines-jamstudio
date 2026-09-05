@@ -494,6 +494,73 @@ fn analysis_of_a_synthetic_a3_sine_finds_pitched_frames_in_tune() {
 }
 
 #[test]
+fn take_analysis_survives_restart_and_failed_reanalysis_preserves_the_manifest() {
+    let _scenario = common::scenario();
+    let take = synthetic_take(0.25, "1700000000.000");
+    let path = take.dir.join("take.json");
+    let mut original = manifest(&take.dir);
+    original["favourite"] = json!(true);
+    original["futureField"] = json!({"keep": true});
+    original["analysis"] = json!({"futureMeasurement": 17});
+    std::fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
+    let studio = Studio::boot();
+    let measured = studio.ok("takes_analyze", json!({"takeId": take.id}));
+    let saved = manifest(&take.dir);
+    assert_eq!(saved["favourite"], true);
+    assert_eq!(saved["futureField"], original["futureField"]);
+    assert_eq!(saved["analysis"]["futureMeasurement"], 17);
+    assert_eq!(saved["analysis"]["schemaVersion"], 1);
+    assert_eq!(saved["analysis"]["analyzerVersion"], 1);
+    assert_eq!(saved["analysis"]["sourceSampleRate"], RATE);
+    assert_eq!(saved["analysis"]["sourceSampleCount"], take.frames);
+    assert_eq!(saved["analysis"]["sourceTempo"], 120.0);
+    assert!(saved["analysis"]["analyzedAtMs"].as_u64().unwrap() > 0);
+    for (key, value) in measured.as_object().unwrap() {
+        let persisted = &saved["analysis"][key];
+        if let (Some(actual), Some(expected)) = (persisted.as_f64(), value.as_f64()) {
+            // IPC writes f32 directly; the JSON manifest passes through Value's f64.
+            assert!((actual - expected).abs() < 0.00001, "{key}");
+        } else {
+            assert_eq!(persisted, value);
+        }
+    }
+    drop(studio);
+    // Every Studio starts with an empty in-memory SQLite index.
+    let reopened = Studio::boot();
+    let listed = reopened.ok("takes_list", json!({}));
+    assert_eq!(
+        find(&listed, &take.id).unwrap()["analysis"],
+        saved["analysis"]
+    );
+    let before = std::fs::read(&path).unwrap();
+    std::fs::create_dir(take.dir.join("take.json.tmp")).unwrap();
+    let error = reopened.err("takes_analyze", json!({"takeId": take.id}));
+    assert!(error.contains("Cannot save take analysis"), "{error}");
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+}
+
+#[test]
+fn analysis_and_favourite_never_write_through_another_takes_input_path() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let own = synthetic_take(0.1, "1700000000.000");
+    let other = synthetic_take(0.1, "1700000001.000");
+    let other_before = std::fs::read(other.dir.join("take.json")).unwrap();
+    let mut doc = manifest(&own.dir);
+    doc["pathInput"] = json!(other.input.to_string_lossy());
+    std::fs::write(own.dir.join("take.json"), serde_json::to_vec(&doc).unwrap()).unwrap();
+    for command in ["takes_analyze", "takes_favourite"] {
+        let error = studio.err(command, json!({"takeId": own.id, "favourite": true}));
+        assert!(error.contains("not inside its take directory"), "{error}");
+    }
+    assert_eq!(
+        std::fs::read(other.dir.join("take.json")).unwrap(),
+        other_before
+    );
+    assert_eq!(manifest(&own.dir), doc);
+}
+
+#[test]
 fn melody_of_the_synthetic_take_is_a3_and_the_window_is_validated() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

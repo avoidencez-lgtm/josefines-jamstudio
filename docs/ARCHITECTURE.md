@@ -601,6 +601,21 @@ The grid is quarter notes from the start of the DI file; it does not compensate
 for intentional swing, syncopation, latency or changing tempo. Dynamics uses RMS
 windows of up to 20 ms after each attack. Pitch uses the existing McLeod tracker
 without bend exclusion. These are explicit limitations, not musical judgments.
-Analysis remains in the frontend's in-memory take cache; durable analysis,
-structured provider reviews, chord agreement, bend handling and the full M6
-pitch tolerance remain unfinished.
+Successful analysis is saved into `take.json.analysis` before the IPC reports
+success. The flat object includes schema/analyzer version 1, `analyzedAtMs`,
+`sourceSampleRate`, `sourceSampleCount` and `sourceTempo` alongside the measurements.
+Re-analysis replaces known fields and preserves unknown ones. The existing
+manifest writer uses a temporary file and rename; an error leaves the prior
+manifest intact and is reported instead of returning unsaved results.
+Analysis and favourite writes require a regular directory under the takes root
+matching the validated take ID; a manifest's input path cannot redirect the write.
+The writer creates its temporary file exclusively, flushes it before rename, and
+removes its own temporary file on failure. A pre-existing temporary file or link
+is refused and left intact.
+
+`takes_list` reloads the evidence from files even with an empty SQLite cache.
+The frontend validates the analysis version, finite numbers and coverage counts;
+unsupported or damaged analysis leaves its take visible with Analyze again.
+Evidence is a snapshot, not automatic file-change tracking: re-analyse after
+replacing a DI file. Structured provider reviews, chord agreement, bend handling
+and the full M6 pitch tolerance remain unfinished.
