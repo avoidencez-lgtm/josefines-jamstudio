@@ -8,6 +8,7 @@ import {
   parseChartText,
   resolveChart,
 } from "../../src/lib/chart/text";
+import { transposeChord } from "../../src/lib/chart/notes";
 import { transposeChart } from "../../src/lib/chart/transpose";
 
 const BLUES = `# Blues in A
@@ -185,5 +186,12 @@ describe("transposition", () => {
       "F#7",
       "G#m7/B",
     ]);
+  });
+
+  it("keeps quality slashes that are not a bass note", () => {
+    expect(transposeChord("C6/9", 2, false)).toBe("D6/9");
+    expect(transposeChord("C/9", 2, false)).toBe("D/9");
+    expect(transposeChord("Cmaj7/E", 2, false)).toBe("Dmaj7/F#");
+    expect(transposeChord("Cm7/Bb", 2, true)).toBe("Dm7/C");
   });
 });
