@@ -114,7 +114,7 @@ Hver beholdte variant eller gitarkomp oppretter først en navngitt versjon av de
 
 ### Tre ulike sikkerhetsnett
 
-Undo/Redo dekker nylige innholdsendringer i minnet. Navngitte Versions er kontrollpunkter i låten med akkorder, innstillinger, tekst og lagreferanser. Save song skriver gjeldende dokument og versjonene til disk. En versjon du beholder uten å lagre er ikke varig. Gjenoppretting av en versjon kan også angres. Fjern en ubrukt versjon når grensen på 20 er nådd.
+Undo/Redo dekker nylige innholdsendringer i minnet. Navngitte Versions er kontrollpunkter i låten med akkorder, innstillinger, tekst og lagreferanser. Save song skriver gjeldende dokument og versjonene til disk. En versjon du beholder uten å lagre er ikke varig. Gjenoppretting av en versjon kan også angres. Fjern en ubrukt versjon når grensen på 20 er nådd. Et drag på en glidebryter eller sammenhengende skriving i ett felt teller som ett Undo-steg, slik at ekte redigeringer ikke skyves ut av historikken på 50 steg.
 
 ### Konflikter og endringer under lagring
 
@@ -184,7 +184,7 @@ Tekstassistenter får låttekst/struktur, innstillinger, riggnavn og mellomlagre
 
 ### Tre perspektiver på låten
 
-Skriv et konkret mål og trykk Ask three perspectives. Én forespørsel går til valgt Jo-leverandør eller installert agent og gir forslag om komposisjon, arrangement og fremføring. Akkordskjema, sangtekst, notater og bandinnstillinger sendes; ingen lyd sendes eller blir hørt. API-kostnader eller abonnementets bruksgrenser kan gjelde. Draft in Jo legger ett eksperiment i samtalefeltet for gjennomgang; det sendes aldri automatisk og overskriver ikke en eksisterende kladd. Keep in song notes legger til ett forslag med versjons- og angrebeskyttelse. Be om nye råd når låten er endret. Manglende oppsett og ugyldige svar gir en feilmelding; ingen ekstra betalt reserveforespørsel kjøres.
+Skriv et konkret mål og trykk Ask three perspectives. Én forespørsel går til valgt Jo-leverandør eller installert agent og gir forslag om komposisjon, arrangement og fremføring. Akkordskjema, form, sangtekst, notater og bandinnstillinger sendes, aldri gitarklipp, lydbilde-snapshot eller blåkopier; ingen lyd sendes eller blir hørt. En forespørsel over 48 000 tegn avvises før noe sendes. Cancel avbryter ventingen: en installert agent stoppes, mens et API-svar som allerede er sendt inn forkastes uten refusjon. Vinduet kan lukkes mens en forespørsel venter. API-kostnader eller abonnementets bruksgrenser kan gjelde. Draft in Jo legger ett eksperiment i samtalefeltet for gjennomgang; det sendes aldri automatisk og overskriver ikke en eksisterende kladd. Keep in song notes legger til ett forslag med versjons- og angrebeskyttelse. Be om nye råd når låten er endret. Manglende oppsett og ugyldige svar gir en feilmelding; ingen ekstra betalt reserveforespørsel kjøres.
 
 ## Songs: mikser og referanser
 
