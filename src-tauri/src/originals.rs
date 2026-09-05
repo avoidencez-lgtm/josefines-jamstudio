@@ -222,8 +222,8 @@ pub fn originals_save(document: Value) -> Result<Value, String> {
     write_document(&song_dir(), document)
 }
 #[tauri::command]
-pub fn originals_list(
-    app: tauri::AppHandle,
+pub fn originals_list<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Vec<Value>, String> {
     let (docs, warnings) = scan_originals(&song_dir())?;

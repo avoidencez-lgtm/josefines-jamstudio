@@ -47,6 +47,8 @@ pub struct AppState {
     pub clips: Mutex<clips::ClipCache>,
     /// Set by `app_exit` once the UI has run its close guard, so the quit handler lets the app go.
     pub exit_confirmed: std::sync::atomic::AtomicBool,
+    /// Set by the first `engine_status` call: the frontend loaded and IPC works (smoke runs read it).
+    pub ui_ready: std::sync::atomic::AtomicBool,
     pub agents: agents::AgentRunner,
     pub secret_store: Arc<dyn SecretStore>,
     pub engine: Arc<Mutex<AudioEngine>>,
@@ -78,7 +80,7 @@ fn agent_cancel(state: State<'_, AppState>) {
 /// The UI has run its close guard (nothing recording, drafts saved or discarded):
 /// exit for real. Both the window's close button and an app-level quit end here.
 #[tauri::command]
-fn app_exit(app: tauri::AppHandle, state: State<'_, AppState>) {
+fn app_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>, state: State<'_, AppState>) {
     state
         .exit_confirmed
         .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -87,10 +89,10 @@ fn app_exit(app: tauri::AppHandle, state: State<'_, AppState>) {
 
 /// The only network command. The WebView names a provider; Rust adds the key.
 #[tauri::command]
-async fn provider_fetch(
+async fn provider_fetch<R: tauri::Runtime>(
     request: net::FetchRequest,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
 ) -> Result<net::FetchResponse, String> {
     let store = Arc::clone(&state.secret_store);
     let log = Arc::clone(&state.cost_log);
@@ -160,6 +162,9 @@ fn audio_set_config(
 
 #[tauri::command]
 fn engine_status(state: State<'_, AppState>) -> EngineStatus {
+    state
+        .ui_ready
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     let eng = state.engine.lock();
     eng.poll_stream_errors();
     eng.status()
@@ -411,8 +416,8 @@ fn recorder_get_latency() -> Result<u32, String> {
 }
 
 #[tauri::command]
-fn takes_list(
-    app: tauri::AppHandle,
+fn takes_list<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Vec<jam_audio::recorder::TakeMetadata>, String> {
     let (takes, warnings) = all_takes(&state)?;
@@ -918,8 +923,11 @@ fn build_rig(settings: &AppSettings, library: &Library) -> jam_rig::RigOrchestra
     rig
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+/// Builds the whole application state the way the desktop app does: under
+/// `JAM_HEADLESS=1` a headless engine, a memory secret store and an in-memory index;
+/// the user's files under `JAM_USER_DIR` (or the home folder). The IPC tests build
+/// this same state and drive the same commands through Tauri's mock runtime.
+pub fn build_state() -> AppState {
     let (settings, recovery_notice) = settings::recover_settings().unwrap_or_else(|e| {
         tracing::error!("{e}");
         (AppSettings::default(), Some(e))
@@ -960,11 +968,12 @@ pub fn run() {
 
     let rig_orchestrator = Arc::new(Mutex::new(build_rig(&settings, &library_arc.lock())));
 
-    let app_state = AppState {
+    AppState {
         recovery_notice: Mutex::new(recovery_notice),
         warnings: WarnOnce::default(),
         clips: Mutex::new(clips::ClipCache::new(clips::ClipCache::DEFAULT_BUDGET)),
         exit_confirmed: std::sync::atomic::AtomicBool::new(false),
+        ui_ready: std::sync::atomic::AtomicBool::new(false),
         agents: agents::AgentRunner::default(),
         controller: Arc::new(Mutex::new(None)),
         secret_store,
@@ -973,11 +982,18 @@ pub fn run() {
         store: Arc::clone(&store_arc),
         rig: Arc::clone(&rig_orchestrator),
         cost_log,
-    };
+    }
+}
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_log::Builder::new().build())
-        .manage(app_state)
+/// Registers the state, the 30 Hz telemetry emitter and every IPC command on a
+/// builder. `run` uses it with the real runtime; `tests/ipc_e2e.rs` with
+/// `tauri::test::mock_builder`, so a command that works there works in the app.
+pub fn configure<R: tauri::Runtime>(
+    builder: tauri::Builder<R>,
+    state: AppState,
+) -> tauri::Builder<R> {
+    builder
+        .manage(state)
         .setup(move |app| {
             use tauri::Manager;
             for folder in ["assets", "exports"] {
@@ -985,10 +1001,11 @@ pub fn run() {
                 std::fs::create_dir_all(&path)?;
                 app.asset_protocol_scope().allow_directory(path, true)?;
             }
-            let controller = Arc::clone(&app.state::<AppState>().controller);
+            let state = app.state::<AppState>();
+            let controller = Arc::clone(&state.controller);
+            let eng = Arc::clone(&state.engine);
+            let rig = Arc::clone(&state.rig);
             let app_handle = app.handle().clone();
-            let eng = Arc::clone(&engine_arc);
-            let rig = Arc::clone(&rig_orchestrator);
 
             // Emit telemetry at 30 Hz; engine status only when it changes.
             std::thread::spawn(move || {
@@ -1127,34 +1144,69 @@ pub fn run() {
             originals::takes_melody,
             takes_export_daw,
         ])
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application")
-        .run(|app, event| {
-            use tauri::Manager;
-            // An app-level quit (Cmd+Q on macOS) never went through the window's
-            // close guard (#35). While a window is open, hand the decision to the UI;
-            // it answers with app_exit, which sets exit_confirmed. A quit after the
-            // last window closed, or one requested by app_exit itself (code Some),
-            // proceeds untouched.
-            if let tauri::RunEvent::ExitRequested {
-                code: None, api, ..
-            } = &event
+}
+
+/// `JAM_SMOKE_SECONDS=n`: exit after n seconds with 0 when the frontend completed
+/// its startup handshake (`engine_status` was invoked), 2 otherwise. CI runs the
+/// real binary this way on Windows and macOS; nothing else changes.
+fn smoke_exit(app: tauri::AppHandle) {
+    let Some(seconds) = std::env::var("JAM_SMOKE_SECONDS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+    else {
+        return;
+    };
+    std::thread::spawn(move || {
+        use tauri::Manager;
+        std::thread::sleep(std::time::Duration::from_secs(seconds));
+        let state = app.state::<AppState>();
+        let ready = state.ui_ready.load(std::sync::atomic::Ordering::SeqCst);
+        eprintln!(
+            "smoke: frontend handshake {} after {seconds} s",
+            if ready { "completed" } else { "MISSING" }
+        );
+        state
+            .exit_confirmed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        app.exit(if ready { 0 } else { 2 });
+    });
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let built = configure(
+        tauri::Builder::default().plugin(tauri_plugin_log::Builder::new().build()),
+        build_state(),
+    )
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application");
+    smoke_exit(built.handle().clone());
+    built.run(|app, event| {
+        use tauri::Manager;
+        // An app-level quit (Cmd+Q on macOS) never went through the window's
+        // close guard (#35). While a window is open, hand the decision to the UI;
+        // it answers with app_exit, which sets exit_confirmed. A quit after the
+        // last window closed, or one requested by app_exit itself (code Some),
+        // proceeds untouched.
+        if let tauri::RunEvent::ExitRequested {
+            code: None, api, ..
+        } = &event
+        {
+            let state = app.state::<AppState>();
+            let window_open = app
+                .webview_windows()
+                .values()
+                .any(|w| w.is_visible().unwrap_or(true));
+            if window_open
+                && !state
+                    .exit_confirmed
+                    .load(std::sync::atomic::Ordering::SeqCst)
             {
-                let state = app.state::<AppState>();
-                let window_open = app
-                    .webview_windows()
-                    .values()
-                    .any(|w| w.is_visible().unwrap_or(true));
-                if window_open
-                    && !state
-                        .exit_confirmed
-                        .load(std::sync::atomic::Ordering::SeqCst)
-                {
-                    api.prevent_exit();
-                    let _ = app.emit("app:exit-requested", ());
-                }
+                api.prevent_exit();
+                let _ = app.emit("app:exit-requested", ());
             }
-        });
+        }
+    });
 }
 
 #[cfg(test)]
