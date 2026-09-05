@@ -84,10 +84,33 @@ jobs:
       - name: Compile Windows desktop with embedded frontend
         if: runner.os == 'Windows'
         run: pnpm tauri build --debug --no-bundle
+      - name: Smoke-run the Windows app headless (frontend handshake)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          JAM_HEADLESS: "1"
+          JAM_SMOKE_SECONDS: "25"
+          JAM_USER_DIR: ${{ runner.temp }}\jam-smoke
+        run: |
+          $exe = Get-ChildItem target\debug -Filter *.exe | Where-Object { $_.Name -match 'Josefines Jamstudio|src-tauri' } | Select-Object -First 1
+          if (-not $exe) { throw "app binary not found under target/debug" }
+          Write-Host "running $($exe.FullName)"
+          & $exe.FullName
+          if ($LASTEXITCODE -ne 0) { throw "smoke run exited with $LASTEXITCODE" }
       - name: Build Mac app and verify recording privacy metadata
         if: runner.os == 'macOS'
         run: |
           pnpm tauri build --debug --bundles app
           /usr/libexec/PlistBuddy -c "Print :NSMicrophoneUsageDescription" "target/debug/bundle/macos/Josefines Jamstudio.app/Contents/Info.plist"
+      - name: Smoke-run the Mac app headless (frontend handshake)
+        if: runner.os == 'macOS'
+        env:
+          JAM_HEADLESS: "1"
+          JAM_SMOKE_SECONDS: "25"
+          JAM_USER_DIR: ${{ runner.temp }}/jam-smoke
+        run: |
+          bin=$(ls "target/debug/bundle/macos/Josefines Jamstudio.app/Contents/MacOS/"* | head -1)
+          echo "running $bin"
+          "$bin"
       - name: License and advisory check (cargo deny)
         run: cargo deny check
