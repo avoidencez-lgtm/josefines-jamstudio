@@ -17,6 +17,7 @@ import {
   transformPhrase,
 } from "../lib/writingTools";
 import { Button } from "./Button";
+import { ChordShapes } from "./ChordShapes";
 
 export function ArrangementDesk() {
   const w = useWriting();
@@ -380,6 +381,9 @@ export function HarmonyDesk() {
           <strong>{current.chord}</strong>
           <span>{notes.length ? notes.join(" · ") : "Rest / no chord"}</span>
         </div>
+        {notes.length > 0 && (
+          <ChordShapes key={current.chord} now={current.chord} compact />
+        )}
         <label>
           Explore harmony
           <select
