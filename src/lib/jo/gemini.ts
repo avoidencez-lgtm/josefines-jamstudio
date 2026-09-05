@@ -30,6 +30,12 @@ export interface JoContext {
     notes?: string;
     lyrics?: Record<string, string>;
   };
+  /** The open Film project, so edit_video_shot can name real shot ids from the Jo room. */
+  film?: {
+    id: string;
+    title: string;
+    shots: { id: string; title: string; seconds: number }[];
+  };
 }
 
 interface GeminiPart {
@@ -72,6 +78,7 @@ export function contextSummary(ctx: JoContext): string {
     `Available style ids: ${ctx.styles.map((s) => `${s.id} (${s.name})`).join(", ")}.`,
     `Available chart ids: ${ctx.charts.map((c) => `${c.id} (${c.name})`).join(", ")}.`,
     `Songwriting document: ${ctx.writing ? JSON.stringify(ctx.writing) : "none"}. Use the songwriting tool for this document.`,
+    `Film project: ${ctx.film ? JSON.stringify(ctx.film) : "none"}. Use edit_video_shot with these project and shot ids.`,
   ].join("\n");
 }
 

@@ -30,6 +30,18 @@ describe("Jo's Gemini request", () => {
     expect(s).toContain("Muted parts: bass");
     expect(s).toContain("blues-shuffle");
     expect(s).toContain("blues-12-bar");
+    // From the Jo room the film tool can only work with real shot ids (#45).
+    expect(s).toContain("Film project: none");
+    expect(
+      contextSummary({
+        ...ctx,
+        film: {
+          id: "film-1",
+          title: "Clip",
+          shots: [{ id: "shot-a", title: "Intro", seconds: 4 }],
+        },
+      }),
+    ).toContain("shot-a");
   });
 
   it("declares every tool the dispatcher understands and keeps recent history", () => {

@@ -125,8 +125,9 @@ export function applyProposal(proposal: Proposal): void {
       );
     b.lyrics[section.id] = next;
   }
+  // Lyrics already went to their section; the notebook keeps only the provenance.
   b.notes =
-    `${b.notes}\n\n${idea.title} (${proposal.source})\n${idea.summary}\n${idea.notes}`.trim();
+    `${b.notes}\n\n${idea.title} (${proposal.source})\n${idea.summary}${proposal.kind === "lyrics" ? "" : `\n${idea.notes}`}`.trim();
   checkWritingForm(b);
   w.version(`Before ${idea.title}`);
   w.edit((body) => Object.assign(body, b));
