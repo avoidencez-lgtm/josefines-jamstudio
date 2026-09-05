@@ -522,7 +522,10 @@ See [ADR 0007](adr/0007-installed-studio-agents.md) and [setup guide](guide/api-
 ## Preview build boundary (2026-09-05)
 
 The sections above retain the target design, including unbuilt voice, analysis,
-resampling and extension-proof work. Current support is recorded in
+resampling and extension-proof work. `IPC_VERSION` is 2: [ADR 0010](adr/0010-remove-unbuilt-m3-m4-code.md)
+removed the placeholder `song_*` and `ai_music_*` commands and the compiled-but-unreferenced
+stems, calibration, stretch, chord-detection and generative-music modules; the M3 and M4
+contracts in §5.2 and §6 describe what gets built, not what exists. Current support is recorded in
 [build closeout](reviews/build-closeout.md), the README and the milestone board.
 
 Logical UI event names use `domain.state`; `src/ipc/client.ts` translates dots to

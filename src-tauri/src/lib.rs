@@ -52,7 +52,6 @@ pub struct AppState {
     pub engine: Arc<Mutex<AudioEngine>>,
     pub library: Arc<Mutex<Library>>,
     pub store: Arc<Mutex<store::IndexStore>>,
-    pub ai_music: Arc<Mutex<jam_audio::ai_music::AiMusicEngine>>,
     pub rig: Arc<Mutex<jam_rig::RigOrchestrator>>,
     pub controller: Arc<Mutex<Option<jam_rig::controller::ControllerInput>>>,
     pub cost_log: Arc<net::CostLog>,
@@ -548,101 +547,6 @@ fn library_reload(state: State<'_, AppState>) -> LibraryInfo {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SongMetadata {
-    pub id: String,
-    pub title: String,
-    pub duration_secs: f64,
-    pub tempo: f64,
-    pub detected_chords: Vec<String>,
-    pub stems: Vec<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StemSettings {
-    pub vocals_volume: f32,
-    pub drums_volume: f32,
-    pub bass_volume: f32,
-    pub other_volume: f32,
-    pub vocals_mute: bool,
-    pub drums_mute: bool,
-    pub bass_mute: bool,
-    pub other_mute: bool,
-    pub vocals_solo: bool,
-    pub drums_solo: bool,
-    pub bass_solo: bool,
-    pub other_solo: bool,
-}
-
-const SONGS_NOT_BUILT: &str = "Real-song playback (stem separation, beat and chord analysis, \
-time-stretch) is not built yet; this is milestone M3 on the plan. Nothing was imported.";
-
-/// M3 is open. Until the analysis pipeline exists this refuses honestly instead of
-/// returning invented tempo, chords and stems.
-#[tauri::command]
-fn song_import(file_path: String) -> Result<SongMetadata, String> {
-    let path = std::path::Path::new(&file_path);
-    if !path.is_file() {
-        return Err(format!("{file_path} is not a file. {SONGS_NOT_BUILT}"));
-    }
-    Err(SONGS_NOT_BUILT.to_string())
-}
-
-#[tauri::command]
-fn song_set_speed(_speed: f32) -> Result<(), String> {
-    Err(SONGS_NOT_BUILT.to_string())
-}
-
-#[tauri::command]
-fn song_set_transpose(_semitones: i32) -> Result<(), String> {
-    Err(SONGS_NOT_BUILT.to_string())
-}
-
-#[tauri::command]
-fn song_set_stem_settings(_settings: StemSettings) -> Result<(), String> {
-    Err(SONGS_NOT_BUILT.to_string())
-}
-const AI_MUSIC_NOT_BUILT: &str = "Generative AI music is not connected yet; this is milestone M4 \
-on the plan. Neither Lyria RealTime, ElevenLabs Music nor the offline generator is wired into the \
-audio engine, so nothing would be heard. The stream was not started.";
-
-/// M4 is open. The generator exists as a stub but is not mixed into the output, so
-/// starting it would only flip a status light; refuse honestly instead.
-#[tauri::command]
-fn ai_music_start(
-    config: jam_audio::ai_music::AiMusicConfig,
-    _state: State<'_, AppState>,
-) -> Result<(), String> {
-    let _ = config;
-    Err(AI_MUSIC_NOT_BUILT.to_string())
-}
-
-#[tauri::command]
-fn ai_music_stop(state: State<'_, AppState>) -> Result<(), String> {
-    state.ai_music.lock().stop_stream();
-    Ok(())
-}
-
-#[tauri::command]
-fn ai_music_steer(delta: String, state: State<'_, AppState>) -> Result<(), String> {
-    state.ai_music.lock().steer_prompt(delta);
-    Ok(())
-}
-
-#[tauri::command]
-fn ai_music_set_volume(volume: f32, state: State<'_, AppState>) -> Result<(), String> {
-    state.ai_music.lock().set_mix_volume(volume);
-    Ok(())
-}
-
-#[tauri::command]
-fn ai_music_get_state(
-    state: State<'_, AppState>,
-) -> Result<jam_audio::ai_music::AiMusicState, String> {
-    Ok(state.ai_music.lock().get_state())
-}
 #[tauri::command]
 fn band_list_charts(state: State<'_, AppState>) -> Vec<Chart> {
     state.library.lock().charts()
@@ -1054,8 +958,6 @@ pub fn run() {
     };
     let store_arc = Arc::new(Mutex::new(index_store));
 
-    let ai_music_engine = Arc::new(Mutex::new(jam_audio::ai_music::AiMusicEngine::new(48_000)));
-
     let rig_orchestrator = Arc::new(Mutex::new(build_rig(&settings, &library_arc.lock())));
 
     let app_state = AppState {
@@ -1069,7 +971,6 @@ pub fn run() {
         engine: Arc::clone(&engine_arc),
         library: Arc::clone(&library_arc),
         store: Arc::clone(&store_arc),
-        ai_music: Arc::clone(&ai_music_engine),
         rig: Arc::clone(&rig_orchestrator),
         cost_log,
     };
@@ -1211,15 +1112,6 @@ pub fn run() {
             recorder_get_latency,
             takes_list,
             takes_delete,
-            song_import,
-            song_set_speed,
-            song_set_transpose,
-            song_set_stem_settings,
-            ai_music_start,
-            ai_music_stop,
-            ai_music_steer,
-            ai_music_set_volume,
-            ai_music_get_state,
             rig_list_profiles,
             rig_select_profile,
             rig_select_scene,

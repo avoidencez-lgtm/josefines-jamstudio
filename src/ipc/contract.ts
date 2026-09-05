@@ -1,4 +1,5 @@
-export const IPC_VERSION = 1;
+/** 2 since ADR 0010 removed the never-wired M3/M4 placeholder commands. */
+export const IPC_VERSION = 2;
 
 export interface DeviceDescriptor {
   name: string;
@@ -190,46 +191,6 @@ export interface TakeMetadata {
   pathMaster: string;
   waveformPeaks: number[];
   notes: string;
-}
-
-export interface SongMetadata {
-  id: string;
-  title: string;
-  durationSecs: number;
-  tempo: number;
-  detectedChords: string[];
-  stems: string[];
-}
-
-export interface StemSettings {
-  vocalsVolume: number;
-  drumsVolume: number;
-  bassVolume: number;
-  otherVolume: number;
-  vocalsMute: boolean;
-  drumsMute: boolean;
-  bassMute: boolean;
-  otherMute: boolean;
-  vocalsSolo: boolean;
-  drumsSolo: boolean;
-  bassSolo: boolean;
-  otherSolo: boolean;
-}
-
-export interface AiMusicConfig {
-  provider: string;
-  prompt: string;
-  tempo: number;
-  key: string;
-  mixVolume: number;
-}
-
-export interface AiMusicState {
-  active: boolean;
-  provider: string;
-  currentPrompt: string;
-  promptDelta: string;
-  mixVolume: number;
 }
 
 export type RigCommand =
