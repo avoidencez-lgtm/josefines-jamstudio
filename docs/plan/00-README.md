@@ -241,3 +241,13 @@ notation emitted for tiny durations is readable by the parser. Explicit bar
 totals retain the existing 1e-6 tolerance. English/Bokmål chart help explains
 mixed counted/shared beats. This does not complete the separate tempo-range or
 schema-validation work.
+
+### Credential recovery (PR #194, merged)
+
+Keychain read failures remain distinct from missing keys through provider status,
+Jo and media preflight. Settings shows unavailable access and offers Check key
+status after unlocking the OS keychain; successful retry restores availability.
+Failed removal is reported, and a failed Jo provider request cannot run offline
+commands. English/Bokmål help explains recovery. Developer checks cover failed
+stores, production error mapping, provider/preflight results and browser controls;
+no live keychain or paid-provider verification is claimed. Friend checks remain V2.

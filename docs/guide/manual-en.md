@@ -318,7 +318,7 @@ On Mac allow microphone access for Jamstudio when requested; the selected audio 
 
 ### Keys, models and usage
 
-AI & models holds provider selection, editable model IDs, native-agent detection and API keys. Keys are saved to Windows credentials or Mac Keychain and are never written to song documents. The key input is cleared after storage; the app reports presence without returning the stored secret. Save AI settings persists the chosen model/limits. Model changes clear stale price estimates.
+AI & models holds provider selection, editable model IDs, native-agent detection and API keys. Keys are saved to Windows credentials or Mac Keychain and are never written to song documents. The key input is cleared after storage; the app reports presence without returning the stored secret. Save AI settings persists the chosen model/limits. Model changes clear stale price estimates. If access fails, Keychain unavailable means the saved key could not be checked, not that it is missing. Unlock or allow access to the OS keychain, then use Check key status under API keys. This reads presence only and makes no paid request. Failed removals remain errors; the app does not claim the key was removed. Jo reports a failed provider request without running offline commands.
 
 Usage records provider/model/status/time/bytes and optional estimates, not prompts or credentials. Output token limits and USD-per-million estimates help planning; they are not enforced account spending caps or final invoices. Set account budgets with the provider and check its dashboard. Media requests and installed CLI usage have their own billing rules.
 
