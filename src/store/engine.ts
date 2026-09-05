@@ -134,6 +134,8 @@ export interface EngineState {
   // Recorder & Takes
   takes: TakeMetadata[];
   isRecording: boolean;
+  /** Capture stopped, but the partial take still needs finalising. */
+  recordingError: string | null;
   /** Round-trip offset trimmed from the guitar stem, set by hand (no auto-calibration yet). */
   latencySamples: number;
   startRecording: (sessionId?: string) => Promise<string>;
@@ -271,6 +273,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
     libraryInfo: null,
     takes: [],
     isRecording: false,
+    recordingError: null,
     latencySamples: 0,
     rigState: null,
     availableProfiles: [],
@@ -467,7 +470,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const takeId = await run("Record", () =>
         ipc.invoke<string>("recorder_start", { sessionId }),
       );
-      if (takeId) set({ isRecording: true });
+      if (takeId) set({ isRecording: true, recordingError: null });
       return takeId ?? "";
     },
     stopRecording: async () => {
@@ -476,6 +479,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       );
       set((state) => ({
         isRecording: false,
+        recordingError: null,
         takes: meta ? [meta, ...state.takes] : state.takes,
       }));
       if (meta?.notes.includes("interrupted")) {
@@ -750,6 +754,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
           set({ rigState });
         }),
         ipc.listen<string>("app.error", (text) => get().notify("error", text)),
+        ipc.listen<string | null>("recorder.error", (recordingError) => {
+          set({ recordingError });
+        }),
         ipc.listen<string>("rig.error", (text) => {
           get().notify("error", `Rig: ${text}`);
         }),

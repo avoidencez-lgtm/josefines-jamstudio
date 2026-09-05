@@ -23,6 +23,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
     styles,
     takes,
     isRecording,
+    recordingError,
     loadTakes,
     loadLibrary,
     exportTakeDaw,
@@ -36,6 +37,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
       styles: s.styles,
       takes: s.takes,
       isRecording: s.isRecording,
+      recordingError: s.recordingError,
       loadTakes: s.loadTakes,
       loadLibrary: s.loadLibrary,
       exportTakeDaw: s.exportTakeDaw,
@@ -201,7 +203,11 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
               title="Starts at bar 1, playing guitar layers while recording a new take"
               onClick={() => run(w.record)}
             >
-              {isRecording ? "Save take" : "Record"}
+              {recordingError
+                ? "Save partial take"
+                : isRecording
+                  ? "Save take"
+                  : "Record"}
             </Button>
           </div>
           <output className="song-loaded-state">
