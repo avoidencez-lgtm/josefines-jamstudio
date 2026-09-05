@@ -22,6 +22,30 @@ describe("browser preview engine", () => {
   });
   afterEach(() => engine.dispose());
 
+  it("refuses malformed recording and MIDI inputs without changing state", async () => {
+    const before = await engine.invoke<RigState>("rig_get_state", {});
+    for (const bad of [null, false, "1", -1, 1.5, Number.NaN]) {
+      await expect(
+        engine.invoke("rig_set_control", { cc: bad, value: 1 }),
+      ).rejects.toThrow("CC");
+      if (bad !== null) {
+        await expect(
+          engine.invoke("rig_set_section_mapping", {
+            section: "Verse",
+            sceneIdx: bad,
+          }),
+        ).rejects.toThrow("does not exist");
+      }
+    }
+    expect(await engine.invoke("rig_get_state", {})).toEqual(before);
+    await expect(
+      engine.invoke("recorder_start", { sessionId: null }),
+    ).rejects.toThrow("session ID");
+    await expect(engine.invoke("recorder_stop", {})).rejects.toThrow(
+      "No active recording",
+    );
+  });
+
   it("serves the bundled library", async () => {
     const styles = await engine.invoke<StyleSummary[]>("band_list_styles", {});
     const charts = await engine.invoke<Chart[]>("band_list_charts", {});
