@@ -342,7 +342,10 @@ impl BandSequencer {
                     Cue::Crash => {
                         self.is_stopped = false;
                         if !self.mute_drums {
-                            self.sampler.trigger("crash", 0.9);
+                            self.fire(SpanEventKind::Drum {
+                                instrument: "crash".into(),
+                                velocity: 0.9,
+                            });
                         }
                         self.is_playing_fill = false;
                         self.update_pattern_for_intensity();
@@ -350,13 +353,18 @@ impl BandSequencer {
                     Cue::Stop => {
                         // A break: everybody hits the downbeat, then drops out.
                         if !self.mute_drums {
-                            self.sampler.trigger("kick", 0.95);
-                            self.sampler.trigger("crash", 0.8);
+                            self.fire(SpanEventKind::Drum {
+                                instrument: "kick".into(),
+                                velocity: 0.95,
+                            });
+                            self.fire(SpanEventKind::Drum {
+                                instrument: "crash".into(),
+                                velocity: 0.8,
+                            });
                         }
                         self.is_stopped = true;
                         self.is_playing_fill = false;
-                        self.synth.all_notes_off();
-                        self.pending_note_offs.clear();
+                        self.cut_sounding_notes();
                     }
                     Cue::Ending => {
                         self.is_stopped = false;
@@ -373,8 +381,7 @@ impl BandSequencer {
                             self.is_playing_ending = false;
                             self.is_stopped = true;
                             self.ending_complete = true;
-                            self.synth.all_notes_off();
-                            self.pending_note_offs.clear();
+                            self.cut_sounding_notes();
                             self.update_pattern_for_intensity();
                         }
                     }
@@ -402,7 +409,7 @@ impl BandSequencer {
             }
 
             TimelineEvent::LoopWrapped { .. } => {
-                self.pending_note_offs.clear();
+                self.cut_sounding_notes();
                 self.update_pattern_for_intensity();
             }
         }
@@ -570,6 +577,17 @@ impl BandSequencer {
         for (bus, samples) in self.part_audio.iter_mut().zip([d, dr, b, c]) {
             bus.extend(samples);
         }
+    }
+
+    fn cut_sounding_notes(&mut self) {
+        let frame = self.part_audio[0].len() as u64;
+        for n in self.pending_note_offs.drain(..) {
+            self.note_events.push(MidiNote {
+                frame,
+                bytes: [0x80 | n.channel, n.key, 0],
+            });
+        }
+        self.synth.all_notes_off();
     }
 
     fn fire(&mut self, kind: SpanEventKind) {
@@ -1238,6 +1256,87 @@ mod tests {
         assert!(seq.take_ending_complete());
         assert!(seq.is_stopped);
         assert!(!seq.take_ending_complete(), "flag is consumed once");
+    }
+
+    fn midi_has(seq: &BandSequencer, status: u8, key: u8) -> bool {
+        seq.note_events
+            .iter()
+            .any(|n| n.bytes[0] == status && n.bytes[1] == key)
+    }
+
+    fn has_pitched_off(seq: &BandSequencer) -> bool {
+        seq.note_events
+            .iter()
+            .any(|n| n.bytes[0] & 0xF0 == 0x80 && n.bytes[0] & 0x0F != 9)
+    }
+
+    #[test]
+    fn crash_and_stop_cues_reach_exported_midi() {
+        let mut seq = BandSequencer::new(style_with(0.5, vec![], vec![], vec![]), 48_000, 1);
+        seq.begin_block();
+        seq.cue(Cue::Crash);
+        seq.handle_timeline_event(&TimelineEvent::Bar {
+            bar: 1,
+            is_count_in: false,
+        });
+        assert!(midi_has(&seq, 0x99, 49), "{:?}", seq.note_events);
+
+        seq.begin_block();
+        seq.cue(Cue::Stop);
+        seq.handle_timeline_event(&TimelineEvent::Bar {
+            bar: 2,
+            is_count_in: false,
+        });
+        assert!(midi_has(&seq, 0x99, 36), "kick {:?}", seq.note_events);
+        assert!(midi_has(&seq, 0x99, 49), "crash {:?}", seq.note_events);
+    }
+
+    #[test]
+    fn loop_wrap_and_stop_emit_note_offs_for_open_notes() {
+        let style = style_with(
+            0.0,
+            vec![],
+            vec![],
+            vec![CompStrum {
+                at_beats: 0.0,
+                dur_beats: 8.0,
+                velocity: 0.8,
+                direction: "down".into(),
+            }],
+        );
+        let mut seq = BandSequencer::new(style, 48_000, 1);
+        let mut l = vec![0.0f32; 12_000];
+        let mut r = vec![0.0f32; 12_000];
+        let span = Span {
+            offset: 0,
+            frames: 12_000,
+            start_beats: 0.0,
+        };
+        seq.begin_block();
+        seq.render_span(&span, 24_000.0, 4.0, &mut l, &mut r);
+        assert!(!seq.pending_note_offs.is_empty());
+        assert!(seq.synth.sustaining_voices(CH_COMP) > 0);
+
+        seq.begin_block();
+        seq.handle_timeline_event(&TimelineEvent::LoopWrapped {
+            from_sample: 0,
+            to_sample: 0,
+        });
+        assert!(seq.pending_note_offs.is_empty());
+        assert_eq!(seq.synth.sustaining_voices(CH_COMP), 0);
+        assert!(has_pitched_off(&seq), "{:?}", seq.note_events);
+
+        seq.render_span(&span, 24_000.0, 4.0, &mut l, &mut r);
+        seq.begin_block();
+        seq.cue(Cue::Stop);
+        seq.handle_timeline_event(&TimelineEvent::Bar {
+            bar: 1,
+            is_count_in: false,
+        });
+        assert!(seq.pending_note_offs.is_empty());
+        assert_eq!(seq.synth.sustaining_voices(CH_COMP), 0);
+        assert!(midi_has(&seq, 0x99, 36), "{:?}", seq.note_events);
+        assert!(has_pitched_off(&seq), "{:?}", seq.note_events);
     }
 
     #[test]
