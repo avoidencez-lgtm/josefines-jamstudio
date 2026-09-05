@@ -682,6 +682,47 @@ fn record_without_a_loaded_song_records_the_default_band() {
 }
 
 #[test]
+fn recorder_start_after_play_song_does_not_auto_play() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let id = unique("song");
+    let saved = studio.ok(
+        "originals_save",
+        json!({ "document": distinctive_song(&id, "G", 90.0) }),
+    );
+    studio.ok("originals_load", json!({ "document": saved }));
+    studio.ok("transport_set_count_in", json!({ "bars": 1 }));
+    studio.ok("transport_stop", json!({}));
+    assert!(
+        !studio
+            .app()
+            .state::<app_lib::AppState>()
+            .engine
+            .lock()
+            .song_snapshot
+            .is_null(),
+        "the bug only appears while an original is loaded"
+    );
+
+    let take_id = studio.ok("recorder_start", json!({ "sessionId": "jam" }));
+    assert!(
+        take_id.as_str().is_some_and(|t| t.starts_with("take-")),
+        "{take_id}"
+    );
+    let tel = telemetry(&studio)["transport"].clone();
+    assert_eq!(
+        tel["state"], "stopped",
+        "Sessions/Transport record must not start playback"
+    );
+    assert_eq!(tel["count_in_bars"], 1, "count-in must survive jam record");
+    assert_eq!(tel["bpm"], 90.0);
+
+    let take = studio.ok("recorder_stop", json!({}));
+    assert_eq!(take["id"], take_id);
+    studio.ok("transport_stop", json!({}));
+}
+
+#[test]
 fn favourite_marks_the_take_manifest_on_disk_and_rejects_unknown_takes() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

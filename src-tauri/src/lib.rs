@@ -382,12 +382,9 @@ struct BandSetArgs {
 
 #[tauri::command]
 fn recorder_start(session_id: String, state: State<'_, AppState>) -> Result<String, String> {
-    let eng = state.engine.lock();
-    if eng.song_snapshot.is_null() {
-        eng.recorder_start(session_id)
-    } else {
-        eng.record_song(session_id)
-    }
+    // Jam record only. Write's Record uses `originals_record` → `record_song`.
+    // A leftover song_snapshot must not rewind, clear the loop or auto-play (#201).
+    state.engine.lock().recorder_start(session_id)
 }
 
 #[tauri::command]
