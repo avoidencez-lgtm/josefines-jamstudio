@@ -85,6 +85,14 @@ impl TakeRecorder {
     pub fn error(&self) -> Option<&str> {
         self.failure.as_deref().filter(|_| self.is_recording())
     }
+    pub(crate) fn interrupt(&mut self, reason: &str) {
+        if self.is_recording() && self.failure.is_none() {
+            self.failure = Some(format!(
+                "Recording interrupted: {reason} Save the partial take."
+            ));
+            self.sender = None;
+        }
+    }
     pub fn start_take(
         &mut self,
         session_id: String,

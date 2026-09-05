@@ -65,6 +65,14 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-05 build integration: PRs #200 (chart duration precision), #204 (count-in
+destination) and #207 (native logging) are merged. PR #192 replaces estimated
+render-lead delays with output-callback frame pairing and drains the queued take
+tail before finalisation. Synthetic callback alignment and WAV/MIDI onset checks
+cover the implementation; current-head Windows/macOS CI remains the merge gate.
+This does not complete the remaining V1 capabilities or signing, and friend-led
+hardware checks remain deferred to V2.
+
 2026-09-05 Jo action results (issue #166): transport, band and recording refusals
 reach Jo as explicit failures while retaining the normal UI notice. Success uses
 the accepted command value, including clamped tempo, and unchanged document edits

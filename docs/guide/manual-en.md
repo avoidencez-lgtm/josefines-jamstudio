@@ -272,7 +272,7 @@ If the disk writer cannot accept audio, the recording indicator stops pulsing an
 
 ### Alignment and stems
 
-Guitar offset is the manual sample offset used to align input with the band. Automatic cable-loopback calibration is not available. Measure alignment in your DAW on the actual rig. New full recordings contain separate guitar, drums, bass and comp, plus band/master reference mixes, scheduled band-note MIDI, a tempo map and the performance snapshot. Referenced guitar layers export as aligned WAVs. Capture-only ideas do not reconstruct band MIDI. Missing files are reported in the export result.
+Recording pairs the guitar input with the band frames sent to the audio output. Save take waits briefly for queued audio before closing the files. If the audio stream or capture queue loses frames, save the partial take and resolve the reported problem before recording again. Guitar offset remains the manual sample offset for the physical device round-trip. Automatic cable-loopback calibration is not available. Measure alignment in your DAW on the actual rig. New full recordings contain separate guitar, drums, bass and comp, plus band/master reference mixes, scheduled band-note MIDI, a tempo map and the performance snapshot. Referenced guitar layers export as aligned WAVs. Capture-only ideas do not reconstruct band MIDI. Missing files are reported in the export result.
 
 ### Logic and other DAWs
 
