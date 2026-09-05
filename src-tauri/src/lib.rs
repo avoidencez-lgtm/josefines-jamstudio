@@ -432,16 +432,15 @@ fn takes_list<R: tauri::Runtime>(
 
 #[tauri::command]
 fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let mut take = find_take(&state, &take_id)?;
-    take.extra
-        .insert("hidden".into(), serde_json::Value::Bool(true));
-    // Files are truth: when the folder is already gone there is nothing to hide,
-    // but the cache row must still go or the take is listed forever (#88).
-    if std::path::Path::new(&take.path_input)
-        .parent()
-        .is_some_and(|dir| dir.exists())
-    {
-        jam_audio::recorder::save_manifest(&take)?;
+    let take = find_take(&state, &take_id)?;
+    // Files are truth: delete the take folder. A ghost cache row (#88) has no
+    // folder; still drop the row so the take leaves the list.
+    if let Some(dir) = std::path::Path::new(&take.path_input).parent() {
+        let root = originals::takes_root();
+        if dir != root && dir.starts_with(&root) && dir.exists() {
+            std::fs::remove_dir_all(dir)
+                .map_err(|e| format!("could not delete take {take_id}: {e}"))?;
+        }
     }
     state.store.lock().delete_take(&take_id)
 }

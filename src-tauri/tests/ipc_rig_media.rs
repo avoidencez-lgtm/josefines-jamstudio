@@ -465,7 +465,6 @@ fn program_changes_name_the_declared_program_and_are_logged_without_a_port() {
 }
 
 #[test]
-#[ignore = "app bug: rig_send_program masks a program above 127 (200 is sent as PC 72) instead of refusing it the way rig_set_control refuses CC 200"]
 fn rig_send_program_refuses_a_program_above_127() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

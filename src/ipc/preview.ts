@@ -837,7 +837,10 @@ export function createPreviewEngine(
       return rigSnapshot();
     },
     rig_send_program: (a) => {
-      const program = Math.min(127, Math.max(0, Number(a.program)));
+      const program = Number(a.program);
+      if (!Number.isInteger(program) || program < 0 || program > 127) {
+        throw new Error(`program ${a.program} is above 127`);
+      }
       const named = rig.currentProfile.programs.find(
         (p) => p.number === program,
       );

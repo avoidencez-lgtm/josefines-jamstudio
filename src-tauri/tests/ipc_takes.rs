@@ -327,10 +327,13 @@ fn takes_delete_drops_the_take_from_the_list_and_refuses_an_unknown_id() {
         find(&studio.ok("takes_list", json!({})), &take.id).is_none(),
         "deleted take is no longer listed"
     );
-    // The manifest is flagged instead of removed, and the other stems stay untouched.
-    assert_eq!(manifest(&take.dir)["hidden"], true);
-    assert_eq!(manifest(&take.dir)["id"], take.id);
-    assert!(take.input.is_file() && take.band.is_file() && take.master.is_file());
+    assert!(
+        !take.dir.exists()
+            && !take.input.exists()
+            && !take.band.exists()
+            && !take.master.exists(),
+        "delete removes the take folder"
+    );
 
     let ghost = unique("no-such-take");
     let err = studio.err("takes_delete", json!({"takeId": ghost}));
@@ -340,7 +343,6 @@ fn takes_delete_drops_the_take_from_the_list_and_refuses_an_unknown_id() {
 }
 
 #[test]
-#[ignore = "app bug: takes_delete only flags take.json hidden; the folder the UI promises to delete permanently stays on disk"]
 fn takes_delete_removes_the_take_folder_from_disk() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

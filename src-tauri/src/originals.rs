@@ -270,12 +270,15 @@ fn scan_originals(root: &Path) -> Result<(Vec<Value>, Vec<String>), String> {
     Ok((docs, warnings))
 }
 
-pub fn file_takes() -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
-    let root = std::env::var("JAM_DATA_DIR")
+pub fn takes_root() -> PathBuf {
+    std::env::var("JAM_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| Library::default_user_root())
-        .join("takes");
-    scan_takes(&root)
+        .join("takes")
+}
+
+pub fn file_takes() -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
+    scan_takes(&takes_root())
 }
 
 fn scan_takes(root: &Path) -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
