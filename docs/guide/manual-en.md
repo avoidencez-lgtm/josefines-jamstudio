@@ -250,6 +250,8 @@ Enter the soundtrack BPM, cut spacing in beats and the first beat’s offset (0�
 
 Search takes, filter favourites and refresh after recording. Listen to guitar auditions the selected input without the band. Mark a favourite, add its guitar to the open Write song, or export it. Deletion requires a deliberate action; check whether a song/version references that take before deleting. Take analysis computes local timing, dynamics and intonation heuristics; it does not listen like a producer. Practice streak and recorded time are activity summaries, not quality scores.
 
+Attack detection waits for 5 ms of quiet before counting another attack, with at least 20 ms between candidates. This prevents a sustained note’s zero crossings from being counted as new picks. Quiet recordings, overlapping notes and legato without a quiet gap can still be missed; the result is an estimate, not a note transcription.
+
 ### Alignment and stems
 
 Guitar offset is the manual sample offset used to align input with the band. Automatic cable-loopback calibration is not available. Measure alignment in your DAW on the actual rig. New full recordings contain separate guitar, drums, bass and comp, plus band/master reference mixes, scheduled band-note MIDI, a tempo map and the performance snapshot. Referenced guitar layers export as aligned WAVs. Capture-only ideas do not reconstruct band MIDI. Missing files are reported in the export result.

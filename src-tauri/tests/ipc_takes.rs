@@ -453,7 +453,7 @@ fn analysis_of_a_synthetic_a3_sine_finds_pitched_frames_in_tune() {
     let intonation = analysis["intonationAccuracyPct"].as_f64().unwrap();
     assert!(intonation >= 90.0, "{analysis}");
     let transients = analysis["detectedTransients"].as_u64().unwrap();
-    assert!(transients > 0, "{analysis}");
+    assert_eq!(transients, 1, "one sustained note: {analysis}");
     let summary = analysis["summary"].as_str().unwrap();
     assert!(
         summary.starts_with(&format!("Recorded {transients} pick transients.")),
