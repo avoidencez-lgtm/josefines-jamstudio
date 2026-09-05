@@ -1,6 +1,7 @@
 //! src-tauri: Tauri application library and command dispatch.
 
 pub mod agents;
+pub mod clips;
 pub mod controller;
 pub mod keys;
 pub mod library;
@@ -42,6 +43,10 @@ impl WarnOnce {
 pub struct AppState {
     pub recovery_notice: Mutex<Option<String>>,
     pub warnings: WarnOnce,
+    /// Decoded guitar clips, keyed by file and checked against size and mtime (#44).
+    pub clips: Mutex<clips::ClipCache>,
+    /// Set by `app_exit` once the UI has run its close guard, so the quit handler lets the app go.
+    pub exit_confirmed: std::sync::atomic::AtomicBool,
     pub agents: agents::AgentRunner,
     pub secret_store: Arc<dyn SecretStore>,
     pub engine: Arc<Mutex<AudioEngine>>,
@@ -69,6 +74,16 @@ async fn agent_request(
 #[tauri::command]
 fn agent_cancel(state: State<'_, AppState>) {
     state.agents.cancel();
+}
+
+/// The UI has run its close guard (nothing recording, drafts saved or discarded):
+/// exit for real. Both the window's close button and an app-level quit end here.
+#[tauri::command]
+fn app_exit(app: tauri::AppHandle, state: State<'_, AppState>) {
+    state
+        .exit_confirmed
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    app.exit(0);
 }
 
 /// The only network command. The WebView names a provider; Rust adds the key.
@@ -1046,6 +1061,8 @@ pub fn run() {
     let app_state = AppState {
         recovery_notice: Mutex::new(recovery_notice),
         warnings: WarnOnce::default(),
+        clips: Mutex::new(clips::ClipCache::new(clips::ClipCache::DEFAULT_BUDGET)),
+        exit_confirmed: std::sync::atomic::AtomicBool::new(false),
         agents: agents::AgentRunner::default(),
         controller: Arc::new(Mutex::new(None)),
         secret_store,
@@ -1133,6 +1150,7 @@ pub fn run() {
             agent_status,
             agent_request,
             agent_cancel,
+            app_exit,
             controller::controller_ports,
             controller::controller_open,
             controller::controller_config,
@@ -1217,8 +1235,34 @@ pub fn run() {
             originals::takes_melody,
             takes_export_daw,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            use tauri::Manager;
+            // An app-level quit (Cmd+Q on macOS) never went through the window's
+            // close guard (#35). While a window is open, hand the decision to the UI;
+            // it answers with app_exit, which sets exit_confirmed. A quit after the
+            // last window closed, or one requested by app_exit itself (code Some),
+            // proceeds untouched.
+            if let tauri::RunEvent::ExitRequested {
+                code: None, api, ..
+            } = &event
+            {
+                let state = app.state::<AppState>();
+                let window_open = app
+                    .webview_windows()
+                    .values()
+                    .any(|w| w.is_visible().unwrap_or(true));
+                if window_open
+                    && !state
+                        .exit_confirmed
+                        .load(std::sync::atomic::Ordering::SeqCst)
+                {
+                    api.prevent_exit();
+                    let _ = app.emit("app:exit-requested", ());
+                }
+            }
+        });
 }
 
 #[cfg(test)]
@@ -1244,8 +1288,10 @@ mod warnings {
 
 #[cfg(test)]
 mod desktop_permissions {
+    /// Closing and quitting go through the `app_exit` command after the UI's guard,
+    /// so the WebView holds no window-destroy permission at all.
     #[test]
-    fn generated_acl_grants_local_main_subscriptions_and_close_only() {
+    fn generated_acl_grants_local_main_subscriptions_only() {
         let acl: serde_json::Value =
             serde_json::from_str(include_str!("../gen/schemas/capabilities.json")).unwrap();
         let cap = &acl["default"];
@@ -1254,11 +1300,7 @@ mod desktop_permissions {
         assert!(cap.get("remote").is_none());
         assert_eq!(
             cap["permissions"],
-            serde_json::json!([
-                "core:event:allow-listen",
-                "core:event:allow-unlisten",
-                "core:window:allow-destroy"
-            ])
+            serde_json::json!(["core:event:allow-listen", "core:event:allow-unlisten"])
         );
     }
 }

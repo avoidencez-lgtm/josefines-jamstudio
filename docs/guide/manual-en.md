@@ -122,7 +122,7 @@ A disk revision prevents one window from silently overwriting another. If the fi
 
 ### Closing and backups
 
-Save before closing. The native app blocks close during a recording/operation and asks about unsaved song, chart or film drafts. Keep editing lets you save; Discard and close abandons unsaved edits. Browser reload protection depends on the browser. Prior files are retained as backups during saves, but a backup is not a complete version history. Copy the whole user folder to another location for a real backup.
+Save before closing. The native app blocks close during a recording/operation and asks about unsaved song, chart or film drafts. Keep editing lets you save; Discard and close abandons unsaved edits. Quitting from the app menu or with Cmd+Q on the Mac goes through the same check. Browser reload protection depends on the browser. Prior files are retained as backups during saves, but a backup is not a complete version history. Copy the whole user folder to another location for a real backup.
 
 ## Stage: play and practise
 

@@ -122,7 +122,7 @@ En diskrevisjon hindrer at ett vindu overskriver et annet uten varsel. Hvis file
 
 ### Lukking og sikkerhetskopier
 
-Lagre før du lukker. Skrivebordsappen hindrer lukking under opptak/arbeid og spør om ulagrede låt-, skjema- eller filmutkast. Keep editing lar deg lagre; Discard and close forkaster ulagrede endringer. Vern mot ny innlasting av nettleseren avhenger av nettleseren. Forrige fil beholdes som sikkerhetskopi ved lagring, men en slik kopi er ikke en full versjonshistorikk. Kopier hele brukermappen til et annet sted for en ordentlig sikkerhetskopi.
+Lagre før du lukker. Skrivebordsappen hindrer lukking under opptak/arbeid og spør om ulagrede låt-, skjema- eller filmutkast. Keep editing lar deg lagre; Discard and close forkaster ulagrede endringer. Avslutning fra appmenyen eller med Cmd+Q på Mac går gjennom samme kontroll. Vern mot ny innlasting av nettleseren avhenger av nettleseren. Forrige fil beholdes som sikkerhetskopi ved lagring, men en slik kopi er ikke en full versjonshistorikk. Kopier hele brukermappen til et annet sted for en ordentlig sikkerhetskopi.
 
 ## Stage: spill og øv
 
