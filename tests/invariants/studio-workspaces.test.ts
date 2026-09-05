@@ -170,4 +170,25 @@ describe("Studio workspaces", () => {
       [section.bars.length * 2 + 1, section.bars.length * 3 + 1],
     ]);
   });
+  it("stops looping pulses when motion is reduced and names icon transport", () => {
+    const css = fs.readFileSync(
+      path.join("src", "screens", "studio.css"),
+      "utf8",
+    );
+    expect(css).toContain("prefers-reduced-motion");
+    expect(css).toMatch(/\.animate-pulse\s*\{\s*animation:\s*none/);
+    const stage = fs.readFileSync(
+      path.join("src", "screens", "Stage.tsx"),
+      "utf8",
+    );
+    expect(stage).toContain('label="Tempo Trainer"');
+    expect(stage).not.toContain('label={tempoTrainer.enabled ? "On" : "Off"}');
+    const bar = fs.readFileSync(
+      path.join("src", "components", "TransportBar.tsx"),
+      "utf8",
+    );
+    expect(bar).toContain('aria-label={isPlaying ? "Pause" : "Play"}');
+    expect(bar).toContain('aria-label="Stop"');
+    expect(bar).toContain("aria-label={recordLabel}");
+  });
 });

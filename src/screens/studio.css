@@ -706,3 +706,8 @@ main :is(button, input, select, textarea, summary):focus-visible {
     grid-template-rows: minmax(160px, 1fr) minmax(180px, 40%);
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse {
+    animation: none;
+  }
+}

@@ -62,6 +62,7 @@ export function TransportBar() {
                 : "bg-[var(--bg-2)] text-[var(--fg-0)] hover:bg-[var(--bg-3)]"
             }`}
             title={isPlaying ? "Pause (Space)" : "Play (Space)"}
+            aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? (
               <Pause size={18} weight="fill" />
@@ -74,6 +75,7 @@ export function TransportBar() {
             onClick={() => transportStop()}
             className="w-9 h-9 rounded flex items-center justify-center bg-[var(--bg-2)] text-[var(--fg-0)] hover:bg-[var(--bg-3)] cursor-pointer"
             title="Stop (Enter)"
+            aria-label="Stop"
           >
             <Stop size={18} />
           </button>

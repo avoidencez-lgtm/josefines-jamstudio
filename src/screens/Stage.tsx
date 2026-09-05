@@ -537,7 +537,7 @@ export const Stage: React.FC = () => {
               onChange={(enabled) =>
                 setTempoTrainer({ enabled, playedBars: 0 })
               }
-              label={tempoTrainer.enabled ? "On" : "Off"}
+              label="Tempo Trainer"
             />
             <NumberField
               label="Start"
