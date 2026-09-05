@@ -519,12 +519,9 @@ fn the_inline_validator_names_what_is_wrong_and_leaves_the_band_untouched() {
     assert_eq!(band["next_chord"], "C7");
 }
 
-/// `band_load_chart` adopts a chart's meter, default style and default tempo so one
-/// click sets up the jam; the inline load (the editor's "Play chart") adopts the meter
-/// and style but keeps whatever tempo the transport had, so the chart's `bpm:` line
-/// is silently ignored.
+/// `band_load_chart` and the editor's inline Play share `apply_chart_timing`, so a
+/// chart's `bpm:` line becomes the transport tempo in both paths (#81 / #83).
 #[test]
-#[ignore = "app bug: band_load_chart_inline adopts the chart's meter and style but not its defaultBpm"]
 fn an_inline_chart_sets_the_transport_tempo_like_a_library_chart_does() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
