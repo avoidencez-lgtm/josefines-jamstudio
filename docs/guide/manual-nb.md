@@ -132,6 +132,8 @@ Lagre før du lukker. Skrivebordsappen hindrer lukking under opptak/arbeid og sp
 
 Transportlinjen øverst spiller av, pauser, stopper, tar opp, velger opptelling og slår av/på løkker. Stage viser gjeldende/neste akkord og posisjon. Chart & band settings velger skjema og passende stil, endrer intensitet og band-/klikkvolum og aktiverer stemmeapparat eller referansetone. Cues ber om Fill, Crash, Stop eller Ending. Noen endringer venter til neste takt og vises som ventende. Mute gjelder trommer, bass eller komp; follow-energy følger målt gitarnivå, ikke musikalsk hensikt. Shapes viser et spillbart grep for gjeldende akkord og, mindre, neste akkord, med grunntonen i gult; nummerknappene velger et annet grep. Dette er teoriforslag i standardstemming, ikke en transkripsjon av det som ble spilt.
 
+Hvis du laster et akkordskjema med en annen taktart under opptelling, starter opptellingen på nytt i den nye taktarten før bandet kommer inn. Samme taktart beholder posisjonen i opptellingen.
+
 ### Øving og tempotrening
 
 Practice viser partier fra det innlastede skjemaet. Velg ett for å repetere taktintervallet, inkludert gjentakelser. Exit loop går tilbake til hele formen. Velg Start, Target, Step og Every i Tempo Trainer, aktiver og trykk Play fra stopp. Tempoet justeres etter valgt antall spilte takter, også i korte løkker; et aktivt opptak endres ikke. Styringen bruker UI-telemetri og er ikke et samplenøyaktig spor for tempoautomasjon.

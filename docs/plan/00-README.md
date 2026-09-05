@@ -215,6 +215,14 @@ This applies to the tuner, melody extraction and take analysis. It does not
 complete bend exclusion, noisy-sweep acceptance, chord agreement or structured
 provider feedback. Friend-led testing remains deferred to V2.
 
+### Count-in meter changes (PR #167)
+
+A different meter restarts an active count-in so its clicks match the new chart.
+An unchanged or invalid meter preserves progress. The regression advances beyond
+the shortened boundary that caused the original underflow, then verifies four
+restarted clicks, exact playback spans and one completion event. This developer
+verification is separate from the friend-led checks deferred to V2.
+
 ### Recording interruption feedback (issue #137)
 
 Rejected disk-queue blocks no longer advance the accepted-frame count or collect
