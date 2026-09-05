@@ -405,7 +405,8 @@ describe("desktop startup against the preview engine", () => {
       buffer_size: 512,
       input_channel: 0,
     };
-    await store().saveSettings(changed);
+    await ipc.invoke("settings_set", { settings: changed });
+    await store().loadSettings();
     expect(store().settings).toEqual(changed);
     expect(store().notices).toEqual([]);
 
@@ -424,7 +425,7 @@ describe("desktop startup against the preview engine", () => {
     expect(config.buffer_size).toBe(512);
     expect(config.input_channel).toBe(0);
 
-    await store().saveSettings(original);
+    await ipc.invoke("settings_set", { settings: original });
     useEngineStore.setState({ settings: null });
     await store().loadSettings();
     expect(store().settings).toEqual(original);

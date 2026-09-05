@@ -2,8 +2,6 @@
 //! Maps guitar dynamics to band intensity (0.0 to 1.0) with hysteresis.
 
 pub struct EnergyFollower {
-    #[allow(dead_code)]
-    sample_rate: u32,
     attack_coeff: f32,
     release_coeff: f32,
     envelope: f32,
@@ -21,7 +19,6 @@ impl EnergyFollower {
         let release_coeff = (-1.0 / (sr * 1.5)).exp();
 
         Self {
-            sample_rate,
             attack_coeff,
             release_coeff,
             envelope: 0.0,
@@ -65,18 +62,6 @@ impl EnergyFollower {
             last = self.process_sample(s);
         }
         last
-    }
-
-    pub fn current_energy(&self) -> f32 {
-        self.current_mapped
-    }
-
-    pub fn current_envelope_db(&self) -> f32 {
-        if self.envelope > 1e-6 {
-            20.0 * self.envelope.log10()
-        } else {
-            -120.0
-        }
     }
 }
 
