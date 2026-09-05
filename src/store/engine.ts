@@ -23,6 +23,7 @@ import type {
 } from "../ipc/contract";
 import { transposeChart } from "../lib/chart/transpose";
 import type { Original } from "../lib/originals";
+import { savedTakeAnalysis } from "../lib/sessions/analysis";
 
 export type ScreenId =
   | "originals"
@@ -499,7 +500,14 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const takes = await run("Takes", () =>
         ipc.invoke<TakeMetadata[]>("takes_list"),
       );
-      if (takes) set({ takes });
+      if (takes) {
+        const takeAnalysis: Record<string, TakeAnalysis> = {};
+        for (const take of takes) {
+          const analysis = savedTakeAnalysis(take.analysis);
+          if (analysis) takeAnalysis[take.id] = analysis;
+        }
+        set({ takes, takeAnalysis });
+      }
     },
     deleteTake: async (takeId) => {
       const ok = await run("Delete take", () =>

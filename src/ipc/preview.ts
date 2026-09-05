@@ -767,20 +767,34 @@ export function createPreviewEngine(
     takes_delete: (a) => {
       takes = takes.filter((t) => t.id !== a.takeId);
     },
-    takes_analyze: () => ({
-      meanGridDistanceMs: null,
-      gridBiasMs: null,
-      gridSpreadMs: null,
-      attackLevelCvPct: null,
-      meanAbsCents: null,
-      pitchedFrames: 0,
-      timingAccuracyPct: 0,
-      dynamicConsistencyPct: 0,
-      intonationAccuracyPct: 0,
-      detectedTransients: 0,
-      summary:
-        "Analysis needs the desktop app: no audio was recorded in browser preview.",
-    }),
+    takes_analyze: (a) => {
+      const take = takes.find((t) => t.id === a.takeId);
+      if (!take) throw new Error("Choose a saved take before analyzing.");
+      const analysis = {
+        meanGridDistanceMs: null,
+        gridBiasMs: null,
+        gridSpreadMs: null,
+        attackLevelCvPct: null,
+        meanAbsCents: null,
+        pitchedFrames: 0,
+        timingAccuracyPct: 0,
+        dynamicConsistencyPct: 0,
+        intonationAccuracyPct: 0,
+        detectedTransients: 0,
+        summary:
+          "Analysis needs the desktop app: no audio was recorded in browser preview.",
+      };
+      take.analysis = {
+        ...analysis,
+        schemaVersion: 1,
+        analyzerVersion: 1,
+        analyzedAtMs: Date.now(),
+        sourceSampleRate: 48_000,
+        sourceSampleCount: 0,
+        sourceTempo: take.tempo,
+      };
+      return analysis;
+    },
     takes_export_daw: () => {
       throw new Error("export is only available in the desktop app");
     },

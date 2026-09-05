@@ -808,11 +808,34 @@ fn takes_analyze(
     take_id: String,
     state: State<'_, AppState>,
 ) -> Result<jam_audio::analysis::TakeAnalysis, String> {
-    let take = find_take(&state, &take_id)?;
+    let mut take = find_take(&state, &take_id)?;
     let (samples, sample_rate) =
         jam_audio::recorder::read_wav_mono(std::path::Path::new(&take.path_input))?;
     let analyzer = jam_audio::analysis::TakeAnalyzer::new(sample_rate);
-    Ok(analyzer.analyze(&samples, take.tempo))
+    let analysis = analyzer.analyze(&samples, take.tempo);
+    let mut fields = serde_json::to_value(&analysis).map_err(|e| e.to_string())?;
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as u64;
+    fields["schemaVersion"] = serde_json::json!(1);
+    fields["analyzerVersion"] = serde_json::json!(1);
+    fields["analyzedAtMs"] = serde_json::json!(at);
+    fields["sourceSampleRate"] = serde_json::json!(sample_rate);
+    fields["sourceSampleCount"] = serde_json::json!(samples.len());
+    fields["sourceTempo"] = serde_json::json!(take.tempo);
+    let saved = take.extra.entry("analysis".into()).or_default();
+    if !saved.is_object() {
+        *saved = serde_json::json!({});
+    }
+    // Preserve future measurement fields while replacing the fields we own.
+    saved
+        .as_object_mut()
+        .unwrap()
+        .extend(fields.as_object().unwrap().clone());
+    originals::save_take_manifest(&take)
+        .map_err(|e| format!("Cannot save take analysis beside {}: {e}", take.path_input))?;
+    Ok(analysis)
 }
 
 /// Section markers for a chart in playing order: `(name, first bar)`.

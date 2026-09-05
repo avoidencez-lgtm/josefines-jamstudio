@@ -414,7 +414,9 @@ const TakeRow: React.FC<TakeRowProps> = ({
           </Button>
           {!analysis || analysis.meanGridDistanceMs === undefined ? (
             <Button size="sm" variant="secondary" onClick={onAnalyze}>
-              {analysis ? "Analyze again" : "Analyze Take"}
+              {analysis || take.analysis !== undefined
+                ? "Analyze again"
+                : "Analyze Take"}
             </Button>
           ) : (
             <Button
@@ -464,6 +466,12 @@ const TakeRow: React.FC<TakeRowProps> = ({
         </div>
       </div>
 
+      {take.analysis !== undefined && !analysis && (
+        <p className="text-xs text-[var(--fg-1)]">
+          Saved analysis is unavailable or from a different analyzer version.
+          Analyze again to refresh the measurements. The recording is unchanged.
+        </p>
+      )}
       {analysis && (
         <dl
           aria-label="Take measurements"
@@ -494,6 +502,9 @@ const TakeRow: React.FC<TakeRowProps> = ({
             Timing and dynamics come from pick transients; intonation is still a
             rough estimate.
           </p>
+          <Button size="sm" onClick={onAnalyze}>
+            Analyze again
+          </Button>
         </div>
       )}
     </div>

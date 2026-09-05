@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs,
+    io::Write,
     path::{Path, PathBuf},
     sync::mpsc,
     thread,
@@ -261,12 +262,20 @@ pub fn save_manifest(meta: &TakeMetadata) -> Result<(), String> {
         .parent()
         .ok_or("Take directory missing")?;
     let temp = dir.join("take.json.tmp");
-    fs::write(
-        &temp,
-        serde_json::to_vec_pretty(meta).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    fs::rename(temp, dir.join("take.json")).map_err(|e| e.to_string())
+    let bytes = serde_json::to_vec_pretty(meta).map_err(|e| e.to_string())?;
+    // Never follow or overwrite a pre-existing temporary file/link.
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .map_err(|e| format!("Cannot create {}: {e}", temp.display()))?;
+    let result = file.write_all(&bytes).and_then(|()| file.sync_all());
+    drop(file);
+    let result = result.and_then(|()| fs::rename(&temp, dir.join("take.json")));
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result.map_err(|e| format!("Cannot save {}: {e}", dir.join("take.json").display()))
 }
 
 /// Reads a WAV file back as mono f32 in -1..1 (channels are averaged), together with its
@@ -305,6 +314,23 @@ pub fn wav_sample_rate(path: &Path) -> Result<u32, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn manifest_write_never_overwrites_an_existing_temporary_link() {
+        let root = std::env::temp_dir().join(format!("jam-manifest-link-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let victim = root.join("keep.txt");
+        fs::write(&victim, b"keep this file").unwrap();
+        fs::hard_link(&victim, root.join("take.json.tmp")).unwrap();
+        let take = TakeMetadata {
+            path_input: root.join("guitar-di.wav").to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+        assert!(save_manifest(&take).unwrap_err().contains("Cannot create"));
+        assert_eq!(fs::read(&victim).unwrap(), b"keep this file");
+        assert!(!root.join("take.json").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn recording_has_separate_aligned_stems_and_a_durable_snapshot() {
         let root = std::env::temp_dir().join(format!("jam-recording-{}", std::process::id()));

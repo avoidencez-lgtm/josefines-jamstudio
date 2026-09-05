@@ -283,6 +283,15 @@ it("analyses a take honestly in the preview (no audio, all zeros), caches it per
     summary: expect.stringMatching(/desktop app/),
   });
   expect(store().takeAnalysis[meta.id]).toEqual(analysis);
+  useEngineStore.setState({ takeAnalysis: {}, takes: [] });
+  await store().loadTakes();
+  expect(store().takeAnalysis[meta.id]).toEqual(analysis);
+  const savedTake = store().takes.find((t) => t.id === meta.id);
+  expect(savedTake?.analysis).toMatchObject({
+    schemaVersion: 1,
+    analyzerVersion: 1,
+    analyzedAtMs: TODAY.getTime(),
+  });
   if (!analysis) throw new Error("no analysis");
   // The Jo review card: too few pick attacks means "record a real take" rather than a drill.
   expect(drillFor(analysis, Math.round(meta.tempo))).toMatch(
@@ -312,6 +321,19 @@ it("analyses a take honestly in the preview (no audio, all zeros), caches it per
     }),
   ).rejects.toThrow("Finish recording before analyzing a take.");
   await s.stopRecording();
+});
+
+it("keeps a take available when its saved analysis is damaged", async () => {
+  const meta = await recordTake(TODAY, 2);
+  const originalInvoke = ipc.invoke;
+  const damaged = { ...meta, analysis: { schemaVersion: 999 } };
+  vi.spyOn(ipc, "invoke").mockImplementation(async (command, args) => {
+    if (command === "takes_list") return [damaged] as never;
+    return originalInvoke(command, args);
+  });
+  await store().loadTakes();
+  expect(store().takes).toEqual([damaged]);
+  expect(store().takeAnalysis).not.toHaveProperty(meta.id);
 });
 
 it("deletes a take from the store and the engine, and an unknown id leaves the list untouched", async () => {

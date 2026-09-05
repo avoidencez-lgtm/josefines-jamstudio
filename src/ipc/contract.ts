@@ -175,6 +175,8 @@ export interface AppSettings {
 }
 
 export interface TakeMetadata {
+  /** Versioned evidence from disk; validate before displaying. */
+  analysis?: unknown;
   favourite?: boolean;
   stems?: Record<string, string>;
   snapshot?: unknown;
