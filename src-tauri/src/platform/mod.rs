@@ -42,12 +42,7 @@ pub async fn open_https(url: &str) -> Result<(), String> {
     let mut opener = command(std::path::Path::new("explorer.exe"));
     #[cfg(not(any(target_os = "macos", windows)))]
     let mut opener = command(std::path::Path::new("xdg-open"));
-    opener
-        .kill_on_drop(false)
-        .arg(url)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    launch_opener(opener.arg(url)).await
 }
 
 pub async fn open_media(path: &std::path::Path) -> Result<(), String> {
@@ -58,11 +53,26 @@ pub async fn open_media(path: &std::path::Path) -> Result<(), String> {
     #[cfg(not(any(target_os = "macos", windows)))]
     let mut opener = command(std::path::Path::new("xdg-open"));
     // The user's explicit Play action opens their default media player.
+    launch_opener(opener.arg(path)).await
+}
+
+async fn launch_opener(opener: &mut tokio::process::Command) -> Result<(), String> {
+    // Explorer hands off to an existing process; its exit code does not prove
+    // whether a browser/player opened. macOS open and xdg-open report failure.
+    #[cfg(windows)]
     opener
         .kill_on_drop(false)
-        .arg(path)
         .spawn()
         .map_err(|e| e.to_string())?;
+    #[cfg(not(windows))]
+    {
+        let status = opener.status().await.map_err(|e| e.to_string())?;
+        if !status.success() {
+            return Err(
+                "The system could not open this item. Check the default application.".into(),
+            );
+        }
+    }
     Ok(())
 }
 
@@ -135,6 +145,19 @@ pub fn find_agent(name: &str, configured: &str) -> Result<PathBuf, String> {
 
 #[cfg(test)]
 mod url_tests {
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn opener_reports_application_failure() {
+        let mut opener = super::command(std::path::Path::new("/bin/sh"));
+        assert!(super::launch_opener(opener.args(["-c", "exit 1"]))
+            .await
+            .is_err());
+        let mut opener = super::command(std::path::Path::new("/bin/sh"));
+        assert!(super::launch_opener(opener.args(["-c", "exit 0"]))
+            .await
+            .is_ok());
+    }
+
     #[test]
     fn https_allowlist_accepts_docs_and_rejects_the_rest() {
         assert!(super::allowed_https_url("https://ffmpeg.org/download.html").is_ok());

@@ -449,6 +449,15 @@ Two platform facts the harness encodes: `run()` is split so tests build the same
 
 ## 12. Errors and logging
 
+Documented Settings/Film links use `openExternal` → `open_url` → the native
+platform opener. Rust accepts HTTPS URLs on the documentation host allowlist;
+the frontend displays a rejected launch in the existing notice rail with the URL
+for manual opening. Browser preview uses a new browser tab. The shared native
+browser/media launcher awaits the macOS/Linux opener's exit status. Windows
+Explorer is a handoff: successful process creation does not confirm the target
+application opened, and the UI does not announce success. OS launch behavior is
+separate from the mocked IPC and shell-exit regression checks.
+
 `AppError { code, message, detail?, fatal }` with codes in `src-tauri/src/ipc/errors.rs` mirrored in `src/ipc/errors.ts`; every code has a user-facing message and a next step in the UI. Logs via `tauri-plugin-log` to `~/JosefinesJamstudio/logs/` with rotation; levels info by default, debug with `JAM_LOG=debug`; never bodies, never keys, never raw audio.
 # Implemented songwriting workflow
 
