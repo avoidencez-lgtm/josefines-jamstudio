@@ -35,6 +35,7 @@ pub async fn takes_melody(
         return Err("Choose a nonnegative start and 0.1–60 seconds of melody.".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
+        valid_id(&take_id)?;
         let take = file_takes()?
             .0
             .into_iter()
@@ -88,7 +89,7 @@ struct SongBody {
 fn song_dir() -> PathBuf {
     Library::default_user_root().join("originals")
 }
-fn valid_id(id: &str) -> Result<(), String> {
+pub(crate) fn valid_id(id: &str) -> Result<(), String> {
     if id.is_empty()
         || id.len() > 100
         || !id
@@ -454,6 +455,19 @@ pub fn takes_favourite(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn take_ids_reject_path_components() {
+        assert_eq!(
+            super::valid_id("..\\saved").unwrap_err(),
+            "Invalid song or take id."
+        );
+        assert_eq!(
+            super::valid_id("../../saved").unwrap_err(),
+            "Invalid song or take id."
+        );
+        assert!(super::valid_id("take-1").is_ok());
+    }
+
     #[test]
     fn near_limit_song_stays_readable_after_pretty_printed_save() {
         let root = std::env::temp_dir().join(format!("jam-song-size-{}", std::process::id()));

@@ -14,6 +14,13 @@ pub struct IndexStore {
     conn: Connection,
 }
 
+fn sample_count_from_row(n: i64) -> Result<usize, rusqlite::Error> {
+    u64::try_from(n)
+        .ok()
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or(rusqlite::Error::IntegralValueOutOfRange(7, n))
+}
+
 impl IndexStore {
     pub fn open() -> Result<Self, String> {
         let path = db_path();
@@ -140,7 +147,7 @@ impl IndexStore {
                     style_id: row.get(4)?,
                     chart_id: row.get(5)?,
                     tempo: row.get(6)?,
-                    sample_count: row.get::<_, i64>(7)? as usize,
+                    sample_count: sample_count_from_row(row.get(7)?)?,
                     path_input: row.get(8)?,
                     path_band: row.get(9)?,
                     path_master: row.get(10)?,
@@ -305,6 +312,44 @@ mod tests {
         );
         assert_eq!(takes[0].duration_secs, 1.5);
         assert_eq!(takes[0].waveform_peaks, vec![0.5]);
+        assert_eq!(skipped.len(), 1);
+        assert!(skipped[0].contains("row 1"), "{}", skipped[0]);
+    }
+
+    #[test]
+    fn negative_sample_count_is_skipped_not_wrapped() {
+        let store = IndexStore::open_in_memory().expect("in-memory db opens");
+        store
+            .insert_take(&TakeMetadata {
+                id: "good".into(),
+                timestamp: "2026-09-05T10:00:00Z".into(),
+                sample_count: 48_000,
+                ..Default::default()
+            })
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "UPDATE takes SET sample_count = -1, manifest = NULL WHERE id = 'good'",
+                [],
+            )
+            .unwrap();
+        store
+            .insert_take(&TakeMetadata {
+                id: "ok".into(),
+                timestamp: "2026-09-05T09:00:00Z".into(),
+                sample_count: 100,
+                ..Default::default()
+            })
+            .unwrap();
+        let (takes, skipped) = store
+            .list_takes()
+            .expect("listing tolerates a negative count");
+        assert_eq!(
+            takes.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+            ["ok"]
+        );
+        assert_eq!(takes[0].sample_count, 100);
         assert_eq!(skipped.len(), 1);
         assert!(skipped[0].contains("row 1"), "{}", skipped[0]);
     }

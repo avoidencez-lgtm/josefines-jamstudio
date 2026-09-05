@@ -309,6 +309,9 @@ pub fn write_performance_midi(
     std::fs::write(path, out)
 }
 
+/// Longest stem the exporter will write (same ten-minute cap as `media_from_take`).
+pub const MAX_EXPORT_SECONDS: u64 = 600;
+
 pub fn write_clip_stem(
     path: &Path,
     clip: &crate::workstation::Clip,
@@ -316,6 +319,12 @@ pub fn write_clip_stem(
     rate: u32,
     bpm: f64,
 ) -> std::io::Result<()> {
+    if rate == 0 || frames == 0 || frames as u64 > u64::from(rate) * MAX_EXPORT_SECONDS {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Take is empty or longer than ten minutes.",
+        ));
+    }
     let mut writer = hound::WavWriter::create(
         path,
         hound::WavSpec {
@@ -511,5 +520,34 @@ mod tests {
         let info = std::fs::read_to_string(dir.join("out").join("take-1-info.json")).unwrap();
         assert!(info.contains("\"sampleRate\": 44100"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clip_stem_refuses_an_unbounded_frame_count() {
+        let clip = crate::workstation::Clip {
+            spec: crate::workstation::ClipSpec {
+                take_id: "take-1".into(),
+                trim_start: 0.0,
+                trim_end: 1.0,
+                start_bar: 1,
+                repeats: 1,
+                gain: 1.0,
+                muted: false,
+                label: String::new(),
+            },
+            samples: std::sync::Arc::new(vec![0.0; 48000]),
+            sample_rate: 48000,
+        };
+        let path = std::env::temp_dir().join(format!(
+            "jam-clip-bound-{}-{}.wav",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let err = write_clip_stem(&path, &clip, usize::MAX, 48000, 120.0).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(!path.exists());
     }
 }

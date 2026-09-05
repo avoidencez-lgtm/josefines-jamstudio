@@ -742,6 +742,7 @@ fn all_takes(
 }
 
 fn find_take(state: &AppState, take_id: &str) -> Result<jam_audio::recorder::TakeMetadata, String> {
+    originals::valid_id(take_id)?;
     all_takes(state)?
         .0
         .into_iter()
