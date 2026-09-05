@@ -11,6 +11,7 @@ import { keyName } from "../lib/chart/notes";
 import { chartToText, parseChartText, resolveChart } from "../lib/chart/text";
 import { transposeChart } from "../lib/chart/transpose";
 import { useLibraryDraft } from "../lib/libraryDraft";
+import { meterLabel, stylesInMeter } from "../lib/styles";
 import { useEngineStore } from "../store/engine";
 
 const TEMPLATE = `# New Tune
@@ -42,6 +43,7 @@ export const Library: React.FC = () => {
     currentChart,
     libraryInfo,
     styleId,
+    meter,
     currentBar,
     barProgress,
     loopEnabled,
@@ -64,6 +66,7 @@ export const Library: React.FC = () => {
       currentChart: s.currentChart,
       libraryInfo: s.libraryInfo,
       styleId: s.telemetry.band.style_id,
+      meter: s.telemetry.transport.time_signature,
       currentBar: s.telemetry.transport.bar,
       barProgress: s.telemetry.transport.bar_progress,
       loopEnabled: s.telemetry.transport.loop_enabled,
@@ -97,6 +100,10 @@ export const Library: React.FC = () => {
   }, [currentChart, text]);
 
   const parsed = useMemo(() => parseChartText(text ?? ""), [text]);
+  const grooves = useMemo(
+    () => stylesInMeter(styles, meter, styleId),
+    [styles, meter, styleId],
+  );
   const draft = parsed.chart;
   const bars = draft ? resolveChart(draft) : [];
   const beatsTotal = bars.reduce(
@@ -295,9 +302,9 @@ export const Library: React.FC = () => {
             )}
           </Panel>
 
-          <Panel title={`Styles (${styles.length})`}>
+          <Panel title={`Styles (${grooves.length})`}>
             <div className="flex flex-col gap-1">
-              {styles
+              {grooves
                 .filter((s) =>
                   `${s.name} ${s.genre} ${s.feel.bpmRange.join(" ")}`
                     .toLowerCase()
@@ -328,8 +335,8 @@ export const Library: React.FC = () => {
                 })}
             </div>
             <p className="text-[10px] font-mono text-[var(--fg-2)] mt-3">
-              Styles are JSON files. Drop your own into the styles folder and
-              reload; no code needed.
+              Grooves in {meterLabel(meter)}. Load a chart in another meter to
+              change it. Drop your own JSON into the styles folder and reload.
             </p>
           </Panel>
         </div>

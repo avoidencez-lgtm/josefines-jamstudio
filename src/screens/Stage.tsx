@@ -15,6 +15,7 @@ import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import { keyName } from "../lib/chart/notes";
 import { sectionPassages } from "../lib/chart/passages";
 import { committedNumber } from "../lib/numberField";
+import { stylesInMeter } from "../lib/styles";
 import { useEngineStore } from "../store/engine";
 
 export const Stage: React.FC = () => {
@@ -81,6 +82,11 @@ export const Stage: React.FC = () => {
   const tunerData = telemetry.tuner;
   const transport = telemetry.transport;
   const band = telemetry.band;
+  const grooves = stylesInMeter(
+    styles,
+    transport.time_signature,
+    band.pending_style_id ?? band.style_id,
+  );
   const isCountingIn = transport.state === "counting_in";
 
   const currentStyle = styles.find((s) => s.id === band.style_id);
@@ -179,10 +185,10 @@ export const Stage: React.FC = () => {
                 onChange={(e) => bandSetStyle(e.target.value)}
                 className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1 rounded text-xs font-mono cursor-pointer"
               >
-                {styles.length === 0 && (
+                {grooves.length === 0 && (
                   <option value={band.style_id}>{band.style_name}</option>
                 )}
-                {styles.map((s) => (
+                {grooves.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
