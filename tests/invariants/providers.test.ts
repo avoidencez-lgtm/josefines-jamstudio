@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { __setIpcForTests, ipc } from "../../src/ipc/client";
+import { type JoContext } from "../../src/lib/jo/gemini";
 import {
   BRAINS,
   type BrainRequest,
   askBrain,
   estimateRequest,
+  joRequest,
   readPreferences,
 } from "../../src/lib/jo/providers";
 import {
@@ -66,6 +68,41 @@ describe("provider contracts and creative proposals", () => {
       ).body;
       expect(body).not.toHaveProperty("tools");
     }
+  });
+  it("starts every built request with a user turn, never the UI welcome", () => {
+    const ctx: JoContext = {
+      transportState: "stopped",
+      bpm: 120,
+      bar: 1,
+      styleId: "blues-shuffle",
+      styleName: "Blues Shuffle",
+      intensity: 0.5,
+      chartName: null,
+      currentChord: "A7",
+      currentSection: "",
+      muted: { drums: false, bass: false, comp: false },
+      styles: [],
+      charts: [],
+    };
+    const welcome = {
+      id: "welcome",
+      sender: "jo" as const,
+      text: "Tell me what the band should do.",
+      timestamp: "Jo",
+    };
+    const built = joRequest([welcome], "Five BPM faster", ctx);
+    expect(built.messages[0]?.role).toBe("user");
+    expect(built.messages.some((m) => m.content.includes("Tell me"))).toBe(
+      false,
+    );
+    const config = readPreferences(null);
+    const anthropic = BRAINS.anthropic.request(built, config.models.anthropic)
+      .body as { messages: { role: string }[] };
+    expect(anthropic.messages[0]?.role).toBe("user");
+    const openai = BRAINS.openai.request(built, config.models.openai).body as {
+      input: { role: string }[];
+    };
+    expect(openai.input[0]?.role).toBe("user");
   });
   it("rejects truncated, malformed and unauthorized actions before dispatch", () => {
     expect(() =>
