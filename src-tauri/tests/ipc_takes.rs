@@ -328,10 +328,7 @@ fn takes_delete_drops_the_take_from_the_list_and_refuses_an_unknown_id() {
         "deleted take is no longer listed"
     );
     assert!(
-        !take.dir.exists()
-            && !take.input.exists()
-            && !take.band.exists()
-            && !take.master.exists(),
+        !take.dir.exists() && !take.input.exists() && !take.band.exists() && !take.master.exists(),
         "delete removes the take folder"
     );
 
