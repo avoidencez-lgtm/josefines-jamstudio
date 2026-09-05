@@ -6,6 +6,7 @@ import type {
   Chart,
   RigProfile,
   RigState,
+  StyleSummary,
 } from "../ipc/contract";
 import { keyName, splitChord } from "./chart/notes";
 import { resolveChart } from "./chart/text";
@@ -355,6 +356,8 @@ export const setlistSchema = z
       .object({
         id: z.string().min(1).max(120),
         chartId: z.string().min(1).max(120),
+        /** Groove for this entry; absent means the chart's own default style. */
+        styleId: z.string().min(1).max(120).optional(),
         bpm: z.number().finite().min(40).max(240),
         countIn: z.number().int().min(0).max(4),
       })
@@ -366,6 +369,33 @@ export const setlistSchema = z
     "Setlist entry ids must be unique.",
   );
 export type Setlist = z.infer<typeof setlistSchema>;
+/** Everything a cue needs, checked before any transport command runs (#64). */
+export function setlistCue(
+  item: Setlist[number],
+  charts: Chart[],
+  styles: StyleSummary[],
+) {
+  setlistSchema.parse([item]);
+  const chart = charts.find((c) => c.id === item.chartId);
+  if (!chart)
+    throw new Error(
+      "This chart is missing. Restore it in Library or remove the setlist entry.",
+    );
+  let styleId: string | null = null;
+  if (item.styleId) {
+    const style = styles.find((s) => s.id === item.styleId);
+    if (!style)
+      throw new Error(
+        "This entry's groove is no longer installed. Edit the entry and choose another groove.",
+      );
+    if (style.feel.timeSig.join("/") !== chart.timeSig.join("/"))
+      throw new Error(
+        `${style.name} is in ${style.feel.timeSig.join("/")}; ${chart.name} is in ${chart.timeSig.join("/")}. Choose a groove in the chart's meter.`,
+      );
+    styleId = style.id;
+  }
+  return { chart, styleId, bpm: item.bpm, countIn: item.countIn };
+}
 export const audioProfileSchema = z
   .array(
     z
