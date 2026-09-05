@@ -9,6 +9,7 @@ import {
   listModels,
   useAi,
 } from "../lib/jo/providers";
+import { openExternal } from "../lib/openUrl";
 import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 import { Panel } from "./Panel";
@@ -149,8 +150,11 @@ export function AiSettings() {
             <a
               className="underline text-sm"
               href={BRAINS[draft.selected].pricing}
-              target="_blank"
               rel="noreferrer"
+              onClick={(e) => {
+                e.preventDefault();
+                void openExternal(BRAINS[draft.selected].pricing);
+              }}
             >
               Account and subscription documentation
             </a>
@@ -241,8 +245,11 @@ export function AiSettings() {
                 <a
                   className="underline"
                   href={BRAINS[draft.selected].pricing}
-                  target="_blank"
                   rel="noreferrer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void openExternal(BRAINS[draft.selected].pricing);
+                  }}
                 >
                   Check current pricing
                 </a>

@@ -87,6 +87,12 @@ fn app_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>, state: State<'_, AppSta
     app.exit(0);
 }
 
+/// Opens an allowlisted https URL in the OS browser. `target="_blank"` is dead in WebView2/WKWebView.
+#[tauri::command]
+async fn open_url(url: String) -> Result<(), String> {
+    platform::open_https(&url).await
+}
+
 /// The only network command. The WebView names a provider; Rust adds the key.
 #[tauri::command]
 async fn provider_fetch<R: tauri::Runtime>(
@@ -1156,6 +1162,7 @@ pub fn configure<R: tauri::Runtime>(
             agent_request,
             agent_cancel,
             app_exit,
+            open_url,
             controller::controller_ports,
             controller::controller_open,
             controller::controller_config,
