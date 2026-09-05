@@ -74,6 +74,13 @@ export function slugify(text: string): string {
   return slug.length > 0 ? slug : "chart";
 }
 
+/** `[Chorus x2]` repeats; `[Mix 2]` is just a name — the x must be its own token. */
+function sectionRepeat(label: string): { name: string; repeats: number } {
+  const m = /^(.+?)\s+[x×]\s*(\d+)$/i.exec(label.trim());
+  if (!m) return { name: label.trim(), repeats: 1 };
+  return { name: m[1].trim(), repeats: Math.max(1, Number.parseInt(m[2], 10)) };
+}
+
 interface WorkingSection {
   id: string;
   name: string;
@@ -131,10 +138,7 @@ export function parseChartText(
 
     const header = /^\[(.+?)\]$/.exec(line);
     if (header) {
-      const inner = header[1].trim();
-      const rep = /^(.*?)\s*[xX×]\s*(\d+)$/.exec(inner);
-      const name = (rep ? rep[1] : inner).trim();
-      const repeats = rep ? Math.max(1, Number.parseInt(rep[2], 10)) : 1;
+      const { name, repeats } = sectionRepeat(header[1]);
       if (name.length === 0) {
         problems.push({ line: lineNo, message: "section needs a name" });
         return;
@@ -400,10 +404,8 @@ function buildArrangement(
     .split(/[,;]+/)
     .map((p) => p.trim())
     .filter(Boolean)) {
-    const m = /^(.*?)\s*(?:[xX×]\s*(\d+))?$/.exec(part);
-    if (!m) continue;
-    const ref = m[1].trim();
-    const repeats = m[2] ? Math.max(1, Number.parseInt(m[2], 10)) : 1;
+    const { name: ref, repeats } = sectionRepeat(part);
+    if (!ref) continue;
     const target =
       sections.find((s) => s.id === slugify(ref)) ??
       sections.find((s) => s.name.toLowerCase() === ref.toLowerCase());

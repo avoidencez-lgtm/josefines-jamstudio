@@ -133,6 +133,46 @@ arrangement: chorus, verse x2, chorus
     ]);
   });
 
+  it("keeps Mix/Box/Remix names and still honours Chorus x2", () => {
+    const { chart, problems } = parseChartText(`# Form
+[Mix 2]
+| C | G |
+[Box 3]
+| Am | F |
+[Remix 1]
+| Dm | E |
+[Chorus x2]
+| G | C |
+[Verse 2]
+| D | A |
+[Bridge x 2]
+| Em | B |
+arrangement: mix 2, chorus x2, verse 2
+`);
+    expect(problems).toEqual([]);
+    expect(chart?.sections.map((s) => [s.id, s.name])).toEqual([
+      ["mix-2", "Mix 2"],
+      ["box-3", "Box 3"],
+      ["remix-1", "Remix 1"],
+      ["chorus", "Chorus"],
+      ["verse-2", "Verse 2"],
+      ["bridge", "Bridge"],
+    ]);
+    expect(chart?.arrangement).toEqual([
+      { sectionId: "mix-2", repeats: 1 },
+      { sectionId: "chorus", repeats: 2 },
+      { sectionId: "verse-2", repeats: 1 },
+    ]);
+    const implicit = parseChartText("[Mix 2]\n| C |\n[Chorus x2]\n| G |");
+    expect(implicit.problems).toEqual([]);
+    expect(implicit.chart?.arrangement).toEqual([
+      { sectionId: "mix-2", repeats: 1 },
+      { sectionId: "chorus", repeats: 2 },
+    ]);
+    expect(chartToText(implicit.chart as Chart)).toMatch(/\[Mix 2\]/);
+    expect(chartToText(implicit.chart as Chart)).toMatch(/\[Chorus x2\]/);
+  });
+
   it("handles 6/8 and comments", () => {
     const { chart, problems } = parseChartText(
       "time: 6/8 // slow\n[A]\n| Em | C:3 D:3 |",
