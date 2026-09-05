@@ -682,7 +682,7 @@ fn record_without_a_loaded_song_records_the_default_band() {
 }
 
 #[test]
-fn recorder_start_after_play_song_does_not_auto_play() {
+fn recorder_start_after_play_song_does_not_auto_play_or_reset_the_loop() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let id = unique("song");
@@ -692,7 +692,18 @@ fn recorder_start_after_play_song_does_not_auto_play() {
     );
     studio.ok("originals_load", json!({ "document": saved }));
     studio.ok("transport_set_count_in", json!({ "bars": 1 }));
-    studio.ok("transport_stop", json!({}));
+    studio.ok(
+        "transport_set_loop",
+        json!({ "startBar": 2, "endBar": 4, "enabled": true }),
+    );
+    wait_until("jam loop armed", || {
+        let t = telemetry(&studio)["transport"].clone();
+        t["count_in_bars"] == 1
+            && t["loop_enabled"] == true
+            && t["loop_start_bar"] == 2
+            && t["loop_end_bar"] == 4
+            && t["state"] == "stopped"
+    });
     assert!(
         !studio
             .app()
@@ -715,6 +726,9 @@ fn recorder_start_after_play_song_does_not_auto_play() {
         "Sessions/Transport record must not start playback"
     );
     assert_eq!(tel["count_in_bars"], 1, "count-in must survive jam record");
+    assert_eq!(tel["loop_enabled"], true);
+    assert_eq!(tel["loop_start_bar"], 2);
+    assert_eq!(tel["loop_end_bar"], 4);
     assert_eq!(tel["bpm"], 90.0);
 
     let take = studio.ok("recorder_stop", json!({}));
