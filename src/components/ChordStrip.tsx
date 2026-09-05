@@ -14,6 +14,42 @@ export interface ChordStripProps {
   compact?: boolean;
 }
 
+/** Horizontal metrics the strip needs; keeps tests off jsdom. */
+export interface StripBox {
+  clientWidth: number;
+  getBoundingClientRect: () => {
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+  };
+  scrollTo: (opts: { left: number; behavior?: ScrollBehavior }) => void;
+}
+
+/**
+ * Center `bar` inside `strip` only. `scrollIntoView` would also move the room.
+ * Off-screen strips are left alone so a playing chart does not yank Stage/Library.
+ */
+export function scrollBarInStrip(
+  strip: StripBox,
+  bar: { offsetLeft: number; offsetWidth: number },
+  viewport: { innerWidth: number; innerHeight: number },
+): void {
+  const r = strip.getBoundingClientRect();
+  if (
+    r.bottom <= 0 ||
+    r.top >= viewport.innerHeight ||
+    r.right <= 0 ||
+    r.left >= viewport.innerWidth
+  ) {
+    return;
+  }
+  strip.scrollTo({
+    left: bar.offsetLeft - strip.clientWidth / 2 + bar.offsetWidth / 2,
+    behavior: "smooth",
+  });
+}
+
 /**
  * The whole form as a row of bars, current bar lit, section names above. Click a bar
  * to jump there; shift-click a second bar to loop the span between them.
@@ -27,16 +63,15 @@ export const ChordStrip: React.FC<ChordStripProps> = ({
   onSetLoop,
   compact = false,
 }) => {
+  const stripRef = useRef<HTMLDivElement | null>(null);
   const currentRef = useRef<HTMLButtonElement | null>(null);
   const anchor = useRef<number | null>(null);
 
   useEffect(() => {
-    if (currentBar <= 0) return;
-    currentRef.current?.scrollIntoView({
-      block: "nearest",
-      inline: "center",
-      behavior: "smooth",
-    });
+    const strip = stripRef.current;
+    const bar = currentRef.current;
+    if (currentBar <= 0 || !strip || !bar) return;
+    scrollBarInStrip(strip, bar, window);
   }, [currentBar]);
 
   if (!chart) {
@@ -65,7 +100,10 @@ export const ChordStrip: React.FC<ChordStripProps> = ({
 
   let lastSection = "";
   return (
-    <div className="flex gap-1 overflow-x-auto pb-2 pt-4 px-1 scroll-smooth [scrollbar-width:thin]">
+    <div
+      ref={stripRef}
+      className="relative flex gap-1 overflow-x-auto pb-2 pt-4 px-1 scroll-smooth [scrollbar-width:thin]"
+    >
       {bars.map((bar) => {
         const isCurrent = bar.barIndex === currentBar;
         const inLoop =
