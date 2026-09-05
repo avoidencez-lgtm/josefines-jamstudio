@@ -406,6 +406,24 @@ Recorded, scrubbed fixtures under `tests/fixtures/providers/<provider>/` capture
 
 [docs/plan/06-owner-verification.md](plan/06-owner-verification.md): what only the real rig on the Mac can prove.
 
+### 9.7 End to end (2026-09-05)
+
+Scenario coverage and excluded regression candidates are tracked in
+[the E2E completion report](reviews/2026-09-05-e2e-completion.md). `common::scenario()`
+serializes and resets process-specific files; use it once per native test before
+booting any studios.
+
+
+Three complementary layers exercise native commands, simulated frontend stores and the built desktop. IPC and store scenarios need no hardware, network or window server. The built-app smoke uses the runner's desktop/WebView and proves startup, not every UI workflow. Rust IPC and desktop smoke run on Windows and macOS; frontend scenarios run in the Linux CI job.
+
+| Layer | What runs | Where |
+|---|---|---|
+| IPC scenarios | `app_lib::build_state()` + `configure()` on `tauri::test::mock_builder`: the real `AppState` (headless engine, `MemoryStore`, in-memory index, files under `JAM_USER_DIR`) and the real command table, invoked through Tauri's IPC layer with the platform's local origin. `Studio` in `src-tauri/tests/common/mod.rs`; `start_events()` runs the real setup hook via a mock event-loop iteration for telemetry assertions; one scenario file per area (`src-tauri/tests/ipc_*.rs`). | `JAM_HEADLESS=1 cargo test -p src-tauri --test ipc_<area>` |
+| Store scenarios | Store and lib actions against the simulated engine in `src/ipc/preview.ts`, the same code path the browser preview uses, with no `ipc` mocks (`tests/e2e/*.test.ts`). | `pnpm vitest run tests/e2e` |
+| Smoke run of the built app | `JAM_SMOKE_SECONDS=n` makes the real binary exit after n seconds with 0 when the frontend completed its startup handshake (`engine_status` invoked over IPC) and 2 otherwise. CI runs the Windows debug build and the Mac `.app` this way, so the macOS runner proves the Mac app boots, loads the embedded frontend and talks to Rust. | `JAM_HEADLESS=1 JAM_SMOKE_SECONDS=25 <binary>` after `pnpm tauri build --debug --no-bundle` |
+
+Two platform facts the harness encodes: `run()` is split so tests build the same app; and on Windows `build.rs` links tauri-build's manifest resource (Common Controls v6) into test binaries too, because the mock runtime links window code whose `TaskDialogIndirect` import otherwise stops the test process at load. `cargo test` rebuilds the bin target without the embedded frontend (it loads `devUrl` instead), so a local smoke run follows `tauri build`, never `cargo test`.
+
 ## 10. Security and privacy
 
 - Keys only in the OS keychain via `SecretStore`; the WebView never sees one; `provider_fetch` is the only TS path to a provider; logs never contain request bodies; a bundle-scan test guards `dist/`; gitleaks guards the repository.

@@ -34,6 +34,13 @@ cargo deny check
 # Run the app (headless engine with the file-backed guitar input)
 $env:JAM_HEADLESS = "1"; $env:JAM_FAKE_INPUT = "tests/fixtures/audio/guitar-e-blues-120.wav"; corepack pnpm tauri dev
 
+# Smoke-run the built app the way CI does (exit 0 = the frontend completed its handshake; run it right after the build, cargo test rebuilds the binary without the embedded frontend)
+corepack pnpm tauri build --debug --no-bundle; $env:JAM_HEADLESS = "1"; $env:JAM_SMOKE_SECONDS = "25"; .\target\debug\src-tauri.exe
+
+# One end-to-end scenario file (ARCHITECTURE §9.7); cargo test --workspace and pnpm test run them all
+$env:JAM_HEADLESS = "1"; cargo test -p src-tauri --test ipc_library
+corepack pnpm vitest run tests/e2e/startup.test.ts
+
 # Build a bundle locally (Windows only; macOS bundles come from CI)
 corepack pnpm tauri build
 ```
