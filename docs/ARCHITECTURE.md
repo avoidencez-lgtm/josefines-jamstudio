@@ -13,6 +13,27 @@ assets and exports, excluding generation receipts. Native preview is silent;
 FFmpeg and the user's external media player own exported audiovisual playback.
 See [music-video setup and acceptance](guide/music-video.md).
 
+## Current native Jo voice
+
+This supersedes the target voice names in §6.3. Additive IPC v2 commands are
+`voice_ptt({down})`, `voice_speak({text,generation})`,
+`voice_cancel({generation?})` and `voice_status()`. PTT returns
+`{generation,transcript,seconds}`; status returns `{generation,phase,error}`.
+`src-tauri/src/voice.rs` owns capture lifecycle; `net/voice.rs` alone performs
+speech HTTP. `jam-audio::voice` owns the microphone buffer and speech bus.
+`src/lib/jo/voice.ts` orchestrates the existing Jo text/command flow, discarding
+cancelled results before further dispatch or speech. No audio crosses IPC.
+
+Non-secret `settings.voice` contains `microphone` (name or null), `voiceId` and
+`duckDb` (default -9, accepted -24..0); unknown settings survive edits. Capture
+uses the selected device's first channel at its negotiated rate, max 20 seconds.
+TTS uses 24 kHz PCM and existing interpolation into 48 kHz output. A separate
+voice bus attenuates the generated band over 150 ms; guitar and recorder stems
+are unaffected. Hardware output is required; headless fallback is refused.
+Cancelled requests may still incur provider cost. The existing render-ahead queue
+bounds interruption responsiveness. Global/MIDI PTT and live latency acceptance
+are pending; see [S5 evidence](spikes/S5-jo-voice.md).
+
 ## 1. The governing rule
 
 > **JS owns text and UI. Rust owns bytes and time. The WebView never produces sound and never holds a key.**

@@ -6,7 +6,7 @@ the app owns the arrangement, accompaniment, recording and DAW handoff.
 
 > **Stabilised preview, with owner acceptance still pending.** Write, Stage,
 > Library, typed Jo, recording/export and file-based media workflows are implemented.
-> Native voice, automatic stem analysis/stretch and Lyria RealTime are not built.
+> Native Jo voice is implemented; live voice acceptance, automatic stem analysis/stretch and Lyria RealTime remain pending.
 > See the [build closeout](docs/reviews/build-closeout.md) and
 > [milestone board](docs/plan/00-README.md) for tested scope and remaining gates.
 
@@ -37,7 +37,7 @@ Guitar ─► HeadRush ─► Black Spirit 200 ─► Vox 4x12
 | Virtual band | Working | Sample-accurate sequencer: drums, bass and comp from a chart, six styles with three intensity tiers each, swing, humanisation, count-in, fills, crash, stop and ending cues, loop points, intensity following the guitarist's energy. Offline render tests check determinism, timing and levels. |
 | Chart library | Working | Bundled charts plus a text chart format you can type (`| Am7 D7 | G %|`), a chart editor, transposition, a chord strip that follows the bar, and a soloing helper suggesting scales and arpeggios per chord. |
 | Practice tools | Working | Tap tempo, tempo trainer, keyboard shortcuts and searchable bilingual in-app help. |
-| Jo | Text tools working | Offline band commands, configurable text providers and installed-agent proposals. Song edits require review. Native microphone input, STT, TTS and voice-bus ducking are not available in this build. |
+| Jo | Text tools working | Offline band commands, configurable text providers and installed-agent proposals. Song edits require review. Optional native microphone input, ElevenLabs STT/TTS and band ducking are available in Jo AI; see Voice setup. Live latency acceptance remains pending. |
 | Rig over MIDI | Working, hardware gate open | Data-driven profiles for HeadRush Pedalboard, Black Spirit 200, Quad Cortex, Helix, Kemper and Axe-Fx III; real MIDI out through `midir`; section-bound scene changes as the band plays; knobs, program changes and a MIDI monitor. Verified against the real rig: not yet (owner gate). |
 | Recorder and export | Working | Every take is written as 24-bit WAV stems (guitar DI, band, master). Analysis measures pick timing against the take's tempo grid, dynamic consistency and intonation on the real DI file. Export writes the stems, a Standard MIDI File tempo map with the chart's section markers, and a JSON sidecar. Latency offset is a manual setting; automatic loopback measurement is not built. |
 | Network | Working | An allow-listed proxy in Rust injects API keys from the OS keychain (keys never reach the UI) and keeps a local usage log shown on the Settings screen. |

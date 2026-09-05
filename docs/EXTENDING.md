@@ -262,3 +262,16 @@ The recipe below describes implemented paths; older planning recipes later in th
 The existing `docs/guide/manual.json` is the English/Bokmål help source. Each section has a unique stable `id` such as `write.song-map-and-linked-sections`; preserve it when editing or translating its title. The help pane uses it for keyboard-focusable topic links. Add both translations and run `node scripts/export-manual.mjs` after changing text, then `pnpm test` to validate IDs and exported manuals.
 
 Help opens beside the current room, or beneath it at compact widths. It is nonmodal: room controls and the global transport stay available. Escape with focus inside help closes it and returns focus to the opener. Music shortcuts are suppressed inside help; room-focused shortcuts and transport buttons remain usable. Write’s Compose, Lyrics, Record, Finish and Versions views launch their topic through `WRITING_HELP` in `src/lib/help.ts`. Each launch resets the pane to that topic, including repeated requests. Extend this map with an existing manual section ID; the invariant test checks every target. Chapter selection retains native select focus so keyboard users can continue choosing; topic links move focus to their heading.
+
+## Native speech
+
+To extend Jo's speech path, keep bytes in `src-tauri/src/net/voice.rs` and
+`jam-audio::voice`; return only transcript/status metadata through the four
+`voice_*` commands. Reuse `VoiceQuery` and the existing Jo dispatcher so review,
+argument validation and actual command outcomes remain identical for text and
+speech. A new codec or provider must add bounded-format fixtures, cancellation
+coverage and a synthetic signal check. `tests/invariants/voice.test.ts` exercises
+the shared turn seam; native IPC coverage is `src-tauri/tests/ipc_voice.rs`.
+The authored transcript fixture is `src-tauri/tests/fixtures/voice-transcript.json`.
+Do not convert it into claimed live-provider evidence. Never store raw microphone
+recordings, keys or provider bodies in usage logs. See [S5](spikes/S5-jo-voice.md).

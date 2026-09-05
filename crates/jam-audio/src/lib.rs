@@ -7,6 +7,7 @@ pub mod export;
 pub mod io;
 pub mod melody;
 pub mod recorder;
+pub mod voice;
 
 pub use analysis::*;
 pub use devices::*;

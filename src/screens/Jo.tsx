@@ -2,6 +2,7 @@ import type React from "react";
 import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
+import { JoVoice } from "../components/JoVoice";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
 import { WorkspaceHeader } from "../components/Workspace";
@@ -135,7 +136,7 @@ export const Jo: React.FC = () => {
     if (list) list.scrollTop = list.scrollHeight;
   }, [messages, busy]);
 
-  const handleUserQuery = async (query: string) => {
+  const handleUserQuery = async (query: string, current = () => true) => {
     if (!query.trim() || useJoConversation.getState().busy) return;
     discardPendingProposal(
       "Proposal set aside: your new message replaces it. Nothing was applied.",
@@ -158,6 +159,7 @@ export const Jo: React.FC = () => {
 
       const expectedSong = documentFingerprint();
       const { reply, toolCalls } = await think(history, query);
+      if (!current()) return;
 
       const results: string[] = [];
       const needsReview = toolCalls.some(joNeedsReview);
@@ -168,6 +170,12 @@ export const Jo: React.FC = () => {
         results.push("Proposed song edits · awaiting your review below");
       } else
         for (const call of toolCalls) {
+          if (!current()) {
+            results.push(
+              "Voice turn cancelled. Remaining commands were not applied.",
+            );
+            break;
+          }
           try {
             results.push(await dispatchJoToolCall(call));
           } catch (e) {
@@ -190,6 +198,7 @@ export const Jo: React.FC = () => {
       };
 
       setMessages((prev) => [...prev, joMsg]);
+      return joMsg.text;
     } catch (e) {
       notify("error", String(e));
     } finally {
@@ -226,7 +235,7 @@ export const Jo: React.FC = () => {
               : "Tempo, cues, styles & recording"}
         </span>
         {lastBrain && <span>Last reply: {lastBrain}</span>}
-        <span>Text commands · native voice is not available in this build</span>
+        <span>Text commands and optional ElevenLabs voice</span>
       </div>
       <div className="jo-suggestions" aria-label="Suggested prompts">
         {[
@@ -247,7 +256,7 @@ export const Jo: React.FC = () => {
       </div>
       {/* Main Chat & Action History Panel */}
       <Panel className="jo-chat flex-1 flex flex-col min-h-0 p-4">
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        <div className="flex-1 min-h-32 overflow-y-auto space-y-4 pr-2">
           {messages.map((m) => (
             <div
               key={m.id}
@@ -366,6 +375,7 @@ export const Jo: React.FC = () => {
           </section>
         )}
         {/* Push-to-Talk & Input Bar */}
+        <JoVoice query={handleUserQuery} busy={busy} />
         <div className="jo-composer">
           <form
             onSubmit={(e) => {
