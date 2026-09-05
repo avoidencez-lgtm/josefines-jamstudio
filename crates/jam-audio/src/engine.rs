@@ -15,7 +15,7 @@ use crate::io::{
 use jam_band::sequencer::{BandSequencer, Cue};
 use jam_core::chart::ResolvedChart;
 use jam_core::style::Style;
-use jam_core::timeline::{Timeline, TimelineEvent, TransportState};
+use jam_core::timeline::{bar_beat_at, samples_to_beats, Timeline, TimelineEvent, TransportState};
 use jam_dsp::{calculate_level, EnergyFollower, PitchTracker};
 use parking_lot::Mutex;
 use rtrb::RingBuffer;
@@ -35,6 +35,25 @@ const RENDER_AHEAD_BLOCKS: usize = 6;
 const CLICK_SECS: f32 = 0.012;
 /// Window for the tuner's pitch detector.
 const TUNER_WINDOW: usize = 2048;
+
+/// Delay `incoming` by `lead` samples so the recorder can pair "now" guitar with
+/// band that is currently leaving the ring (ARCHITECTURE §4.4 / #129).
+fn delay_block(hist: &mut VecDeque<f32>, incoming: &[f32], lead: usize, dest: &mut [f32]) {
+    for &s in incoming {
+        hist.push_back(s);
+    }
+    let block = dest.len();
+    for (i, slot) in dest.iter_mut().enumerate() {
+        *slot = hist
+            .len()
+            .checked_sub(block + lead)
+            .and_then(|base| hist.get(base + i).copied())
+            .unwrap_or(0.0);
+    }
+    while hist.len() > lead {
+        hist.pop_front();
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EngineTelemetry {
@@ -210,6 +229,7 @@ pub struct AudioEngine {
     input_driver: Option<Box<dyn AudioInput>>,
     output_driver: Option<Box<dyn AudioOutput>>,
     render_handle: Option<JoinHandle<()>>,
+    injected_input: Option<Vec<f32>>,
 }
 
 fn default_style() -> Style {
@@ -271,6 +291,7 @@ impl AudioEngine {
             timeline: Arc::new(Mutex::new(Timeline::new(sample_rate, 120.0, (4, 4)))),
             sequencer: Arc::new(Mutex::new(sequencer)),
             recorder: Arc::new(Mutex::new(recorder)),
+            injected_input: None,
             latest_telemetry: Arc::new(Mutex::new(EngineTelemetry::default())),
             status: Arc::new(Mutex::new(EngineStatus {
                 sample_rate: config.sample_rate,
@@ -314,6 +335,11 @@ impl AudioEngine {
     /// normally monitors through the amp/modeler, not through us).
     pub fn set_input_monitor(&self, gain: f32) {
         self.mix.lock().input_monitor = gain.clamp(0.0, 1.0);
+    }
+
+    /// Test-only FileInput samples, consumed on the next [`start`].
+    pub fn inject_input(&mut self, samples: Vec<f32>) {
+        self.injected_input = Some(samples);
     }
 
     // ----- transport -------------------------------------------------------
@@ -657,28 +683,39 @@ impl AudioEngine {
                 let _ = input_prod.push(sample);
             }
         });
+        let injected = self.injected_input.take();
         let fake_wav = std::env::var("JAM_FAKE_INPUT").ok();
-        let mut input_driver: Box<dyn AudioInput> = match (&fake_wav, headless_requested()) {
-            (Some(path), _) => match FileInput::from_wav_file(path, requested_buffer as usize) {
-                Ok(f) => Box::new(f),
-                Err(e) => {
-                    problems.push(format!("JAM_FAKE_INPUT {path}: {e}; using 440 Hz sine"));
-                    Box::new(FileInput::sine_440(
-                        requested_buffer as usize,
-                        effective_rate,
-                    ))
-                }
-            },
-            (None, true) => Box::new(FileInput::sine_440(
+        let mut input_driver: Box<dyn AudioInput> = if let Some(samples) = injected {
+            Box::new(FileInput::from_samples_at(
+                samples,
                 requested_buffer as usize,
                 effective_rate,
-            )),
-            (None, false) => Box::new(CpalInput::new(
-                self.config.input_device.clone(),
-                self.config.input_channel,
-                effective_rate,
-                requested_buffer,
-            )),
+            ))
+        } else {
+            match (&fake_wav, headless_requested()) {
+                (Some(path), _) => {
+                    match FileInput::from_wav_file(path, requested_buffer as usize) {
+                        Ok(f) => Box::new(f),
+                        Err(e) => {
+                            problems.push(format!("JAM_FAKE_INPUT {path}: {e}; using 440 Hz sine"));
+                            Box::new(FileInput::sine_440(
+                                requested_buffer as usize,
+                                effective_rate,
+                            ))
+                        }
+                    }
+                }
+                (None, true) => Box::new(FileInput::sine_440(
+                    requested_buffer as usize,
+                    effective_rate,
+                )),
+                (None, false) => Box::new(CpalInput::new(
+                    self.config.input_device.clone(),
+                    self.config.input_channel,
+                    effective_rate,
+                    requested_buffer,
+                )),
+            }
         };
         let input_driver: Box<dyn AudioInput> = match input_driver.start(input_callback) {
             Ok(()) => input_driver,
@@ -724,7 +761,13 @@ impl AudioEngine {
 
         self.running.store(true, Ordering::SeqCst);
         let wait_for_input = input_driver.is_running() && input_driver.is_synthetic();
-        self.spawn_render_thread(output_prod, input_cons, effective_rate, wait_for_input);
+        self.spawn_render_thread(
+            output_prod,
+            input_cons,
+            effective_rate,
+            wait_for_input,
+            ring_capacity,
+        );
 
         self.output_driver = Some(output_driver);
         self.input_driver = Some(input_driver);
@@ -747,6 +790,7 @@ impl AudioEngine {
         mut input_cons: rtrb::Consumer<f32>,
         sample_rate: u32,
         wait_for_input: bool,
+        ring_capacity: usize,
     ) {
         let running = Arc::clone(&self.running);
         let tone_active = Arc::clone(&self.tone_active);
@@ -771,6 +815,11 @@ impl AudioEngine {
                 let block_len = RENDER_BLOCK;
                 let mut input_queue: VecDeque<f32> = VecDeque::with_capacity(block_len * 16);
                 let mut primed = false;
+                let mut delay_hist: [VecDeque<f32>; 9] =
+                    std::array::from_fn(|_| VecDeque::with_capacity(ring_capacity / 2 + block_len));
+                let mut delayed: [Vec<f32>; 9] = std::array::from_fn(|_| vec![0.0f32; block_len]);
+                let mut dry_l = vec![0.0f32; block_len];
+                let mut dry_r = vec![0.0f32; block_len];
 
                 while running.load(Ordering::SeqCst) {
                     let mut rendered = false;
@@ -809,7 +858,7 @@ impl AudioEngine {
                             input_gaps.fetch_add(1, Ordering::Relaxed);
                         }
 
-                        let (transport_telem, band_telem) = ctx.render_block(
+                        let (mut transport_telem, band_telem) = ctx.render_block(
                             &timeline_arc,
                             &sequencer_arc,
                             &mix,
@@ -848,26 +897,59 @@ impl AudioEngine {
                             let seq = sequencer_arc.lock();
                             (seq.part_audio.clone(), seq.note_events.clone())
                         };
-                        let input_gain = 1.0 - mix.lock().input_monitor;
+                        let monitor = mix.lock().input_monitor;
+                        let input_gain = 1.0 - monitor;
+                        // Frames already queued for the DAC: this block is heard after `lead`.
+                        let lead = ring_capacity / 2 - prod.slots() / 2;
+                        if lead > 0 {
+                            let heard = (transport_telem.position_beats
+                                - samples_to_beats(lead as u64, transport_telem.bpm, sample_rate))
+                            .max(0.0);
+                            let (bar, beat) = bar_beat_at(heard, transport_telem.time_signature);
+                            let bpb = transport_telem.time_signature.0.max(1) as f64;
+                            transport_telem.position_beats = heard;
+                            transport_telem.bar = bar;
+                            transport_telem.beat = beat;
+                            transport_telem.bar_progress = (heard / bpb).fract() as f32;
+                        }
+                        for i in 0..block_len {
+                            dry_l[i] = ctx.out_left[i] - ctx.in_block[i] * monitor;
+                            dry_r[i] = ctx.out_right[i] - ctx.in_block[i] * monitor;
+                        }
+                        delay_block(&mut delay_hist[0], &ctx.band_left, lead, &mut delayed[0]);
+                        delay_block(&mut delay_hist[1], &ctx.band_right, lead, &mut delayed[1]);
+                        delay_block(&mut delay_hist[2], &dry_l, lead, &mut delayed[2]);
+                        delay_block(&mut delay_hist[3], &dry_r, lead, &mut delayed[3]);
+                        delay_block(&mut delay_hist[4], &parts[0], lead, &mut delayed[4]);
+                        delay_block(&mut delay_hist[5], &parts[1], lead, &mut delayed[5]);
+                        delay_block(&mut delay_hist[6], &parts[2], lead, &mut delayed[6]);
+                        delay_block(&mut delay_hist[7], &parts[3], lead, &mut delayed[7]);
+                        // FileInput is consumed at render time (lockstep). Hardware input
+                        // arrives at the playhead. Only the lockstep path delays guitar too.
+                        if wait_for_input {
+                            delay_block(&mut delay_hist[8], &ctx.in_block, lead, &mut delayed[8]);
+                        } else {
+                            delayed[8].copy_from_slice(&ctx.in_block);
+                        }
                         let frames: Vec<crate::workstation::Frame> = (0..block_len)
                             .map(|i| {
                                 [
-                                    ctx.in_block[i],
-                                    ctx.band_left[i],
-                                    ctx.band_right[i],
-                                    ctx.out_left[i] + ctx.in_block[i] * input_gain,
-                                    ctx.out_right[i] + ctx.in_block[i] * input_gain,
-                                    parts[0][i],
-                                    parts[1][i],
-                                    parts[2][i],
-                                    parts[3][i],
+                                    delayed[8][i],
+                                    delayed[0][i],
+                                    delayed[1][i],
+                                    delayed[2][i] + delayed[8][i] * input_gain,
+                                    delayed[3][i] + delayed[8][i] * input_gain,
+                                    delayed[4][i],
+                                    delayed[5][i],
+                                    delayed[6][i],
+                                    delayed[7][i],
                                 ]
                             })
                             .collect();
                         capture.lock().push(&frames, sample_rate);
                         let mut recorder = recorder_arc.lock();
                         if recorder.is_recording() {
-                            let base = recorder.frames_written;
+                            let base = recorder.frames_written + lead as u64;
                             recorder.midi.extend(notes.into_iter().map(|mut n| {
                                 n.frame += base;
                                 n
@@ -1396,5 +1478,100 @@ mod tests {
         assert!((t.hz - 440.0).abs() < 5.0, "got {} Hz", t.hz);
         assert!(t.note.starts_with('A'));
         engine.stop().unwrap();
+    }
+
+    #[test]
+    fn delay_block_replays_samples_after_the_lead() {
+        let mut hist = VecDeque::new();
+        let mut out = [0.0f32; 2];
+        delay_block(&mut hist, &[1.0, 2.0], 3, &mut out);
+        assert_eq!(out, [0.0, 0.0]);
+        delay_block(&mut hist, &[3.0, 4.0], 3, &mut out);
+        assert_eq!(out, [0.0, 0.0]);
+        delay_block(&mut hist, &[5.0, 6.0], 3, &mut out);
+        assert_eq!(out, [2.0, 3.0]);
+        delay_block(&mut hist, &[7.0, 8.0], 3, &mut out);
+        assert_eq!(out, [4.0, 5.0]);
+    }
+
+    #[test]
+    fn delaying_the_band_cancels_render_ahead() {
+        let lead = 5;
+        let mut hist = VecDeque::new();
+        let mut dest = [0.0f32];
+        for r in 0..12 {
+            let band = [if r == 0 { 1.0 } else { 0.0 }];
+            delay_block(&mut hist, &band, lead, &mut dest);
+            if r == lead {
+                assert_eq!(dest[0], 1.0, "click rendered at 0 is heard at {r}");
+            }
+        }
+    }
+
+    fn peak_index(samples: &[f32]) -> usize {
+        samples
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap())
+            .map(|(i, _)| i)
+            .unwrap()
+    }
+
+    #[test]
+    fn recorded_impulse_lines_up_with_the_click() {
+        let mut samples = vec![0.0f32; 96_000];
+        samples[24_000] = 0.9;
+        let dir = std::env::temp_dir().join(format!(
+            "jam-align-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut engine = headless_engine();
+        *engine.recorder.lock() = crate::recorder::TakeRecorder::new(48_000, dir.clone());
+        engine.inject_input(samples);
+        engine.set_click_volume(1.0);
+        engine.set_band_volume(0.0);
+        engine.band_set(BandPatch {
+            mute_drums: Some(true),
+            mute_bass: Some(true),
+            mute_comp: Some(true),
+            ..Default::default()
+        });
+        engine.start().unwrap();
+        engine.transport_set_count_in(0);
+        engine.transport_play();
+        engine.recorder_start("align".into()).unwrap();
+        thread::sleep(Duration::from_millis(1600));
+        let take = engine.recorder_stop().unwrap();
+        engine.stop().unwrap();
+        let guitar = crate::recorder::read_wav_mono(std::path::Path::new(&take.path_input))
+            .unwrap()
+            .0;
+        let master = crate::recorder::read_wav_mono(std::path::Path::new(&take.path_master))
+            .unwrap()
+            .0;
+        let click: Vec<f32> = master.iter().zip(&guitar).map(|(m, g)| m - g).collect();
+        let g = peak_index(&guitar);
+        let mut quiet = 1_000usize;
+        let mut clicks = Vec::new();
+        for (i, s) in click.iter().enumerate() {
+            if s.abs() > 0.05 {
+                if quiet > 200 {
+                    clicks.push(i);
+                }
+                quiet = 0;
+            } else {
+                quiet += 1;
+            }
+        }
+        assert!(
+            clicks.iter().any(|&c| (c as i64 - g as i64).abs() <= 1),
+            "guitar peak {g}, click onsets {clicks:?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
