@@ -965,11 +965,7 @@ pub fn build_state() -> AppState {
     } else {
         Arc::new(KeyringStore::default())
     };
-    let cost_log = Arc::new(net::CostLog::new(if is_test {
-        std::env::temp_dir().join("jam-usage-log-test.jsonl")
-    } else {
-        net::CostLog::default_path()
-    }));
+    let cost_log = Arc::new(net::CostLog::new(net::CostLog::default_path()));
 
     let (index_store, index_notice) = if is_test {
         (

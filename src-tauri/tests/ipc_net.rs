@@ -703,7 +703,6 @@ fn cost_log_list_and_totals_mirror_the_usage_log_on_disk_and_honour_the_limit() 
 }
 
 #[test]
-#[ignore = "app bug: the headless cost log is one fixed file in the OS temp folder shared by every process, not under JAM_USER_DIR"]
 fn cost_log_lives_under_the_user_root_and_starts_empty() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
