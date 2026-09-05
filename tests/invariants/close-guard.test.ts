@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { closeDecision } from "../../src/lib/closeGuard";
+import { closeDecision, windowCloseAction } from "../../src/lib/closeGuard";
 import { useLibraryDraft } from "../../src/lib/libraryDraft";
 import { useMedia } from "../../src/lib/media";
 import { newOriginal, useWriting } from "../../src/lib/originals";
@@ -33,4 +33,15 @@ it("refuses to close during blocking work, asks about unsaved drafts, otherwise 
   useLibraryDraft.setState({ dirty: false });
   useMedia.setState({ busy: "Rendering" });
   expect(closeDecision()).toBe("refuse");
+});
+
+it("always preventDefaults the window close so Tauri can then app_exit (#127)", () => {
+  let prevented = 0;
+  const preventDefault = () => {
+    prevented += 1;
+  };
+  expect(windowCloseAction("close", preventDefault)).toBe("exit");
+  expect(windowCloseAction("ask", preventDefault)).toBe("ask");
+  expect(windowCloseAction("refuse", preventDefault)).toBe("refuse");
+  expect(prevented).toBe(3);
 });
