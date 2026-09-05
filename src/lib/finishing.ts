@@ -138,7 +138,7 @@ export function finishingReview(
         id: `unused-${section.id}`,
         title: `${section.name} is outside the form`,
         detail:
-          "Keep it as an idea, or add it in Compose so the band plays it.",
+          "Keep it as an idea, add it in Compose so the band plays it, or use Delete section to let it go.",
       });
     else if (vocal && !body.lyrics?.[section.id]?.trim())
       issues.push({

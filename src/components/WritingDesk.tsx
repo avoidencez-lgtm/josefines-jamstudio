@@ -1,4 +1,10 @@
-import { ArrowLeft, ArrowRight, Copy, Plus } from "@phosphor-icons/react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Copy,
+  Plus,
+  Trash,
+} from "@phosphor-icons/react";
 import { useState } from "react";
 import { keyName } from "../lib/chart/notes";
 import {
@@ -11,6 +17,7 @@ import {
   PHRASE_MOVES,
   arrangedBars,
   chordNotes,
+  deleteSection,
   duplicateSection,
   harmonyChoices,
   setSectionEnergy,
@@ -29,6 +36,7 @@ export function ArrangementDesk() {
   const total = arrangedBars(chart);
   const seconds = Math.round((total * 240) / chart.defaultBpm);
   const select = (id: string) => w.select(id);
+  const inForm = chart.arrangement.some((a) => a.sectionId === selected.id);
   return (
     <section className="write-arrange" aria-label="Song arrangement">
       <div className="song-section-heading">
@@ -68,6 +76,31 @@ export function ArrangementDesk() {
             }}
           >
             <Copy size={15} /> Make variation
+          </Button>
+          <Button
+            size="sm"
+            disabled={inForm || chart.sections.length === 1}
+            title={
+              inForm
+                ? "Remove this section's form entries first"
+                : "Delete this unused section with its lyrics and band settings"
+            }
+            onClick={() => {
+              if (song.versions.length >= 20) {
+                useWriting.setState({
+                  message:
+                    "Remove an unused version first so the song before the deletion can be kept.",
+                });
+                return;
+              }
+              w.version(`Before deleting ${selected.name}`);
+              w.edit((b) => deleteSection(b, selected.id));
+              const sections = useWriting.getState().song?.body.chart.sections;
+              if (sections && !sections.some((s) => s.id === selected.id))
+                select(sections[0].id);
+            }}
+          >
+            <Trash size={15} /> Delete section
           </Button>
         </div>
       </div>
@@ -195,7 +228,8 @@ export function ArrangementDesk() {
         <p className="song-help">
           Repeated sections share chords, lyrics and band settings. Make a
           variation for an independent edit. Guitar layers stay at their
-          numbered bars when you rearrange.
+          numbered bars when you rearrange. Delete section removes a section
+          that is no longer in the form; a version is kept first.
         </p>
       </details>
     </section>
