@@ -111,6 +111,9 @@ fn body(doc: &Value) -> Result<SongBody, String> {
     if doc["schemaVersion"] != 1 {
         return Err("Unsupported song version. Update the app before editing this file.".into());
     }
+    if !doc["versions"].is_array() {
+        return Err("Song version list must be an array.".into());
+    }
     let b: SongBody =
         serde_json::from_value(doc["body"].clone()).map_err(|e| format!("Song: {e}"))?;
     // Bound before resolving a chart, so a hand-edited repeat count cannot allocate forever.
@@ -253,8 +256,8 @@ fn scan_originals(root: &Path) -> Result<(Vec<Value>, Vec<String>), String> {
                     .map_err(|e| e.to_string())?;
                 body(&v)?;
                 valid_id(v["id"].as_str().ok_or("Song id missing")?)?;
-                if v["revision"].as_u64().is_none() || !v["versions"].is_array() {
-                    return Err("Song revision or version list is invalid.".into());
+                if v["revision"].as_u64().is_none() {
+                    return Err("Song revision is invalid.".into());
                 }
                 Ok(v)
             };

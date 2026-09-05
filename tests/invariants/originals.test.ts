@@ -121,6 +121,24 @@ describe("songwriting workflow", () => {
     expect(sectionBars("Am | F | C G | Am")).toHaveLength(4);
     expect(() => sectionBars("nonsense")).toThrow();
   });
+  it("refuses malformed version lists without replacing a saved preview song", async () => {
+    const engine = createPreviewEngine({ autoTick: false });
+    try {
+      const saved = await engine.invoke<typeof fixture>("originals_save", {
+        document: fixture,
+      });
+      for (const versions of [undefined, null, {}, "bad", 1]) {
+        await expect(
+          engine.invoke("originals_save", {
+            document: { ...saved, versions },
+          }),
+        ).rejects.toThrow(/version/);
+        expect(await engine.invoke("originals_list", {})).toEqual([saved]);
+      }
+    } finally {
+      engine.dispose();
+    }
+  });
   it("registers the screen, tool and data fixture; preview never pretends to capture audio", async () => {
     expect(SCREENS.some((s) => s.id === "originals")).toBe(true);
     expect(JO_TOOLS.some((t) => t.name === "songwriting")).toBe(true);

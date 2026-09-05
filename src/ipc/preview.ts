@@ -209,8 +209,7 @@ export function createPreviewEngine(
   let countInRemainingBeats = 0;
   let lastBar = -1;
   let takes: TakeMetadata[] = [];
-  let recordingSince: number | null = null;
-  let recordingId: string | null = null;
+  let recording: { since: number; id: string; sessionId: string } | null = null;
   let previewLatency = 0;
   let clock = 0;
   const rigProfiles = bundledRigs();
@@ -690,6 +689,8 @@ export function createPreviewEngine(
     originals_list: () => structuredClone(originals),
     originals_save: (a) => {
       const doc = structuredClone(a.document) as Original;
+      if (!Array.isArray(doc?.versions))
+        throw new Error("Song version list must be an array.");
       const idx = originals.findIndex((s) => s.id === doc.id);
       if (idx >= 0 && originals[idx].revision !== doc.revision)
         throw new Error("Reopen the song before saving.");
@@ -722,16 +723,22 @@ export function createPreviewEngine(
       throw new Error("Audio capture requires the desktop app.");
     },
     recorder_start: (a) => {
-      recordingSince = clock;
-      recordingId = `preview-${Date.now()}`;
-      void a;
-      return recordingId;
+      if (recording) throw new Error("A take is already recording");
+      if (typeof a.sessionId !== "string")
+        throw new Error("Recording session ID must be a string");
+      recording = {
+        since: clock,
+        id: `preview-${Date.now()}`,
+        sessionId: a.sessionId,
+      };
+      return recording.id;
     },
     recorder_stop: (): TakeMetadata => {
-      const dur = recordingSince === null ? 0 : clock - recordingSince;
+      if (!recording) throw new Error("No active recording");
+      const dur = clock - recording.since;
       const meta: TakeMetadata = {
-        id: recordingId ?? `preview-${Date.now()}`,
-        sessionId: "preview",
+        id: recording.id,
+        sessionId: recording.sessionId,
         timestamp: new Date().toISOString(),
         durationSecs: dur,
         styleId: band.style_id,
@@ -748,7 +755,7 @@ export function createPreviewEngine(
         notes: "Simulated take from browser preview (no audio).",
       };
       takes = [meta, ...takes];
-      recordingSince = null;
+      recording = null;
       return meta;
     },
     recorder_set_latency: (a) => {
@@ -797,8 +804,13 @@ export function createPreviewEngine(
       if (a.sceneIdx === null || a.sceneIdx === undefined) {
         delete rig.sectionMappings[section];
       } else {
-        const idx = Number(a.sceneIdx);
-        if (idx >= rig.currentProfile.scenes.length)
+        const idx = a.sceneIdx;
+        if (
+          typeof idx !== "number" ||
+          !Number.isInteger(idx) ||
+          idx < 0 ||
+          idx >= rig.currentProfile.scenes.length
+        )
           throw new Error(
             `scene ${idx} does not exist on ${rig.currentProfile.name}`,
           );
@@ -826,7 +838,10 @@ export function createPreviewEngine(
       return rigSnapshot();
     },
     rig_set_control: (a) => {
-      const cc = Number(a.cc);
+      const cc = a.cc;
+      if (typeof cc !== "number" || !Number.isInteger(cc) || cc < 0)
+        throw new Error("CC must be an integer from 0 to 127");
+      if (cc > 127) throw new Error(`CC ${cc} is above 127`);
       const ctl = rig.currentProfile.controls.find((c) => c.cc === cc);
       const raw = Math.min(127, Math.max(0, Number(a.value)));
       const v = ctl ? Math.min(ctl.max, Math.max(ctl.min, raw)) : raw;

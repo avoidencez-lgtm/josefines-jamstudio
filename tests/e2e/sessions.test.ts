@@ -192,7 +192,7 @@ it("lets Jo start and stop a take by voice and refuses an unknown or missing act
   expect(store().isRecording).toBe(false);
 });
 
-it.skip("app bug: stopping when nothing is recording invents a zero-second take in the preview instead of refusing like the desktop (No active recording)", async () => {
+it("refuses stopping without an active recording", async () => {
   const before = (await engineTakes()).map((t) => t.id);
   expect(store().isRecording).toBe(false);
   const meta = await store().stopRecording();
@@ -202,7 +202,7 @@ it.skip("app bug: stopping when nothing is recording invents a zero-second take 
   expect(store().takes.some((t) => t.durationSecs === 0)).toBe(false);
 });
 
-it.skip("app bug: starting a second take while one is recording silently restarts in the preview instead of refusing like the desktop (A take is already recording)", async () => {
+it("preserves the active take when a duplicate start is refused", async () => {
   const first = await store().startRecording();
   engine.tick(1.5);
   const second = await store().startRecording();
@@ -214,7 +214,7 @@ it.skip("app bug: starting a second take while one is recording silently restart
   expect(meta?.durationSecs).toBeCloseTo(2, 6);
 });
 
-it.skip('app bug: a preview take reports sessionId "preview" instead of the session it was recorded for, so Write cannot group it under its song', async () => {
+it("records the requested session ID", async () => {
   const id = await store().startRecording("song-evening-jam");
   engine.tick(1);
   const meta = await store().stopRecording();
