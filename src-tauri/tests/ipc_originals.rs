@@ -898,7 +898,6 @@ fn audition_of_a_take_whose_audio_file_is_missing_fails_and_keeps_the_take_liste
 }
 
 #[test]
-#[ignore = "app bug: clip_audition reports a missing take file as a bare OS error naming neither the take nor the file"]
 fn audition_of_a_take_whose_audio_file_is_missing_names_the_take_or_file() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

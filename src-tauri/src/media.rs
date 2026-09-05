@@ -62,10 +62,17 @@ fn media_extension(ext: &str) -> Result<&str, String> {
     }
 }
 fn read(path: &Path) -> Result<Value, String> {
-    if fs::metadata(path).map_err(|e| e.to_string())?.len() > 2_000_000 {
-        return Err("Media document exceeds 2 MB".into());
+    if fs::metadata(path)
+        .map_err(|e| format!("Cannot read media document {}: {e}", path.display()))?
+        .len()
+        > 2_000_000
+    {
+        return Err(format!("Media document {} exceeds 2 MB", path.display()));
     }
-    serde_json::from_slice(&fs::read(path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    let bytes = fs::read(path)
+        .map_err(|e| format!("Cannot read media document {}: {e}", path.display()))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|e| format!("Invalid media document {}: {e}", path.display()))
 }
 fn write(path: &Path, value: &Value) -> Result<(), String> {
     fs::create_dir_all(path.parent().ok_or("Invalid output path")?).map_err(|e| e.to_string())?;

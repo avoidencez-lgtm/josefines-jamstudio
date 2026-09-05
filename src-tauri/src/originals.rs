@@ -310,11 +310,19 @@ pub fn read_clip(spec: ClipSpec, state: &AppState) -> Result<Clip, String> {
     let take = crate::find_take(state, &spec.take_id)?;
     let p = Path::new(&take.path_input);
     // ponytail: decode each guitar clip in memory, max 10 min; stream if longer songs are needed.
-    if fs::metadata(p).map_err(|e| e.to_string())?.len() > 100_000_000 {
+    if fs::metadata(p)
+        .map_err(|e| format!("Cannot read take {} at {}: {e}", take.id, p.display()))?
+        .len()
+        > 100_000_000
+    {
         return Err("Clip is too large. Use a take shorter than ten minutes.".into());
     }
     // One decode per take file, shared by Play, Loop, Record, audition and export (#44).
-    let decoded = state.clips.lock().load(p)?;
+    let decoded = state
+        .clips
+        .lock()
+        .load(p)
+        .map_err(|e| format!("Cannot read take {} at {}: {e}", take.id, p.display()))?;
     Clip::new(spec, decoded.samples, decoded.sample_rate)
 }
 
