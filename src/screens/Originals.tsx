@@ -71,7 +71,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
       await loadRigProfiles();
     });
   }, [w.action, w.refresh, loadTakes, loadLibrary, loadRigProfiles]);
-  const run = (fn: () => Promise<void>) => w.action(fn);
+  const run = (fn: () => Promise<unknown>) => w.action(fn);
   const favourite = async (id: string, on: boolean) => {
     await ipc.invoke("takes_favourite", { takeId: id, favourite: on });
     await loadTakes();

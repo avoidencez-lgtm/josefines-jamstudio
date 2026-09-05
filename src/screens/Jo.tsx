@@ -161,7 +161,8 @@ export const Jo: React.FC = () => {
       const { reply, toolCalls } = await think(history, query);
 
       const results: string[] = [];
-      if (toolCalls.some(joNeedsReview)) {
+      const needsReview = toolCalls.some(joNeedsReview);
+      if (needsReview) {
         useJoConversation.setState({
           pending: { calls: toolCalls, expected: expectedSong },
         });
@@ -178,7 +179,9 @@ export const Jo: React.FC = () => {
       const joMsg: JoMessage = {
         id: crypto.randomUUID(),
         sender: "jo",
-        text: reply,
+        // Replies are generated before execution. Preserve actual outcomes in
+        // both the visible conversation and the history sent on the next turn.
+        text: toolCalls.length && !needsReview ? results.join("\n") : reply,
         timestamp: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",

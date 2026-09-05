@@ -238,6 +238,18 @@ export type LyriaState = { active: boolean; buffering: boolean; bufferMs: number
 
 ## 6. AI layer
 
+Current execution contract (2026-09-05, issue #166): the engine store returns
+`CommandResult` for Jo's transport, band and recording actions. Errors remain
+visible UI notices and are carried on that specific result; the dispatcher
+requires success before confirming the action. Tauri's `null` unit response is
+successful. Tempo/intensity results contain the value submitted after clamping;
+they acknowledge the command, not an audio or later-telemetry measurement. Queued
+band changes are described as accepted. Refused actions appear in Jo's transcript
+instead of the model's proposed success wording; the inline assistant also retains
+the failure in conversation history. Unchanged song/film edits are reported as
+unchanged and do not create extra undo/version entries. This does not implement
+the voice pipeline described below.
+
 ### 6.1 Providers (Rust, `src-tauri/src/net/`)
 
 ```rust

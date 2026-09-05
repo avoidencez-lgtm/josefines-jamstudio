@@ -65,6 +65,13 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-05 Jo action results (issue #166): transport, band and recording refusals
+reach Jo as explicit failures while retaining the normal UI notice. Success uses
+the accepted command value, including clamped tempo, and unchanged document edits
+are reported without claiming a change. Failing-IPC regressions cover every legacy
+engine action. This advances reliable AI control; voice and other unbuilt V1
+capabilities remain unfinished. Friend-led testing remains deferred to V2.
+
 2026-09-05 Write follow-up ([PR #119](https://github.com/avoidencez-lgtm/josefines-jamstudio/pull/119), merged): the workspace names the arrangement loaded in the band and distinguishes it from the current draft, including band settings and guitar layers. Play, loop and record share the accepted-snapshot update; failed loads preserve the previous indicator. Contextual help and both exported manuals explain Save versus Play versus Space.
 
 2026-09-05 rig persistence follow-up ([PR #117](https://github.com/avoidencez-lgtm/josefines-jamstudio/pull/117), merged): profile, section mapping, follow-section and MIDI connection changes save before replacing the active configuration. IPC regression coverage verifies corrupt-file and write failures leave the previous runtime state and settings file intact, including an existing synthetic MIDI connection. Hardware verification is not claimed.

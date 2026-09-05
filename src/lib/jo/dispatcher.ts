@@ -1,9 +1,16 @@
-import { useEngineStore } from "../../store/engine";
+import { requireCommand, useEngineStore } from "../../store/engine";
 import { useMedia } from "../media";
 import { PARTS, changeGroove, useWriting } from "../originals";
 import type { JoToolCall } from "./persona";
 import { STUDIO_TOOLS, applyStudioEdits } from "./studioTools";
 import { validateToolCall } from "./tools";
+
+function editResult(changed: boolean, success: string): string {
+  if (changed) return success;
+  const message = useWriting.getState().message;
+  if (message) throw new Error(message);
+  return "Song unchanged. The requested settings already match or the parts are locked.";
+}
 
 export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
   validateToolCall(call);
@@ -43,6 +50,8 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
     );
     if (shots.reduce((n, s) => n + s.seconds, 0) > 600)
       throw new Error("Keep the film within 10 minutes.");
+    if (JSON.stringify(shots) === JSON.stringify(media.project.shots))
+      return "Shot unchanged. The requested settings already match.";
     media.edit({ shots });
     return "Shot updated. Undo edit is available in Film; save the video to keep the change.";
   }
@@ -106,8 +115,10 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
           (v) => v.name.toLowerCase() === name.toLowerCase(),
         );
         if (!v) throw new Error("Version not found.");
-        w.restore(v.id);
-        return "Version restored. Press Play to hear it.";
+        return editResult(
+          w.restore(v.id),
+          "Version restored. Press Play to hear it.",
+        );
       }
       if (a.action === "undo") {
         if (!w.past.length) throw new Error("No edit to undo.");
@@ -126,36 +137,39 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       if (a.action === "lock") {
         const i = PARTS.findIndex((p) => p.toLowerCase() === a.part);
         if (i < 0) throw new Error("Choose drums, bass or comp.");
-        w.edit((b) => {
+        const changed = w.edit((b) => {
           b.sections[section.id].parts[i].locked = a.locked !== false;
         });
-        return "Part lock updated.";
+        return editResult(changed, "Part lock updated.");
       }
       if (a.action === "groove") {
         if (!store.styles.some((s) => s.id === a.styleId))
           throw new Error("Choose an available groove.");
-        w.edit((b) => {
+        const changed = w.edit((b) => {
           b.sections[section.id] = changeGroove(
             b.sections[section.id],
             String(a.styleId),
           );
         });
-        return "Unlocked parts changed. Press Play to compare.";
+        return editResult(
+          changed,
+          "Unlocked parts changed. Press Play to compare.",
+        );
       }
       throw new Error("Unknown songwriting action.");
     }
     case "transport_control": {
       const action = call.arguments.action as string;
       if (action === "play") {
-        await store.transportPlay();
+        requireCommand(await store.transportPlay());
         return "Started playback";
       }
       if (action === "pause") {
-        await store.transportPause();
+        requireCommand(await store.transportPause());
         return "Paused playback";
       }
       if (action === "stop") {
-        await store.transportStop();
+        requireCommand(await store.transportStop());
         return "Stopped playback";
       }
       throw new Error("Unknown transport action. Use play, pause or stop.");
@@ -163,14 +177,16 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
 
     case "set_tempo": {
       if (typeof call.arguments.bpm === "number") {
-        await store.transportSetTempo(call.arguments.bpm);
-        return `Tempo set to ${call.arguments.bpm} BPM`;
+        const bpm = requireCommand(
+          await store.transportSetTempo(call.arguments.bpm),
+        );
+        return `Tempo set to ${bpm} BPM`;
       }
       if (typeof call.arguments.delta === "number") {
         const currentBpm = store.telemetry.transport.bpm;
         const targetBpm = currentBpm + call.arguments.delta;
-        await store.transportSetTempo(targetBpm);
-        return `Tempo set to ${targetBpm} BPM`;
+        const bpm = requireCommand(await store.transportSetTempo(targetBpm));
+        return `Tempo set to ${bpm} BPM`;
       }
       throw new Error("Set tempo needs a bpm or a delta.");
     }
@@ -182,27 +198,27 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         | "crash"
         | "stop"
         | "ending";
-      await store.bandCue(cue);
+      requireCommand(await store.bandCue(cue));
       return `Queued cue: ${cue}`;
     }
 
     case "set_style": {
       const styleId = call.arguments.styleId as string;
-      await store.bandSetStyle(styleId);
-      return `Switched style to ${styleId}`;
+      requireCommand(await store.bandSetStyle(styleId));
+      return `Style change accepted: ${styleId}`;
     }
 
     case "set_intensity": {
       const raw = Number(call.arguments.intensity);
       const intensity = Math.min(1, Math.max(0, raw > 1 ? raw / 100 : raw));
-      await store.bandSetIntensity(intensity);
-      return `Intensity ${Math.round(intensity * 100)}%`;
+      const applied = requireCommand(await store.bandSetIntensity(intensity));
+      return `Intensity change accepted: ${Math.round(applied * 100)}%`;
     }
 
     case "load_chart": {
       const chartId = call.arguments.chartId as string;
-      await store.bandLoadChart(chartId);
-      return `Loaded chart ${chartId}`;
+      const chart = requireCommand(await store.bandLoadChart(chartId));
+      return `Loaded chart ${chart.name}`;
     }
 
     case "set_loop": {
@@ -210,38 +226,42 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       const start = Number(call.arguments.startBar);
       const end = Number(call.arguments.endBar);
       const t = store.telemetry.transport;
-      await store.transportSetLoop(
-        Number.isFinite(start) && start > 0 ? start : t.loop_start_bar,
-        Number.isFinite(end) && end > 0 ? end : t.loop_end_bar,
-        enabled,
+      requireCommand(
+        await store.transportSetLoop(
+          Number.isFinite(start) && start > 0 ? start : t.loop_start_bar,
+          Number.isFinite(end) && end > 0 ? end : t.loop_end_bar,
+          enabled,
+        ),
       );
       return enabled ? "Looping" : "Loop off";
     }
 
     case "set_parts": {
-      await store.bandSet({
-        muteDrums: call.arguments.muteDrums as boolean | undefined,
-        muteBass: call.arguments.muteBass as boolean | undefined,
-        muteComp: call.arguments.muteComp as boolean | undefined,
-      });
-      return "Updated rhythm section parts";
+      requireCommand(
+        await store.bandSet({
+          muteDrums: call.arguments.muteDrums as boolean | undefined,
+          muteBass: call.arguments.muteBass as boolean | undefined,
+          muteComp: call.arguments.muteComp as boolean | undefined,
+        }),
+      );
+      return "Rhythm section change accepted";
     }
 
     case "toggle_energy_follower": {
       const enabled = call.arguments.enabled as boolean;
-      await store.bandSet({ followEnergy: enabled });
+      requireCommand(await store.bandSet({ followEnergy: enabled }));
       return `Energy following ${enabled ? "enabled" : "disabled"}`;
     }
 
     case "record_take": {
       const action = call.arguments.action as string;
       if (action === "start") {
-        const id = await store.startRecording();
+        const id = requireCommand(await store.startRecording());
         return `Recording started: ${id}`;
       }
       if (action === "stop") {
-        const take = await store.stopRecording();
-        return `Recording saved: ${take?.id ?? "take"}`;
+        const take = requireCommand(await store.stopRecording());
+        return `Recording saved: ${take.id}`;
       }
       throw new Error("Unknown recording action. Use start or stop.");
     }
