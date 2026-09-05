@@ -226,7 +226,7 @@ pub fn originals_save(document: Value) -> Result<Value, String> {
     write_document(&song_dir(), document)
 }
 #[tauri::command]
-pub fn originals_list<R: tauri::Runtime>(
+pub async fn originals_list<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Vec<Value>, String> {
@@ -354,7 +354,7 @@ pub fn read_clip(spec: ClipSpec, state: &AppState) -> Result<Clip, String> {
 }
 
 #[tauri::command]
-pub fn originals_load(document: Value, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn originals_load(document: Value, state: State<'_, AppState>) -> Result<(), String> {
     let song = body(&document)?;
     let tones = {
         let rig = state.rig.lock();
