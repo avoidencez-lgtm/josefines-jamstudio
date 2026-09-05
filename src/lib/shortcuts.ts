@@ -19,7 +19,7 @@ export interface Shortcut {
 const code = (c: string) => (e: KeyboardEvent) =>
   e.code === c && !e.ctrlKey && !e.metaKey && !e.altKey;
 const key = (k: string) => (e: KeyboardEvent) =>
-  e.key === k && !e.ctrlKey && !e.metaKey && !e.altKey;
+  e.key === k && !e.ctrlKey && !e.metaKey;
 
 export const SHORTCUTS: Shortcut[] = [
   {
@@ -169,7 +169,7 @@ export function handleShortcut(
   if (e.defaultPrevented) return false;
   const target = e.target as HTMLElement | null;
   if (
-    target?.closest("button, summary") &&
+    target?.closest("button, summary, a[href]") &&
     (e.code === "Space" || e.code === "Enter")
   )
     return false;
@@ -181,8 +181,10 @@ export function handleShortcut(
   ) {
     return false;
   }
-  // Leave Ctrl/Cmd/Alt combinations to the browser and the editor.
-  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  // Leave Ctrl/Cmd chords to the browser. Alt is ignored except when it is
+  // how the layout typed `[` / `]` (Option+8/9 on a Norwegian Mac).
+  if (e.ctrlKey || e.metaKey) return false;
+  if (e.altKey && e.key !== "[" && e.key !== "]") return false;
   if (
     e.repeat &&
     e.code !== "ArrowUp" &&
