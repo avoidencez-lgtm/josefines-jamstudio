@@ -71,7 +71,7 @@ fn read(path: &Path) -> Result<Value, String> {
     }
     let bytes = fs::read(path)
         .map_err(|e| format!("Cannot read media document {}: {e}", path.display()))?;
-    serde_json::from_slice(&bytes)
+    jam_core::json::from_slice(&bytes)
         .map_err(|e| format!("Invalid media document {}: {e}", path.display()))
 }
 fn write_err(path: &Path, e: impl std::fmt::Display) -> String {
