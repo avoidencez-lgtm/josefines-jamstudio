@@ -231,3 +231,13 @@ pending take for finalisation. Transport, Sessions and Write offer Save partial
 take and stop presenting capture as live. The close/device guards stay active
 until finalisation. Native backpressure and frontend failure/recovery regressions
 cover this path; alignment and start/stop disk-lock work remain separate.
+
+### Chart duration precision (PR #200, awaiting review and CI)
+
+The shared text formatter preserves numeric beat durations instead of rounding
+each chord to two decimals. Mixed thirds and dense bars survive repeated
+format/parse cycles without losing a bar or accumulating drift. Short scientific
+notation emitted for tiny durations is readable by the parser. Explicit bar
+totals retain the existing 1e-6 tolerance. English/Bokmål chart help explains
+mixed counted/shared beats. This does not complete the separate tempo-range or
+schema-validation work.

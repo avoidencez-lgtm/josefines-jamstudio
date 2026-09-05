@@ -94,11 +94,16 @@ describe("chart text parser", () => {
   });
 
   it("round-trips mixed splits and thirds without dropping the bar", () => {
-    for (const cell of ["C:2 F G A", "C:3 F G A", "C:1 F G"]) {
+    for (const cell of [
+      "C:2 F G A",
+      "C:3 F G A",
+      "C:1 F G",
+      "C:0.123456789 F:0.234567891 G",
+      "C:0.0000001 G",
+    ]) {
       const { chart, problems } = parseChartText(`[A]\n| ${cell} |`);
       expect(problems, cell).toEqual([]);
       const text = chartToText(chart as Chart);
-      expect(text, cell).toContain(`| ${cell} |`);
       const again = parseChartText(text);
       expect(again.problems, cell).toEqual([]);
       expect(again.chart?.sections[0].bars[0], cell).toEqual(
@@ -106,8 +111,23 @@ describe("chart text parser", () => {
       );
     }
     const rounded = parseChartText("[A]\n| C:2 F:0.67 G:0.67 A:0.67 |");
-    expect(rounded.problems).toEqual([]);
-    expect(rounded.chart?.sections[0].bars[0]).toHaveLength(4);
+    expect(rounded.problems[0].message).toContain("expected 4");
+    expect(rounded.chart).toBeNull();
+  });
+
+  it("preserves dense mixed bars without a subset search or repeated rounding drift", () => {
+    // 32 slots also exercise the signed 32-bit shift ceiling of the old search.
+    const cell = `C:1 ${Array.from({ length: 31 }, () => "G").join(" ")}`;
+    const parsed = parseChartText(`[Dense]\n| ${cell} |`);
+    expect(parsed.problems).toEqual([]);
+    let chart = parsed.chart as Chart;
+    const original = chart.sections[0].bars[0];
+    for (let pass = 0; pass < 10; pass++) {
+      const next = parseChartText(chartToText(chart));
+      expect(next.problems).toEqual([]);
+      expect(next.chart?.sections[0].bars[0]).toEqual(original);
+      chart = next.chart as Chart;
+    }
   });
 
   it("reports problems with line numbers instead of throwing", () => {
@@ -149,6 +169,46 @@ arrangement: chorus, verse x2, chorus
       "chorus",
       "chorus",
     ]);
+  });
+
+  it("keeps Mix/Box/Remix names and still honours Chorus x2", () => {
+    const { chart, problems } = parseChartText(`# Form
+[Mix 2]
+| C | G |
+[Box 3]
+| Am | F |
+[Remix 1]
+| Dm | E |
+[Chorus x2]
+| G | C |
+[Verse 2]
+| D | A |
+[Bridge x 2]
+| Em | B |
+arrangement: mix 2, chorus x2, verse 2
+`);
+    expect(problems).toEqual([]);
+    expect(chart?.sections.map((s) => [s.id, s.name])).toEqual([
+      ["mix-2", "Mix 2"],
+      ["box-3", "Box 3"],
+      ["remix-1", "Remix 1"],
+      ["chorus", "Chorus"],
+      ["verse-2", "Verse 2"],
+      ["bridge", "Bridge"],
+    ]);
+    expect(chart?.arrangement).toEqual([
+      { sectionId: "mix-2", repeats: 1 },
+      { sectionId: "chorus", repeats: 2 },
+      { sectionId: "verse-2", repeats: 1 },
+    ]);
+    const implicit = parseChartText("[Mix 2]\n| C |\n[Chorus x2]\n| G |");
+    expect(implicit.problems).toEqual([]);
+    expect(implicit.chart?.arrangement).toEqual([
+      { sectionId: "mix-2", repeats: 1 },
+      { sectionId: "chorus", repeats: 2 },
+    ]);
+    expect(chartToText(implicit.chart as Chart)).toMatch(/\[Mix 2\]/);
+    expect(chartToText(implicit.chart as Chart)).toMatch(/\[Chorus x2\]/);
   });
 
   it("handles 6/8 and comments", () => {
