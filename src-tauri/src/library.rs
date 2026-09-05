@@ -268,8 +268,8 @@ pub fn validate_chart(chart: &Chart) -> Result<(), String> {
     if chart.arrangement.is_empty() {
         return Err("chart has no arrangement".into());
     }
-    if chart.time_sig.0 == 0 || chart.time_sig.1 == 0 {
-        return Err("time signature must be positive".into());
+    if chart.time_sig.0 == 0 || !chart.time_sig.1.is_power_of_two() || chart.time_sig.1 > 32 {
+        return Err("Time signature denominator must be a power of two, at most 32.".into());
     }
     let mut total_bars = 0_u64;
     let mut ids = std::collections::BTreeSet::new();
@@ -369,6 +369,17 @@ mod tests {
         for chart in lib.charts() {
             validate_chart(&chart).unwrap_or_else(|e| panic!("{}: {e}", chart.id));
         }
+    }
+
+    #[test]
+    fn non_power_of_two_meters_are_rejected() {
+        let lib = Library::load_from(temp_root("meter"));
+        let mut chart = lib.chart("blues-12-bar").unwrap();
+        chart.time_sig = (4, 6);
+        let err = validate_chart(&chart).unwrap_err();
+        assert!(err.contains("power of two"), "{err}");
+        chart.time_sig = (4, 0);
+        assert!(validate_chart(&chart).unwrap_err().contains("power of two"));
     }
 
     #[test]
