@@ -1,5 +1,6 @@
 import type React from "react";
 import { useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { BigReadout } from "../components/BigReadout";
 import { Button } from "../components/Button";
 import { ChordShapes } from "../components/ChordShapes";
@@ -41,7 +42,35 @@ export const Stage: React.FC = () => {
     togglePart,
     toggleFollowEnergy,
     transposeCurrentChart,
-  } = useEngineStore();
+  } = useEngineStore(
+    useShallow((s) => ({
+      tunerOn: s.tunerOn,
+      toneOn: s.toneOn,
+      clickVolume: s.clickVolume,
+      bandVolume: s.bandVolume,
+      telemetry: s.telemetry,
+      styles: s.styles,
+      charts: s.charts,
+      currentChart: s.currentChart,
+      tempoTrainer: s.tempoTrainer,
+      setTone: s.setTone,
+      setTuner: s.setTuner,
+      setClickVolume: s.setClickVolume,
+      setBandVolume: s.setBandVolume,
+      transportSeekBar: s.transportSeekBar,
+      transportSetLoop: s.transportSetLoop,
+      transportSetTempo: s.transportSetTempo,
+      tapTempo: s.tapTempo,
+      setTempoTrainer: s.setTempoTrainer,
+      bandSetStyle: s.bandSetStyle,
+      bandSetIntensity: s.bandSetIntensity,
+      bandCue: s.bandCue,
+      bandLoadChart: s.bandLoadChart,
+      togglePart: s.togglePart,
+      toggleFollowEnergy: s.toggleFollowEnergy,
+      transposeCurrentChart: s.transposeCurrentChart,
+    })),
+  );
 
   const [view, setView] = useState("Perform");
   const [showSolo, setShowSolo] = useState(true);

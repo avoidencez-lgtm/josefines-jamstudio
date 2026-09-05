@@ -236,10 +236,20 @@ fn every_bundled_chart_loads_and_the_band_follows_its_style_tempo_and_first_chor
             .map(|s| s["name"].clone())
             .unwrap();
 
+        // Wait for the FULL post-load state, not just chord+style+bpm: the engine's
+        // default telemetry is an A7/D7 blues at exactly the bundled blues charts'
+        // style and tempo, so a partial predicate can match the pre-load default on
+        // a slow runner before the chart lands (#105). The asserts below document
+        // the matched snapshot; a never-appearing state fails the wait with the
+        // last telemetry in the message.
         let tel = telemetry_where(&studio, &format!("{id} loaded"), |t| {
             t["band"]["current_chord"] == first_chord
+                && t["band"]["next_chord"] == next_chord
+                && t["band"]["current_section"] == section["name"]
                 && t["band"]["style_id"] == style_id
                 && t["transport"]["bpm"] == chart["defaultBpm"]
+                && t["transport"]["time_signature"] == json!([4, 4])
+                && t["transport"]["state"] == "stopped"
         });
         assert_eq!(tel["band"]["style_name"], style_name, "{id}");
         assert_eq!(tel["band"]["next_chord"], next_chord, "{id}");

@@ -1,5 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import { ipc, isPreview } from "../ipc/client";
@@ -88,7 +89,15 @@ function SilentPreview({ path, label }: { path: string; label: string }) {
 }
 export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
   const m = useMedia();
-  const engine = useEngineStore();
+  const engine = useEngineStore(
+    useShallow((s) => ({
+      isRecording: s.isRecording,
+      loadTakes: s.loadTakes,
+      takes: s.takes,
+      keysPresent: s.keysPresent,
+      setScreen: s.setScreen,
+    })),
+  );
   const ai = useAi();
   const [view, setView] = useState(audioOnly ? "Create music" : "Storyboard");
   const [jobFilter, setJobFilter] = useState("All jobs");

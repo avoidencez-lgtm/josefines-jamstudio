@@ -354,6 +354,29 @@ fn takes_delete_removes_the_take_folder_from_disk() {
 }
 
 #[test]
+fn takes_delete_ignores_a_manifest_path_pointing_at_another_take() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let keep = synthetic_take(0.2, "1500000000.000");
+    let take = synthetic_take(0.2, "1500000001.000");
+    let mut meta = manifest(&take.dir);
+    meta["pathInput"] = json!(keep.input.to_string_lossy());
+    std::fs::write(
+        take.dir.join("take.json"),
+        serde_json::to_vec(&meta).unwrap(),
+    )
+    .unwrap();
+
+    studio.ok("takes_delete", json!({"takeId": take.id}));
+    assert!(
+        !take.dir.exists(),
+        "only the requested take folder is deleted"
+    );
+    assert!(keep.input.is_file() && keep.band.is_file() && keep.master.is_file());
+    assert!(find(&studio.ok("takes_list", json!({})), &keep.id).is_some());
+}
+
+#[test]
 fn a_damaged_manifest_is_skipped_with_one_warning_and_hides_no_other_take() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

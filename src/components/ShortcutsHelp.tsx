@@ -10,30 +10,44 @@ import "./manual.css";
 export function ShortcutsHelp({
   open,
   room,
+  topic,
   onClose,
 }: {
   open: boolean;
   room: string;
+  topic: string | null;
   onClose: () => void;
 }) {
   const savedLanguage = useEngineStore((s) => readHelpLanguage(s.settings));
   const [language, setLanguage] = useState<HelpLanguage>(savedLanguage);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState("start");
+  const [selected, setSelected] = useState(
+    () =>
+      manual.chapters.find((c) => c.sections.some((s) => s.id === topic))?.id ??
+      manual.chapters.find((c) => c.room === room)?.id ??
+      "start",
+  );
   const search = useRef<HTMLInputElement>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
   // Settings load after the first render; adopt the saved choice when they arrive.
   useEffect(() => setLanguage(savedLanguage), [savedLanguage]);
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement;
-    setSelected(manual.chapters.find((c) => c.room === room)?.id ?? "start");
-    setQuery("");
-    search.current?.focus();
+    const target = topic
+      ? document.getElementById(`help-${topic}`)
+      : search.current;
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "nearest" });
     return () => {
-      if (previous instanceof HTMLElement) previous.focus();
+      if (
+        previous instanceof HTMLElement &&
+        previous.isConnected &&
+        (document.activeElement === document.body ||
+          document.activeElement?.closest("#studio-help"))
+      )
+        previous.focus();
     };
-  }, [open, room]);
+  }, [open, topic]);
   if (!open) return null;
   const nb = language === "nb";
   const chooseLanguage = (next: HelpLanguage) => {
@@ -54,7 +68,8 @@ export function ShortcutsHelp({
   );
   const chapter = matches.find((c) => c.id === selected) ?? matches[0];
   return (
-    <section
+    <aside
+      id="studio-help"
       className="studio-manual"
       lang={language}
       aria-label={nb ? "Hjelp og veiledninger" : "Help & guides"}
@@ -79,7 +94,7 @@ export function ShortcutsHelp({
           </select>
         </label>
         <Button variant="secondary" onClick={onClose}>
-          {nb ? "Tilbake til studioet" : "Back to studio"}
+          {nb ? "Lukk hjelp" : "Close help"}
         </Button>
       </header>
       <div className="manual-layout">
@@ -94,22 +109,21 @@ export function ShortcutsHelp({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <nav aria-label={nb ? "Kapitler" : "Guide chapters"}>
+          <label htmlFor="manual-chapter">{nb ? "Kapittel" : "Chapter"}</label>
+          <select
+            id="manual-chapter"
+            value={chapter?.id ?? ""}
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            {!chapter && (
+              <option value="">{nb ? "Ingen treff" : "No matches"}</option>
+            )}
             {matches.map((c) => (
-              <button
-                type="button"
-                key={c.id}
-                aria-current={chapter?.id === c.id ? "page" : undefined}
-                onClick={() => {
-                  setSelected(c.id);
-                  // Reading starts at the chapter title, not at the whole chapter text.
-                  requestAnimationFrame(() => heading.current?.focus());
-                }}
-              >
+              <option key={c.id} value={c.id}>
                 {c.title[language]}
-              </button>
+              </option>
             ))}
-          </nav>
+          </select>
         </aside>
         <article>
           <p className="sr-only" aria-live="polite">
@@ -119,12 +133,30 @@ export function ShortcutsHelp({
           </p>
           {chapter ? (
             <>
-              <h2 ref={heading} tabIndex={-1}>
-                {chapter.title[language]}
-              </h2>
+              <h2>{chapter.title[language]}</h2>
+              <nav
+                aria-label={nb ? "Emner i kapitlet" : "Topics in this chapter"}
+              >
+                {chapter.sections.map((s) => (
+                  <a
+                    key={s.id}
+                    href={`#help-${s.id}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      const target = document.getElementById(`help-${s.id}`);
+                      target?.focus({ preventScroll: true });
+                      target?.scrollIntoView({ block: "nearest" });
+                    }}
+                  >
+                    {s.title[language]}
+                  </a>
+                ))}
+              </nav>
               {chapter.sections.map((s) => (
-                <section key={s.title.en}>
-                  <h3>{s.title[language]}</h3>
+                <section key={s.id}>
+                  <h3 id={`help-${s.id}`} tabIndex={-1}>
+                    {s.title[language]}
+                  </h3>
                   {s.text[language].split("\n\n").map((p) => (
                     <p key={p}>{p}</p>
                   ))}
@@ -143,8 +175,8 @@ export function ShortcutsHelp({
               <h3>{nb ? "Hurtigtaster" : "Keyboard shortcuts"}</h3>
               <p>
                 {nb
-                  ? "Hurtigtastene er av mens du leser hjelpen eller skriver i et felt. I skjemaeditoren spiller Ctrl/Cmd+Enter skjemaet, og Ctrl/Cmd+S lagrer det."
-                  : "Shortcuts are off while reading help or typing in a field. In the chart editor, Ctrl/Cmd+Enter plays the chart and Ctrl/Cmd+S saves it."}
+                  ? "Hurtigtastene er av når fokus er i hjelpen eller du skriver i et felt. I skjemaeditoren spiller Ctrl/Cmd+Enter skjemaet, og Ctrl/Cmd+S lagrer det."
+                  : "Shortcuts are off when focus is in help or you are typing in a field. In the chart editor, Ctrl/Cmd+Enter plays the chart and Ctrl/Cmd+S saves it."}
               </p>
               <dl className="manual-shortcuts">
                 {SHORTCUTS.map((s) => (
@@ -166,6 +198,6 @@ export function ShortcutsHelp({
           )}
         </article>
       </div>
-    </section>
+    </aside>
   );
 }
