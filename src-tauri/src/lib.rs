@@ -480,10 +480,7 @@ fn band_load_chart(
     if follow_chart.unwrap_or(true) {
         let style = state.library.lock().style_for_chart(&chart)?;
         eng.band_set_style(style);
-        eng.transport_set_time_signature(chart.time_sig);
-        if chart.default_bpm > 0.0 {
-            eng.transport_set_tempo(chart.default_bpm);
-        }
+        apply_chart_timing(&eng, &chart);
     } else {
         eng.validate_transport_meter(chart.time_sig)?;
     }
@@ -500,10 +497,17 @@ fn band_load_chart_inline(chart: Chart, state: State<'_, AppState>) -> Result<()
     let mut eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.band_set_style(style);
-    eng.transport_set_time_signature(chart.time_sig);
+    apply_chart_timing(&eng, &chart);
     eng.band_load_chart(chart.resolve());
     restore_rig_mappings(&state);
     Ok(())
+}
+
+fn apply_chart_timing(eng: &AudioEngine, chart: &Chart) {
+    eng.transport_set_time_signature(chart.time_sig);
+    if chart.default_bpm > 0.0 {
+        eng.transport_set_tempo(chart.default_bpm);
+    }
 }
 
 fn restore_rig_mappings(state: &AppState) {
@@ -1220,6 +1224,38 @@ pub fn run() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod chart_timing {
+    use jam_audio::devices::AudioConfig;
+    use jam_audio::engine::AudioEngine;
+    use jam_core::chart::Chart;
+
+    fn chart(bpm: f64, time_sig: (u8, u8)) -> Chart {
+        Chart {
+            schema_version: 1,
+            id: "timing".into(),
+            name: "Timing".into(),
+            key_tonic: 0,
+            mode: "major".into(),
+            time_sig,
+            default_bpm: bpm,
+            default_style_id: None,
+            sections: vec![],
+            arrangement: vec![],
+        }
+    }
+
+    #[test]
+    fn inline_play_adopts_the_chart_default_tempo() {
+        let eng = AudioEngine::new(AudioConfig::default());
+        eng.transport_set_tempo(90.0);
+        super::apply_chart_timing(&eng, &chart(140.0, (4, 4)));
+        assert!((eng.transport_bpm() - 140.0).abs() < f64::EPSILON);
+        super::apply_chart_timing(&eng, &chart(0.0, (4, 4)));
+        assert!((eng.transport_bpm() - 140.0).abs() < f64::EPSILON);
+    }
 }
 
 #[cfg(test)]
