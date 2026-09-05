@@ -170,4 +170,24 @@ describe("Studio workspaces", () => {
       [section.bars.length * 2 + 1, section.bars.length * 3 + 1],
     ]);
   });
+  it("shows meter as a readout; the engine refuses a change the style cannot play", () => {
+    const bar = fs.readFileSync(
+      path.join("src", "components", "TransportBar.tsx"),
+      "utf8",
+    );
+    expect(bar).not.toContain("<select");
+    expect(bar).toContain("Meter");
+    expect(bar).not.toContain("3/4");
+    const stage = fs.readFileSync(
+      path.join("src", "screens", "Stage.tsx"),
+      "utf8",
+    );
+    expect(stage).toContain("stylesInMeter");
+    expect(stage).not.toMatch(/styles\.map\(\(s\) =>/);
+    const library = fs.readFileSync(
+      path.join("src", "screens", "Library.tsx"),
+      "utf8",
+    );
+    expect(library).toContain("stylesInMeter");
+  });
 });

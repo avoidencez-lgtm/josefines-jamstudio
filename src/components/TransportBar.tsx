@@ -18,7 +18,6 @@ export function TransportBar() {
     transportStop,
     transportSetLoop,
     transportSetCountIn,
-    transportSetTimeSignature,
     startRecording,
     stopRecording,
     setScreen,
@@ -34,7 +33,6 @@ export function TransportBar() {
       transportStop: s.transportStop,
       transportSetLoop: s.transportSetLoop,
       transportSetCountIn: s.transportSetCountIn,
-      transportSetTimeSignature: s.transportSetTimeSignature,
       startRecording: s.startRecording,
       stopRecording: s.stopRecording,
       setScreen: s.setScreen,
@@ -142,20 +140,17 @@ export function TransportBar() {
 
             <div className="h-5 w-px bg-[var(--line)]" />
 
-            <select
-              value={`${transport.time_signature[0]}/${transport.time_signature[1]}`}
-              onChange={(e) => {
-                const parts = e.target.value.split("/").map(Number);
-                transportSetTimeSignature(parts[0], parts[1]);
-              }}
-              className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1 rounded text-xs font-mono cursor-pointer"
-              title="Time Signature"
+            <div
+              className="flex items-baseline gap-2 font-mono tabular-nums"
+              title="Meter follows the loaded chart"
             >
-              <option value="4/4">4/4</option>
-              <option value="3/4">3/4</option>
-              <option value="6/8">6/8</option>
-              <option value="12/8">12/8</option>
-            </select>
+              <span className="text-xs uppercase text-[var(--fg-2)] tracking-wider">
+                Meter
+              </span>
+              <span className="text-lg font-semibold text-[var(--fg-0)]">
+                {transport.time_signature[0]}/{transport.time_signature[1]}
+              </span>
+            </div>
           </>
         )}
       </div>
