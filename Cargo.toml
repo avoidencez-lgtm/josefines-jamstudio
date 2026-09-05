@@ -12,6 +12,8 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+# `<[T]>::as_chunks` in crates/jam-audio/src/io.rs needs 1.88; CI on stable would otherwise hide this.
+rust-version = "1.88"
 authors = ["Vegar <avoidencez@gmail.com>"]
 license = "Apache-2.0"
 
