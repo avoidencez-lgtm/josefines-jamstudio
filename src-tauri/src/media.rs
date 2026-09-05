@@ -74,23 +74,31 @@ fn read(path: &Path) -> Result<Value, String> {
     serde_json::from_slice(&bytes)
         .map_err(|e| format!("Invalid media document {}: {e}", path.display()))
 }
+fn write_err(path: &Path, e: impl std::fmt::Display) -> String {
+    format!("Cannot write media document {}: {e}", path.display())
+}
+
 fn write(path: &Path, value: &Value) -> Result<(), String> {
-    fs::create_dir_all(path.parent().ok_or("Invalid output path")?).map_err(|e| e.to_string())?;
-    let bytes = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
+    fs::create_dir_all(
+        path.parent()
+            .ok_or_else(|| write_err(path, "invalid output path"))?,
+    )
+    .map_err(|e| write_err(path, e))?;
+    let bytes = serde_json::to_vec_pretty(value).map_err(|e| write_err(path, e))?;
     if bytes.len() > 2_000_000 {
-        return Err("Media document exceeds 2 MB".into());
+        return Err(format!("Media document {} exceeds 2 MB", path.display()));
     }
     let temp = path.with_extension("tmp");
-    fs::write(&temp, bytes).map_err(|e| e.to_string())?;
+    fs::write(&temp, bytes).map_err(|e| write_err(path, e))?;
     fs::OpenOptions::new()
         .write(true)
         .open(&temp)
         .and_then(|f| f.sync_all())
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| write_err(path, e))?;
     if path.exists() {
-        fs::copy(path, path.with_extension("bak")).map_err(|e| e.to_string())?;
+        fs::copy(path, path.with_extension("bak")).map_err(|e| write_err(path, e))?;
     }
-    fs::rename(temp, path).map_err(|e| e.to_string())
+    fs::rename(temp, path).map_err(|e| write_err(path, e))
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -804,6 +812,19 @@ mod tests {
             "Invalid media extension"
         );
     }
+    #[test]
+    fn write_names_the_document_when_the_temp_file_cannot_be_created() {
+        let base = std::env::temp_dir().join(format!("jam-write-{}", id()));
+        let file = base.join("projects").join("clip.json");
+        fs::create_dir_all(file.with_extension("tmp")).unwrap();
+        let err = write(&file, &json!({"schemaVersion": 1})).unwrap_err();
+        assert!(
+            err.contains("clip.json") && err.contains("Cannot write media document"),
+            "{err}"
+        );
+        fs::remove_dir_all(base).unwrap();
+    }
+
     #[test]
     fn save_conflicts_unknown_fields_and_path_boundaries() {
         let base = std::env::temp_dir().join(format!("jam-video-{}", id()));
