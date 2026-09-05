@@ -413,7 +413,11 @@ pub async fn originals_load(
         state.rig.lock().song_mappings = Some(tones);
         return Ok(());
     }
-    let (takes, _) = crate::all_takes(&state)?;
+    let takes = if song.clips.is_empty() {
+        Vec::new()
+    } else {
+        crate::all_takes(&state)?.0
+    };
     let clips = song
         .clips
         .into_iter()

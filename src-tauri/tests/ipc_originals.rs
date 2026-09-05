@@ -690,6 +690,29 @@ fn play_song_resolves_several_clips_from_one_take_catalog() {
 }
 
 #[test]
+fn song_without_clips_does_not_need_a_readable_take_catalog() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let blocked = user_dir().join(unique("blocked-take-catalog"));
+    std::fs::create_dir_all(&blocked).unwrap();
+    std::fs::write(blocked.join("takes"), b"not a directory").unwrap();
+    let previous = std::env::var_os("JAM_DATA_DIR");
+    std::env::set_var("JAM_DATA_DIR", &blocked);
+    let catalog = app_lib::originals::file_takes();
+    let mut doc = song(&unique("no-clips"));
+    doc["body"]["clips"] = json!([]);
+    let loaded = studio.invoke("originals_load", json!({"document": doc}));
+    match previous {
+        Some(value) => std::env::set_var("JAM_DATA_DIR", value),
+        None => std::env::remove_var("JAM_DATA_DIR"),
+    }
+    std::fs::remove_file(blocked.join("takes")).unwrap();
+    std::fs::remove_dir(blocked).unwrap();
+    assert!(catalog.is_err(), "the fixture must block take listing");
+    assert!(loaded.is_ok(), "song without clips must load: {loaded:?}");
+}
+
+#[test]
 fn record_on_the_headless_engine_writes_a_take_with_the_song_snapshot() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

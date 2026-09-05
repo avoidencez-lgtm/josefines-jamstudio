@@ -310,7 +310,7 @@ Med en egen låt åpen lagrer Capture current tone profil-ID, scene og kontrolle
 
 ### Lydenheter
 
-Velg navn på inn-/utgangsenheter, inngangskanal og støttet bufferstørrelse. Grensesnittet nummererer kanaler fra 1; lagret konfigurasjon starter på 0. Tørr HeadRush-kanal 3 lagres derfor som 2, når driveren faktisk tilbyr den. Enhetsendringer starter lyden på nytt og lagres etter vellykket oppsett. Bruk helst ett lydkort for inn og ut. Mindre buffer kan redusere forsinkelsen, men øke utfall; bruk større buffer hvis stream errors eller input gaps øker. Motoren bruker 48 kHz internt. Ustøttede formater gir tydelig feil fremfor skjult resampling.
+Velg navn på inn-/utgangsenheter, inngangskanal og støttet bufferstørrelse. Grensesnittet nummererer kanaler fra 1; lagret konfigurasjon starter på 0. Tørr HeadRush-kanal 3 lagres derfor som 2, når driveren faktisk tilbyr den. Enhetsendringer starter lyden på nytt og lagres etter vellykket oppsett. Bruk helst ett lydkort for inn og ut. Mindre buffer kan redusere forsinkelsen, men øke utfall; bruk større buffer hvis stream errors eller input gaps øker. Motoren følger foreløpig utgangsenhetens samplingsfrekvens; konvertering til fast 48 kHz er ikke ferdig. Hvis inngang og utgang har ulik frekvens, stenges inngangen og statusen viser begge verdiene. Jamopptak, låtopptak og Keep recent idea avviser denne inngangen. Velg enheter/frekvenser som samsvarer og bruk Restart audio; sperren fjernes etter en omstart med samsvarende frekvenser. Ingen automatisk resampling utføres.
 
 ### Oppsett på Mac og Windows
 
