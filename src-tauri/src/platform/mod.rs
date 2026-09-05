@@ -1,6 +1,55 @@
 //! Native child-process behavior is isolated from the agent protocol.
 use std::path::PathBuf;
 
+/// Hosts the UI may open in the OS browser. Keep in lockstep with `https://` links in `src/`.
+const ALLOWED_HOSTS: &[&str] = &[
+    "ffmpeg.org",
+    "docs.comfy.org",
+    "developers.openai.com",
+    "support.claude.com",
+    "ai.google.dev",
+    "platform.claude.com",
+    "openrouter.ai",
+    "huggingface.co",
+    "platform.minimax.io",
+    "docs.dev.runwayml.com",
+    "github.com",
+    "elevenlabs.io",
+];
+
+/// `https://` and an allowlisted host only. Rejects other schemes, credentials and hosts.
+pub fn allowed_https_url(url: &str) -> Result<&str, String> {
+    let rest = url
+        .strip_prefix("https://")
+        .ok_or_else(|| "Only https links from the documented hosts can open.".to_string())?;
+    if rest.contains('@') {
+        return Err("This link is not allowed.".into());
+    }
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if !ALLOWED_HOSTS.contains(&host) {
+        return Err(format!(
+            "This host is not on the open-in-browser list: {host}"
+        ));
+    }
+    Ok(url)
+}
+
+pub async fn open_https(url: &str) -> Result<(), String> {
+    allowed_https_url(url)?;
+    #[cfg(target_os = "macos")]
+    let mut opener = command(std::path::Path::new("/usr/bin/open"));
+    #[cfg(windows)]
+    let mut opener = command(std::path::Path::new("explorer.exe"));
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let mut opener = command(std::path::Path::new("xdg-open"));
+    opener
+        .kill_on_drop(false)
+        .arg(url)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub async fn open_media(path: &std::path::Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let mut opener = command(std::path::Path::new("/usr/bin/open"));
@@ -82,6 +131,20 @@ pub fn find_agent(name: &str, configured: &str) -> Result<PathBuf, String> {
         .flat_map(|d| filenames.iter().map(move |f| d.join(f)))
         .find(|p| p.is_file())
         .ok_or_else(|| format!("{name} is not installed or not on PATH. Install and sign in once, or set its full executable path."))
+}
+
+#[cfg(test)]
+mod url_tests {
+    #[test]
+    fn https_allowlist_accepts_docs_and_rejects_the_rest() {
+        assert!(super::allowed_https_url("https://ffmpeg.org/download.html").is_ok());
+        assert!(super::allowed_https_url("https://ai.google.dev/gemini-api/docs/pricing").is_ok());
+        assert!(super::allowed_https_url("http://ffmpeg.org/download.html").is_err());
+        assert!(super::allowed_https_url("https://evil.example/ffmpeg.org").is_err());
+        assert!(super::allowed_https_url("https://ffmpeg.org.evil.example/").is_err());
+        assert!(super::allowed_https_url("https://user:pass@ffmpeg.org/").is_err());
+        assert!(super::allowed_https_url("file:///etc/passwd").is_err());
+    }
 }
 
 #[cfg(all(test, windows))]

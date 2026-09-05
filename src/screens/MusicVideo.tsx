@@ -20,6 +20,7 @@ import {
   useMedia,
   videoDuration,
 } from "../lib/media";
+import { openExternal } from "../lib/openUrl";
 import { useWriting } from "../lib/originals";
 import { openAiSettings } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
@@ -414,8 +415,11 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
         {!isPreview && !tools.ready && (
           <a
             href="https://ffmpeg.org/download.html"
-            target="_blank"
             rel="noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              void openExternal("https://ffmpeg.org/download.html");
+            }}
           >
             Get FFmpeg
           </a>
@@ -604,8 +608,13 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             does not install ComfyUI or weights.{" "}
             <a
               href="https://docs.comfy.org/development/comfyui-server/comms_routes"
-              target="_blank"
               rel="noreferrer"
+              onClick={(e) => {
+                e.preventDefault();
+                void openExternal(
+                  "https://docs.comfy.org/development/comfyui-server/comms_routes",
+                );
+              }}
             >
               Workflow documentation
             </a>
@@ -1005,13 +1014,18 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                 </label>
                 <p className="video-note">
                   {chosenModel?.description}{" "}
-                  <a
-                    href={chosenModel?.source}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Provider documentation
-                  </a>
+                  {chosenModel?.source && (
+                    <a
+                      href={chosenModel.source}
+                      rel="noreferrer"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void openExternal(chosenModel.source);
+                      }}
+                    >
+                      Provider documentation
+                    </a>
+                  )}
                 </p>
               </details>
               <div className="video-actions">
