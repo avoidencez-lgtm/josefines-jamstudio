@@ -76,6 +76,74 @@ describe("Studio workspaces", () => {
       ).toBe(false);
     }
   });
+  it("transposes when Option typed [ or ] and leaves Enter on a link alone", () => {
+    vi.stubGlobal("HTMLInputElement", class HTMLInputElement {});
+    vi.stubGlobal("HTMLTextAreaElement", class HTMLTextAreaElement {});
+    vi.stubGlobal("HTMLSelectElement", class HTMLSelectElement {});
+    const ctx = { toggleHelp: () => {} };
+    const transposeCurrentChart = vi.fn();
+    const bandCue = vi.fn();
+    const transportStop = vi.fn();
+    const store = {
+      transposeCurrentChart,
+      bandCue,
+      transportStop,
+      telemetry: { transport: {}, band: {} },
+    } as unknown as EngineState;
+    expect(
+      handleShortcut(
+        {
+          key: "[",
+          code: "Digit8",
+          altKey: true,
+          target: null,
+        } as unknown as KeyboardEvent,
+        store,
+        ctx,
+      ),
+    ).toBe(true);
+    expect(transposeCurrentChart).toHaveBeenCalledWith(-1);
+    expect(
+      handleShortcut(
+        {
+          key: "]",
+          code: "Digit9",
+          altKey: true,
+          target: null,
+        } as unknown as KeyboardEvent,
+        store,
+        ctx,
+      ),
+    ).toBe(true);
+    expect(transposeCurrentChart).toHaveBeenCalledWith(1);
+    expect(
+      handleShortcut(
+        {
+          key: "ƒ",
+          code: "KeyF",
+          altKey: true,
+          target: null,
+        } as unknown as KeyboardEvent,
+        store,
+        ctx,
+      ),
+    ).toBe(false);
+    expect(bandCue).not.toHaveBeenCalled();
+    expect(
+      handleShortcut(
+        {
+          code: "Enter",
+          key: "Enter",
+          target: {
+            closest: (sel: string) => (sel.includes("a[href]") ? {} : null),
+          },
+        } as unknown as KeyboardEvent,
+        store,
+        ctx,
+      ),
+    ).toBe(false);
+    expect(transportStop).not.toHaveBeenCalled();
+  });
   it("keeps screen modules to components so fast refresh and tests stay simple", () => {
     const dir = path.resolve(process.cwd(), "src/screens");
     for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".tsx"))) {
