@@ -768,6 +768,12 @@ export function createPreviewEngine(
       takes = takes.filter((t) => t.id !== a.takeId);
     },
     takes_analyze: () => ({
+      meanGridDistanceMs: null,
+      gridBiasMs: null,
+      gridSpreadMs: null,
+      attackLevelCvPct: null,
+      meanAbsCents: null,
+      pitchedFrames: 0,
       timingAccuracyPct: 0,
       dynamicConsistencyPct: 0,
       intonationAccuracyPct: 0,

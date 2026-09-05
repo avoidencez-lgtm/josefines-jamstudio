@@ -1,4 +1,10 @@
-import { CassetteTape, Export, Play, Star } from "@phosphor-icons/react";
+import {
+  CassetteTape,
+  Export,
+  Play,
+  Question,
+  Star,
+} from "@phosphor-icons/react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
@@ -13,10 +19,13 @@ import {
   formatJamTime,
   practiceStreakDays,
   takeDate,
+  takeMeasurements,
 } from "../lib/sessions/stats";
 import { useEngineStore } from "../store/engine";
 
-export const Sessions: React.FC = () => {
+export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
+  onHelp,
+}) => {
   const {
     takes,
     isRecording,
@@ -222,6 +231,7 @@ export const Sessions: React.FC = () => {
                 onAnalyze={() => analyzeTake(take.id)}
                 onExport={() => handleExport(take.id)}
                 onDelete={() => deleteTake(take.id)}
+                onHelp={() => onHelp("sessions.find-the-keeper")}
               />
             ))}
           </div>
@@ -237,6 +247,7 @@ interface TakeRowProps {
   onAnalyze: () => void;
   onExport: () => void;
   onDelete: () => void;
+  onHelp: () => void;
 }
 
 const TakeRow: React.FC<TakeRowProps> = ({
@@ -245,6 +256,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
   onAnalyze,
   onExport,
   onDelete,
+  onHelp,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [busy, setBusy] = useState(false);
@@ -299,7 +311,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
 
   return (
     <div className="py-4 flex flex-col gap-3">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
         <div className="flex flex-col gap-1 min-w-[200px]">
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono font-bold text-[var(--fg-0)]">
@@ -338,7 +350,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
         </div>
 
         {/* Action buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
           <Button
             size="sm"
             disabled={busy || isPreview || recording}
@@ -400,20 +412,24 @@ const TakeRow: React.FC<TakeRowProps> = ({
           >
             Layer in Write
           </Button>
-          {!analysis ? (
+          {!analysis || analysis.meanGridDistanceMs === undefined ? (
             <Button size="sm" variant="secondary" onClick={onAnalyze}>
-              Analyze Take
+              {analysis ? "Analyze again" : "Analyze Take"}
             </Button>
           ) : (
             <Button
               size="sm"
               variant={showJoReview ? "primary" : "secondary"}
+              aria-expanded={showJoReview}
               onClick={() => setShowJoReview(!showJoReview)}
             >
-              Jo Review
+              Evidence & exercise
             </Button>
           )}
 
+          <Button size="sm" variant="ghost" onClick={onHelp}>
+            <Question size={16} aria-hidden="true" /> Analysis help
+          </Button>
           <Button size="sm" variant="secondary" onClick={onExport}>
             <Export size={16} aria-hidden="true" /> Export stems
           </Button>
@@ -448,30 +464,25 @@ const TakeRow: React.FC<TakeRowProps> = ({
         </div>
       </div>
 
-      {/* Analysis Metrics Badges */}
       {analysis && (
-        <div className="flex flex-wrap items-center gap-3 p-2 bg-[var(--bg-2)] rounded border border-[var(--line)] text-xs font-mono">
-          <span className="text-[var(--fg-2)]">Metrics:</span>
-          <span className="px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-700/50 text-emerald-300">
-            Timing: {analysis.timingAccuracyPct}%
-          </span>
-          <span className="px-2 py-0.5 rounded bg-sky-950/60 border border-sky-700/50 text-sky-300">
-            Dynamics: {analysis.dynamicConsistencyPct}%
-          </span>
-          <span className="px-2 py-0.5 rounded bg-purple-950/60 border border-purple-700/50 text-purple-300">
-            Intonation: {analysis.intonationAccuracyPct}%
-          </span>
-          <span className="text-[11px] text-[var(--fg-2)] italic ml-auto">
-            {analysis.detectedTransients} pick strikes
-          </span>
-        </div>
+        <dl
+          aria-label="Take measurements"
+          className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 p-3 bg-[var(--bg-2)] rounded border border-[var(--line)] text-xs"
+        >
+          {takeMeasurements(analysis).map(([label, value]) => (
+            <div key={label} className="flex flex-wrap justify-between gap-2">
+              <dt className="text-[var(--fg-1)]">{label}</dt>
+              <dd className="font-mono text-[var(--fg-0)]">{value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
 
       {/* Jo Constructive Feedback Card */}
       {showJoReview && analysis && (
         <div className="p-3 bg-[var(--bg-1)] border border-[var(--line)] rounded-[var(--radius-m)] text-xs font-mono space-y-2">
           <div className="flex items-center gap-2 font-bold text-[var(--accent)]">
-            <span>Jo's Take Feedback</span>
+            <span>Local take analysis</span>
           </div>
           <p className="text-[var(--fg-1)]">{analysis.summary}</p>
           <div className="text-[11px] text-[var(--fg-2)] bg-[var(--bg-2)] p-2 rounded">

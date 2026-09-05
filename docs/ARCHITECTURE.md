@@ -584,3 +584,23 @@ Original and Film save completions preserve newer in-memory edits while advancin
 Song documents gain optional `body.referenceBlueprint` (reference name, optional media asset ID, mapped form) and `body.rigSnapshot` (profile ID, scene index, known controller values). Existing schema version 1 and unknown-field preservation carry these additive values. Settings gain `rehearsalSetlist` (entries name a chart, an optional groove checked against the chart's meter, tempo and count-in) and `audioProfiles`; other settings survive updates and profiles never include API credentials. Imported malformed presets are shown as errors rather than silently replaced.
 
 Offline melody extraction is a Rust worker: saved take ID → bounded WAV decode → existing DSP pitch tracker → sustained note events → editable UI sketch. Harmony ranking and film grid calculations are pure TypeScript; actual audio, playback, capture, MIDI, keys and disk writes remain native. The new Jo actions enter the same reviewed song-edit boundary as existing tools. See `docs/research/room-capabilities.md` and the current recipe in `docs/EXTENDING.md` for scope and limits. Older target architecture below is not a claim that all roadmap seams are implemented.
+
+## Current take-analysis evidence
+
+`takes_analyze` still reads the saved DI WAV and the take's tempo in Rust. Its
+additive result fields are `meanGridDistanceMs`, `gridBiasMs`, `gridSpreadMs`,
+`attackLevelCvPct`, `meanAbsCents` (nullable numbers), and `pitchedFrames`.
+Timing needs at least two attack candidates; level variation needs three.
+Silence and insufficient evidence return null measurements, not perfect scores.
+Legacy percentage fields remain for compatibility; zero can mean unavailable.
+The UI and Jo prefer the raw measurements and coverage counts. Older cached
+results offer Analyze again. Evidence & exercise opens the local summary and a
+controlled practice suggestion, without claiming an AI listening review.
+
+The grid is quarter notes from the start of the DI file; it does not compensate
+for intentional swing, syncopation, latency or changing tempo. Dynamics uses RMS
+windows of up to 20 ms after each attack. Pitch uses the existing McLeod tracker
+without bend exclusion. These are explicit limitations, not musical judgments.
+Analysis remains in the frontend's in-memory take cache; durable analysis,
+structured provider reviews, chord agreement, bend handling and the full M6
+pitch tolerance remain unfinished.

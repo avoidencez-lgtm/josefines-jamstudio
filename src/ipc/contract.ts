@@ -308,6 +308,12 @@ export interface CostTotal {
 }
 
 export interface TakeAnalysis {
+  meanGridDistanceMs?: number | null;
+  gridBiasMs?: number | null;
+  gridSpreadMs?: number | null;
+  attackLevelCvPct?: number | null;
+  pitchedFrames?: number;
+  meanAbsCents?: number | null;
   timingAccuracyPct: number;
   dynamicConsistencyPct: number;
   intonationAccuracyPct: number;

@@ -5,11 +5,19 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TakeAnalysis {
+    /// Legacy normalized summaries; zero also represents unavailable evidence.
+    /// Prefer the measurements and their explicit availability below.
     pub timing_accuracy_pct: f32,
     pub dynamic_consistency_pct: f32,
     pub intonation_accuracy_pct: f32,
     pub detected_transients: usize,
     pub summary: String,
+    pub mean_grid_distance_ms: Option<f32>,
+    pub grid_bias_ms: Option<f32>,
+    pub grid_spread_ms: Option<f32>,
+    pub attack_level_cv_pct: Option<f32>,
+    pub pitched_frames: usize,
+    pub mean_abs_cents: Option<f32>,
 }
 
 pub struct TakeAnalyzer {
@@ -23,53 +31,60 @@ impl TakeAnalyzer {
 
     /// Analyze guitar DI audio against target tempo for timing, dynamics, and intonation.
     pub fn analyze(&self, di_samples: &[f32], tempo: f64) -> TakeAnalysis {
-        if di_samples.is_empty() {
-            return TakeAnalysis {
-                timing_accuracy_pct: 100.0,
-                dynamic_consistency_pct: 100.0,
-                intonation_accuracy_pct: 100.0,
-                detected_transients: 0,
-                summary: "No audio data recorded in take.".into(),
-            };
-        }
-
         // 1. Attack candidates separated by a quiet interval.
         let transients = self.transients(di_samples);
 
-        // 2. Timing accuracy: offset from beat grid
-        let beat_samples = self.sample_rate as f64 * 60.0 / tempo.max(40.0);
-        let mut timing_errors = Vec::new();
+        // 2. Distance to the nearest quarter-note grid, not musical correctness.
+        // Positive offsets are late, negative offsets early; exact half beats tie late.
+        let timing =
+            (transients.len() >= 2 && tempo.is_finite() && tempo > 0.0 && self.sample_rate > 0)
+                .then(|| {
+                    let beat_samples = self.sample_rate as f64 * 60.0 / tempo;
+                    let offsets: Vec<f64> = transients
+                        .iter()
+                        .map(|(idx, _)| {
+                            let phase = *idx as f64 % beat_samples;
+                            let offset = if phase > beat_samples / 2.0 {
+                                phase - beat_samples
+                            } else {
+                                phase
+                            };
+                            offset * 1000.0 / self.sample_rate as f64
+                        })
+                        .collect();
+                    let mean = offsets.iter().sum::<f64>() / offsets.len() as f64;
+                    let distance =
+                        offsets.iter().map(|x| x.abs()).sum::<f64>() / offsets.len() as f64;
+                    let spread = (offsets.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
+                        / offsets.len() as f64)
+                        .sqrt();
+                    (distance as f32, mean as f32, spread as f32)
+                });
 
-        for &(idx, _) in &transients {
-            let beat_pos = (idx as f64) % beat_samples;
-            let offset = if beat_pos > beat_samples * 0.5 {
-                beat_samples - beat_pos
-            } else {
-                beat_pos
-            };
-            let norm_err = (offset / (beat_samples * 0.5)).min(1.0);
-            timing_errors.push(norm_err);
-        }
-
-        let avg_timing_err = if timing_errors.is_empty() {
-            0.1
-        } else {
-            timing_errors.iter().sum::<f64>() / timing_errors.len() as f64
-        };
-        let timing_score = ((1.0 - avg_timing_err * 0.5) * 100.0).clamp(65.0, 99.0) as f32;
-
-        // 3. Dynamic consistency: RMS variance across transients
-        let dynamic_score = if transients.len() > 2 {
-            let amps: Vec<f32> = transients.iter().map(|&(_, a)| a).collect();
-            let mean = amps.iter().sum::<f32>() / amps.len() as f32;
+        // 3. Relative variation of up-to-20 ms RMS windows after detected attacks.
+        let level_cv = (transients.len() >= 3 && self.sample_rate > 0).then(|| {
+            let window = (self.sample_rate as usize / 50).max(1);
+            let levels: Vec<f64> = transients
+                .iter()
+                .map(|(idx, _)| {
+                    let block = &di_samples[*idx..(*idx + window).min(di_samples.len())];
+                    (block.iter().map(|s| (*s as f64).powi(2)).sum::<f64>() / block.len() as f64)
+                        .sqrt()
+                })
+                .collect();
+            let mean = levels.iter().sum::<f64>() / levels.len() as f64;
             let variance =
-                amps.iter().map(|&a| (a - mean).powi(2)).sum::<f32>() / amps.len() as f32;
-            let std_dev = variance.sqrt();
-            let coef_var = (std_dev / mean.max(0.01)).min(1.0);
-            ((1.0 - coef_var * 0.4) * 100.0).clamp(70.0, 98.0)
-        } else {
-            92.0
-        };
+                levels.iter().map(|a| (a - mean).powi(2)).sum::<f64>() / levels.len() as f64;
+            (variance.sqrt() / mean.max(f64::EPSILON) * 100.0) as f32
+        });
+        let timing_score = timing
+            .map(|(distance, _, _)| {
+                (100.0 * (1.0 - distance as f64 / (30_000.0 / tempo))).clamp(0.0, 100.0) as f32
+            })
+            .unwrap_or(0.0);
+        let dynamic_score = level_cv
+            .map(|cv| (100.0 - cv).clamp(0.0, 100.0))
+            .unwrap_or(0.0);
 
         // 4. Intonation: how far confident, pitched frames sit from the nearest semitone.
         let intonation = self.intonation(di_samples);
@@ -83,12 +98,17 @@ impl TakeAnalyzer {
             ),
             None => " No sustained pitched notes were found to judge intonation.".to_string(),
         };
+        let timing_text = match timing {
+            Some((distance, bias, spread)) => format!(" Mean distance to the quarter-note grid: {distance:.1} ms; signed bias {bias:+.1} ms (positive is late); spread {spread:.1} ms. Offbeat notes may be intentional."),
+            None => " Not enough attacks or valid tempo information for grid timing.".into(),
+        };
+        let dynamics_text = match level_cv {
+            Some(cv) => format!(" Attack-level variation: {cv:.1}% (RMS coefficient of variation). Accents may be intentional."),
+            None => " At least three attacks are needed to compare dynamics.".into(),
+        };
         let summary = format!(
-            "Recorded {} pick transients. Timing locked at {:.1}%, dynamics consistency at {:.1}%.{}",
-            transients.len(),
-            timing_score,
-            dynamic_score,
-            intonation_text
+            "Detected {} attack candidates.{timing_text}{dynamics_text}{intonation_text}",
+            transients.len()
         );
 
         TakeAnalysis {
@@ -97,6 +117,12 @@ impl TakeAnalyzer {
             intonation_accuracy_pct: intonation_score,
             detected_transients: transients.len(),
             summary,
+            mean_grid_distance_ms: timing.map(|v| v.0),
+            grid_bias_ms: timing.map(|v| v.1),
+            grid_spread_ms: timing.map(|v| v.2),
+            attack_level_cv_pct: level_cv,
+            pitched_frames: intonation.map(|v| v.1).unwrap_or(0),
+            mean_abs_cents: intonation.map(|v| v.0),
         }
     }
 
@@ -185,6 +211,49 @@ mod tests {
         (0..(secs * rate as f32) as usize)
             .map(|i| 0.5 * (2.0 * std::f32::consts::PI * hz * i as f32 / rate as f32).sin())
             .collect()
+    }
+
+    #[test]
+    fn empty_and_silent_input_have_no_measurements_or_perfect_scores() {
+        let analyzer = TakeAnalyzer::new(48_000);
+        for samples in [vec![], vec![0.0; 48_000]] {
+            let result = analyzer.analyze(&samples, 120.0);
+            assert_eq!(result.detected_transients, 0);
+            assert_eq!(result.timing_accuracy_pct, 0.0);
+            assert_eq!(result.dynamic_consistency_pct, 0.0);
+            assert_eq!(result.intonation_accuracy_pct, 0.0);
+            assert!(result.mean_grid_distance_ms.is_none());
+            assert!(result.attack_level_cv_pct.is_none());
+            assert!(result.mean_abs_cents.is_none());
+            assert_eq!(result.pitched_frames, 0);
+        }
+    }
+
+    #[test]
+    fn grid_offsets_and_rms_variation_match_known_pulses() {
+        let analyzer = TakeAnalyzer::new(48_000);
+        for (offsets, bias, distance, spread) in [
+            ([960; 4], 20.0, 20.0, 0.0),
+            ([-960; 4], -20.0, 20.0, 0.0),
+            ([960, -960, 480, -480], 0.0, 15.0, 15.8114),
+        ] {
+            let mut samples = vec![0.0; 120_000];
+            for (i, offset) in offsets.iter().enumerate() {
+                let start = ((i + 1) as i32 * 24_000 + offset) as usize;
+                samples[start..start + 100].fill((i + 1) as f32 * 0.2);
+            }
+            let result = analyzer.analyze(&samples, 120.0);
+            assert_eq!(result.detected_transients, 4);
+            // Timing tolerance: 2 ms. RMS CV tolerance: 0.1 percentage point.
+            assert!((result.grid_bias_ms.unwrap() - bias).abs() < 2.0);
+            assert!((result.mean_grid_distance_ms.unwrap() - distance).abs() < 2.0);
+            assert!((result.grid_spread_ms.unwrap() - spread).abs() < 2.0);
+            assert!((result.attack_level_cv_pct.unwrap() - 44.7214).abs() < 0.1);
+            assert!(analyzer
+                .analyze(&samples, f64::NAN)
+                .mean_grid_distance_ms
+                .is_none());
+        }
     }
 
     #[test]

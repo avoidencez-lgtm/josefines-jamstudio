@@ -254,6 +254,10 @@ Søk blant opptak, filtrer favoritter og oppdater etter innspilling. Listen to g
 
 Anslagsdeteksjonen venter på 5 ms med lavt nivå før et nytt anslag kan telles, og krever minst 20 ms mellom kandidatene. Dermed telles ikke nullgjennomgangene i en vedvarende tone som nye anslag. Svake opptak, overlappende toner og legato uten et stille mellomrom kan fortsatt bli oversett; resultatet er et anslag, ikke en notetranskripsjon.
 
+Bruk Analysis help ved opptaket for å åpne denne forklaringen. Evidence & exercise viser det lokale sammendraget og øvelsesforslaget.
+
+Take measurements erstatter kvalitetskarakterer med målinger. Grid distance er gjennomsnittlig absolutt avstand til nærmeste firedelsslag; bias er fortegnet (positiv er sent, negativ er tidlig), og spread er standardavviket til disse avvikene. Minst to registrerte anslag og et gyldig tempo kreves. Målingen kjenner ikke til tilsiktet swing eller synkoper. Attack-level variation er variasjonskoeffisienten til RMS-nivåer i vinduer på opptil 20 ms etter minst tre registrerte anslag; lavere variasjon betyr ikke nødvendigvis bedre musikk. Pitch distance er gjennomsnittlig absolutt centavvik fra nærmeste likesvevende tone over de oppgitte sikre tonevinduene, ikke en vurdering av bend eller vibrato. Manglende målinger vises som Not enough evidence, også ved stillhet. Eldre mellomlagrede resultater krever Analyze igjen. Øvelsesforslag er kontrollerte sammenligninger, ikke diagnoser av fremføringen.
+
 ### Justering og separate spor
 
 Guitar offset er et manuelt antall sampler som brukes til å justere inngangen mot bandet. Automatisk kalibrering via kabelsløyfe er ikke tilgjengelig. Mål justeringen i DAW på den faktiske riggen. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.

@@ -197,18 +197,15 @@ export const App: React.FC = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showHelp, showClose]);
 
+  const openHelp = (topic: string) => {
+    setHelpTopic(topic);
+    setHelpRequest((n) => n + 1);
+    setShowHelp(true);
+  };
   const renderScreen = () => {
     switch (currentScreen) {
       case "originals":
-        return (
-          <Originals
-            onHelp={(topic) => {
-              setHelpTopic(topic);
-              setHelpRequest((n) => n + 1);
-              setShowHelp(true);
-            }}
-          />
-        );
+        return <Originals onHelp={openHelp} />;
       case "stage":
         return <Stage />;
       case "library":
@@ -222,7 +219,7 @@ export const App: React.FC = () => {
       case "music-video":
         return <MusicVideo />;
       case "sessions":
-        return <Sessions />;
+        return <Sessions onHelp={openHelp} />;
       case "rig":
         return <Rig />;
       case "settings":

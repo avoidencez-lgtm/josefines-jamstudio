@@ -254,6 +254,10 @@ Search takes, filter favourites and refresh after recording. Listen to guitar au
 
 Attack detection waits for 5 ms of quiet before counting another attack, with at least 20 ms between candidates. This prevents a sustained note’s zero crossings from being counted as new picks. Quiet recordings, overlapping notes and legato without a quiet gap can still be missed; the result is an estimate, not a note transcription.
 
+Use Analysis help beside the take to open this explanation. Evidence & exercise opens the local summary and practice suggestion.
+
+Take measurements replace quality-score badges with evidence. Grid distance is the mean absolute distance to the nearest quarter-note beat; bias is signed (positive late, negative early), and spread is the standard deviation of those offsets. At least two detected attacks and a valid tempo are required. This grid does not recognize intended swing or syncopation. Attack-level variation is the coefficient of variation of RMS levels in up-to-20-ms windows after at least three detected attacks; lower variation is not necessarily better music. Pitch distance is the mean absolute cents from the nearest equal-tempered note over the reported confident pitched frames, not a verdict on bends or vibrato. Missing measurements say Not enough evidence, including silence. Older cached results require Analyze again. Suggested drills are controlled comparisons, not diagnoses of the performance.
+
 ### Alignment and stems
 
 Guitar offset is the manual sample offset used to align input with the band. Automatic cable-loopback calibration is not available. Measure alignment in your DAW on the actual rig. New full recordings contain separate guitar, drums, bass and comp, plus band/master reference mixes, scheduled band-note MIDI, a tempo map and the performance snapshot. Referenced guitar layers export as aligned WAVs. Capture-only ideas do not reconstruct band MIDI. Missing files are reported in the export result.

@@ -462,15 +462,29 @@ fn analysis_of_a_synthetic_a3_sine_finds_pitched_frames_in_tune() {
     assert_eq!(transients, 1, "one sustained note: {analysis}");
     let summary = analysis["summary"].as_str().unwrap();
     assert!(
-        summary.starts_with(&format!("Recorded {transients} pick transients.")),
+        summary.starts_with(&format!("Detected {transients} attack candidates.")),
         "{summary}"
     );
     assert!(summary.contains("pitched frames"), "{summary}");
     assert!(!summary.contains("No sustained pitched notes"), "{summary}");
     let timing = analysis["timingAccuracyPct"].as_f64().unwrap();
-    assert!((65.0..=99.0).contains(&timing), "{analysis}");
+    assert_eq!(
+        timing, 0.0,
+        "one attack is insufficient for timing: {analysis}"
+    );
     let dynamics = analysis["dynamicConsistencyPct"].as_f64().unwrap();
-    assert!((70.0..=98.0).contains(&dynamics), "{analysis}");
+    assert_eq!(
+        dynamics, 0.0,
+        "one attack is insufficient for dynamics: {analysis}"
+    );
+    assert!(analysis["meanGridDistanceMs"].is_null());
+    assert!(analysis["attackLevelCvPct"].is_null());
+    assert!(analysis["pitchedFrames"].as_u64().unwrap() > 0);
+    let cents = analysis["meanAbsCents"].as_f64().unwrap();
+    // Expose the unchanged detector measurement behind the existing >=90 score.
+    // Rounding that score permits up to 5.25 cents; this is not M6's ±3-cent gate.
+    assert!((0.0..=5.25).contains(&cents), "{analysis}");
+    assert_eq!(((1.0 - cents / 50.0) * 100.0).round(), intonation);
 
     let ghost = unique("no-such-take");
     assert_eq!(

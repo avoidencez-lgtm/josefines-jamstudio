@@ -3,6 +3,7 @@ import {
   drillFor,
   formatJamTime,
   practiceStreakDays,
+  takeMeasurements,
 } from "../../src/lib/sessions/stats";
 
 const day = (offset: number, now: Date) => {
@@ -65,6 +66,9 @@ describe("drill suggestion", () => {
     intonationAccuracyPct: 90,
     detectedTransients: 40,
     summary: "",
+    meanGridDistanceMs: 10,
+    meanAbsCents: 5,
+    attackLevelCvPct: 10,
   };
 
   it("asks for more material when too few attacks were detected", () => {
@@ -73,15 +77,32 @@ describe("drill suggestion", () => {
     );
   });
 
-  it("targets the weakest metric", () => {
-    expect(drillFor({ ...base, timingAccuracyPct: 70 }, 120)).toMatch(
-      /only the click at 100 BPM/,
+  it("offers controlled exercises without treating musical choices as errors", () => {
+    expect(drillFor({ ...base, meanGridDistanceMs: 50 }, 120)).toMatch(
+      /quarter notes with the click at 100 BPM/,
     );
-    expect(drillFor({ ...base, dynamicConsistencyPct: 70 }, 120)).toMatch(
-      /even pick attack/,
+    expect(drillFor({ ...base, attackLevelCvPct: 40 }, 120)).toMatch(
+      /evenly picked notes/,
     );
-    expect(drillFor({ ...base, intonationAccuracyPct: 70 }, 120)).toMatch(
-      /tuner/,
+    expect(drillFor({ ...base, meanAbsCents: 30 }, 120)).toMatch(/tuner/);
+  });
+
+  it("distinguishes missing evidence from a measured zero", () => {
+    const rows = takeMeasurements({
+      ...base,
+      meanGridDistanceMs: 0,
+      gridBiasMs: null,
+      meanAbsCents: null,
+      pitchedFrames: 0,
+    });
+    expect(rows).toContainEqual(["Quarter-note grid distance", "0.0 ms"]);
+    expect(rows).toContainEqual([
+      "Grid bias (+ late / − early)",
+      "Not enough evidence",
+    ]);
+    expect(rows).toContainEqual(["Pitched frames", "0"]);
+    expect(drillFor({ ...base, meanGridDistanceMs: undefined }, 120)).toMatch(
+      /again/,
     );
   });
 });

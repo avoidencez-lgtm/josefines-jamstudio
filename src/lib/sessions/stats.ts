@@ -39,22 +39,38 @@ export function formatJamTime(totalSecs: number): string {
   return h > 0 ? `${h} h ${m} min` : `${m} min`;
 }
 
-/** Picks one drill from the weakest of the three measured scores. */
+export function takeMeasurements(a: TakeAnalysis): [string, string][] {
+  if (a.meanGridDistanceMs === undefined)
+    return [["Measurements", "Analyze again to get evidence and coverage."]];
+  const value = (n: number | null | undefined, unit: string) =>
+    n == null ? "Not enough evidence" : `${n.toFixed(1)} ${unit}`;
+  return [
+    ["Detected attacks", String(a.detectedTransients)],
+    ["Quarter-note grid distance", value(a.meanGridDistanceMs, "ms")],
+    ["Grid bias (+ late / − early)", value(a.gridBiasMs, "ms")],
+    ["Grid spread", value(a.gridSpreadMs, "ms")],
+    ["Attack-level variation", value(a.attackLevelCvPct, "% CV")],
+    ["Pitch distance to nearest note", value(a.meanAbsCents, "cents")],
+    ["Pitched frames", String(a.pitchedFrames ?? 0)],
+  ];
+}
+
+/** Offer a controlled exercise, not a diagnosis of musical quality. */
 export function drillFor(a: TakeAnalysis, tempo: number): string {
+  if (a.meanGridDistanceMs === undefined)
+    return "Analyze this take again before choosing an exercise from its measurements.";
   if (a.detectedTransients < 8) {
     return "Too few pick attacks were detected to judge this take. Record at least a full chorus with the DI channel selected.";
   }
   const slow = Math.max(40, tempo - 20);
-  const weakest = Math.min(
-    a.timingAccuracyPct,
-    a.dynamicConsistencyPct,
-    a.intonationAccuracyPct,
-  );
-  if (weakest === a.timingAccuracyPct) {
-    return `Five minutes with only the click at ${slow} BPM, muting the band, landing every downbeat before bringing the tempo back to ${tempo}.`;
+  if (a.meanAbsCents != null && a.meanAbsCents > 15) {
+    return `Try sustained, unbent notes at ${slow} BPM and compare them with the tuner. Bends and vibrato can intentionally move away from equal temperament.`;
   }
-  if (weakest === a.dynamicConsistencyPct) {
-    return `Play the form once at ${tempo} BPM at a single, even pick attack, then once accenting only beats 2 and 4, listening back to the DI stem for evenness.`;
+  if (a.meanGridDistanceMs != null && a.meanGridDistanceMs > 30) {
+    return `Try eight straight quarter notes with the click at ${slow} BPM and compare another take. Syncopation and swing can intentionally sit away from this grid.`;
   }
-  return `Loop the section with the most bends at ${slow} BPM and check every bend against the tuner before releasing it.`;
+  if (a.attackLevelCvPct != null && a.attackLevelCvPct > 25) {
+    return `Try eight evenly picked notes at ${tempo} BPM, then repeat with deliberate accents and listen back. Variation is not automatically a problem.`;
+  }
+  return "Listen back and choose one phrase to keep or improve. These measurements do not judge phrasing, feel or songwriting quality.";
 }

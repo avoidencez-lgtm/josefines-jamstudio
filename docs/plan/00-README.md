@@ -183,3 +183,12 @@ The 2026-09-05 pass adds searchable English/Bokmål help, generated manuals for 
 ## One capability per studio room
 
 The next 2026-09-05 pass adds melody-to-harmony sketches, rehearsal setlists, harmonic discovery, three-perspective coaching, reference forms, arrangement briefs, beat-grid cuts, blind take comparisons, song tone snapshots and audio setup profiles. English/Bokmål help covers all ten; [validation, the live-test incident and remaining owner gates](../reviews/room-capabilities-2026-09-05.md) distinguish browser, native headless, live CLI and physical-hardware evidence. The existing roadmap and signing/owner gates remain open.
+
+### 2026-09-05 take-analysis evidence (implementation branch)
+
+Sessions now presents measured grid distance, early/late bias, spread, attack-level
+variation and pitch coverage. Missing evidence is explicit. Local exercises do not
+rate musical quality; Analysis help opens the English/Bokmål explanation beside
+the take. Existing cached scores can be reanalysed. The IPC adds raw measurements
+without removing legacy fields. This advances M6 but does not complete durable
+analysis, bend-aware precision, chord agreement or structured provider reviews.
