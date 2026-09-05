@@ -91,6 +91,8 @@ describe("music video seam", () => {
     expect(clampGenerationSeconds("veo", 2)).toBe(4);
     expect(clampGenerationSeconds("veo", 10)).toBe(8);
     expect(clampGenerationSeconds("veo", 6)).toBe(6);
+    expect(clampGenerationSeconds("veo", Number.NaN)).toBe(8);
+    expect(clampGenerationSeconds("veo", Number.POSITIVE_INFINITY)).toBe(8);
     expect(clampGenerationSeconds("omni", 2)).toBe(2);
   });
   it("director edits preserve clips and timing and reject missing or duplicated shots", () => {

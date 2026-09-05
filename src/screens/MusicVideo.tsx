@@ -193,6 +193,12 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
     );
   const generate = (kind: "audio" | "video") =>
     work(`Generating ${kind} · this can take several minutes`, async () => {
+      const seconds =
+        kind === "audio"
+          ? audioSeconds
+          : clampGenerationSeconds(shot.catalogId, shot.generationSeconds);
+      if (kind === "video" && seconds !== shot.generationSeconds)
+        editShot({ generationSeconds: seconds });
       // Save the creative plan before any paid request. The job receipt is also persisted in Rust.
       await m.save();
       const selectedShotId = shot?.id;
@@ -204,7 +210,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             kind === "audio"
               ? audioPrompt
               : `${project.direction}\n${shot.prompt}`,
-          seconds: kind === "audio" ? audioSeconds : shot.generationSeconds,
+          seconds,
           ratio: project.ratio,
           instrumental: kind === "audio" && instrumental,
           workflow:
@@ -963,7 +969,10 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                     max={shot.catalogId === "veo" ? 8 : 10}
                     step={shot.catalogId === "veo" ? 2 : 1}
                     disabled={locked}
-                    value={shot.generationSeconds}
+                    value={clampGenerationSeconds(
+                      shot.catalogId,
+                      shot.generationSeconds,
+                    )}
                     onChange={(e) =>
                       editShot({
                         generationSeconds: clampGenerationSeconds(

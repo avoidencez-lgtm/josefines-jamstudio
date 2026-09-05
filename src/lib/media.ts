@@ -14,12 +14,12 @@ export function clampGenerationSeconds(
   catalogId: string,
   seconds: number,
 ): number {
+  if (!Number.isFinite(seconds)) return 8;
   if (catalogId === "veo") {
     return VEO_SECONDS.reduce((best, n) =>
       Math.abs(n - seconds) < Math.abs(best - seconds) ? n : best,
     );
   }
-  if (!Number.isFinite(seconds)) return 8;
   return Math.min(10, Math.max(2, Math.round(seconds)));
 }
 export interface MediaAsset {
