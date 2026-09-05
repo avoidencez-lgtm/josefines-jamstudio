@@ -429,6 +429,12 @@ impl AudioEngine {
     }
 
     pub fn transport_stop(&self) {
+        let _gate = self.render_gate.lock();
+        self.stop_transport_under_render_gate();
+    }
+
+    // Caller holds render_gate so a block cannot pair a stopped clock with old cues.
+    fn stop_transport_under_render_gate(&self) {
         if let Some(song) = self.reference.lock().as_mut() {
             song.stop();
         }
@@ -439,6 +445,7 @@ impl AudioEngine {
     }
 
     pub fn transport_seek_bar(&self, bar: u32) {
+        let _gate = self.render_gate.lock();
         self.timeline.lock().seek_bar(bar);
         self.sequencer.lock().reset();
     }
@@ -473,7 +480,7 @@ impl AudioEngine {
     pub fn load_reference(&mut self, song: crate::song::ReferenceSong) -> Result<(), String> {
         self.ensure_timing_editable()?;
         let _gate = self.render_gate.lock();
-        self.transport_stop();
+        self.stop_transport_under_render_gate();
         self.clips.lock().clear();
         self.song_snapshot = serde_json::json!({"reference": song.info, "beatGrid": "unanalysed"});
         *self.reference.lock() = Some(song);
@@ -483,7 +490,7 @@ impl AudioEngine {
     pub fn unload_reference(&mut self) -> Result<(), String> {
         self.ensure_timing_editable()?;
         let _gate = self.render_gate.lock();
-        self.transport_stop();
+        self.stop_transport_under_render_gate();
         self.reference.lock().take();
         self.song_snapshot = serde_json::Value::Null;
         Ok(())
@@ -658,7 +665,7 @@ impl AudioEngine {
         }
         let prepared = self.prepare_recorder(session_id, true)?;
         let _gate = self.render_gate.lock();
-        self.transport_stop();
+        self.stop_transport_under_render_gate();
         self.transport_set_count_in(0);
         if let Some(bpm) = self.song_snapshot["body"]["chart"]["defaultBpm"].as_f64() {
             self.transport_set_tempo(bpm);
@@ -1621,6 +1628,32 @@ fn dirs_base() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stop_cannot_split_a_render_blocks_transport_and_band_state() {
+        let engine = AudioEngine::new(AudioConfig::default());
+        engine.transport_set_count_in(0);
+        engine.transport_play();
+        engine.sequencer.lock().active_cue = Cue::Fill;
+        let gate = engine.render_gate.lock();
+        thread::scope(|scope| {
+            let (started, ready) = std::sync::mpsc::channel();
+            let (finished, done) = std::sync::mpsc::channel();
+            let engine = &engine;
+            scope.spawn(move || {
+                started.send(()).unwrap();
+                engine.transport_stop();
+                finished.send(()).unwrap();
+            });
+            ready.recv_timeout(Duration::from_secs(2)).unwrap();
+            let blocked = done.recv_timeout(Duration::from_millis(50)).is_err();
+            drop(gate);
+            assert!(blocked, "Stop must wait for the current render block");
+            done.recv_timeout(Duration::from_secs(2)).unwrap();
+        });
+        assert_eq!(engine.timeline.lock().state, TransportState::Stopped);
+        assert_eq!(engine.sequencer.lock().active_cue, Cue::None);
+    }
 
     #[test]
     fn reference_transport_records_stereo_source_without_generated_parts_or_midi() {

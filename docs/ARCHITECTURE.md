@@ -775,7 +775,11 @@ FFmpeg decoder and cancellation. It decodes up to twenty minutes to a temporary
 removes the temporary decode. No library document or source is rewritten. Loading
 refuses an active recording both before preparation and before installation.
 
-The existing Play/Pause/Stop commands control the loaded source. Its cursor advances
+The existing Play/Pause/Stop commands control the loaded source. Stop and bar seek
+hold the existing render gate while resetting clock and band state; a render block
+cannot observe a stopped clock paired with a stale fill. Source replacement and
+record-from-start reuse the reset while already holding that gate.
+Its cursor advances
 only with frames prepared for the existing output queue; there is no wall-clock
 audio timer or JS audio. The chart timeline stays stopped. Reference stereo replaces
 the generated band bus before voice ducking, and travels with the same output frames
