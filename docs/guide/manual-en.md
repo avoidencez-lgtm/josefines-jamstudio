@@ -184,6 +184,8 @@ Voice setup also accepts a global shortcut, default CommandOrControl+Shift+J. Sa
 
 In Write → Hands-free controls, learn Talk / send to Jo and enable pedal actions. Program Change has no release signal: press once to capture, again to send; a press during transcription/thinking cancels. CC/note pedals use the same two-press behavior. Disabling or reconnecting pedal controls cancels capture. Provider first-audio latency and a real headset/pedal run remain unverified.
 
+Speech usage shows submitted STT seconds and TTS characters, including failed or interrupted requests, plus an all-time estimate and the number of unpriced calls. In Jo AI → Voice setup, enter your Scribe v2 USD per hour and Flash v2.5 USD per 1,000 characters, then Save voice setup. Blank means unknown; zero is an explicit zero estimate. No rates are assumed. Each request keeps its original estimate when prices change. Allowances, taxes, voice-specific charges and the final provider invoice are not calculated. Older log entries remain readable but cannot gain missing speech units.
+
 ### Connect a text API
 
 In Settings → AI & models choose Gemini, OpenAI, Claude API or OpenRouter. Store the correct API key, choose a compatible model ID, and Save AI settings. Load provider models fetches a catalog; listed models are not all guaranteed compatible. Test model sends a small billable request only when pressed. Jo and Song Lab share this choice. A failed request does not silently switch to another paid provider. Supported simple English intents can still work locally.
@@ -333,6 +335,8 @@ On Mac allow microphone access for Jamstudio when requested; the selected audio 
 AI & models holds provider selection, editable model IDs, native-agent detection and API keys. Keys are saved to Windows credentials or Mac Keychain and are never written to song documents. The key input is cleared after storage; the app reports presence without returning the stored secret. Save AI settings persists the chosen model/limits. Model changes clear stale price estimates. If access fails, Keychain unavailable means the saved key could not be checked, not that it is missing. Unlock or allow access to the OS keychain, then use Check key status under API keys. This reads presence only and makes no paid request. Failed removals remain errors; the app does not claim the key was removed. Jo reports a failed provider request without running offline commands.
 
 Usage records provider/model/status/time/bytes and optional estimates, not prompts or credentials. Output token limits and USD-per-million estimates help planning; they are not enforced account spending caps or final invoices. Set account budgets with the provider and check its dashboard. Media requests and installed CLI usage have their own billing rules.
+
+Speech usage shows submitted STT seconds and TTS characters, including failed or interrupted requests, plus an all-time estimate and the number of unpriced calls. In Jo AI → Voice setup, enter your Scribe v2 USD per hour and Flash v2.5 USD per 1,000 characters, then Save voice setup. Blank means unknown; zero is an explicit zero estimate. No rates are assumed. Each request keeps its original estimate when prices change. Allowances, taxes, voice-specific charges and the final provider invoice are not calculated. Older log entries remain readable but cannot gain missing speech units.
 
 ### Audio setup profiles
 

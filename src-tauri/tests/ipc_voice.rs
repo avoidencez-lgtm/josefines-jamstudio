@@ -45,4 +45,19 @@ fn voice_commands_are_registered_guarded_and_cancelled_by_generation() {
         )
         .is_err());
     assert_eq!(std::env::var_os("JAM_LIVE"), None);
+    let mut settings = studio.ok("settings_get", json!({}));
+    settings["voice"] =
+        json!({"voiceId":"fixture","sttUsdPerHour":0.22,"ttsUsdPer1k":0.05,"futureField":true});
+    studio.ok("settings_set", json!({"settings":settings}));
+    assert_eq!(
+        studio.ok("settings_get", json!({}))["voice"],
+        settings["voice"]
+    );
+    settings["voice"]["ttsUsdPer1k"] = json!(-1);
+    studio.ok("settings_set", json!({"settings":settings}));
+    let refused = studio
+        .invoke("voice_speak", json!({"text":"No request", "generation":1}))
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("Speech prices"), "{refused}");
 }

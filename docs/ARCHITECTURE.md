@@ -726,3 +726,19 @@ fabricated MIDI release edge. The shared `handleJoQuery` in `conversation.ts`
 serves Jo AI, Stage and voice; results/history/review rules remain identical.
 The toolbar exposes hold/cancel throughout navigation. An unrelated typed draft
 is preserved when a global voice command arrives.
+
+### Speech usage accounting (2026-09-06)
+
+Native `net::voice` records `sttSeconds` from the captured frame count/rate and
+`ttsCharacters` as Unicode scalar values in submitted text. These optional fields
+extend `CostEntry`; old JSONL entries remain readable with unknown units. Totals
+add seconds, characters, optional `estimatedCostUsd` and `unpricedCalls`. Estimates
+include attempted requests even when the response fails, because billing may have
+occurred. These are submitted units, not provider-confirmed charges.
+
+`settings.voice.sttUsdPerHour` and `ttsUsdPer1k` are nullable, finite USD rates in
+0..10000, edited in Jo voice setup. Blank is unknown; explicit zero stays zero.
+Rust snapshots the estimate into each request's existing log entry; editing a
+rate never rewrites history. STT uses seconds / 3600 and TTS uses characters / 1000.
+`cost:state` refreshes the existing Settings usage view. Unknown entries are counted
+separately from the known estimate subtotal. No account budget or invoice is implied.

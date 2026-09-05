@@ -300,6 +300,8 @@ export interface CostEntry {
   error?: string | null;
   model?: string | null;
   estimatedCostUsd?: number | null;
+  sttSeconds?: number | null;
+  ttsCharacters?: number | null;
 }
 
 export interface CostTotal {
@@ -308,6 +310,10 @@ export interface CostTotal {
   failures: number;
   bytesIn: number;
   bytesOut: number;
+  sttSeconds: number;
+  ttsCharacters: number;
+  estimatedCostUsd: number | null;
+  unpricedCalls: number;
 }
 
 export interface TakeAnalysis {

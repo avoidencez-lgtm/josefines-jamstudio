@@ -295,6 +295,7 @@ impl AgentRunner {
             error: result.as_ref().err().cloned(),
             model: Some(req.model),
             estimated_cost_usd: None,
+            ..CostEntry::default()
         };
         if log.append(&entry).is_err() {
             tracing::warn!("Could not save agent usage metadata");

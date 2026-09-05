@@ -24,6 +24,8 @@ struct Config {
     voice_id: String,
     #[serde(default = "default_duck")]
     duck_db: f32,
+    #[serde(flatten)]
+    prices: net::voice::Prices,
 }
 fn default_duck() -> f32 {
     -9.0
@@ -37,6 +39,7 @@ fn config() -> Result<Config, String> {
         .cloned()
         .unwrap_or(serde_json::json!({}));
     let cfg: Config = serde_json::from_value(value).map_err(|_| "Check the voice settings.")?;
+    cfg.prices.validate()?;
     if cfg.voice_id.is_empty()
         || cfg.voice_id.len() > 100
         || !cfg
@@ -199,7 +202,18 @@ pub async fn voice_ptt<R: tauri::Runtime>(
     .await
     .map_err(|_| "Microphone worker stopped.")??;
     let (wav, seconds) = audio;
-    let result = net::voice::transcribe(wav, state.secret_store.as_ref(), &state.cost_log).await;
+    let result = async {
+        let prices = config()?.prices;
+        net::voice::transcribe(
+            wav,
+            seconds,
+            &prices,
+            state.secret_store.as_ref(),
+            &state.cost_log,
+        )
+        .await
+    }
+    .await;
     let _ = app.emit("cost:state", state.cost_log.totals());
     let mut session = state.voice.lock();
     if session.generation != generation {
@@ -232,6 +246,7 @@ pub async fn voice_speak<R: tauri::Runtime>(
     let result = net::voice::speak(
         &text,
         &cfg.voice_id,
+        &cfg.prices,
         state.secret_store.as_ref(),
         &state.cost_log,
     )
