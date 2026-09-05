@@ -285,6 +285,7 @@ export interface ProviderInfo {
   id: string;
   description: string;
   hasKey: boolean;
+  keyError?: string;
 }
 
 export interface CostEntry {

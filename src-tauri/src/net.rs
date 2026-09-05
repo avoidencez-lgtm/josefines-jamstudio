@@ -85,15 +85,21 @@ pub struct ProviderInfo {
     pub id: String,
     pub description: String,
     pub has_key: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_error: Option<String>,
 }
 
 pub fn providers_info(store: &dyn SecretStore) -> Vec<ProviderInfo> {
     PROVIDERS
         .iter()
-        .map(|p| ProviderInfo {
-            id: p.id.to_string(),
-            description: p.description.to_string(),
-            has_key: store.has(p.id),
+        .map(|p| {
+            let status = store.has(p.id);
+            ProviderInfo {
+                id: p.id.to_string(),
+                description: p.description.to_string(),
+                has_key: status.as_ref().copied().unwrap_or(false),
+                key_error: status.err(),
+            }
         })
         .collect()
 }
@@ -316,12 +322,7 @@ pub async fn provider_fetch(
     log: &CostLog,
 ) -> Result<FetchResponse, String> {
     let (entry, url) = validate(&req)?;
-    let key = store.get(entry.id).ok_or_else(|| {
-        format!(
-            "no API key for \"{}\": add it under Settings → API credentials",
-            entry.id
-        )
-    })?;
+    let key = store.require(entry.id)?;
     live_guard(&format!("provider \"{}\"", entry.id))?;
 
     let client = provider_client().build().map_err(|e| e.to_string())?;
@@ -412,7 +413,7 @@ pub async fn provider_fetch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keys::MemoryStore;
+    use crate::keys::{FailingStore, MemoryStore};
 
     fn req(provider: &str, path: &str) -> FetchRequest {
         FetchRequest {
@@ -508,6 +509,26 @@ mod tests {
         assert!(
             log.list(10).is_empty(),
             "nothing is logged when nothing was sent"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn keychain_failure_is_not_reported_as_missing_key() {
+        let store = FailingStore {
+            get_error: Some("keychain unavailable: locked".into()),
+            delete_error: None,
+        };
+        let dir = std::env::temp_dir().join(format!("jam-net-keychain-{}", std::process::id()));
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        let err = provider_fetch(req("gemini", "/v1beta/models"), &store, &log)
+            .await
+            .unwrap_err();
+        assert!(err.contains("keychain unavailable"), "{err}");
+        assert!(!err.contains("no API key"), "{err}");
+        assert!(
+            log.list(10).is_empty(),
+            "nothing is logged when the keychain cannot be read"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

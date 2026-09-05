@@ -534,7 +534,7 @@ pub async fn media_generate(
         .map_err(|_| "Another media operation is running")?;
     CANCEL.store(false, Ordering::Relaxed);
     let (mut m, path, body) = api::request(&request)?;
-    if !api::configured(&m, state.secret_store.as_ref()) {
+    if !api::configured(&m, state.secret_store.as_ref())? {
         return Err(format!("Add a {} API key in Settings.", m.provider));
     }
     platform::find_agent("ffprobe", "")

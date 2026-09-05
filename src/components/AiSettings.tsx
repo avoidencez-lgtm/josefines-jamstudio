@@ -17,14 +17,17 @@ const field =
   "min-w-0 w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm";
 export function AiSettings() {
   const { preferences, save } = useAi();
-  const { keysPresent, setKey, deleteKey, isPreview } = useEngineStore(
-    useShallow((s) => ({
-      keysPresent: s.keysPresent,
-      setKey: s.setKey,
-      deleteKey: s.deleteKey,
-      isPreview: s.isPreview,
-    })),
-  );
+  const { keysPresent, keyErrors, checkKey, setKey, deleteKey, isPreview } =
+    useEngineStore(
+      useShallow((s) => ({
+        keysPresent: s.keysPresent,
+        keyErrors: s.keyErrors,
+        checkKey: s.checkKey,
+        setKey: s.setKey,
+        deleteKey: s.deleteKey,
+        isPreview: s.isPreview,
+      })),
+    );
   const [draft, setDraft] = useState<AiPreferences>(preferences);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [providerQuery, setProviderQuery] = useState("");
@@ -36,7 +39,17 @@ export function AiSettings() {
   useEffect(() => {
     void ipc
       .invoke<ProviderInfo[]>("providers_list")
-      .then(setProviders)
+      .then((providers) => {
+        setProviders(providers);
+        useEngineStore.setState({
+          keysPresent: Object.fromEntries(
+            providers.map((p) => [p.id, p.hasKey]),
+          ),
+          keyErrors: Object.fromEntries(
+            providers.map((p) => [p.id, p.keyError]),
+          ),
+        });
+      })
       .catch((e) => setMessage(String(e)));
   }, []);
   const run = async (fn: () => Promise<void>) => {
@@ -69,6 +82,11 @@ export function AiSettings() {
           agents use their own login and limits. API connections use separate
           billing.
         </p>
+        {!local && keyErrors[draft.selected] && (
+          <p role="alert" className="text-sm text-[var(--fg-1)]">
+            {keyErrors[draft.selected]} Open API keys below to retry the check.
+          </p>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label>
             Provider
@@ -321,7 +339,11 @@ export function AiSettings() {
               >
                 <label htmlFor={`key-${p.id}`}>
                   {BRAINS[p.id]?.name ?? p.description} ·{" "}
-                  {keysPresent[p.id] ? "Key saved" : "No key"}
+                  {keyErrors[p.id]
+                    ? "Keychain unavailable"
+                    : keysPresent[p.id]
+                      ? "Key saved"
+                      : "No key"}
                 </label>
                 <div className="flex flex-wrap sm:flex-nowrap gap-2 mt-1">
                   <input
@@ -350,7 +372,11 @@ export function AiSettings() {
                     Save key
                   </Button>
                   <Button
-                    disabled={busy || isPreview || !keysPresent[p.id]}
+                    disabled={
+                      busy ||
+                      isPreview ||
+                      (!keysPresent[p.id] && !keyErrors[p.id])
+                    }
                     onClick={() =>
                       void run(async () => {
                         await deleteKey(p.id);
@@ -360,7 +386,27 @@ export function AiSettings() {
                   >
                     Remove
                   </Button>
+                  <Button
+                    disabled={busy || isPreview}
+                    onClick={() =>
+                      void run(async () => {
+                        const present = await checkKey(p.id);
+                        setMessage(
+                          present
+                            ? "Key is available."
+                            : "No saved key for this provider.",
+                        );
+                      })
+                    }
+                  >
+                    Check key status
+                  </Button>
                 </div>
+                {keyErrors[p.id] && (
+                  <p role="alert" className="text-sm text-[var(--fg-1)]">
+                    {keyErrors[p.id]}
+                  </p>
+                )}
                 {p.id === "elevenlabs" && (
                   <p className="text-sm text-[var(--fg-1)]">
                     Eleven Music uses this connection in AI Music. Native voice
