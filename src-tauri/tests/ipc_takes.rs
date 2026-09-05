@@ -493,6 +493,24 @@ fn analysis_of_a_synthetic_a3_sine_finds_pitched_frames_in_tune() {
 }
 
 #[test]
+fn takes_analyze_refuses_a_di_over_100_mb() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = synthetic_take(0.1, "1700000000.000");
+    {
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&take.input)
+            .unwrap();
+        file.set_len(100_000_001).unwrap();
+    }
+    assert_eq!(
+        studio.err("takes_analyze", json!({"takeId": take.id})),
+        "Take is too large. Use a take shorter than ten minutes."
+    );
+}
+
+#[test]
 fn take_analysis_survives_restart_and_failed_reanalysis_preserves_the_manifest() {
     let _scenario = common::scenario();
     let take = synthetic_take(0.25, "1700000000.000");

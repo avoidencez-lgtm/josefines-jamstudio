@@ -1641,7 +1641,10 @@ mod tests {
             ..Default::default()
         });
 
-        thread::sleep(Duration::from_millis(80));
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while !engine.get_telemetry().band.mute_drums && std::time::Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
         let tel = engine.get_telemetry();
         assert!(tel.band.mute_drums);
         assert!(tel.band.mute_bass);

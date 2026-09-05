@@ -48,6 +48,64 @@ it("keeps the accepted draft through edits and later transport failures, but not
   expect(useEngineStore.getState().loadedOriginal).toBeNull();
 });
 
+it("Stage transpose reloads a loaded original instead of inlining the chart", async () => {
+  const song = newOriginal();
+  useWriting.getState().openSong(song);
+  const commands: string[] = [];
+  let lastLoad: { document?: { body: (typeof song)["body"] } } | undefined;
+  __setIpcForTests({
+    invoke: async <T>(command: string, args?: Record<string, unknown>) => {
+      commands.push(command);
+      if (command === "originals_load") {
+        lastLoad = args as { document: { body: (typeof song)["body"] } };
+      }
+      if (command === "band_load_chart_inline") {
+        throw new Error("inline load must not run after Play song");
+      }
+      return undefined as T;
+    },
+  });
+  await useWriting.getState().play();
+  expect(useEngineStore.getState().loadedOriginal?.body.sections).toEqual(
+    song.body.sections,
+  );
+  commands.length = 0;
+  await useEngineStore.getState().transposeCurrentChart(1);
+  expect(commands).toEqual(["originals_load"]);
+  expect(useEngineStore.getState().loadedOriginal?.id).toBe(song.id);
+  expect(useEngineStore.getState().loadedOriginal?.body.sections).toEqual(
+    song.body.sections,
+  );
+  expect(useEngineStore.getState().loadedOriginal?.body.chart.keyTonic).toBe(
+    (song.body.chart.keyTonic + 1) % 12,
+  );
+  expect(useEngineStore.getState().currentChart?.keyTonic).toBe(
+    (song.body.chart.keyTonic + 1) % 12,
+  );
+  expect(lastLoad?.document?.body.sections).toEqual(song.body.sections);
+});
+
+it("Stage transpose still inlines a jam chart when no original is loaded", async () => {
+  const song = newOriginal();
+  const commands: string[] = [];
+  useEngineStore.setState({
+    currentChart: song.body.chart,
+    loadedOriginal: null,
+  });
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      return undefined as T;
+    },
+  });
+  await useEngineStore.getState().transposeCurrentChart(1);
+  expect(commands).toEqual(["band_load_chart_inline"]);
+  expect(useEngineStore.getState().loadedOriginal).toBeNull();
+  expect(useEngineStore.getState().currentChart?.keyTonic).toBe(
+    (song.body.chart.keyTonic + 1) % 12,
+  );
+});
+
 it("records the draft accepted after saving and retains it if recording fails", async () => {
   const song = newOriginal();
   useWriting.getState().openSong(song);

@@ -520,6 +520,44 @@ fn load_puts_the_song_chart_into_the_band_and_the_transport() {
 }
 
 #[test]
+fn reloading_a_transposed_song_keeps_the_snapshot_and_section_bands() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let id = unique("song");
+    let mut doc = distinctive_song(&id, "F#m7", 133.0);
+    studio.ok("originals_load", json!({ "document": doc }));
+    wait_until("the first song chord", || {
+        telemetry(&studio)["band"]["current_chord"] == "F#m7"
+    });
+
+    doc["body"]["chart"]["sections"][0]["bars"] =
+        json!([[{ "chord": "Gm7", "beats": 4 }], [{ "chord": "Eb", "beats": 4 }]]);
+    studio.ok("originals_load", json!({ "document": doc }));
+    wait_until("the transposed song chord", || {
+        telemetry(&studio)["band"]["current_chord"] == "Gm7"
+    });
+
+    let tel = telemetry(&studio);
+    assert_eq!(tel["band"]["current_section"], "Bridge");
+    assert_eq!(tel["band"]["next_chord"], "Eb");
+    assert_eq!(tel["transport"]["bpm"], 133.0);
+
+    let state = studio.app().state::<app_lib::AppState>();
+    assert_eq!(state.engine.lock().song_snapshot["id"], id);
+    assert!(state.rig.lock().song_mappings.is_some());
+
+    studio.ok(
+        "band_load_chart_inline",
+        json!({ "chart": doc["body"]["chart"] }),
+    );
+    assert!(
+        state.engine.lock().song_snapshot.is_null(),
+        "inlining is what Stage must not do after Play song"
+    );
+    assert!(state.rig.lock().song_mappings.is_none());
+}
+
+#[test]
 fn load_refuses_songs_the_band_cannot_play_and_keeps_the_previous_song() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

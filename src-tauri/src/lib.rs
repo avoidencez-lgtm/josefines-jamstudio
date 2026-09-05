@@ -88,6 +88,12 @@ fn app_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>, state: State<'_, AppSta
     app.exit(0);
 }
 
+/// Opens an allowlisted https URL in the OS browser. `target="_blank"` is dead in WebView2/WKWebView.
+#[tauri::command]
+async fn open_url(url: String) -> Result<(), String> {
+    platform::open_https(&url).await
+}
+
 /// The only network command. The WebView names a provider; Rust adds the key.
 #[tauri::command]
 async fn provider_fetch<R: tauri::Runtime>(
@@ -152,7 +158,7 @@ fn audio_get_config(state: State<'_, AppState>) -> AudioConfig {
 /// and persists it. Returns the resulting status so the UI can show what actually
 /// happened, including a headless fallback.
 #[tauri::command]
-fn audio_set_config(
+async fn audio_set_config(
     config: AudioConfig,
     state: State<'_, AppState>,
 ) -> Result<EngineStatus, String> {
@@ -179,7 +185,7 @@ fn engine_status(state: State<'_, AppState>) -> EngineStatus {
 
 /// Restart the engine on the current configuration (after plugging a device back in).
 #[tauri::command]
-fn engine_restart(state: State<'_, AppState>) -> Result<EngineStatus, String> {
+async fn engine_restart(state: State<'_, AppState>) -> Result<EngineStatus, String> {
     let mut eng = state.engine.lock();
     let cfg = eng.config().clone();
     let result = eng.apply_config(cfg);
@@ -423,7 +429,7 @@ fn recorder_get_latency() -> Result<u32, String> {
 }
 
 #[tauri::command]
-fn takes_list<R: tauri::Runtime>(
+async fn takes_list<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Vec<jam_audio::recorder::TakeMetadata>, String> {
@@ -808,13 +814,17 @@ fn find_take(state: &AppState, take_id: &str) -> Result<jam_audio::recorder::Tak
 
 /// Analyses the guitarist's recorded DI stem against the tempo the take was played at.
 #[tauri::command]
-fn takes_analyze(
+async fn takes_analyze(
     take_id: String,
     state: State<'_, AppState>,
 ) -> Result<jam_audio::analysis::TakeAnalysis, String> {
     let mut take = find_take(&state, &take_id)?;
-    let (samples, sample_rate) =
-        jam_audio::recorder::read_wav_mono(std::path::Path::new(&take.path_input))?;
+    let path = std::path::Path::new(&take.path_input);
+    // Same ceiling as `read_clip`: a 10-minute 48 kHz mono 16-bit stem is ~55 MB.
+    if std::fs::metadata(path).map_err(|e| e.to_string())?.len() > 100_000_000 {
+        return Err("Take is too large. Use a take shorter than ten minutes.".into());
+    }
+    let (samples, sample_rate) = jam_audio::recorder::read_wav_mono(path)?;
     let analyzer = jam_audio::analysis::TakeAnalyzer::new(sample_rate);
     let analysis = analyzer.analyze(&samples, take.tempo);
     let mut fields = serde_json::to_value(&analysis).map_err(|e| e.to_string())?;
@@ -860,7 +870,7 @@ fn chart_sections(chart: &Chart) -> Vec<(String, u32)> {
 
 /// Exports recorded stems, layers, MIDI, markers and an optional REAPER session builder.
 #[tauri::command]
-fn takes_export_daw(
+async fn takes_export_daw(
     take_id: String,
     output_dir: Option<String>,
     state: State<'_, AppState>,
@@ -1160,6 +1170,7 @@ pub fn configure<R: tauri::Runtime>(
             agent_request,
             agent_cancel,
             app_exit,
+            open_url,
             controller::controller_ports,
             controller::controller_open,
             controller::controller_config,
