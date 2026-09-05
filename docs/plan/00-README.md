@@ -191,6 +191,12 @@ complete by this UI slice alone.
 
 ## Build integration
 
+The clip-catalog follow-up (#221, awaiting renewed review and CI) reads the take
+catalog once for a layered-song load, DAW export or media mix. Per-clip ID checks
+and decoded-audio caching remain in place. Songs without clips skip the catalog
+entirely, so a broken take folder cannot block their load. A native IPC regression
+uses an unreadable catalog fixture and verifies this independence.
+
 The rate-mismatch follow-up (#211, awaiting renewed review and CI) closes an input
 whose rate differs from the output and refuses jam/song recording and recent-idea
 capture before creating files. A dedicated input-error state supplies the shared
