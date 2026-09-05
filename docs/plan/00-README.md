@@ -215,3 +215,12 @@ An unchanged or invalid meter preserves progress. The regression advances beyond
 the shortened boundary that caused the original underflow, then verifies four
 restarted clicks, exact playback spans and one completion event. This developer
 verification is separate from the friend-led checks deferred to V2.
+
+### Recording interruption feedback (issue #137)
+
+Rejected disk-queue blocks no longer advance the accepted-frame count or collect
+MIDI. The native control thread reports a capture failure while preserving the
+pending take for finalisation. Transport, Sessions and Write offer Save partial
+take and stop presenting capture as live. The close/device guards stay active
+until finalisation. Native backpressure and frontend failure/recovery regressions
+cover this path; alignment and start/stop disk-lock work remain separate.

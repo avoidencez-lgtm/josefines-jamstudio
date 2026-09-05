@@ -585,6 +585,20 @@ Song documents gain optional `body.referenceBlueprint` (reference name, optional
 
 Offline melody extraction is a Rust worker: saved take ID → bounded WAV decode → existing DSP pitch tracker → sustained note events → editable UI sketch. Harmony ranking and film grid calculations are pure TypeScript; actual audio, playback, capture, MIDI, keys and disk writes remain native. The new Jo actions enter the same reviewed song-edit boundary as existing tools. See `docs/research/room-capabilities.md` and the current recipe in `docs/EXTENDING.md` for scope and limits. Older target architecture below is not a claim that all roadmap seams are implemented.
 
+## Recording interruption recovery
+
+Recording failure reporting: the render worker queues audio and its MIDI as one
+accepted block. A rejected audio block neither advances the accepted-frame count
+nor appends MIDI; later blocks are ignored. The writer remains pending so a new
+take, device change or close cannot discard the partial recording. The 30 Hz
+control thread emits `recorder:error` (string or null) when that error changes,
+plus `app:error` once for a new failure. The UI stops its recording animation,
+shows the interruption and offers Save partial take. `isRecording` retains its
+existing pending-take/close-guard meaning until finalisation; `recordingError`
+distinguishes interrupted capture. WAV finalisation remains on the command thread,
+never the audio callback. This does not resolve recording alignment or blocking
+disk I/O during explicit start/stop (issues #129 and #136).
+
 ## Current take-analysis evidence
 
 `takes_analyze` still reads the saved DI WAV and the take's tempo in Rust. Its

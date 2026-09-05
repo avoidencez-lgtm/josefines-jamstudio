@@ -531,6 +531,10 @@ impl AudioEngine {
         self.recorder.lock().is_recording()
     }
 
+    pub fn recorder_error(&self) -> Option<String> {
+        self.recorder.lock().error().map(str::to_owned)
+    }
+
     /// The rate the recorder (and the running stream) currently uses.
     pub fn sample_rate(&self) -> u32 {
         self.recorder.lock().sample_rate()
@@ -867,12 +871,7 @@ impl AudioEngine {
                         capture.lock().push(&frames, sample_rate);
                         let mut recorder = recorder_arc.lock();
                         if recorder.is_recording() {
-                            let base = recorder.frames_written;
-                            recorder.midi.extend(notes.into_iter().map(|mut n| {
-                                n.frame += base;
-                                n
-                            }));
-                            recorder.push_frames(frames);
+                            recorder.push_frames(frames, notes);
                         }
                         drop(recorder);
 

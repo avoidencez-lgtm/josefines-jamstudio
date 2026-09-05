@@ -266,6 +266,8 @@ Hvis lagring melder at take.json.tmp allerede finnes, lukk appen og sikkerhetsko
 
 Den oppdaterte tonedetektoren måler stabile testtoner mer nøyaktig. Bruk Analyze again for eldre resultater. Bend, vibrato og akkorder krever fortsatt en musikalsk vurdering; målingen skiller ikke tilsiktede tonebevegelser fra stemmingsfeil.
 
+Hvis diskskrivingen ikke kan ta imot lyd, slutter opptaksindikatoren å pulsere, og en melding om avbrudd vises. Save partial take fullfører lyden som ble mottatt før avbruddet; opptaket fortsetter ikke automatisk. Hold appen åpen til dette er ferdig. En diskfeil kan også hindre fullføring: feilen vises, og delvise WAV-filer blir liggende i opptaksmappen for gjenoppretting. Frigjør diskplass eller løs diskproblemet før du starter et nytt opptak.
+
 ### Justering og separate spor
 
 Guitar offset er et manuelt antall sampler som brukes til å justere inngangen mot bandet. Automatisk kalibrering via kabelsløyfe er ikke tilgjengelig. Mål justeringen i DAW på den faktiske riggen. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.
