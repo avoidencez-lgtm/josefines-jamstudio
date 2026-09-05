@@ -104,6 +104,7 @@ Grid: 12 columns, 24 px gutters, content max width 1400 px centred inside the bo
 | `Button` | primary (accent fill, dark text), secondary (outline), danger (record red) | hover, active (translate 1 px down), disabled, loading |
 | `SourceSwitch` | Band / Song / Lyria | active, switching (shows what stops) |
 | `ChartStrip` | bars with chords, playhead, loop range | playing, editing, loop selected |
+| `ChordDiagram` / `ChordShapes` | one playable shape for a chord symbol: six strings, four frets, root in accent, interval labels in the dots; Stage shows the chord now and the chord next, Write the selected chord | now (primary ink), next (secondary ink), no shape, shape picker 1 to 3 |
 | `ChordTimeline` | analysed chords over time (Song mode) | analysing (skeleton), low confidence (dashed), editing |
 | `JoPresence` | orb + last transcript + reply + text input | idle, listening (accent pulse), transcribing, thinking, speaking (accent solid), error |
 | `StatusPill` | key set, device open, provider enabled | ok (green dot is allowed here: real state), warning (accent), error (record red) |

@@ -36,7 +36,7 @@ Song map viser avspillingsrekkefølgen med taktintervaller, repetisjoner og band
 
 Klikk på en akkordrute. Taktfeltet godtar Am:3 G:1 for tre slag Am og ett slag G, eller Dm G for lik fordeling. Enter eller å forlate feltet bruker endringen; Escape avbryter. Ugyldig tekst lar den gamle takten stå. Add bar kopierer valgt takt; Remove bar beholder minst én. Transform phrase roterer, snur eller gjentar taktene. Undo gjenoppretter forrige tilstand.
 
-Find the next colour foreslår akkorder i tonearten, lånte akkorder fra parallelltonearten og sekundærdominanter. Shared teller felles toneklasser med forrige akkord; det er ingen kvalitetsvurdering eller garanti for et bestemt gitargrep.
+Find the next colour foreslår akkorder i tonearten, lånte akkorder fra parallelltonearten og sekundærdominanter. Shared teller felles toneklasser med forrige akkord; det er ingen kvalitetsvurdering eller garanti for et bestemt gitargrep. Inspektøren viser også ett spillbart grep for valgt akkord; nummerknappene blar gjennom alternativene.
 
 ### Bandstemmer, låser og energi
 
@@ -128,7 +128,7 @@ Lagre før du lukker. Skrivebordsappen hindrer lukking under opptak/arbeid og sp
 
 ### Fremføring
 
-Transportlinjen øverst spiller av, pauser, stopper, tar opp, velger opptelling og slår av/på løkker. Stage viser gjeldende/neste akkord og posisjon. Chart & band settings velger skjema og passende stil, endrer intensitet og band-/klikkvolum og aktiverer stemmeapparat eller referansetone. Cues ber om Fill, Crash, Stop eller Ending. Noen endringer venter til neste takt og vises som ventende. Mute gjelder trommer, bass eller komp; follow-energy følger målt gitarnivå, ikke musikalsk hensikt.
+Transportlinjen øverst spiller av, pauser, stopper, tar opp, velger opptelling og slår av/på løkker. Stage viser gjeldende/neste akkord og posisjon. Chart & band settings velger skjema og passende stil, endrer intensitet og band-/klikkvolum og aktiverer stemmeapparat eller referansetone. Cues ber om Fill, Crash, Stop eller Ending. Noen endringer venter til neste takt og vises som ventende. Mute gjelder trommer, bass eller komp; follow-energy følger målt gitarnivå, ikke musikalsk hensikt. Shapes viser et spillbart grep for gjeldende akkord og, mindre, neste akkord, med grunntonen i gult; nummerknappene velger et annet grep. Dette er teoriforslag i standardstemming, ikke en transkripsjon av det som ble spilt.
 
 ### Øving og tempotrening
 
