@@ -435,7 +435,14 @@ fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), Strin
     let mut take = find_take(&state, &take_id)?;
     take.extra
         .insert("hidden".into(), serde_json::Value::Bool(true));
-    jam_audio::recorder::save_manifest(&take)?;
+    // Files are truth: when the folder is already gone there is nothing to hide,
+    // but the cache row must still go or the take is listed forever (#88).
+    if std::path::Path::new(&take.path_input)
+        .parent()
+        .is_some_and(|dir| dir.exists())
+    {
+        jam_audio::recorder::save_manifest(&take)?;
+    }
     state.store.lock().delete_take(&take_id)
 }
 #[tauri::command]
