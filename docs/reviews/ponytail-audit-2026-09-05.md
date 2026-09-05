@@ -35,12 +35,12 @@ remaining work or measured savings.
 
 - **partly applied in #85:** redundant style/chart/rig mirror types were removed in favour of production types. Keep `ControlMapManifest`, `BUNDLED_CONTROLS`, `controls/black-spirit-200.json` and the bundled registry test: these are the control-map seam fixture required by invariant 12. [crates/jam-core/src/registry.rs, crates/jam-core/tests/seams.rs]
 - **delete:** per-tool proposal state machine (proposal + fingerprint + changed-guard + apply/dismiss) copy-pasted 8×. One `useProposal()` hook / shared apply path. [src/components/tools/*.tsx, src/components/SongLab.tsx:113-184, src/components/FinishingDesk.tsx:77-104, src/lib/roomActions.ts:25-45] (~100)
-- **delete:** `TapTempo` — zero callers in Rust, no IPC command, no TS counterpart. Delete file. [crates/jam-dsp/src/tap_tempo.rs] (~89)
-- **delete:** `ClickGenerator` — only caller is its own test; the engine synthesizes clicks itself via `ClickVoice`. Delete file. [crates/jam-band/src/click.rs, cf. crates/jam-audio/src/engine.rs:979-983] (~59)
-- **delete:** `IndexStore::rebuild_index` + the whole `library_index` table. Nothing — no caller outside its own unit test, and it scans `songs/recordings/backups` dirs the app never writes (real layout is `takes/`, `originals/`, `music-videos/`). [src-tauri/src/store.rs:175-214, 36-46] (~55)
+- **applied in #85:** `TapTempo` — zero callers in Rust, no IPC command, no TS counterpart. Delete file. [crates/jam-dsp/src/tap_tempo.rs] (~89)
+- **applied in #85:** `ClickGenerator` — only caller is its own test; the engine synthesizes clicks itself via `ClickVoice`. Delete file. [crates/jam-band/src/click.rs, cf. crates/jam-audio/src/engine.rs:979-983] (~59)
+- **applied in #85:** `IndexStore::rebuild_index` + the whole `library_index` table. Nothing — no caller outside its own unit test, and it scans `songs/recordings/backups` dirs the app never writes (real layout is `takes/`, `originals/`, `music-videos/`). [src-tauri/src/store.rs:175-214, 36-46] (~55)
 - **shrink:** atomic temp-write-with-`.bak` hand-rolled 5×. One `atomic_write(path, bytes)` helper. [src-tauri/src/media.rs:54-71, originals.rs:206-216, library.rs:188-199, settings.rs:128-142, controller.rs:53-60] (~50)
 - **delete:** "busy wrapper with error message" re-implemented 6×. One shared helper. [src/store/engine.ts:195-207, src/lib/originals.ts:182-193, src/lib/media.ts:270-280, src/components/tools/shared.tsx:13-41, src/components/AiSettings.tsx:34-45, src/screens/Sessions.tsx:238-248] (~45)
-- **delete:** `EmptyState` + `ErrorState` components — never rendered anywhere. Remove. [src/components/States.tsx:25-59] (~35)
+- **applied in #85:** `EmptyState` + `ErrorState` components — never rendered anywhere. Remove. [src/components/States.tsx:25-59] (~35)
 - **delete:** `providerJson` — exported, zero imports anywhere including tests. Remove. [src/lib/net/providerFetch.ts:33-62] (~30)
 - **delete:** `Timeline` dead API — `TempoPoint` (+`Default`), `next_bar_boundary`, `seek_sample`, `Timeline::default`. Nothing (no callers). [crates/jam-core/src/timeline.rs:8-21, 92-96, 187-189, 419-425] (~29)
 - **shrink:** `list_devices` — two copy-pasted 30-line halves (inputs/outputs). One helper parameterized by direction, like io.rs `named_or_default_device` already does. [crates/jam-audio/src/devices.rs:41-107] (~28)
@@ -50,7 +50,7 @@ remaining work or measured savings.
 - **delete:** second `NumberField` component (Stage's is a subset of Originals'). One shared component. [src/screens/Stage.tsx:617-640 vs Originals.tsx:850-893] (~25)
 - **shrink:** 8 consecutive rig actions repeating `const state = await run(...); if (state) set({ rigState: state })`. Local `rigAct(label, cmd, args)`. [src/store/engine.ts:515-592] (~25)
 - **shrink:** hand-written `Default` for `TransportTelemetry`/`BandTelemetry` re-states `Timeline::new`/sequencer defaults (incl. "A7"/"D7"). Derive or construct from the sources they mirror. [crates/jam-audio/src/engine.rs:81-97, 119-140] (~25)
-- **delete:** `Kit`/`KitInstrument`/`VelocityLayer` schema — no kit JSON is ever parsed anywhere; the sampler is synthetic-only (`new_with_synthetic_kit`). Nothing. [crates/jam-core/src/style.rs:101-124] (~24)
+- **applied in #85:** `Kit`/`KitInstrument`/`VelocityLayer` schema — no kit JSON is ever parsed anywhere; the sampler is synthetic-only (`new_with_synthetic_kit`). Nothing. [crates/jam-core/src/style.rs:101-124] (~24)
 - **shrink:** three near-identical ASCII id validators. One shared `fn valid_id(s, max, what)`. [src-tauri/src/media.rs:37-47, originals.rs:91-101, net/media.rs:325-335] (~23)
 - **shrink:** `default_style()` — 24-line inline `Style` fallback literal. `.unwrap()`; it's an `include_str!` of an in-repo file that golden/seams/library tests prove parses. [crates/jam-audio/src/engine.rs:215-239] (~22)
 - **candidate:** remove the unused `spdx-satisfies` package, or use it to replace the parser after testing equivalent allowlist decisions. Never remove `scripts/check-js-licences.mjs` or licence enforcement (invariant 9). [package.json, scripts/check-js-licences.mjs]
@@ -59,7 +59,7 @@ remaining work or measured savings.
 - **shrink:** JSON ```-fence stripping repeated 3×. One `readJson()` helper. [src/lib/media.ts:154-158, src/lib/jo/songLab.ts:64-69, src/components/tools/CoachTool.tsx:60-63] (~10)
 - **shrink:** `impl AppSettings { audio_config, set_audio_config }` hand-copies 5 fields both directions. `#[serde(flatten)] pub audio: AudioConfig` (same JSON shape). [src-tauri/src/lib.rs:119-137] (~17)
 - **delete:** `SeamRegistry::load_file`, `len`, `is_empty`. Nothing — library.rs uses only `new`/`load_from_dir`/`load_from_fs_dir`/`get`/`list`/`insert`. [crates/jam-core/src/registry.rs:204-212, 224-230] (~16)
-- **delete:** `shortestTransposition` — imported only by its own test. Remove with test. [src/lib/chart/transpose.ts:28-33, tests/chart/text.test.ts:168-171] (~15)
+- **applied in #85:** `shortestTransposition` — imported only by its own test. Remove with test. [src/lib/chart/transpose.ts:28-33, tests/chart/text.test.ts:168-171] (~15)
 - **delete:** `Sampler` dead pub surface — `Default`, `active_voices`, `max_polyphony` (already `#[allow(dead_code)]`), `kit_name` (written, never read); make `new`/`set_choke_group`/`set_pan`/`load_sample` private (only internal callers). [crates/jam-band/src/sampler.rs:24-40, 121-123] (~14)
 - **retain contract:** `styleOverrideId` / `stylehere` is parsed, serialized and sent over IPC. Missing playback consumption is a feature gap to resolve explicitly; do not remove persisted fields as dead code. Preserve unknown-field round trips and follow the schema/ADR process for any future migration. [src/lib/chart/text.ts, src/ipc/contract.ts]
 - **delete:** `metronome_set`, `audio_set_input_monitor`, `audio_get_telemetry` commands — zero invokes from src/ (the 30 Hz emitter already pushes all telemetry); only IPC tests and preview.ts stubs exercise them. Remove commands + stubs (dedicated IPC tests go too). [src-tauri/src/lib.rs:189-191, 237-247, 255-257, src/ipc/preview.ts:562-569] (~25)
@@ -71,7 +71,7 @@ remaining work or measured savings.
 - **yagni:** `ModelerKind` 7-variant enum — nothing matches on any variant, it's JSON passthrough to the UI. `String` (or drop). [crates/jam-rig/src/profiles.rs:10-20] (~11)
 - **delete:** `bass_note_for_degree` — delegate with test-only callers (production uses `bass_note_for_chord`). [crates/jam-band/src/voicing.rs:172-181] (~10)
 - **delete:** `scene_to_midi` — doc says "for tests and monitors"; only test callers (production path is `scene_commands` + `render`). [crates/jam-rig/src/profiles.rs:226-236] (~10)
-- **delete:** `importChartFile` store method — no UI ever calls it. [src/store/engine.ts:127, 451-457] (~9)
+- **applied in #85:** `importChartFile` store method — no UI ever calls it. [src/store/engine.ts:127, 451-457] (~9)
 - **shrink:** `start()` writes the NullOutput fallback block twice (headless branch and cpal-failure branch). One small helper next to `make_output`. [crates/jam-audio/src/engine.rs:611-635] (~8)
 - **shrink:** hand-rolled 12-key select list in Originals when `notes.ts` already exports the names. Derive from `SHARP_NAMES`. [src/screens/Originals.tsx:236-253] (~8)
 - **shrink:** `recorder_start` and `originals_record` — two wrappers over the same engine calls. One command. [src-tauri/src/lib.rs:380-388, originals.rs:409-412] (~8)
@@ -98,7 +98,7 @@ remaining work or measured savings.
 - **delete:** `MidirSink::port_name` → orchestrator uses `describe()` [crates/jam-rig/src/midi.rs:104-106] (~3)
 - **delete:** `BandSequencer::sample_rate()` getter → no callers [crates/jam-band/src/sequencer.rs:186-188] (~3)
 - **delete:** `LevelResult.peak`/`.rms` linear fields (test-only; all consumers use `peak_db`/`rms_db`), make `amp_to_db` private [crates/jam-dsp/src/level.rs:3-9, 42] (~6)
-- **native:** `rustysynth` dependency — zero `use rustysynth` in the repo; the doc comment "rustysynth integration" describes code that doesn't exist. Delete the dep. [Cargo.toml:32, crates/jam-band/Cargo.toml:11] (1 dep)
+- **applied in #85:** `rustysynth` dependency — zero `use rustysynth` in the repo; the doc comment "rustysynth integration" describes code that doesn't exist. Delete the dep. [Cargo.toml:32, crates/jam-band/Cargo.toml:11] (1 dep)
 - **yagni:** `pub struct DawExporter;` zero-sized namespace for 3 associated fns. Free functions (cosmetic). [crates/jam-audio/src/export.rs:7, 33] (~2)
 
 ## Originally assessed as lean (historical, reverify when changing)
