@@ -11,11 +11,12 @@ import {
 } from "../components/WritingDesk";
 import { ipc, isPreview } from "../ipc/client";
 import { transposeChart } from "../lib/chart/transpose";
+import { WRITING_HELP } from "../lib/help";
 import { PARTS, changeGroove, fitTempo, useWriting } from "../lib/originals";
 import { useEngineStore } from "../store/engine";
 import "./originals.css";
 
-export function Originals() {
+export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
   const w = useWriting();
   const {
     styles,
@@ -202,7 +203,10 @@ export function Originals() {
                   {label}
                 </button>
               ))}
-            </nav>{" "}
+            </nav>
+            <Button onClick={() => onHelp(WRITING_HELP[w.view].topic)}>
+              Help with {WRITING_HELP[w.view].label}
+            </Button>
             <fieldset
               title="Key transposes chords. Mode changes only the harmony palette. Recorded guitar retains pitch and speed."
               className="write-key-settings"

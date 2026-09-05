@@ -10,30 +10,44 @@ import "./manual.css";
 export function ShortcutsHelp({
   open,
   room,
+  topic,
   onClose,
 }: {
   open: boolean;
   room: string;
+  topic: string | null;
   onClose: () => void;
 }) {
   const savedLanguage = useEngineStore((s) => readHelpLanguage(s.settings));
   const [language, setLanguage] = useState<HelpLanguage>(savedLanguage);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState("start");
+  const [selected, setSelected] = useState(
+    () =>
+      manual.chapters.find((c) => c.sections.some((s) => s.id === topic))?.id ??
+      manual.chapters.find((c) => c.room === room)?.id ??
+      "start",
+  );
   const search = useRef<HTMLInputElement>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
   // Settings load after the first render; adopt the saved choice when they arrive.
   useEffect(() => setLanguage(savedLanguage), [savedLanguage]);
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement;
-    setSelected(manual.chapters.find((c) => c.room === room)?.id ?? "start");
-    setQuery("");
-    search.current?.focus();
+    const target = topic
+      ? document.getElementById(`help-${topic}`)
+      : search.current;
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "nearest" });
     return () => {
-      if (previous instanceof HTMLElement) previous.focus();
+      if (
+        previous instanceof HTMLElement &&
+        previous.isConnected &&
+        (document.activeElement === document.body ||
+          document.activeElement?.closest("#studio-help"))
+      )
+        previous.focus();
     };
-  }, [open, room]);
+  }, [open, topic]);
   if (!open) return null;
   const nb = language === "nb";
   const chooseLanguage = (next: HelpLanguage) => {
@@ -119,9 +133,7 @@ export function ShortcutsHelp({
           </p>
           {chapter ? (
             <>
-              <h2 ref={heading} tabIndex={-1}>
-                {chapter.title[language]}
-              </h2>
+              <h2>{chapter.title[language]}</h2>
               <nav
                 aria-label={nb ? "Emner i kapitlet" : "Topics in this chapter"}
               >
@@ -163,8 +175,8 @@ export function ShortcutsHelp({
               <h3>{nb ? "Hurtigtaster" : "Keyboard shortcuts"}</h3>
               <p>
                 {nb
-                  ? "Hurtigtastene er av mens du leser hjelpen eller skriver i et felt. I skjemaeditoren spiller Ctrl/Cmd+Enter skjemaet, og Ctrl/Cmd+S lagrer det."
-                  : "Shortcuts are off while reading help or typing in a field. In the chart editor, Ctrl/Cmd+Enter plays the chart and Ctrl/Cmd+S saves it."}
+                  ? "Hurtigtastene er av når fokus er i hjelpen eller du skriver i et felt. I skjemaeditoren spiller Ctrl/Cmd+Enter skjemaet, og Ctrl/Cmd+S lagrer det."
+                  : "Shortcuts are off when focus is in help or you are typing in a field. In the chart editor, Ctrl/Cmd+Enter plays the chart and Ctrl/Cmd+S saves it."}
               </p>
               <dl className="manual-shortcuts">
                 {SHORTCUTS.map((s) => (
