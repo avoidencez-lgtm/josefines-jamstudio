@@ -321,6 +321,17 @@ pub async fn provider_fetch(
     store: &dyn SecretStore,
     log: &CostLog,
 ) -> Result<FetchResponse, String> {
+    provider_fetch_notifying(req, store, log, |_| {}).await
+}
+
+/// Same as [`provider_fetch`], and tells the desktop command when the usage
+/// log could not be written so it can emit `app:error`.
+pub async fn provider_fetch_notifying(
+    req: FetchRequest,
+    store: &dyn SecretStore,
+    log: &CostLog,
+    on_log_error: impl FnOnce(&str),
+) -> Result<FetchResponse, String> {
     let (entry, url) = validate(&req)?;
     let key = store.require(entry.id)?;
     live_guard(&format!("provider \"{}\"", entry.id))?;
@@ -404,10 +415,15 @@ pub async fn provider_fetch(
         }
         Err(e) => cost.error = Some(e.clone()),
     }
-    if let Err(e) = log.append(&cost) {
-        tracing::warn!("usage log: {e}");
-    }
+    persist_cost(log, &cost, on_log_error);
     result
+}
+
+fn persist_cost(log: &CostLog, cost: &CostEntry, on_log_error: impl FnOnce(&str)) {
+    if let Err(e) = log.append(cost) {
+        tracing::warn!("usage log: {e}");
+        on_log_error(&e);
+    }
 }
 
 #[cfg(test)]
@@ -597,6 +613,40 @@ mod tests {
         assert_eq!(g.calls, 3);
         assert_eq!(g.failures, 1);
         assert_eq!(g.bytes_in, 600);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn usage_log_write_failure_is_reported() {
+        let dir = std::env::temp_dir().join(format!("jam-costlog-fail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let blocker = dir.join("not-a-folder");
+        std::fs::write(&blocker, b"x").unwrap();
+        let log = CostLog::new(blocker.join("usage.jsonl"));
+        let mut reported = None;
+        persist_cost(
+            &log,
+            &CostEntry {
+                at_ms: 1,
+                provider: "gemini".into(),
+                method: "POST".into(),
+                path: "/v1/x".into(),
+                status: 200,
+                duration_ms: 1,
+                bytes_out: 0,
+                bytes_in: 0,
+                error: None,
+                model: None,
+                estimated_cost_usd: None,
+            },
+            |e| reported = Some(e.to_string()),
+        );
+        let err = reported.expect("append failure is reported");
+        assert!(
+            err.contains("not-a-folder") || err.contains("usage.jsonl"),
+            "{err}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

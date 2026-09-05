@@ -888,3 +888,44 @@ fn agent_cancel_is_a_harmless_no_op_without_a_running_agent() {
     );
     assert_offline();
 }
+
+#[test]
+fn tracing_warn_lands_in_the_user_log() {
+    let _scenario = common::scenario();
+    let mut app = app_lib::configure(
+        tauri::test::mock_builder().plugin(app_lib::jam_log_plugin()),
+        app_lib::build_state(),
+    )
+    .build(tauri::test::mock_context(tauri::test::noop_assets()))
+    .expect("app builds with the jam log plugin");
+    #[allow(deprecated)]
+    app.run_iteration(|_, _| {});
+
+    tracing::warn!("jam-log-canary-140");
+    tauri_plugin_log::log::logger().flush();
+
+    let dir = user_dir().join("logs");
+    assert_eq!(app_lib::logs_dir(), dir);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut text = String::new();
+    while Instant::now() < deadline {
+        text.clear();
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                if let Ok(chunk) = std::fs::read_to_string(entry.path()) {
+                    text.push_str(&chunk);
+                }
+            }
+        }
+        if text.contains("jam-log-canary-140") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        text.contains("jam-log-canary-140"),
+        "expected the canary in {}: {text}",
+        dir.display()
+    );
+    assert_offline();
+}

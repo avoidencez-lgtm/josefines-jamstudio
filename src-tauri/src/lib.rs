@@ -21,6 +21,7 @@ use keys::{KeyringStore, MemoryStore, SecretStore};
 use library::Library;
 use parking_lot::Mutex;
 use settings::{load_settings, save_settings, AppSettings};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{Emitter, State};
 
@@ -96,7 +97,13 @@ async fn provider_fetch<R: tauri::Runtime>(
 ) -> Result<net::FetchResponse, String> {
     let store = Arc::clone(&state.secret_store);
     let log = Arc::clone(&state.cost_log);
-    let result = net::provider_fetch(request, store.as_ref(), &log).await;
+    let result = net::provider_fetch_notifying(request, store.as_ref(), &log, |error| {
+        let _ = app.emit(
+            "app:error",
+            format!("Could not save the usage log: {error}"),
+        );
+    })
+    .await;
     let _ = app.emit("cost:state", &log.totals());
     result
 }
@@ -1263,10 +1270,49 @@ fn smoke_exit(app: tauri::AppHandle) {
     });
 }
 
+/// `~/JosefinesJamstudio/logs` (or `$JAM_USER_DIR/logs`).
+pub fn logs_dir() -> PathBuf {
+    Library::default_user_root().join("logs")
+}
+
+fn jam_log_level_from(raw: Option<&str>) -> tauri_plugin_log::log::LevelFilter {
+    use tauri_plugin_log::log::LevelFilter;
+    match raw.map(|s| s.to_ascii_lowercase()).as_deref() {
+        Some("trace") => LevelFilter::Trace,
+        Some("debug") => LevelFilter::Debug,
+        Some("warn") | Some("warning") => LevelFilter::Warn,
+        Some("error") => LevelFilter::Error,
+        Some("off") => LevelFilter::Off,
+        _ => LevelFilter::Info,
+    }
+}
+
+fn jam_log_level() -> tauri_plugin_log::log::LevelFilter {
+    jam_log_level_from(std::env::var("JAM_LOG").ok().as_deref())
+}
+
+/// File + stderr logger for the desktop app. IPC tests omit this so they do
+/// not install a process-wide logger.
+pub fn jam_log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+    tauri_plugin_log::Builder::new()
+        .level(jam_log_level())
+        .max_file_size(1_000_000)
+        .rotation_strategy(RotationStrategy::KeepAll)
+        .targets([
+            Target::new(TargetKind::Stderr),
+            Target::new(TargetKind::Folder {
+                path: logs_dir(),
+                file_name: Some("jamstudio".into()),
+            }),
+        ])
+        .build()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let built = configure(
-        tauri::Builder::default().plugin(tauri_plugin_log::Builder::new().build()),
+        tauri::Builder::default().plugin(jam_log_plugin()),
         build_state(),
     )
     .build(tauri::generate_context!())
@@ -1375,5 +1421,23 @@ mod desktop_permissions {
             cap["permissions"],
             serde_json::json!(["core:event:allow-listen", "core:event:allow-unlisten"])
         );
+    }
+}
+
+#[cfg(test)]
+mod jam_log {
+    use super::jam_log_level_from;
+    use tauri_plugin_log::log::LevelFilter;
+
+    #[test]
+    fn jam_log_defaults_to_info_and_honours_debug() {
+        assert_eq!(jam_log_level_from(None), LevelFilter::Info);
+        assert_eq!(jam_log_level_from(Some("")), LevelFilter::Info);
+        assert_eq!(jam_log_level_from(Some("nope")), LevelFilter::Info);
+        assert_eq!(jam_log_level_from(Some("debug")), LevelFilter::Debug);
+        assert_eq!(jam_log_level_from(Some("DEBUG")), LevelFilter::Debug);
+        assert_eq!(jam_log_level_from(Some("info")), LevelFilter::Info);
+        assert_eq!(jam_log_level_from(Some("warn")), LevelFilter::Warn);
+        assert_eq!(jam_log_level_from(Some("error")), LevelFilter::Error);
     }
 }
