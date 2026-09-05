@@ -226,11 +226,18 @@ impl BandSequencer {
     }
 
     pub fn load_chart(&mut self, chart: ResolvedChart) {
-        let (c, n) = chart.chord_at(1, 1);
+        self.retarget_chart(chart, 1, 1);
+    }
+
+    /// Swap the written chords without rewinding to bar 1 (Stage transpose).
+    pub fn retarget_chart(&mut self, chart: ResolvedChart, bar: u32, beat: u32) {
+        let bar = bar.max(1);
+        let beat = beat.max(1);
+        let (c, n) = chart.chord_at(bar, beat);
         self.current_chord = c;
         self.next_chord = n;
         self.current_section = chart
-            .section_at(1)
+            .section_at(bar)
             .map(|b| b.section_name.clone())
             .unwrap_or_default();
         self.current_chart = Some(chart);

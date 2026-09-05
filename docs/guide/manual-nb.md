@@ -354,6 +354,8 @@ Ved feiljustert gitar måles Guitar offset mot en kjent transient i DAW. Hvis kl
 
 Ved 401/403 kontrollerer du valgt tilkobling, lagret nøkkel/konto og modelltilgang. Ved 429 undersøker du kvote/hastighetsgrenser; ikke send betalte jobber gjentatte ganger. Agent not found betyr at du må installere nativ CLI eller oppgi full filbane; deteksjon alene beviser ikke pålogging. Manglende FFmpeg betyr at både ffmpeg og ffprobe må installeres, før omstart og ny kontroll. Ugyldige lokale arbeidsflyter må først fungere i ComfyUI og eksporteres i API-format. Manglende medier krever kontroll av faktisk filbane og backup, ikke bare hurtigbufferen.
 
+Dokumentasjonslenker i Settings og Film åpnes i standardnettleseren. Hvis systemet avviser en lenke, viser feilmeldingen nettadressen som du kan kopiere til nettleseren. På macOS varsles feil når systemet ikke kan åpne nettleseren eller mediespilleren. På Windows kan appen bare bekrefte at Utforsker startet, så kontroller standardnettleser/-spiller hvis ingenting vises.
+
 ### Hva automatiske tester ikke kan bevise
 
 Før du baserer deg på en utgivelse, gjennomfør en ekte Mac-økt: tillat opptak, velg riggen, spill inn og åpne en låt på nytt, test alle aktuelle pedaler/scener, eksporter fem minutter til Logic/REAPER og mål drift, og generer ett kort resultat med hver aktuell leverandør/lokal modell. Kontroller avspilling og filmrendring på den maskinen. Kontotilgang, musikalsk kvalitet, maskinvarestabilitet, signering/notarisering og fysisk forsinkelse er egne godkjenningsresultater.

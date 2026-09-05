@@ -628,6 +628,29 @@ impl AudioEngine {
         Ok(())
     }
 
+    /// Update the loaded original's chords without stopping, clearing the loop
+    /// or re-reading guitar clips (Stage `[` / `]` after Play song).
+    pub fn replace_song_chart(
+        &mut self,
+        chart: ResolvedChart,
+        sections: std::collections::BTreeMap<String, jam_band::sequencer::SectionBand>,
+        snapshot: serde_json::Value,
+    ) -> Result<(), String> {
+        if self.recorder_is_recording() {
+            return Err("Save the recording before changing the song.".into());
+        }
+        if self.song_snapshot.is_null() {
+            return Err("Load a song before updating its chart.".into());
+        }
+        let pos = self.timeline.lock().current_position();
+        let mut seq = self.sequencer.lock();
+        seq.section_bands = sections;
+        seq.retarget_chart(chart, pos.bar, pos.beat);
+        drop(seq);
+        self.song_snapshot = snapshot;
+        Ok(())
+    }
+
     pub fn recorder_stop(&self) -> Result<crate::recorder::TakeMetadata, String> {
         let _operation = self.recording_operation.lock();
         let end = {

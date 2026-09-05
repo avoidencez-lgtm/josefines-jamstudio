@@ -191,6 +191,12 @@ complete by this UI slice alone.
 
 ## Build integration
 
+The follow-up to merged PR #205 (awaiting current-head review and CI)
+routes Settings/Film links through the native browser opener and reports launch
+failures with a copyable URL. The shared macOS browser/player path checks opener
+completion; Windows confirms only the Explorer handoff. A rejected IPC regression
+failed before the notice fix. English/Bokmål troubleshooting explains recovery.
+
 The current build is stabilised separately from the unbuilt roadmap above. See
 [build closeout](../reviews/build-closeout.md) for native IPC, persistence, meter
 export and installer validation. Owner hardware/provider gates remain open;
