@@ -236,10 +236,17 @@ fn every_bundled_chart_loads_and_the_band_follows_its_style_tempo_and_first_chor
             .map(|s| s["name"].clone())
             .unwrap();
 
+        // Wait for the full post-load snapshot. current_chord + style + bpm
+        // can match the engine default (A7 / blues-shuffle) on a slow runner
+        // before next_chord and current_section land (#105).
         let tel = telemetry_where(&studio, &format!("{id} loaded"), |t| {
             t["band"]["current_chord"] == first_chord
+                && t["band"]["next_chord"] == next_chord
+                && t["band"]["current_section"] == section["name"]
                 && t["band"]["style_id"] == style_id
                 && t["transport"]["bpm"] == chart["defaultBpm"]
+                && t["transport"]["time_signature"] == json!([4, 4])
+                && t["transport"]["state"] == "stopped"
         });
         assert_eq!(tel["band"]["style_name"], style_name, "{id}");
         assert_eq!(tel["band"]["next_chord"], next_chord, "{id}");
