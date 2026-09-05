@@ -1,6 +1,7 @@
 import { CassetteTape, Export, Play, Star } from "@phosphor-icons/react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
@@ -29,7 +30,22 @@ export const Sessions: React.FC = () => {
     analyzeTake,
     exportTakeDaw,
     engineStatus,
-  } = useEngineStore();
+  } = useEngineStore(
+    useShallow((s) => ({
+      takes: s.takes,
+      isRecording: s.isRecording,
+      latencySamples: s.latencySamples,
+      startRecording: s.startRecording,
+      stopRecording: s.stopRecording,
+      setLatencySamples: s.setLatencySamples,
+      loadTakes: s.loadTakes,
+      deleteTake: s.deleteTake,
+      takeAnalysis: s.takeAnalysis,
+      analyzeTake: s.analyzeTake,
+      exportTakeDaw: s.exportTakeDaw,
+      engineStatus: s.engineStatus,
+    })),
+  );
 
   const [query, setQuery] = useState("");
   const [favourites, setFavourites] = useState(false);

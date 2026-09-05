@@ -158,7 +158,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         await store.transportStop();
         return "Stopped playback";
       }
-      break;
+      throw new Error("Unknown transport action. Use play, pause or stop.");
     }
 
     case "set_tempo": {
@@ -172,7 +172,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         await store.transportSetTempo(targetBpm);
         return `Tempo set to ${targetBpm} BPM`;
       }
-      break;
+      throw new Error("Set tempo needs a bpm or a delta.");
     }
 
     case "trigger_cue": {
@@ -243,9 +243,9 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         const take = await store.stopRecording();
         return `Recording saved: ${take?.id ?? "take"}`;
       }
-      break;
+      throw new Error("Unknown recording action. Use start or stop.");
     }
   }
 
-  return `Executed ${call.name}`;
+  throw new Error(`Unknown tool: ${call.name}`);
 }

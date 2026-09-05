@@ -108,8 +108,6 @@ Grid: 12 columns, 24 px gutters, content max width 1400 px centred inside the bo
 | `ChordTimeline` | analysed chords over time (Song mode) | analysing (skeleton), low confidence (dashed), editing |
 | `JoPresence` | orb + last transcript + reply + text input | idle, listening (accent pulse), transcribing, thinking, speaking (accent solid), error |
 | `StatusPill` | key set, device open, provider enabled | ok (green dot is allowed here: real state), warning (accent), error (record red) |
-| `EmptyState` | first-run and empty lists | icon, one sentence, one action |
-| `ErrorState` | `app.error` rendering | code, message, next step, retry |
 | `Wizard` | onboarding | steps, progress, skip |
 
 Corner radii: buttons and inputs `--radius-m`, panels `--radius-l`, pills full. Nothing else.

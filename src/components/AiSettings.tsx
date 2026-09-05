@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { ipc } from "../ipc/client";
 import type { ProviderInfo } from "../ipc/contract";
 import {
@@ -16,7 +17,14 @@ const field =
   "min-w-0 w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm";
 export function AiSettings() {
   const { preferences, save } = useAi();
-  const { keysPresent, setKey, deleteKey, isPreview } = useEngineStore();
+  const { keysPresent, setKey, deleteKey, isPreview } = useEngineStore(
+    useShallow((s) => ({
+      keysPresent: s.keysPresent,
+      setKey: s.setKey,
+      deleteKey: s.deleteKey,
+      isPreview: s.isPreview,
+    })),
+  );
   const [draft, setDraft] = useState<AiPreferences>(preferences);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [providerQuery, setProviderQuery] = useState("");

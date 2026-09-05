@@ -1,5 +1,6 @@
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { AiSettings } from "../components/AiSettings";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
@@ -115,7 +116,19 @@ export const Settings: React.FC = () => {
     applyAudioConfig,
     refreshEngineStatus,
     restartEngine,
-  } = useEngineStore();
+  } = useEngineStore(
+    useShallow((s) => ({
+      devices: s.devices,
+      settings: s.settings,
+      engineStatus: s.engineStatus,
+      isPreview: s.isPreview,
+      refreshDevices: s.refreshDevices,
+      loadSettings: s.loadSettings,
+      applyAudioConfig: s.applyAudioConfig,
+      refreshEngineStatus: s.refreshEngineStatus,
+      restartEngine: s.restartEngine,
+    })),
+  );
 
   const { view } = useSettingsView();
   const setView = (view: string) => useSettingsView.setState({ view });

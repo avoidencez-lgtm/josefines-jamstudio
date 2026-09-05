@@ -1,5 +1,6 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { ChordStrip } from "../components/ChordStrip";
 import { Panel } from "../components/Panel";
@@ -40,7 +41,12 @@ export const Library: React.FC = () => {
     charts,
     currentChart,
     libraryInfo,
-    telemetry,
+    styleId,
+    currentBar,
+    barProgress,
+    loopEnabled,
+    loopStartBar,
+    loopEndBar,
     isPreview,
     bandLoadChart,
     bandSetStyle,
@@ -51,7 +57,30 @@ export const Library: React.FC = () => {
     transportSeekBar,
     transportSetLoop,
     notify,
-  } = useEngineStore();
+  } = useEngineStore(
+    useShallow((s) => ({
+      styles: s.styles,
+      charts: s.charts,
+      currentChart: s.currentChart,
+      libraryInfo: s.libraryInfo,
+      styleId: s.telemetry.band.style_id,
+      currentBar: s.telemetry.transport.bar,
+      barProgress: s.telemetry.transport.bar_progress,
+      loopEnabled: s.telemetry.transport.loop_enabled,
+      loopStartBar: s.telemetry.transport.loop_start_bar,
+      loopEndBar: s.telemetry.transport.loop_end_bar,
+      isPreview: s.isPreview,
+      bandLoadChart: s.bandLoadChart,
+      bandSetStyle: s.bandSetStyle,
+      playChartInline: s.playChartInline,
+      saveChart: s.saveChart,
+      deleteUserChart: s.deleteUserChart,
+      reloadLibrary: s.reloadLibrary,
+      transportSeekBar: s.transportSeekBar,
+      transportSetLoop: s.transportSetLoop,
+      notify: s.notify,
+    })),
+  );
 
   const { text, editingId, dirty } = useLibraryDraft();
   const [query, setQuery] = useState("");
@@ -275,7 +304,7 @@ export const Library: React.FC = () => {
                     .includes(query.toLowerCase()),
                 )
                 .map((s) => {
-                  const active = telemetry.band.style_id === s.id;
+                  const active = styleId === s.id;
                   return (
                     <button
                       key={s.id}
@@ -438,14 +467,14 @@ export const Library: React.FC = () => {
                 currentChart &&
                 draft &&
                 chartToText(currentChart) === chartToText(draft)
-                  ? telemetry.transport.bar
+                  ? currentBar
                   : 0
               }
-              barProgress={telemetry.transport.bar_progress}
+              barProgress={barProgress}
               loop={{
-                enabled: telemetry.transport.loop_enabled,
-                startBar: telemetry.transport.loop_start_bar,
-                endBar: telemetry.transport.loop_end_bar,
+                enabled: loopEnabled,
+                startBar: loopStartBar,
+                endBar: loopEndBar,
               }}
               onSeek={(bar) => {
                 if (

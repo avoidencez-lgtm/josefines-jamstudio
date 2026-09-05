@@ -27,7 +27,7 @@ Measured `cpal` 0.15.3 on Windows 11 PC using WASAPI host via `scripts/spikes/s2
 Adopt `cpal` 0.15.x with explicit `AudioInput` / `AudioOutput` abstraction traits. `JAM_HEADLESS=1` gates device creation to `NullOutput` and `FileInput`, enabling flawless CI and headless testing on Windows and macOS.
 
 ## Fixtures captured
-`scripts/spikes/s2-cpal-probe/` probe tool.
+Probe lived in `scripts/spikes/s2-cpal-probe/` (removed; numbers above).
 
 ## Open questions
 - Confirmation of HeadRush 4-channel enumeration on macOS CoreAudio (Owner Gate 1).

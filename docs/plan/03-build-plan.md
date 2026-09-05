@@ -62,19 +62,19 @@ jobs:
 - `jam-audio::io`: traits `AudioInput` and `AudioOutput` (ARCHITECTURE §4); `CpalInput`, `CpalOutput`, `FileInput` (looping WAV via `symphonia`, resampled to 48 kHz with `rubato`), `NullOutput` (advances exactly `bufferFrames` per tick on a timer thread).
 - `jam-audio::devices`: enumeration with channel counts and supported sample rates; `AudioConfig` selection; open/close; a resampler at the device edge when the device is not 48 kHz.
 - `jam-audio::engine`: the master ring buffer (`rtrb`), the output callback that only copies, the input callbacks that only push into per-input ring buffers, an xrun counter, and the first **render worker** thread that fills the ring from a `Renderer` trait. In M0 the renderer sums a test tone generator and a metronome.
-- `jam-dsp`: `level` (peak/RMS), `pitch` (McLeod pitch method via the `pitch-detection` crate, 2048-frame window, hop 512, confidence threshold), `tap_tempo`. Each with the synthetic-signal tests in ARCHITECTURE §9.
+- `jam-dsp`: `level` (peak/RMS), `pitch` (McLeod pitch method via the `pitch-detection` crate, 2048-frame window, hop 512, confidence threshold). Each with the synthetic-signal tests in ARCHITECTURE §9. Tap tempo is handled by the UI store; the unused Rust tap helper was removed.
 - IPC: `audio_list_devices`, `audio_get_config`, `audio_set_config`, `tone_set({ on, hz })`, `metronome_set({ on, bpm })`, `tuner_set({ on })`, events `audio.state`, `meters` (30 Hz), `tuner.state` (20 Hz: note, cents, hz, confidence).
 - Env: `JAM_HEADLESS=1` selects `NullOutput`; `JAM_FAKE_INPUT=<wav>` selects `FileInput` for the guitar input. `tests/fixtures/audio/` gets two CC0 or self-generated fixtures: `sine-440.wav` and `guitar-e-blues-120.wav` (a real DI recording is best; if none is available, synthesise a plucked-string signal with Karplus-Strong in a script `scripts/gen-fixtures.mjs` and say so in the file's README).
 
 ### 0.4 App shell (`src/`)
-- Design tokens and primitives from [DESIGN.md](../DESIGN.md): `src/design/tokens.css`, `Button`, `Toggle`, `Dial`, `BigReadout`, `Meter`, `Panel`, `StatusPill`, `EmptyState`, `ErrorState`.
+- Design tokens and primitives from [DESIGN.md](../DESIGN.md): `src/design/tokens.css`, `Button`, `Toggle`, `Dial`, `BigReadout`, `Meter`, `Panel`, `StatusPill`. Empty/error states use the existing room UI; unused standalone wrappers were removed.
 - Navigation registry `src/screens/registry.ts` with Stage, Library, Sessions, Rig, Settings (later screens are one line each). Stage shows: tuner readout, input meter, tempo readout with tap, test tone and metronome toggles. Settings shows: audio devices and channels, API keys (set/clear only, never displayed), diagnostics (xruns, sample rate, buffer).
 - `src/ipc/`: `contract.ts` (types and `IPC_VERSION`), one file per domain wrapping `invoke` and `listen`, a `useEngineState` store (zustand) fed by `<domain>.state` events.
 
 ### 0.5 Keys, settings, store, logging (`src-tauri/src/{keys,store,settings}`)
 - `SecretStore` trait with `KeyringStore` (`keyring` crate, service `josefines-jamstudio`) and `MemoryStore` (tests). Commands `keys_set(provider, value)`, `keys_has(provider)`, `keys_delete(provider)`. There is no command that returns a key.
 - Settings: `~/JosefinesJamstudio/settings.json` (`schemaVersion: 1`, shape in ARCHITECTURE §7), commands `settings_get`, `settings_set`, event `settings.state`. Unknown fields preserved on write.
-- Store: `rusqlite` (bundled) database at `~/JosefinesJamstudio/index.sqlite` with a `rebuild_index()` that scans the library folders; deleting the file must be harmless.
+- Store: `rusqlite` (bundled) take cache at `~/JosefinesJamstudio/index.sqlite`; take manifests remain authoritative. The unused library index and its rebuild helper were removed; library discovery reads files directly.
 - Logging: `tauri-plugin-log` to `~/JosefinesJamstudio/logs/`, rotating, never request bodies.
 
 ### 0.6 Seam registries and the invariant tests

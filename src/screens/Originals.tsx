@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { FinishingDesk } from "../components/FinishingDesk";
 import { FootControls } from "../components/FootControls";
@@ -28,7 +29,19 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
     transportStop,
     rigState,
     loadRigProfiles,
-  } = useEngineStore();
+  } = useEngineStore(
+    useShallow((s) => ({
+      styles: s.styles,
+      takes: s.takes,
+      isRecording: s.isRecording,
+      loadTakes: s.loadTakes,
+      loadLibrary: s.loadLibrary,
+      exportTakeDaw: s.exportTakeDaw,
+      transportStop: s.transportStop,
+      rigState: s.rigState,
+      loadRigProfiles: s.loadRigProfiles,
+    })),
+  );
   const [versionName, setVersionName] = useState("");
   const [captureLength, setCaptureLength] = useState(30);
   const [fitBars, setFitBars] = useState(4);

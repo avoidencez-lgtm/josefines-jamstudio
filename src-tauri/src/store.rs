@@ -61,18 +61,6 @@ impl IndexStore {
 
     fn init_schema(conn: &Connection) -> Result<(), String> {
         conn.execute(
-            "CREATE TABLE IF NOT EXISTS library_index (
-                id TEXT PRIMARY KEY,
-                kind TEXT NOT NULL,
-                name TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                updated_at INTEGER NOT NULL
-            )",
-            [],
-        )
-        .map_err(|e| e.to_string())?;
-
-        conn.execute(
             "CREATE TABLE IF NOT EXISTS takes (
                 id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
@@ -198,52 +186,6 @@ impl IndexStore {
             .map_err(|e| e.to_string())?;
         Ok(())
     }
-
-    pub fn rebuild_index(&mut self) -> Result<usize, String> {
-        let library_dir = crate::library::Library::default_user_root();
-        Self::rebuild_index_dir(&mut self.conn, &library_dir)
-    }
-
-    pub fn rebuild_index_dir(
-        conn: &mut Connection,
-        library_dir: &std::path::Path,
-    ) -> Result<usize, String> {
-        let mut count = 0;
-        if !library_dir.exists() {
-            return Ok(0);
-        }
-
-        let tx = conn.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM library_index", [])
-            .map_err(|e| e.to_string())?;
-
-        let subdirs = ["songs", "takes", "backups"];
-        for sub in subdirs {
-            let path = library_dir.join(sub);
-            if let Ok(entries) = fs::read_dir(path) {
-                for entry in entries.flatten() {
-                    if let Ok(ft) = entry.file_type() {
-                        if ft.is_file() {
-                            let file_name = entry.file_name().to_string_lossy().to_string();
-                            let file_path = entry.path().to_string_lossy().to_string();
-                            let id = format!("{}:{}", sub, file_name);
-
-                            tx.execute(
-                                "INSERT INTO library_index (id, kind, name, file_path, updated_at)
-                                 VALUES (?1, ?2, ?3, ?4, strftime('%s', 'now'))",
-                                params![id, sub, file_name, file_path],
-                            )
-                            .map_err(|e| e.to_string())?;
-                            count += 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        tx.commit().map_err(|e| e.to_string())?;
-        Ok(count)
-    }
 }
 
 #[cfg(test)]
@@ -285,17 +227,8 @@ mod tests {
     }
 
     #[test]
-    fn test_store_open_and_rebuild() {
-        let mut store = IndexStore::open_in_memory().expect("in-memory db opens");
-        let temp_dir =
-            std::env::temp_dir().join(format!("jam-rebuild-test-{}", std::process::id()));
-        let songs_dir = temp_dir.join("songs");
-        let _ = fs::create_dir_all(&songs_dir);
-        let _ = fs::write(songs_dir.join("test.json"), b"{}");
-        let count =
-            IndexStore::rebuild_index_dir(&mut store.conn, &temp_dir).expect("rebuild succeeds");
-        assert_eq!(count, 1);
-        let _ = fs::remove_dir_all(temp_dir);
+    fn test_store_open_in_memory() {
+        IndexStore::open_in_memory().expect("in-memory db opens");
     }
 
     #[test]

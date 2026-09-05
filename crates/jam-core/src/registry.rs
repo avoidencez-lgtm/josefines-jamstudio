@@ -17,82 +17,6 @@ pub trait VersionedManifest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct StyleManifest {
-    #[serde(rename = "schemaVersion")]
-    pub schema_version: u32,
-    pub id: String,
-    pub name: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub default_bpm: Option<f64>,
-    #[serde(flatten)]
-    pub extra: HashMap<String, serde_json::Value>,
-}
-
-impl VersionedManifest for StyleManifest {
-    fn schema_version(&self) -> u32 {
-        self.schema_version
-    }
-    fn id(&self) -> &str {
-        &self.id
-    }
-    fn name(&self) -> &str {
-        &self.name
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ChartManifest {
-    #[serde(rename = "schemaVersion")]
-    pub schema_version: u32,
-    pub id: String,
-    pub name: String,
-    #[serde(default)]
-    pub key: Option<String>,
-    #[serde(default, alias = "timeSig")]
-    pub time_signature: Option<(u8, u8)>,
-    #[serde(flatten)]
-    pub extra: HashMap<String, serde_json::Value>,
-}
-
-impl VersionedManifest for ChartManifest {
-    fn schema_version(&self) -> u32 {
-        self.schema_version
-    }
-    fn id(&self) -> &str {
-        &self.id
-    }
-    fn name(&self) -> &str {
-        &self.name
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RigManifest {
-    #[serde(rename = "schemaVersion")]
-    pub schema_version: u32,
-    pub id: String,
-    pub name: String,
-    #[serde(default, alias = "targetDevice")]
-    pub target_device: String,
-    #[serde(flatten)]
-    pub extra: HashMap<String, serde_json::Value>,
-}
-
-impl VersionedManifest for RigManifest {
-    fn schema_version(&self) -> u32 {
-        self.schema_version
-    }
-    fn id(&self) -> &str {
-        &self.id
-    }
-    fn name(&self) -> &str {
-        &self.name
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ControlMapManifest {
     #[serde(rename = "schemaVersion")]
     pub schema_version: u32,
@@ -198,17 +122,6 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
             }
         }
         (count, errors)
-    }
-
-    /// Parses one file and registers it, returning the id.
-    pub fn load_file<P: AsRef<Path>>(&mut self, path: P) -> Result<String, String> {
-        let p = path.as_ref();
-        let content = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-        let item =
-            serde_json::from_str::<T>(&content).map_err(|e| format!("{}: {e}", p.display()))?;
-        let id = item.id().to_string();
-        self.items.insert(id.clone(), item);
-        Ok(id)
     }
 
     pub fn insert(&mut self, item: T) -> String {

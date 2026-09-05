@@ -24,10 +24,3 @@ export function transposeChart(chart: Chart, semitones: number): Chart {
     })),
   };
 }
-
-/** Semitone offset that moves `from` to `to` going the short way round (-6..+5). */
-export function shortestTransposition(from: number, to: number): number {
-  let d = (((to - from) % 12) + 12) % 12;
-  if (d > 6) d -= 12;
-  return d;
-}

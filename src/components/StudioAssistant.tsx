@@ -1,5 +1,6 @@
 import { ChatCircleDots } from "@phosphor-icons/react";
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { ipc } from "../ipc/client";
 import { dispatchJoToolCall } from "../lib/jo/dispatcher";
 import type { JoToolCall } from "../lib/jo/persona";
@@ -26,7 +27,7 @@ const studioFingerprint = () =>
 
 const field =
   "w-full min-w-0 rounded border border-[var(--line)] bg-[var(--bg-2)] p-2 text-sm";
-export function StudioAssistant() {
+export const StudioAssistant = memo(function StudioAssistant() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [history, setHistory] = useState<BrainRequest["messages"]>([]);
@@ -39,7 +40,13 @@ export function StudioAssistant() {
   const activeLocal = useRef(false);
   const [message, setMessage] = useState("");
   const { preferences, save, loaded } = useAi();
-  const engine = useEngineStore();
+  const engine = useEngineStore(
+    useShallow((s) => ({
+      isPreview: s.isPreview,
+      isRecording: s.isRecording,
+      keysPresent: s.keysPresent,
+    })),
+  );
   const writing = useWriting();
   const brain = BRAINS[preferences.selected];
   const ready =
@@ -329,4 +336,4 @@ export function StudioAssistant() {
       )}
     </>
   );
-}
+});

@@ -48,9 +48,9 @@ State snapshots for the UI are published by the render worker into `arc-swap` ce
 josefines-jamstudio/
   AGENTS.md  README.md  LICENSE  deny.toml  Cargo.toml (workspace)  package.json  biome.json  tsconfig.json  vite.config.ts
   crates/
-    jam-core/    types, timeline, chart, style, kit, rig profile, control map, schema versions, registries (pure, serde)
-    jam-dsp/     pure DSP: level, pitch, onset, chroma/chords, energy, tap tempo, offline analysis, key profiles
-    jam-audio/   cpal devices and streams, io traits, engine (ring buffers, callback, render worker), transport, mixer, click, recorder, song player, stretch
+    jam-core/    types, timeline, chart, style, rig profile, control map, schema versions, registries (pure, serde)
+    jam-dsp/     pure DSP: level, pitch, energy
+    jam-audio/   cpal devices and streams, io traits, engine (ring buffers, callback, render worker), transport, mixer, click, recorder, song player (stretch remains roadmap work)
     jam-band/    sequencer, instruments (Sampler, Sf2Synth), voicing, bass, comp, cues, offline render
     jam-rig/     MidiSink/MidirSink/MemorySink, profiles, scenes, scheduler, clock, input
   src-tauri/
@@ -309,9 +309,6 @@ type Style = { schemaVersion: 1; id: string; name: string; genre: string;
 type DrumPattern = { lengthBeats: number; hits: { instrument: string; atBeats: Beats; velocity: number; prob?: number }[] };
 type BassPattern = { lengthBeats: number; notes: { degree: number; octave: number; atBeats: Beats; durBeats: number; velocity: number }[] };  // degree relative to chord root
 type CompPattern = { lengthBeats: number; voicing: 'shell'|'triad'|'drop2'|'power'; strums: { atBeats: Beats; durBeats: number; velocity: number; direction: 'up'|'down' }[] };
-
-type Kit = { schemaVersion: 1; id: string; name: string; instruments: { name: string; chokeGroup?: string;
-  layers: { velocity: [number, number]; files: string[] }[] }[] };   // files are round-robin alternatives
 
 type Song = { schemaVersion: 1; id: Uuid; title: string; artist?: string; sourcePath: string; sourceHash: string; durationMs: number;
   key?: { tonic: number; mode: 'major'|'minor'; confidence: number }; tempoMap: TempoPoint[]; beats: { timeMs: number; beatInBar: number }[];

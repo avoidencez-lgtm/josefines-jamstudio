@@ -14,7 +14,6 @@ tauri = { version = "2.11", features = ["protocol-asset"] }
 base64 = "0.22"
 tauri-plugin-log = "2"
 jam-core.workspace = true
-jam-dsp.workspace = true
 jam-audio.workspace = true
 jam-band.workspace = true
 jam-rig.workspace = true
