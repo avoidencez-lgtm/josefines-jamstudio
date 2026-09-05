@@ -3,7 +3,7 @@ import {
   drillFor,
   formatJamTime,
   practiceStreakDays,
-} from "../../src/screens/Sessions";
+} from "../../src/lib/sessions/stats";
 
 const day = (offset: number, now: Date) => {
   const d = new Date(now);

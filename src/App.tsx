@@ -7,32 +7,58 @@ import {
   Stop,
 } from "@phosphor-icons/react";
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Button } from "./components/Button";
 import { EngineStatusPill } from "./components/EngineStatusPill";
 import { Notices } from "./components/Notices";
 import { RoomTools } from "./components/RoomTools";
-import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { StudioAssistant } from "./components/StudioAssistant";
 import { listenToController } from "./lib/controller";
 import { useAi } from "./lib/jo/providers";
+import { useLibraryDraft } from "./lib/libraryDraft";
 import { useMedia } from "./lib/media";
 import { useWriting } from "./lib/originals";
 import { useRoomOperation } from "./lib/roomActions";
 import { handleShortcut } from "./lib/shortcuts";
-import { AiMusic } from "./screens/AiMusic";
-import { Jo } from "./screens/Jo";
-import { Library, useLibraryDraft } from "./screens/Library";
-import { MusicVideo } from "./screens/MusicVideo";
-import { Originals } from "./screens/Originals";
-import { Rig } from "./screens/Rig";
-import { Sessions } from "./screens/Sessions";
-import { Settings } from "./screens/Settings";
-import { Songs } from "./screens/Songs";
-import { Stage } from "./screens/Stage";
 import { SCREENS, SCREEN_ICONS } from "./screens/registry";
 import { useEngineStore } from "./store/engine";
 import "./screens/studio.css";
+
+// Every room and the manual are their own chunks: the first paint carries the shell,
+// the transport and the room that opens first (issues #40, #50).
+const Originals = lazy(() =>
+  import("./screens/Originals").then((m) => ({ default: m.Originals })),
+);
+const Stage = lazy(() =>
+  import("./screens/Stage").then((m) => ({ default: m.Stage })),
+);
+const Library = lazy(() =>
+  import("./screens/Library").then((m) => ({ default: m.Library })),
+);
+const Jo = lazy(() => import("./screens/Jo").then((m) => ({ default: m.Jo })));
+const Songs = lazy(() =>
+  import("./screens/Songs").then((m) => ({ default: m.Songs })),
+);
+const AiMusic = lazy(() =>
+  import("./screens/AiMusic").then((m) => ({ default: m.AiMusic })),
+);
+const MusicVideo = lazy(() =>
+  import("./screens/MusicVideo").then((m) => ({ default: m.MusicVideo })),
+);
+const Sessions = lazy(() =>
+  import("./screens/Sessions").then((m) => ({ default: m.Sessions })),
+);
+const Rig = lazy(() =>
+  import("./screens/Rig").then((m) => ({ default: m.Rig })),
+);
+const Settings = lazy(() =>
+  import("./screens/Settings").then((m) => ({ default: m.Settings })),
+);
+const ShortcutsHelp = lazy(() =>
+  import("./components/ShortcutsHelp").then((m) => ({
+    default: m.ShortcutsHelp,
+  })),
+);
 
 const hasUnsavedWork = () =>
   useLibraryDraft.getState().dirty ||
@@ -393,13 +419,23 @@ export const App: React.FC = () => {
         <main className="flex-1 overflow-y-auto p-8 relative">
           <div hidden={showHelp}>
             <RoomTools screen={currentScreen} />
-            {renderScreen()}
+            <Suspense
+              fallback={<p className="workspace-note">Opening the room…</p>}
+            >
+              {renderScreen()}
+            </Suspense>
           </div>
-          <ShortcutsHelp
-            open={showHelp}
-            room={currentScreen}
-            onClose={() => setShowHelp(false)}
-          />
+          {showHelp && (
+            <Suspense
+              fallback={<p className="workspace-note">Opening help…</p>}
+            >
+              <ShortcutsHelp
+                open
+                room={currentScreen}
+                onClose={() => setShowHelp(false)}
+              />
+            </Suspense>
+          )}
         </main>
       </div>
 

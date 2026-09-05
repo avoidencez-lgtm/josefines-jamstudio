@@ -1,6 +1,5 @@
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
-import { create } from "zustand";
 import { AiSettings } from "../components/AiSettings";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
@@ -13,6 +12,7 @@ import type {
   CostTotal,
   EngineStatus,
 } from "../ipc/contract";
+import { useSettingsView } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
 
 const EngineStatusView: React.FC<{
@@ -104,11 +104,6 @@ const EngineStatusView: React.FC<{
   );
 };
 
-const useSettingsView = create(() => ({ view: "Audio devices" }));
-export function openAiSettings() {
-  useSettingsView.setState({ view: "AI & models" });
-  useEngineStore.getState().setScreen("settings");
-}
 export const Settings: React.FC = () => {
   const {
     devices,

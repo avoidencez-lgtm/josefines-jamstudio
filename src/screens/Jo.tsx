@@ -1,10 +1,17 @@
 import type React from "react";
 import { useEffect, useRef } from "react";
-import { create } from "zustand";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
 import { WorkspaceHeader } from "../components/Workspace";
+import {
+  documentFingerprint,
+  joNeedsReview,
+  setInputValue,
+  setLastBrain,
+  setMessages,
+  useJoConversation,
+} from "../lib/jo/conversation";
 import { dispatchJoToolCall } from "../lib/jo/dispatcher";
 import type { JoContext } from "../lib/jo/gemini";
 import { parseNaturalIntent } from "../lib/jo/intent";
@@ -15,48 +22,9 @@ import {
   applyStudioEdits,
   songFingerprint,
 } from "../lib/jo/studioTools";
-import { useMedia } from "../lib/media";
 import { useWriting } from "../lib/originals";
+import { openAiSettings } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
-import { openAiSettings } from "./Settings";
-
-export function joNeedsReview(call: JoToolCall): boolean {
-  return (
-    Object.hasOwn(STUDIO_TOOLS, call.name) ||
-    call.name === "edit_video_shot" ||
-    (call.name === "songwriting" &&
-      ["lock", "groove", "restore"].includes(String(call.arguments.action)))
-  );
-}
-const documentFingerprint = () =>
-  JSON.stringify([songFingerprint(), useMedia.getState().project]);
-
-export const useJoConversation = create<{
-  messages: JoMessage[];
-  inputValue: string;
-  busy: boolean;
-  lastBrain: string | null;
-  pending: { calls: JoToolCall[]; expected: string } | null;
-}>(() => ({
-  messages: [
-    {
-      id: "welcome",
-      sender: "jo",
-      text: "Tell me what the band should do. Live commands run when you send them; changes to your original song are proposed for review.",
-      timestamp: "Jo",
-    },
-  ],
-  inputValue: "",
-  busy: false,
-  lastBrain: null,
-  pending: null,
-}));
-const setMessages = (update: (previous: JoMessage[]) => JoMessage[]) =>
-  useJoConversation.setState((s) => ({ messages: update(s.messages) }));
-const setInputValue = (inputValue: string) =>
-  useJoConversation.setState({ inputValue });
-const setLastBrain = (lastBrain: string) =>
-  useJoConversation.setState({ lastBrain });
 
 export const Jo: React.FC = () => {
   const { messages, inputValue, busy, pending, lastBrain } =

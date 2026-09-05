@@ -1,6 +1,5 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
-import { create } from "zustand";
 import { Button } from "../components/Button";
 import { ChordStrip } from "../components/ChordStrip";
 import { Panel } from "../components/Panel";
@@ -10,6 +9,7 @@ import type { Chart } from "../ipc/contract";
 import { keyName } from "../lib/chart/notes";
 import { chartToText, parseChartText, resolveChart } from "../lib/chart/text";
 import { transposeChart } from "../lib/chart/transpose";
+import { useLibraryDraft } from "../lib/libraryDraft";
 import { useEngineStore } from "../store/engine";
 
 const TEMPLATE = `# New Tune
@@ -25,13 +25,6 @@ style: blues-shuffle
 | Dm7 G7 | Cmaj7 | % | Bm7b5 E7 | Am7:3 D7:1 |
 `;
 
-// Keep the editor when navigating to Stage or Settings; files remain the saved truth.
-export const useLibraryDraft = create<{
-  text: string | null;
-  baseline: string;
-  editingId: string | null;
-  dirty: boolean;
-}>(() => ({ text: null, baseline: "", editingId: null, dirty: false }));
 const setText = (text: string) => useLibraryDraft.setState({ text });
 const setEditingId = (editingId: string | null) =>
   useLibraryDraft.setState({ editingId });

@@ -17,7 +17,7 @@ import {
 } from "../lib/jo/studioTools";
 import { useMedia } from "../lib/media";
 import { useWriting } from "../lib/originals";
-import { openAiSettings } from "../screens/Settings";
+import { openAiSettings } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 
