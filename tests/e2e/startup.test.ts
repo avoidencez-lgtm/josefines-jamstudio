@@ -252,6 +252,7 @@ describe("desktop startup against the preview engine", () => {
       "engine.status",
       "input.meters",
       "meters",
+      "recorder.error",
       "rig.error",
       "rig.state",
       "transport.state",

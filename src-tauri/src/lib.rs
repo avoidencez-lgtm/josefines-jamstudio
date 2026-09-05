@@ -1089,13 +1089,21 @@ pub fn configure<R: tauri::Runtime>(
             // Emit telemetry at 30 Hz; engine status only when it changes.
             std::thread::spawn(move || {
                 let mut last_status: Option<EngineStatus> = None;
+                let mut last_recording_error: Option<String> = None;
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(33));
-                    let (tel, status) = {
+                    let (tel, status, recording_error) = {
                         let eng = eng.lock();
                         eng.poll_stream_errors();
-                        (eng.get_telemetry(), eng.status())
+                        (eng.get_telemetry(), eng.status(), eng.recorder_error())
                     };
+                    if recording_error != last_recording_error {
+                        let _ = app_handle.emit("recorder:error", &recording_error);
+                        if let Some(error) = &recording_error {
+                            let _ = app_handle.emit("app:error", error);
+                        }
+                        last_recording_error = recording_error;
+                    }
                     // Section-bound rig scenes: the orchestrator de-duplicates, so
                     // calling it every tick is cheap and only sends on a change.
                     if tel.transport.state == "playing" && !tel.band.current_section.is_empty() {

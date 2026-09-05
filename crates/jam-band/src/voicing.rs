@@ -62,11 +62,47 @@ pub fn parse_chord(symbol: &str) -> Option<(i32, ChordQuality)> {
         quality_str = &quality_str[accidental.len_utf8()..];
     }
 
-    // Slash chords ("C/G") keep the upper structure; the bass player reads the root.
+    // Slash chords ("C/G") keep the upper structure; written bass is `slash_bass`.
     let quality_str = quality_str.split('/').next().unwrap_or("");
     let quality = classify_quality(quality_str);
 
     Some((root, quality))
+}
+
+/// Pitch class written after `/` (`C/E` → 4). Same letters and accidentals as the root.
+pub fn slash_bass(symbol: &str) -> Option<i32> {
+    let after = symbol.trim().split_once('/')?.1.trim();
+    parse_note_pc(after)
+}
+
+fn parse_note_pc(s: &str) -> Option<i32> {
+    let s = s.trim();
+    let letter = s.chars().next()?.to_ascii_uppercase();
+    let mut pc = match letter {
+        'C' => 0,
+        'D' => 2,
+        'E' => 4,
+        'F' => 5,
+        'G' => 7,
+        'A' => 9,
+        'B' => 11,
+        _ => return None,
+    };
+    let mut rest = &s[letter.len_utf8()..];
+    while let Some(accidental) = rest.chars().next() {
+        let delta = match accidental {
+            '#' => 1,
+            'b' => -1,
+            'x' => 2,
+            _ => break,
+        };
+        pc = (pc + delta + 12) % 12;
+        rest = &rest[accidental.len_utf8()..];
+    }
+    if !rest.is_empty() {
+        return None;
+    }
+    Some(pc)
 }
 
 /// Maps a chord-symbol suffix onto the closest quality the band can voice. Extensions
@@ -315,6 +351,10 @@ mod tests {
         assert_eq!(parse_chord("G#dim7"), Some((8, ChordQuality::Diminished)));
         assert_eq!(parse_chord("C/G"), Some((0, ChordQuality::Major)));
         assert_eq!(parse_chord("D7/F#"), Some((2, ChordQuality::Dominant7)));
+        assert_eq!(slash_bass("C/E"), Some(4));
+        assert_eq!(slash_bass("D7/F#"), Some(6));
+        assert_eq!(slash_bass("C"), None);
+        assert_eq!(voice_chord("C/E", "shell"), voice_chord("C", "shell"));
         assert_eq!(parse_chord("Esus"), Some((4, ChordQuality::Sus4)));
         assert_eq!(parse_chord("E5"), Some((4, ChordQuality::Power5)));
     }

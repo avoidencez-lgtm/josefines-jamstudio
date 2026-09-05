@@ -132,6 +132,8 @@ Lagre før du lukker. Skrivebordsappen hindrer lukking under opptak/arbeid og sp
 
 Transportlinjen øverst spiller av, pauser, stopper, tar opp, velger opptelling og slår av/på løkker. Stage viser gjeldende/neste akkord og posisjon. Chart & band settings velger skjema og passende stil, endrer intensitet og band-/klikkvolum og aktiverer stemmeapparat eller referansetone. Cues ber om Fill, Crash, Stop eller Ending. Noen endringer venter til neste takt og vises som ventende. Mute gjelder trommer, bass eller komp; follow-energy følger målt gitarnivå, ikke musikalsk hensikt. Shapes viser et spillbart grep for gjeldende akkord og, mindre, neste akkord, med grunntonen i gult; nummerknappene velger et annet grep. Dette er teoriforslag i standardstemming, ikke en transkripsjon av det som ble spilt.
 
+Hvis du laster et akkordskjema med en annen taktart under opptelling, starter opptellingen på nytt i den nye taktarten før bandet kommer inn. Samme taktart beholder posisjonen i opptellingen.
+
 ### Øving og tempotrening
 
 Practice viser partier fra det innlastede skjemaet. Velg ett for å repetere taktintervallet, inkludert gjentakelser. Exit loop går tilbake til hele formen. Velg Start, Target, Step og Every i Tempo Trainer, aktiver og trykk Play fra stopp. Tempoet justeres etter valgt antall spilte takter, også i korte løkker; et aktivt opptak endres ikke. Styringen bruker UI-telemetri og er ikke et samplenøyaktig spor for tempoautomasjon.
@@ -183,6 +185,8 @@ CLI-en beholder sine egne innloggingsdata. Codex kan bruke ChatGPT-pålogging el
 ### Personvern og nyttige forespørsler
 
 Tekstassistenter får låttekst/struktur, innstillinger, riggnavn og mellomlagrede opptaksmål etter behov, ikke rå opptakslyd eller nøkler. Prøv «Add a quiet eight-bar bridge», «Leave locked bass alone and thin out verse drums» eller «Append three concrete chorus images to this section’s lyrics». Lokale opptaksmål er heuristikker, ikke en AI-lyttevurdering. Bare mediegenereringskommandoer sender sine uttrykkelig valgte genereringsdata.
+
+Les handlingsresultatet: Jo viser motorens avvisning i stedet for å melde at handlingen lyktes. Et tempo utenfor tillatt område begrenses til området, og godkjent BPM vises. Bandendringer kan vente til neste takt. En uendret låt eller scene meldes som uendret; låste stemmer forblir låst.
 
 ### Tre perspektiver på låten
 
@@ -263,6 +267,8 @@ I skrivebordsappen lagres en vellykket analyse sammen med opptaket og vises igje
 Hvis lagring melder at take.json.tmp allerede finnes, lukk appen og sikkerhetskopier opptaksmappen før du flytter den midlertidige filen til side og prøver igjen. Appen nekter å overskrive den. Hvis inngangsfilen peker utenfor opptakets egen mappe, må opptaket gjenopprettes fra en sammenhengende sikkerhetskopi før metadata kan lagres.
 
 Den oppdaterte tonedetektoren måler stabile testtoner mer nøyaktig. Bruk Analyze again for eldre resultater. Bend, vibrato og akkorder krever fortsatt en musikalsk vurdering; målingen skiller ikke tilsiktede tonebevegelser fra stemmingsfeil.
+
+Hvis diskskrivingen ikke kan ta imot lyd, slutter opptaksindikatoren å pulsere, og en melding om avbrudd vises. Save partial take fullfører lyden som ble mottatt før avbruddet; opptaket fortsetter ikke automatisk. Hold appen åpen til dette er ferdig. En diskfeil kan også hindre fullføring: feilen vises, og delvise WAV-filer blir liggende i opptaksmappen for gjenoppretting. Frigjør diskplass eller løs diskproblemet før du starter et nytt opptak.
 
 ### Justering og separate spor
 

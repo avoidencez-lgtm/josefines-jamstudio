@@ -132,6 +132,8 @@ Save before closing. The native app blocks close during a recording/operation an
 
 The top transport plays, pauses, stops, records, sets count-in and toggles loops. Stage shows the current/next chord and live position. Chart & band settings selects a chart and matching style, changes intensity and band/click volume, and enables tuner or a reference tone. Cues request Fill, Crash, Stop or Ending. Some changes are queued for the next bar and shown as pending. Part mutes affect drums, bass or comp; follow-energy follows measured guitar level, not musical intent. Shapes shows a playable fingering for the chord now and, smaller, the chord next, root in amber; the numbered buttons pick another shape. These are theory suggestions in standard tuning, not a transcription of what was played.
 
+Loading a chart with a different meter during count-in restarts the count-in in the new meter, then the band enters. Loading the same meter keeps the current count-in position.
+
 ### Practice and tempo trainer
 
 Practice lists passages from the loaded chart. Select one to loop its arranged range, including repeats. Exit loop returns to the full form. In Tempo Trainer choose Start, Target, Step and Every, then enable it and press Play from stopped. It adjusts after the chosen number of performed bars, including short loop wraps; it does not retime an active recording. It is controlled from UI telemetry, not a sample-accurate tempo automation lane.
@@ -183,6 +185,8 @@ The CLI keeps its own credentials. Codex can use a ChatGPT login or API-key logi
 ### Privacy and useful prompts
 
 Text assistants receive song text/structure, settings, rig name and cached take metrics as needed, not raw take audio or keys. Try “Add a quiet eight-bar bridge”, “Leave locked bass alone and thin out verse drums”, or “Append three concrete chorus images to this section’s lyrics”. Local take metrics are heuristics, not an AI listening judgment. Only media-generation commands send their explicitly selected generation inputs.
+
+Read the action result: Jo reports engine refusals instead of claiming success. A tempo request outside the allowed range is limited to that range and the accepted BPM is shown. Band changes may wait for the next bar. An unchanged song or shot is reported as unchanged; locked parts stay locked.
 
 ### Three perspectives
 
@@ -263,6 +267,8 @@ In the desktop app, successful analysis is saved with the take and returns when 
 If saving reports an existing take.json.tmp, close the app and back up the take folder before moving that temporary file aside, then retry. The app refuses to overwrite it. A take whose input path points outside its own folder must be restored from a consistent backup before metadata can be saved.
 
 The updated pitch detector measures stationary test tones more accurately. Use Analyze again for older results. Bends, vibrato and chords still need musical judgment; the measurement does not separate deliberate pitch movement from tuning error.
+
+If the disk writer cannot accept audio, the recording indicator stops pulsing and an interruption message appears. Save partial take finalises the audio received before the interruption; recording does not silently resume. Keep the app open until this finishes. A disk failure can also prevent finalisation: the error stays visible and partial WAV files remain in the take folder for recovery. Free disk space or resolve the disk problem before starting another take.
 
 ### Alignment and stems
 

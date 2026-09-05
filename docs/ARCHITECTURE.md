@@ -238,6 +238,18 @@ export type LyriaState = { active: boolean; buffering: boolean; bufferMs: number
 
 ## 6. AI layer
 
+Current execution contract (2026-09-05, issue #166): the engine store returns
+`CommandResult` for Jo's transport, band and recording actions. Errors remain
+visible UI notices and are carried on that specific result; the dispatcher
+requires success before confirming the action. Tauri's `null` unit response is
+successful. Tempo/intensity results contain the value submitted after clamping;
+they acknowledge the command, not an audio or later-telemetry measurement. Queued
+band changes are described as accepted. Refused actions appear in Jo's transcript
+instead of the model's proposed success wording; the inline assistant also retains
+the failure in conversation history. Unchanged song/film edits are reported as
+unchanged and do not create extra undo/version entries. This does not implement
+the voice pipeline described below.
+
 ### 6.1 Providers (Rust, `src-tauri/src/net/`)
 
 ```rust
@@ -584,6 +596,20 @@ Original and Film save completions preserve newer in-memory edits while advancin
 Song documents gain optional `body.referenceBlueprint` (reference name, optional media asset ID, mapped form) and `body.rigSnapshot` (profile ID, scene index, known controller values). Existing schema version 1 and unknown-field preservation carry these additive values. Settings gain `rehearsalSetlist` (entries name a chart, an optional groove checked against the chart's meter, tempo and count-in) and `audioProfiles`; other settings survive updates and profiles never include API credentials. Imported malformed presets are shown as errors rather than silently replaced.
 
 Offline melody extraction is a Rust worker: saved take ID → bounded WAV decode → existing DSP pitch tracker → sustained note events → editable UI sketch. Harmony ranking and film grid calculations are pure TypeScript; actual audio, playback, capture, MIDI, keys and disk writes remain native. The new Jo actions enter the same reviewed song-edit boundary as existing tools. See `docs/research/room-capabilities.md` and the current recipe in `docs/EXTENDING.md` for scope and limits. Older target architecture below is not a claim that all roadmap seams are implemented.
+
+## Recording interruption recovery
+
+Recording failure reporting: the render worker queues audio and its MIDI as one
+accepted block. A rejected audio block neither advances the accepted-frame count
+nor appends MIDI; later blocks are ignored. The writer remains pending so a new
+take, device change or close cannot discard the partial recording. The 30 Hz
+control thread emits `recorder:error` (string or null) when that error changes,
+plus `app:error` once for a new failure. The UI stops its recording animation,
+shows the interruption and offers Save partial take. `isRecording` retains its
+existing pending-take/close-guard meaning until finalisation; `recordingError`
+distinguishes interrupted capture. WAV finalisation remains on the command thread,
+never the audio callback. This does not resolve recording alignment or blocking
+disk I/O during explicit start/stop (issues #129 and #136).
 
 ## Current take-analysis evidence
 
