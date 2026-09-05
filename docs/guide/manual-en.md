@@ -354,6 +354,8 @@ For misaligned guitar, measure Guitar offset against a known transient in your D
 
 For 401/403, verify the selected connection, stored key/account and model access. For 429, inspect quota/rate limits; do not repeatedly submit paid jobs. Agent not found means install the native CLI or set its full path; detection alone does not prove login. Missing FFmpeg means install both ffmpeg and ffprobe, restart and recheck. Invalid local workflows must run in ComfyUI first and be exported in API format. Missing media means check the recorded file path and backup, not only the cache.
 
+Documentation links in Settings and Film open in your default browser. If the system refuses a link, the error notice includes the URL to copy into your browser. On macOS, a failed system browser or media-player handoff is reported; on Windows the app can confirm only that Explorer started, so check your default browser/player if nothing appears.
+
 ### What automated checks cannot prove
 
 Before depending on a release, run a real Mac session: allow recording access, select the rig, record and reopen a song, test every intended pedal/scene, export five minutes to Logic/REAPER and measure drift, then generate one short result with each intended provider/local model. Verify playback and a film render on that machine. Account access, musical quality, hardware continuity, signing/notarisation and physical latency remain separate acceptance results.
