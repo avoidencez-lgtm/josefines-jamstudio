@@ -40,6 +40,17 @@ pub struct TakeMetadata {
 }
 
 type Writer = thread::JoinHandle<Result<TakeMetadata, String>>;
+type StemWriter = WavWriter<std::io::BufWriter<fs::File>>;
+
+/// Stem files opened on the command thread, then installed under the recorder lock.
+pub(crate) struct PreparedTake {
+    id: String,
+    writers: Vec<(Vec<usize>, StemWriter)>,
+    meta: TakeMetadata,
+    offset: usize,
+    rate: u32,
+}
+
 pub struct TakeRecorder {
     sample_rate: u32,
     base_dir: PathBuf,
@@ -85,69 +96,55 @@ impl TakeRecorder {
     pub fn error(&self) -> Option<&str> {
         self.failure.as_deref().filter(|_| self.is_recording())
     }
-    pub fn start_take(
-        &mut self,
+    pub(crate) fn base_dir(&self) -> &Path {
+        &self.base_dir
+    }
+
+    pub(crate) fn latency_offset_samples(&self) -> usize {
+        self.latency_offset_samples
+    }
+
+    /// Opens the take directory and six WAV writers. Disk I/O only; call
+    /// [`install_prepared`] under the recorder lock afterwards.
+    pub(crate) fn prepare_take(
+        &self,
         session_id: String,
         style_id: String,
         chart_id: String,
         tempo: f64,
-    ) -> Result<String, String> {
+    ) -> Result<PreparedTake, String> {
         if self.is_recording() {
             return Err("A take is already recording. Stop and save it first.".into());
         }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| e.to_string())?;
-        let id = format!("take-{}", now.as_nanos());
-        fs::create_dir_all(&self.base_dir).map_err(|e| e.to_string())?;
-        let dir = self.base_dir.join(&id);
-        fs::create_dir(&dir).map_err(|e| e.to_string())?;
-        let layout: [(&str, &[usize]); 6] = [
-            ("guitar-di", &[0]),
-            ("band", &[1, 2]),
-            ("master", &[3, 4]),
-            ("drums", &[5, 6]),
-            ("bass", &[7]),
-            ("comp", &[8]),
-        ];
-        let mut writers = Vec::new();
-        let mut stems = BTreeMap::new();
-        for (name, channels) in layout {
-            let path = dir.join(format!("{name}.wav"));
-            let writer = WavWriter::create(
-                &path,
-                WavSpec {
-                    channels: channels.len() as u16,
-                    sample_rate: self.sample_rate,
-                    bits_per_sample: 24,
-                    sample_format: hound::SampleFormat::Int,
-                },
-            )
-            .map_err(|e| e.to_string())?;
-            stems.insert(name.to_string(), path.to_string_lossy().into_owned());
-            writers.push((channels.to_vec(), writer));
+        prepare_take_files(
+            &self.base_dir,
+            self.sample_rate,
+            self.latency_offset_samples,
+            self.snapshot.clone(),
+            (session_id, style_id, chart_id, tempo),
+        )
+    }
+
+    pub(crate) fn install_prepared(&mut self, prepared: PreparedTake) -> Result<String, String> {
+        if self.is_recording() {
+            let dir = Path::new(&prepared.meta.path_input)
+                .parent()
+                .map(|p| p.to_path_buf());
+            drop(prepared);
+            if let Some(dir) = dir {
+                let _ = fs::remove_dir_all(dir);
+            }
+            return Err("A take is already recording. Stop and save it first.".into());
         }
-        let mut meta = TakeMetadata {
-            id: id.clone(),
-            session_id,
-            timestamp: format!("{}.{:03}", now.as_secs(), now.subsec_millis()),
-            style_id,
-            chart_id,
-            tempo,
-            path_input: stems["guitar-di"].clone(),
-            path_band: stems["band"].clone(),
-            path_master: stems["master"].clone(),
-            stems,
-            snapshot: self.snapshot.clone(),
-            sample_rate: self.sample_rate,
-            ..Default::default()
-        };
-        meta.extra
-            .insert("schemaVersion".into(), serde_json::json!(1));
+        let PreparedTake {
+            id,
+            mut writers,
+            mut meta,
+            offset,
+            rate,
+        } = prepared;
         // Keep enough queued audio for disk jitter; never block the render thread.
         let (tx, rx) = mpsc::sync_channel::<Vec<Frame>>(512);
-        let rate = self.sample_rate;
-        let offset = self.latency_offset_samples;
         let writer = thread::spawn(move || -> Result<TakeMetadata, String> {
             let mut frames = 0usize;
             let mut checkpoint = 0usize;
@@ -214,6 +211,17 @@ impl TakeRecorder {
         self.frames_written = 0;
         Ok(id)
     }
+
+    pub fn start_take(
+        &mut self,
+        session_id: String,
+        style_id: String,
+        chart_id: String,
+        tempo: f64,
+    ) -> Result<String, String> {
+        let prepared = self.prepare_take(session_id, style_id, chart_id, tempo)?;
+        self.install_prepared(prepared)
+    }
     pub fn push_frames(&mut self, frames: Vec<Frame>, notes: Vec<crate::workstation::MidiNote>) {
         if let Some(tx) = &self.sender {
             let count = frames.len() as u64;
@@ -243,24 +251,97 @@ impl TakeRecorder {
         }
         Ok(())
     }
-    pub fn stop_and_save(&mut self) -> Result<TakeMetadata, String> {
+    /// Drops the sender and takes the writer handle. Join it *outside* the
+    /// recorder mutex so the render thread can keep pushing (or see idle).
+    pub(crate) fn take_writer(&mut self) -> Result<Writer, String> {
         self.sender.take();
-        let writer = self.writer.take().ok_or("No active recording")?;
-        let mut meta = writer
-            .join()
-            .map_err(|_| "Recording writer failed; partial WAVs kept")??;
+        self.writer.take().ok_or("No active recording".into())
+    }
+
+    pub(crate) fn apply_stop_fields(&mut self, mut meta: TakeMetadata) -> TakeMetadata {
         meta.midi = std::mem::take(&mut self.midi);
         if let Some(e) = self.failure.take() {
             meta.notes = e;
-            save_manifest(&meta)?;
-            // Files are truth: the take is on disk. Returning Err hid it from
-            // Sessions until a manual refresh (#92).
-            return Ok(meta);
         }
+        meta
+    }
+
+    pub fn stop_and_save(&mut self) -> Result<TakeMetadata, String> {
+        let writer = self.take_writer()?;
+        let meta = writer
+            .join()
+            .map_err(|_| "Recording writer failed; partial WAVs kept")??;
+        let meta = self.apply_stop_fields(meta);
         save_manifest(&meta)?;
         Ok(meta)
     }
 }
+pub(crate) fn prepare_take_files(
+    base_dir: &Path,
+    sample_rate: u32,
+    offset: usize,
+    snapshot: serde_json::Value,
+    ids: (String, String, String, f64),
+) -> Result<PreparedTake, String> {
+    let (session_id, style_id, chart_id, tempo) = ids;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?;
+    let id = format!("take-{}", now.as_nanos());
+    fs::create_dir_all(base_dir).map_err(|e| e.to_string())?;
+    let dir = base_dir.join(&id);
+    fs::create_dir(&dir).map_err(|e| e.to_string())?;
+    let layout: [(&str, &[usize]); 6] = [
+        ("guitar-di", &[0]),
+        ("band", &[1, 2]),
+        ("master", &[3, 4]),
+        ("drums", &[5, 6]),
+        ("bass", &[7]),
+        ("comp", &[8]),
+    ];
+    let mut writers = Vec::new();
+    let mut stems = BTreeMap::new();
+    for (name, channels) in layout {
+        let path = dir.join(format!("{name}.wav"));
+        let writer = WavWriter::create(
+            &path,
+            WavSpec {
+                channels: channels.len() as u16,
+                sample_rate,
+                bits_per_sample: 24,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .map_err(|e| e.to_string())?;
+        stems.insert(name.to_string(), path.to_string_lossy().into_owned());
+        writers.push((channels.to_vec(), writer));
+    }
+    let mut meta = TakeMetadata {
+        id: id.clone(),
+        session_id,
+        timestamp: format!("{}.{:03}", now.as_secs(), now.subsec_millis()),
+        style_id,
+        chart_id,
+        tempo,
+        path_input: stems["guitar-di"].clone(),
+        path_band: stems["band"].clone(),
+        path_master: stems["master"].clone(),
+        stems,
+        snapshot,
+        sample_rate,
+        ..Default::default()
+    };
+    meta.extra
+        .insert("schemaVersion".into(), serde_json::json!(1));
+    Ok(PreparedTake {
+        id,
+        writers,
+        meta,
+        offset,
+        rate: sample_rate,
+    })
+}
+
 impl Drop for TakeRecorder {
     fn drop(&mut self) {
         if self.is_recording() {
@@ -426,5 +507,42 @@ mod tests {
             .join("take.json")
             .exists());
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stop_does_not_hold_the_recorder_mutex_while_the_writer_joins() {
+        use std::sync::{mpsc as std_mpsc, Arc, Mutex};
+        use std::time::{Duration, Instant};
+
+        let mut rec = TakeRecorder::new(1000, PathBuf::new());
+        let (tx, rx) = mpsc::sync_channel::<Vec<Frame>>(1);
+        rec.sender = Some(tx);
+        rec.writer = Some(thread::spawn(move || {
+            thread::sleep(Duration::from_millis(150));
+            drop(rx);
+            Ok(TakeMetadata::default())
+        }));
+        let rec = Arc::new(Mutex::new(rec));
+        let probe = Arc::clone(&rec);
+
+        let started = Instant::now();
+        let writer = rec.lock().unwrap().take_writer().unwrap();
+        let held = started.elapsed();
+        assert!(
+            held < Duration::from_millis(50),
+            "taking the writer joined the thread: {held:?}"
+        );
+
+        let (ready_tx, ready_rx) = std_mpsc::channel();
+        thread::spawn(move || {
+            let _g = probe.lock().unwrap();
+            ready_tx.send(()).unwrap();
+        });
+        ready_rx
+            .recv_timeout(Duration::from_millis(50))
+            .expect("render thread would block if the lock were still held");
+
+        writer.join().unwrap().unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(150));
     }
 }

@@ -443,13 +443,31 @@ impl AudioEngine {
             let tl = self.timeline.lock();
             (tl.bpm, tl.time_signature)
         };
-        let mut recorder = self.recorder.lock();
-        recorder.snapshot = self.song_snapshot.clone();
-        if recorder.snapshot.is_null() {
-            recorder.snapshot = serde_json::json!({});
-        }
-        recorder.snapshot["timeSignature"] = serde_json::json!(meter);
-        recorder.start_take(session_id, style_id, chart_id, tempo)
+        let (base_dir, sample_rate, offset, snapshot) = {
+            let mut recorder = self.recorder.lock();
+            if recorder.is_recording() {
+                return Err("A take is already recording. Stop and save it first.".into());
+            }
+            recorder.snapshot = self.song_snapshot.clone();
+            if recorder.snapshot.is_null() {
+                recorder.snapshot = serde_json::json!({});
+            }
+            recorder.snapshot["timeSignature"] = serde_json::json!(meter);
+            (
+                recorder.base_dir().to_path_buf(),
+                recorder.sample_rate(),
+                recorder.latency_offset_samples(),
+                recorder.snapshot.clone(),
+            )
+        };
+        let prepared = crate::recorder::prepare_take_files(
+            &base_dir,
+            sample_rate,
+            offset,
+            snapshot,
+            (session_id, style_id, chart_id, tempo),
+        )?;
+        self.recorder.lock().install_prepared(prepared)
     }
 
     pub fn ensure_timing_editable(&self) -> Result<(), String> {
@@ -460,19 +478,24 @@ impl AudioEngine {
     }
 
     pub fn record_song(&self, session_id: String) -> Result<String, String> {
-        let _gate = self.render_gate.lock();
-        if self.recorder_is_recording() {
-            return Err("Save the current take first.".into());
-        }
-        self.transport_stop();
-        self.transport_set_count_in(0);
-        if let Some(bpm) = self.song_snapshot["body"]["chart"]["defaultBpm"].as_f64() {
-            self.transport_set_tempo(bpm);
-            self.transport_set_time_signature((4, 4));
-            self.transport_set_loop(1, 257, false);
+        {
+            let _gate = self.render_gate.lock();
+            if self.recorder_is_recording() {
+                return Err("Save the current take first.".into());
+            }
+            self.transport_stop();
+            self.transport_set_count_in(0);
+            if let Some(bpm) = self.song_snapshot["body"]["chart"]["defaultBpm"].as_f64() {
+                self.transport_set_tempo(bpm);
+                self.transport_set_time_signature((4, 4));
+                self.transport_set_loop(1, 257, false);
+            }
         }
         let id = self.recorder_start(session_id)?;
-        self.timeline.lock().play();
+        {
+            let _gate = self.render_gate.lock();
+            self.timeline.lock().play();
+        }
         Ok(id)
     }
 
@@ -480,7 +503,11 @@ impl AudioEngine {
         &self,
         session_id: String,
     ) -> Result<crate::recorder::TakeMetadata, String> {
-        let frames = self.capture.lock().snapshot()?;
+        let queued = {
+            let mut capture = self.capture.lock();
+            capture.take_frames()?
+        };
+        let frames = Vec::from(queued);
         let mut r =
             crate::recorder::TakeRecorder::new(self.sample_rate(), dirs_base().join("takes"));
         r.snapshot = serde_json::json!({"capture": true});
@@ -518,7 +545,13 @@ impl AudioEngine {
     }
 
     pub fn recorder_stop(&self) -> Result<crate::recorder::TakeMetadata, String> {
-        self.recorder.lock().stop_and_save()
+        let writer = self.recorder.lock().take_writer()?;
+        let meta = writer
+            .join()
+            .map_err(|_| "Recording writer failed; partial WAVs kept")??;
+        let meta = self.recorder.lock().apply_stop_fields(meta);
+        crate::recorder::save_manifest(&meta)?;
+        Ok(meta)
     }
 
     pub fn recorder_set_latency_compensation(&self, offset_samples: usize) {

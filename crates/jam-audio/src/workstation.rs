@@ -41,6 +41,13 @@ impl Capture {
         }
         Ok(self.frames.iter().copied().collect())
     }
+
+    pub fn take_frames(&mut self) -> Result<VecDeque<Frame>, String> {
+        if self.frames.is_empty() {
+            return Err("Arm capture, then play something first.".into());
+        }
+        Ok(std::mem::take(&mut self.frames))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,6 +168,17 @@ mod tests {
         assert_eq!(c.snapshot().unwrap(), vec![[0.2; 9], [0.3; 9]]);
         c.arm(0).unwrap();
         assert!(c.snapshot().is_err());
+    }
+
+    #[test]
+    fn keep_takes_the_buffer_instead_of_cloning() {
+        let mut c = Capture::default();
+        c.arm(1).unwrap();
+        c.push(&[[0.4; 9]; 3], 3);
+        let frames = Vec::from(c.take_frames().unwrap());
+        assert_eq!(frames.len(), 3);
+        assert!(c.snapshot().is_err(), "buffer must be empty after keep");
+        assert!(c.take_frames().is_err());
     }
     #[test]
     fn clip_keeps_pitch_repeats_at_trim_and_obeys_transport_spans() {
