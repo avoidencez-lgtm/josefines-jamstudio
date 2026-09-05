@@ -109,7 +109,10 @@ impl IndexStore {
         Ok(())
     }
 
-    pub fn list_takes(&self) -> Result<Vec<TakeMetadata>, String> {
+    /// Lists cached takes. The cache never decides what exists (ADR 0005): a manifest
+    /// column another app version wrote falls back to the plain columns, and a row that
+    /// cannot be read at all is skipped with a warning instead of hiding every take.
+    pub fn list_takes(&self) -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
         let mut stmt = self
             .conn
             .prepare(
@@ -123,13 +126,9 @@ impl IndexStore {
         let rows = stmt
             .query_map([], |row| {
                 if let Some(manifest) = row.get::<_, Option<String>>(13)? {
-                    return serde_json::from_str(&manifest).map_err(|e| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            13,
-                            rusqlite::types::Type::Text,
-                            Box::new(e),
-                        )
-                    });
+                    if let Ok(take) = serde_json::from_str::<TakeMetadata>(&manifest) {
+                        return Ok(take);
+                    }
                 }
                 let peaks_str: String = row.get(11)?;
                 let peaks: Vec<f32> = serde_json::from_str(&peaks_str).unwrap_or_default();
@@ -153,10 +152,17 @@ impl IndexStore {
             .map_err(|e| e.to_string())?;
 
         let mut takes = Vec::new();
-        for r in rows {
-            takes.push(r.map_err(|e| e.to_string())?);
+        let mut skipped = Vec::new();
+        for (i, r) in rows.enumerate() {
+            match r {
+                Ok(take) => takes.push(take),
+                Err(e) => skipped.push(format!(
+                    "Skipped unreadable take index row {}: {e}. Takes with a take.json on disk stay available; delete index.sqlite to rebuild the cache.",
+                    i + 1
+                )),
+            }
         }
-        Ok(takes)
+        Ok((takes, skipped))
     }
 
     pub fn delete_take(&self, id: &str) -> Result<(), String> {
@@ -247,7 +253,8 @@ mod tests {
         take.snapshot = serde_json::json!({"timeSignature": [6, 8]});
         store.insert_take(&take).expect("insert succeeds");
 
-        let list = store.list_takes().expect("list succeeds");
+        let (list, skipped) = store.list_takes().expect("list succeeds");
+        assert!(skipped.is_empty());
         assert_eq!(list.len(), 1);
         assert_eq!(
             serde_json::to_value(&list[0]).unwrap(),
@@ -257,7 +264,48 @@ mod tests {
         assert_eq!(list[0].waveform_peaks, vec![0.1, 0.5, 0.9]);
 
         store.delete_take("take-123").expect("delete succeeds");
-        let empty_list = store.list_takes().expect("list succeeds");
+        let (empty_list, _) = store.list_takes().expect("list succeeds");
         assert_eq!(empty_list.len(), 0);
+    }
+
+    /// Issue #33: one stale or broken cache row must never hide the other takes.
+    #[test]
+    fn stale_or_broken_cache_rows_never_hide_other_takes() {
+        let store = IndexStore::open_in_memory().expect("in-memory db opens");
+        store
+            .insert_take(&TakeMetadata {
+                id: "good".into(),
+                timestamp: "2026-09-05T10:00:00Z".into(),
+                ..Default::default()
+            })
+            .expect("insert succeeds");
+        let columns = "id, session_id, timestamp, duration_secs, style_id, chart_id, tempo, \
+             sample_count, path_input, path_band, path_master, waveform_peaks, notes, manifest";
+        // A manifest written by a future app version that no longer deserialises: the
+        // plain columns still describe the take.
+        store
+            .conn
+            .execute(
+                &format!("INSERT INTO takes ({columns}) VALUES ('stale', 's', '2026-09-05T11:00:00Z', 1.5, 'blues-shuffle', 'blues-12-bar', 100.0, 72000, 'in.wav', 'band.wav', 'master.wav', '[0.5]', 'note', '{{\"id\":\"stale\",\"unexpected\":')"),
+                [],
+            )
+            .unwrap();
+        // A row whose columns cannot be read at all is skipped, not fatal.
+        store
+            .conn
+            .execute(
+                &format!("INSERT INTO takes ({columns}) VALUES ('broken', 's', '2026-09-05T12:00:00Z', 'not a number', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', NULL)"),
+                [],
+            )
+            .unwrap();
+        let (takes, skipped) = store.list_takes().expect("listing tolerates bad rows");
+        assert_eq!(
+            takes.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+            ["stale", "good"]
+        );
+        assert_eq!(takes[0].duration_secs, 1.5);
+        assert_eq!(takes[0].waveform_peaks, vec![0.5]);
+        assert_eq!(skipped.len(), 1);
+        assert!(skipped[0].contains("row 1"), "{}", skipped[0]);
     }
 }

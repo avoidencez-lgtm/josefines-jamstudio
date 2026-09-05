@@ -222,9 +222,13 @@ pub fn originals_save(document: Value) -> Result<Value, String> {
     write_document(&song_dir(), document)
 }
 #[tauri::command]
-pub fn originals_list(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
+pub fn originals_list(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<Value>, String> {
     let (docs, warnings) = scan_originals(&song_dir())?;
-    for warning in warnings {
+    // Three rooms refresh this list; a damaged file is reported once per session.
+    for warning in state.warnings.fresh(warnings) {
         let _ = app.emit("app:error", warning);
     }
     Ok(docs)
@@ -334,7 +338,10 @@ pub fn originals_load(document: Value, state: State<'_, AppState>) -> Result<(),
                 .iter()
                 .any(|s| s.feel.time_sig != song.chart.time_sig)
             {
-                return Err("Choose 4/4 styles for this original song.".into());
+                return Err(format!(
+                    "Choose {}/{} styles for this original song.",
+                    song.chart.time_sig.0, song.chart.time_sig.1
+                ));
             }
             sections.insert(
                 id.clone(),
