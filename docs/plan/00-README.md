@@ -53,7 +53,7 @@ These are the original full-product targets, not claims about the current previe
 
 ## Status board (the builder updates this after every milestone)
 
-2026-09-05: ten room tools merged in #57. The storage-recovery follow-up addresses #31/#48 and records the already-authorized bilingual-help exception (#49). See [issue triage](../reviews/issues-2026-09-05.md) for all 25 reviewed reports, including the per-open help-language claim that was not reproduced. Other follow-ups and owner hardware gates remain open.
+2026-09-05 (bug sweep, later the same day): PRs #66 to #74 closed 24 review issues, split the bundle, and added section deletion, setlist grooves, an always-open Jo composer and chord shapes; see [the bug-sweep report](../reviews/2026-09-05-bugsweep.md). Earlier that day: ten room tools merged in #57. The storage-recovery follow-up addresses #31/#48 and records the already-authorized bilingual-help exception (#49). See [issue triage](../reviews/issues-2026-09-05.md) for all 25 reviewed reports, including the per-open help-language claim that was not reproduced. Other follow-ups and owner hardware gates remain open.
 
 
 | Milestone | Content | Status | PR / release |
