@@ -34,18 +34,6 @@ impl IndexStore {
 
     fn init_schema(conn: &Connection) -> Result<(), String> {
         conn.execute(
-            "CREATE TABLE IF NOT EXISTS library_index (
-                id TEXT PRIMARY KEY,
-                kind TEXT NOT NULL,
-                name TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                updated_at INTEGER NOT NULL
-            )",
-            [],
-        )
-        .map_err(|e| e.to_string())?;
-
-        conn.execute(
             "CREATE TABLE IF NOT EXISTS takes (
                 id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
@@ -171,47 +159,6 @@ impl IndexStore {
             .map_err(|e| e.to_string())?;
         Ok(())
     }
-
-    pub fn rebuild_index(&mut self) -> Result<usize, String> {
-        let mut count = 0;
-        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        let library_dir = home.join("JosefinesJamstudio");
-
-        if !library_dir.exists() {
-            return Ok(0);
-        }
-
-        let tx = self.conn.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM library_index", [])
-            .map_err(|e| e.to_string())?;
-
-        let subdirs = ["songs", "recordings", "backups"];
-        for sub in subdirs {
-            let path = library_dir.join(sub);
-            if let Ok(entries) = fs::read_dir(path) {
-                for entry in entries.flatten() {
-                    if let Ok(ft) = entry.file_type() {
-                        if ft.is_file() {
-                            let file_name = entry.file_name().to_string_lossy().to_string();
-                            let file_path = entry.path().to_string_lossy().to_string();
-                            let id = format!("{}:{}", sub, file_name);
-
-                            tx.execute(
-                                "INSERT INTO library_index (id, kind, name, file_path, updated_at)
-                                 VALUES (?1, ?2, ?3, ?4, strftime('%s', 'now'))",
-                                params![id, sub, file_name, file_path],
-                            )
-                            .map_err(|e| e.to_string())?;
-                            count += 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        tx.commit().map_err(|e| e.to_string())?;
-        Ok(count)
-    }
 }
 
 #[cfg(test)]
@@ -219,10 +166,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_store_open_and_rebuild() {
-        let mut store = IndexStore::open_in_memory().expect("in-memory db opens");
-        let count = store.rebuild_index().expect("rebuild succeeds");
-        assert_eq!(count, 0);
+    fn test_store_open_in_memory() {
+        IndexStore::open_in_memory().expect("in-memory db opens");
     }
 
     #[test]

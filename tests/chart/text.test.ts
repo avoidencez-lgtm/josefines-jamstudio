@@ -7,10 +7,7 @@ import {
   parseChartText,
   resolveChart,
 } from "../../src/lib/chart/text";
-import {
-  shortestTransposition,
-  transposeChart,
-} from "../../src/lib/chart/transpose";
+import { transposeChart } from "../../src/lib/chart/transpose";
 
 const BLUES = `# Blues in A
 key: A major
@@ -162,11 +159,5 @@ describe("transposition", () => {
       "F#7",
       "G#m7/B",
     ]);
-  });
-
-  it("finds the short way round", () => {
-    expect(shortestTransposition(9, 0)).toBe(3);
-    expect(shortestTransposition(0, 9)).toBe(-3);
-    expect(shortestTransposition(0, 6)).toBe(6);
   });
 });

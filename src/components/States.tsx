@@ -21,39 +21,3 @@ export const StatusPill: React.FC<{
     </span>
   );
 };
-
-export const EmptyState: React.FC<{
-  title: string;
-  message: string;
-  action?: React.ReactNode;
-}> = ({ title, message, action }) => {
-  return (
-    <div className="flex flex-col items-center justify-center p-12 text-center">
-      <h4 className="text-base font-medium text-[var(--fg-0)] mb-1">{title}</h4>
-      <p className="text-sm text-[var(--fg-2)] max-w-sm mb-4">{message}</p>
-      {action}
-    </div>
-  );
-};
-
-export const ErrorState: React.FC<{ error: string; onRetry?: () => void }> = ({
-  error,
-  onRetry,
-}) => {
-  return (
-    <div className="flex flex-col items-center justify-center p-8 bg-[rgba(224,83,78,0.08)] border border-[var(--record)] rounded-[var(--radius-m)] text-center">
-      <span className="text-sm text-[var(--record)] font-mono mb-3">
-        {error}
-      </span>
-      {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="text-xs uppercase tracking-wider font-mono text-[var(--fg-0)] underline cursor-pointer"
-        >
-          Retry
-        </button>
-      )}
-    </div>
-  );
-};

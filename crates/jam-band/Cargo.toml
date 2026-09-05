@@ -7,10 +7,10 @@ license.workspace = true
 
 [dependencies]
 jam-core.workspace = true
-jam-dsp.workspace = true
-rustysynth.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 rand.workspace = true
 rand_pcg.workspace = true
-thiserror.workspace = true
+
+[dev-dependencies]
+jam-dsp.workspace = true
+serde_json.workspace = true

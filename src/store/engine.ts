@@ -124,7 +124,6 @@ export interface EngineState {
   reloadLibrary: () => Promise<void>;
   saveChart: (chart: Chart) => Promise<string | null>;
   deleteUserChart: (chartId: string) => Promise<void>;
-  importChartFile: (path: string) => Promise<Chart | null>;
   /** Load a chart object straight into the band without saving (editor preview). */
   playChartInline: (chart: Chart) => Promise<boolean>;
   transposeCurrentChart: (semitones: number) => Promise<void>;
@@ -153,7 +152,6 @@ export interface EngineState {
     sceneIdx: number | null,
   ) => Promise<void>;
   setRigFollowSections: (enabled: boolean) => Promise<void>;
-  refreshRigState: () => Promise<void>;
   refreshMidiPorts: () => Promise<void>;
   openMidiPort: (port: string | null) => Promise<void>;
   setRigControl: (cc: number, value: number) => Promise<void>;
@@ -168,7 +166,6 @@ export interface EngineState {
   // Devices, settings, keys
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
-  saveSettings: (settings: AppSettings) => Promise<void>;
   applyAudioConfig: (config: AudioConfig) => Promise<EngineStatus | null>;
   refreshEngineStatus: () => Promise<void>;
   restartEngine: () => Promise<void>;
@@ -448,13 +445,6 @@ export const useEngineStore = create<EngineState>((set, get) => {
       );
       if (ok !== null) await get().reloadLibrary();
     },
-    importChartFile: async (path) => {
-      const chart = await run("Import chart", () =>
-        ipc.invoke<Chart>("charts_import_file", { path }),
-      );
-      if (chart) await get().reloadLibrary();
-      return chart;
-    },
     playChartInline: async (chart) => {
       const ok = await run("Play chart", () =>
         ipc.invoke("band_load_chart_inline", { chart }),
@@ -546,12 +536,6 @@ export const useEngineStore = create<EngineState>((set, get) => {
       );
       if (state) set({ rigState: state });
     },
-    refreshRigState: async () => {
-      const state = await run("Rig state", () =>
-        ipc.invoke<RigState>("rig_get_state"),
-      );
-      if (state) set({ rigState: state });
-    },
     refreshMidiPorts: async () => {
       try {
         const ports = await ipc.invoke<MidiPortInfo[]>("rig_list_ports");
@@ -633,12 +617,6 @@ export const useEngineStore = create<EngineState>((set, get) => {
         ipc.invoke<string | null>("settings_recovery_notice"),
       );
       if (recovered) get().notify("error", recovered);
-    },
-    saveSettings: async (settings) => {
-      const ok = await run("Save settings", () =>
-        ipc.invoke("settings_set", { settings }),
-      );
-      if (ok !== null) set({ settings });
     },
     applyAudioConfig: async (config) => {
       const status = await run("Audio devices", () =>

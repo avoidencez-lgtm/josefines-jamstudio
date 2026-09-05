@@ -27,7 +27,7 @@ Evaluated crates `signalsmith-stretch` 0.1.3 and `ssstretch` 0.1.0 on Windows 11
 Do not depend on external wrapper crates `signalsmith-stretch` or `ssstretch`. Vendor `signalsmith-stretch.h` (MIT) directly inside `crates/jam-dsp/cxx/` and bind via `cxx`.
 
 ## Fixtures captured
-`scripts/spikes/s3-stretch-probe/` probe test.
+Probe lived in `scripts/spikes/s3-stretch-probe/` (removed; numbers above).
 
 ## Open questions
 None. Ready for integration into `crates/jam-dsp`.

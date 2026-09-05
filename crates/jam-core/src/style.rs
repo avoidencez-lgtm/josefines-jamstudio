@@ -1,4 +1,4 @@
-//! style: Data schemas for styles, drum patterns, kit definitions, and groove structures.
+//! style: Data schemas for styles, drum patterns, and groove structures.
 
 use serde::{Deserialize, Serialize};
 
@@ -96,29 +96,4 @@ pub struct Style {
     #[serde(default)]
     pub endings: Vec<DrumPattern>,
     pub humanize: StyleHumanize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VelocityLayer {
-    pub velocity: (f32, f32),
-    pub files: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KitInstrument {
-    pub name: String,
-    #[serde(default)]
-    pub choke_group: Option<String>,
-    pub layers: Vec<VelocityLayer>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Kit {
-    pub schema_version: u32,
-    pub id: String,
-    pub name: String,
-    pub instruments: Vec<KitInstrument>,
 }

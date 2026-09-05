@@ -7,8 +7,6 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 struct ActiveVoice {
-    #[allow(dead_code)]
-    instrument: String,
     samples: Arc<Vec<f32>>,
     position: usize,
     velocity: f32,
@@ -21,7 +19,6 @@ struct ActiveVoice {
 
 pub struct Sampler {
     sample_rate: u32,
-    kit_name: String,
     /// Instrument name -> list of alternative samples (round-robin)
     sample_bank: HashMap<String, Vec<Arc<Vec<f32>>>>,
     choke_mappings: HashMap<String, String>,
@@ -29,8 +26,6 @@ pub struct Sampler {
     pan: HashMap<String, f32>,
     voices: Vec<Option<ActiveVoice>>,
     round_robin_idx: HashMap<String, usize>,
-    #[allow(dead_code)]
-    max_polyphony: usize,
 }
 
 impl Default for Sampler {
@@ -43,13 +38,11 @@ impl Sampler {
     pub fn new(sample_rate: u32, max_polyphony: usize) -> Self {
         Self {
             sample_rate,
-            kit_name: "Default".into(),
             sample_bank: HashMap::new(),
             choke_mappings: HashMap::new(),
             pan: HashMap::new(),
             voices: vec![None; max_polyphony],
             round_robin_idx: HashMap::new(),
-            max_polyphony,
         }
     }
 
@@ -57,7 +50,6 @@ impl Sampler {
     /// for reliable offline testing and headless CI.
     pub fn new_with_synthetic_kit(sample_rate: u32) -> Self {
         let mut sampler = Self::new(sample_rate, 32);
-        sampler.kit_name = "SyntheticStandard".into();
 
         // Choke hi-hats: closed hi-hat chokes open hi-hat
         sampler.set_choke_group("hihat_closed", "hihat");
@@ -118,10 +110,6 @@ impl Sampler {
         }
     }
 
-    pub fn active_voices(&self) -> usize {
-        self.voices.iter().flatten().count()
-    }
-
     pub fn trigger(&mut self, instrument: &str, velocity: f32) {
         let choke_grp = self.choke_mappings.get(instrument).cloned();
 
@@ -154,7 +142,6 @@ impl Sampler {
         let (gain_left, gain_right) = (angle.cos(), angle.sin());
 
         let voice = ActiveVoice {
-            instrument: instrument.into(),
             samples,
             position: 0,
             velocity: velocity.clamp(0.0, 1.0),
@@ -381,11 +368,7 @@ mod tests {
         let mut right2 = vec![0.0f32; 256];
         sampler.render(&mut left2, &mut right2);
 
-        // Open hi-hat slot should be closed or dying
-        assert!(sampler
-            .voices
-            .iter()
-            .flatten()
-            .any(|v| v.instrument == "hihat_closed"));
+        // Open hat has finished its choke fade; one live closed-hat voice remains.
+        assert_eq!(sampler.voices.iter().flatten().count(), 1);
     }
 }

@@ -1,5 +1,4 @@
-//! instruments: Synthesizers and sampled instruments for bass and comping.
-//! Implements Sf2Synth with pure Rust fallback and rustysynth integration.
+//! instruments: sine-voice bass and comp (named Sf2Synth for the planned SoundFont path).
 
 use jam_core::timeline::SAMPLE_RATE;
 
@@ -75,10 +74,6 @@ impl Sf2Synth {
 
     pub fn all_notes_off(&mut self) {
         self.voices.clear();
-    }
-
-    pub fn active_voices(&self) -> usize {
-        self.voices.len()
     }
 
     /// Voices whose note-off has not been requested yet.
