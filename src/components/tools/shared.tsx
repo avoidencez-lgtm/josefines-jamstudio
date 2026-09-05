@@ -6,10 +6,20 @@ import { useEngineStore } from "../../store/engine";
 
 export function useTool() {
   const [message, setMessage] = useState("");
+  /**
+   * Runs one room operation. Pass `blocking: false` for work that only waits for an
+   * answer and changes nothing until the user acts on it; the close guard ignores it.
+   */
   const run = async (
     fn: () => Promise<string | undefined> | string | undefined,
+    { blocking = true }: { blocking?: boolean } = {},
   ) => {
-    if (useRoomOperation.getState().busy) return;
+    if (useRoomOperation.getState().busy) {
+      setMessage(
+        "Another room tool is still working. Wait for it or cancel it.",
+      );
+      return;
+    }
     if (
       useEngineStore.getState().isRecording ||
       useWriting.getState().busy ||
@@ -18,14 +28,14 @@ export function useTool() {
       setMessage("Finish the current operation or recording first.");
       return;
     }
-    useRoomOperation.setState({ busy: true });
+    useRoomOperation.setState({ busy: true, blocking });
     setMessage("");
     try {
       setMessage((await fn()) ?? "");
     } catch (e) {
       setMessage(String(e).replace(/^Error: /, ""));
     } finally {
-      useRoomOperation.setState({ busy: false });
+      useRoomOperation.setState({ busy: false, blocking: false });
     }
   };
   return { run, message };

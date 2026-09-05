@@ -71,6 +71,7 @@ export const ROOM_TOOLS: Record<
 
 export function RoomTools({ screen }: { screen: ScreenId }) {
   const busy = useRoomOperation((s) => s.busy);
+  const blocking = useRoomOperation((s) => s.blocking);
   const recording = useEngineStore((s) => s.isRecording);
   const writingBusy = useWriting((s) => s.busy);
   const mediaBusy = useMedia((s) => s.busy);
@@ -98,7 +99,9 @@ export function RoomTools({ screen }: { screen: ScreenId }) {
               </span>
             </summary>
             <fieldset
-              disabled={busy || recording || writingBusy || Boolean(mediaBusy)}
+              disabled={
+                blocking || recording || writingBusy || Boolean(mediaBusy)
+              }
               className="room-tool-body"
               aria-label={descriptor.title}
             >

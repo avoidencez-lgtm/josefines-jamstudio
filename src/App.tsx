@@ -65,7 +65,7 @@ const hasUnsavedWork = () =>
   useMedia.getState().dirty ||
   useWriting.getState().dirty;
 const hasActiveWork = () =>
-  useRoomOperation.getState().busy ||
+  useRoomOperation.getState().blocking ||
   useEngineStore.getState().isRecording ||
   useWriting.getState().busy ||
   Boolean(useMedia.getState().busy);
