@@ -354,7 +354,11 @@ pub fn read_clip(spec: ClipSpec, state: &AppState) -> Result<Clip, String> {
 }
 
 #[tauri::command]
-pub async fn originals_load(document: Value, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn originals_load(
+    document: Value,
+    keep_playback: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let song = body(&document)?;
     let tones = {
         let rig = state.rig.lock();
@@ -395,16 +399,25 @@ pub async fn originals_load(document: Value, state: State<'_, AppState>) -> Resu
             );
         }
     }
-    let clips = song
-        .clips
-        .into_iter()
-        .map(|s| read_clip(s, &state))
-        .collect::<Result<Vec<_>, _>>()?;
     let mut snapshot = document.clone();
     snapshot
         .as_object_mut()
         .ok_or("Song must be an object")?
         .remove("versions");
+    let keep = keep_playback.unwrap_or(false) && !state.engine.lock().song_snapshot.is_null();
+    if keep {
+        state
+            .engine
+            .lock()
+            .replace_song_chart(song.chart.resolve(), sections, snapshot)?;
+        state.rig.lock().song_mappings = Some(tones);
+        return Ok(());
+    }
+    let clips = song
+        .clips
+        .into_iter()
+        .map(|s| read_clip(s, &state))
+        .collect::<Result<Vec<_>, _>>()?;
     state
         .engine
         .lock()

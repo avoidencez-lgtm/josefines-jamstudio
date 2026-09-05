@@ -515,7 +515,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
         };
         if (
           await runOk("Transpose song", () =>
-            ipc.invoke("originals_load", { document }),
+            ipc.invoke("originals_load", { document, keepPlayback: true }),
           )
         ) {
           set({
