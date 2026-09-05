@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { __setIpcForTests, ipc } from "../../src/ipc/client";
-import { type JoContext } from "../../src/lib/jo/gemini";
+import type { JoContext } from "../../src/lib/jo/gemini";
 import {
   BRAINS,
   type BrainRequest,
