@@ -1149,6 +1149,11 @@ pub fn configure<R: tauri::Runtime>(
 /// `JAM_SMOKE_SECONDS=n`: exit after n seconds with 0 when the frontend completed
 /// its startup handshake (`engine_status` was invoked), 2 otherwise. CI runs the
 /// real binary this way on Windows and macOS; nothing else changes.
+/// Exit code chosen by a smoke run, -1 when none is active. The wry runtime turns
+/// `AppHandle::exit(code)` into a plain exit and drops the code, so the run loop
+/// applies it on `RunEvent::Exit`, after the app's own shutdown.
+static SMOKE_EXIT_CODE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+
 fn smoke_exit(app: tauri::AppHandle) {
     let Some(seconds) = std::env::var("JAM_SMOKE_SECONDS")
         .ok()
@@ -1168,7 +1173,9 @@ fn smoke_exit(app: tauri::AppHandle) {
         state
             .exit_confirmed
             .store(true, std::sync::atomic::Ordering::SeqCst);
-        app.exit(if ready { 0 } else { 2 });
+        let code = if ready { 0 } else { 2 };
+        SMOKE_EXIT_CODE.store(code, std::sync::atomic::Ordering::SeqCst);
+        app.exit(code);
     });
 }
 
@@ -1183,6 +1190,12 @@ pub fn run() {
     smoke_exit(built.handle().clone());
     built.run(|app, event| {
         use tauri::Manager;
+        if matches!(event, tauri::RunEvent::Exit) {
+            let code = SMOKE_EXIT_CODE.load(std::sync::atomic::Ordering::SeqCst);
+            if code >= 0 {
+                std::process::exit(code);
+            }
+        }
         // An app-level quit (Cmd+Q on macOS) never went through the window's
         // close guard (#35). While a window is open, hand the decision to the UI;
         // it answers with app_exit, which sets exit_confirmed. A quit after the
