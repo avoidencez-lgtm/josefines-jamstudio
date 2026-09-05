@@ -54,7 +54,8 @@ export function ShortcutsHelp({
   );
   const chapter = matches.find((c) => c.id === selected) ?? matches[0];
   return (
-    <section
+    <aside
+      id="studio-help"
       className="studio-manual"
       lang={language}
       aria-label={nb ? "Hjelp og veiledninger" : "Help & guides"}
@@ -79,7 +80,7 @@ export function ShortcutsHelp({
           </select>
         </label>
         <Button variant="secondary" onClick={onClose}>
-          {nb ? "Tilbake til studioet" : "Back to studio"}
+          {nb ? "Lukk hjelp" : "Close help"}
         </Button>
       </header>
       <div className="manual-layout">
@@ -94,22 +95,21 @@ export function ShortcutsHelp({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <nav aria-label={nb ? "Kapitler" : "Guide chapters"}>
+          <label htmlFor="manual-chapter">{nb ? "Kapittel" : "Chapter"}</label>
+          <select
+            id="manual-chapter"
+            value={chapter?.id ?? ""}
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            {!chapter && (
+              <option value="">{nb ? "Ingen treff" : "No matches"}</option>
+            )}
             {matches.map((c) => (
-              <button
-                type="button"
-                key={c.id}
-                aria-current={chapter?.id === c.id ? "page" : undefined}
-                onClick={() => {
-                  setSelected(c.id);
-                  // Reading starts at the chapter title, not at the whole chapter text.
-                  requestAnimationFrame(() => heading.current?.focus());
-                }}
-              >
+              <option key={c.id} value={c.id}>
                 {c.title[language]}
-              </button>
+              </option>
             ))}
-          </nav>
+          </select>
         </aside>
         <article>
           <p className="sr-only" aria-live="polite">
@@ -122,9 +122,29 @@ export function ShortcutsHelp({
               <h2 ref={heading} tabIndex={-1}>
                 {chapter.title[language]}
               </h2>
+              <nav
+                aria-label={nb ? "Emner i kapitlet" : "Topics in this chapter"}
+              >
+                {chapter.sections.map((s) => (
+                  <a
+                    key={s.id}
+                    href={`#help-${s.id}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      const target = document.getElementById(`help-${s.id}`);
+                      target?.focus({ preventScroll: true });
+                      target?.scrollIntoView({ block: "nearest" });
+                    }}
+                  >
+                    {s.title[language]}
+                  </a>
+                ))}
+              </nav>
               {chapter.sections.map((s) => (
-                <section key={s.title.en}>
-                  <h3>{s.title[language]}</h3>
+                <section key={s.id}>
+                  <h3 id={`help-${s.id}`} tabIndex={-1}>
+                    {s.title[language]}
+                  </h3>
                   {s.text[language].split("\n\n").map((p) => (
                     <p key={p}>{p}</p>
                   ))}
@@ -166,6 +186,6 @@ export function ShortcutsHelp({
           )}
         </article>
       </div>
-    </section>
+    </aside>
   );
 }

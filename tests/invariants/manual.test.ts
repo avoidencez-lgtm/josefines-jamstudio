@@ -5,6 +5,9 @@ import { SHORTCUTS } from "../../src/lib/shortcuts";
 import { SCREENS } from "../../src/screens/registry";
 
 it("documents every studio room and shortcut in both languages with current exports", () => {
+  const ids = manual.chapters.flatMap((c) => c.sections.map((s) => s.id));
+  expect(new Set(ids).size).toBe(ids.length);
+  for (const id of ids) expect(id).toMatch(/^[a-z0-9-]+\.[a-z0-9-]+$/);
   expect(new Set(manual.chapters.map((c) => c.id)).size).toBe(
     manual.chapters.length,
   );

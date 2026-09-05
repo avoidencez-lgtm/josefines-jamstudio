@@ -275,6 +275,9 @@ export const App: React.FC = () => {
         <button
           type="button"
           className="studio-shortcuts"
+          aria-label="Help & guides"
+          aria-expanded={showHelp}
+          aria-controls={showHelp ? "studio-help" : undefined}
           onClick={() => setShowHelp(true)}
           title="Help & guides (?)"
         >
@@ -431,15 +434,15 @@ export const App: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-8 relative">
-          <div hidden={showHelp}>
+        <div className={`studio-content${showHelp ? " with-help" : ""}`}>
+          <main className="studio-room overflow-y-auto p-8 relative">
             <RoomTools screen={currentScreen} />
             <Suspense
               fallback={<p className="workspace-note">Opening the room…</p>}
             >
               {renderScreen()}
             </Suspense>
-          </div>
+          </main>
           {showHelp && (
             <Suspense
               fallback={<p className="workspace-note">Opening help…</p>}
@@ -451,7 +454,7 @@ export const App: React.FC = () => {
               />
             </Suspense>
           )}
-        </main>
+        </div>
       </div>
 
       {showClose && (

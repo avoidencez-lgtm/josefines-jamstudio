@@ -257,3 +257,8 @@ The recipe below describes implemented paths; older planning recipes later in th
 ## Startup settings recovery
 
 `settings_recovery_notice()` is additive IPC registered beside `settings_get` in `src-tauri/src/lib.rs`. It takes the pending startup notice once; `loadSettings` displays it after initialization. Browser preview returns null. Keep recovery in the native settings module, before engine and rig initialization. Never replace malformed input until its bytes have been archived successfully. Normal settings saves stay strict. `tests/invariants/desktop-startup.test.ts` checks the UI handoff; native settings tests exercise valid/invalid backups and subsequent saves.
+## Contextual manual topics
+
+The existing `docs/guide/manual.json` is the English/Bokmål help source. Each section has a unique stable `id` such as `write.song-map-and-linked-sections`; preserve it when editing or translating its title. The help pane uses it for keyboard-focusable topic links. Add both translations and run `node scripts/export-manual.mjs` after changing text, then `pnpm test` to validate IDs and exported manuals.
+
+Help opens beside the current room, or beneath it at compact widths. It is nonmodal: room controls and the global transport stay available. Escape closes help and returns focus to the opener. Global music shortcuts remain suppressed while help is open; the transport buttons remain usable. Direct feature-to-topic launchers are a later extension of these IDs, not yet implemented.
