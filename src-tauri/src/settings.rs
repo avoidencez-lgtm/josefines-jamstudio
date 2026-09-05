@@ -95,7 +95,7 @@ impl Default for AppSettings {
     }
 }
 
-// Serialises writers; a corrupt source is kept intact and never replaced with defaults.
+// Serialises writers; normal saves refuse corrupt input. Startup archives it before recovery.
 static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn load_from(path: &std::path::Path) -> Result<AppSettings, String> {
@@ -114,6 +114,14 @@ pub fn load_settings() -> Result<AppSettings, String> {
 fn save_to(path: &std::path::Path, settings: &AppSettings) -> Result<(), String> {
     let _lock = SAVE_LOCK.lock().map_err(|e| e.to_string())?;
     load_from(path)?;
+    write_to(path, settings, true)
+}
+
+fn write_to(
+    path: &std::path::Path,
+    settings: &AppSettings,
+    keep_backup: bool,
+) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -128,7 +136,7 @@ fn save_to(path: &std::path::Path, settings: &AppSettings) -> Result<(), String>
         .open(&temp)
         .and_then(|f| f.sync_all())
         .map_err(|e| e.to_string())?;
-    if path.exists() {
+    if keep_backup && path.exists() {
         fs::copy(path, path.with_extension("json.bak")).map_err(|e| e.to_string())?;
     }
     fs::rename(temp, path).map_err(|e| e.to_string())
@@ -138,9 +146,91 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
     save_to(&settings_path(), settings)
 }
 
+/// Startup-only recovery: preserve damaged bytes before replacing the active file.
+fn recover_from(path: &std::path::Path) -> Result<(AppSettings, Option<String>), String> {
+    use std::io::Write;
+    let _lock = SAVE_LOCK.lock().map_err(|e| e.to_string())?;
+    if let Ok(settings) = load_from(path) {
+        return Ok((settings, None));
+    }
+    // Permission/read failures are not evidence of malformed JSON and must not be replaced.
+    let damaged = fs::read(path).map_err(|e| format!("Cannot recover {}: {e}", path.display()))?;
+    let backup = path.with_extension("json.bak");
+    let restored = backup.is_file().then(|| load_from(&backup).ok()).flatten();
+    let source = if restored.is_some() {
+        "the last valid backup"
+    } else {
+        "default settings"
+    };
+    let settings = restored.unwrap_or_default();
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let archive = path.with_extension(format!("json.broken-{stamp}"));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&archive)
+        .map_err(|e| e.to_string())?;
+    file.write_all(&damaged)
+        .and_then(|_| file.sync_all())
+        .map_err(|e| e.to_string())?;
+    write_to(path, &settings, false)?;
+    Ok((settings, Some(format!("Recovered settings using {source}. The damaged file is preserved at {}. Check your audio device and MIDI port before playing.", archive.display()))))
+}
+
+pub fn recover_settings() -> Result<(AppSettings, Option<String>), String> {
+    recover_from(&settings_path())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_recovers_backup_or_defaults_and_preserves_every_damaged_file() {
+        let root =
+            std::env::temp_dir().join(format!("jam-settings-recovery-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("settings.json");
+        let mut expected = AppSettings::default();
+        expected
+            .extra
+            .insert("futureField".into(), serde_json::json!({"keep": true}));
+        fs::write(
+            path.with_extension("json.bak"),
+            serde_json::to_vec(&expected).unwrap(),
+        )
+        .unwrap();
+        fs::write(&path, "broken active").unwrap();
+        let (mut settings, warning) = recover_from(&path).unwrap();
+        assert_eq!(settings, expected);
+        assert!(warning.unwrap().contains("valid backup"));
+        assert!(recover_from(&path).unwrap().1.is_none());
+        settings.buffer_size = 512;
+        save_to(&path, &settings).unwrap();
+        assert_eq!(load_from(&path).unwrap().buffer_size, 512);
+        fs::write(&path, "broken again").unwrap();
+        fs::write(path.with_extension("json.bak"), "broken backup").unwrap();
+        let (settings, warning) = recover_from(&path).unwrap();
+        assert_eq!(settings, AppSettings::default());
+        assert!(warning.unwrap().contains("default settings"));
+        assert_eq!(
+            fs::read_to_string(path.with_extension("json.bak")).unwrap(),
+            "broken backup"
+        );
+        let mut preserved: Vec<_> = fs::read_dir(&root)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.to_string_lossy().contains(".broken-"))
+            .map(|p| fs::read_to_string(p).unwrap())
+            .collect();
+        preserved.sort();
+        assert_eq!(preserved, ["broken active", "broken again"]);
+        save_to(&path, &settings).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn settings_keep_backup_and_never_overwrite_corrupt_source() {

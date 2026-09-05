@@ -3,6 +3,34 @@ import { ipc } from "../../src/ipc/client";
 import type { TransportTelemetry } from "../../src/ipc/contract";
 import { useEngineStore } from "../../src/store/engine";
 
+it("shows a startup settings recovery notice once without blocking later settings loads", async () => {
+  const previous = useEngineStore.getState();
+  const notify = vi.fn();
+  let notice: string | null = "Recovered settings using the last valid backup.";
+  const invoke = vi.spyOn(ipc, "invoke").mockImplementation(async (command) => {
+    if (command === "settings_get") return previous.settings;
+    if (command === "settings_recovery_notice") {
+      const result = notice;
+      notice = null;
+      return result;
+    }
+    throw new Error(`Unexpected command: ${command}`);
+  });
+  useEngineStore.setState({ notify });
+  try {
+    await previous.loadSettings();
+    await previous.loadSettings();
+    expect(notify).toHaveBeenCalledExactlyOnceWith(
+      "error",
+      "Recovered settings using the last valid backup.",
+    );
+    expect(useEngineStore.getState().settings).toEqual(previous.settings);
+  } finally {
+    invoke.mockRestore();
+    useEngineStore.setState(previous, true);
+  }
+});
+
 it("loads settings and library even when a subscription fails, and releases successful subscriptions", async () => {
   const unlisten = vi.fn();
   const listen = vi

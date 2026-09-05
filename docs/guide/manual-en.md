@@ -320,7 +320,7 @@ To recover a previous file, first copy the damaged file and its backup somewhere
 
 ### Damaged files and interrupted recordings
 
-Unreadable songs, takes and media entries are reported individually while healthy entries remain visible. Invalid user charts are skipped. Corrupt settings are not silently overwritten with defaults. Keep the error path when requesting help. The recorder uses a bounded disk queue and periodically updates WAV headers. A disk failure is reported; partial files may remain, but they are not claimed as a successfully saved take. Retained render intermediates consume disk space.
+Unreadable songs, takes and media entries are reported individually while healthy entries remain visible. Invalid user charts are skipped. On startup, damaged settings are first preserved as settings.json.broken-<timestamp>, then a valid settings.json.bak is restored, or defaults if no valid backup exists. A recovery notice names the preserved file. Check your audio device and MIDI port before playing. If settings become damaged while the app is running, restart to recover. Permission or disk errors require fixing the reported access problem. Keep the error path when requesting help. The recorder uses a bounded disk queue and periodically updates WAV headers. A disk failure is reported; partial files may remain, but they are not claimed as a successfully saved take. Retained render intermediates consume disk space.
 
 ## Troubleshooting and acceptance
 

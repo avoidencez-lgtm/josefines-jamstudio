@@ -53,6 +53,9 @@ These are the original full-product targets, not claims about the current previe
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-05: ten room tools merged in #57. The storage-recovery follow-up addresses #31/#48 and records the already-authorized bilingual-help exception (#49). See [issue triage](../reviews/issues-2026-09-05.md) for all 25 reviewed reports, including the per-open help-language claim that was not reproduced. Other follow-ups and owner hardware gates remain open.
+
+
 | Milestone | Content | Status | PR / release |
 |---|---|---|---|
 | M0 | Foundation: scaffold, crates, gates, CI, design shell, keychain settings, seam registries, tuner, metronome, spikes S1 to S3 | ✅ | #2, reworked in #28 |

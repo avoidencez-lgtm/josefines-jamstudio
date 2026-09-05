@@ -745,6 +745,10 @@ export const useEngineStore = create<EngineState>((set, get) => {
         ipc.invoke<AppSettings>("settings_get"),
       );
       if (s) set({ settings: s });
+      const recovered = await run("Settings recovery", () =>
+        ipc.invoke<string | null>("settings_recovery_notice"),
+      );
+      if (recovered) get().notify("error", recovered);
     },
     saveSettings: async (settings) => {
       const ok = await run("Save settings", () =>

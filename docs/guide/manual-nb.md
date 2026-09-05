@@ -320,7 +320,7 @@ For å gjenopprette en tidligere fil: kopier først skadet fil og sikkerhetskopi
 
 ### Skadede filer og avbrutte opptak
 
-Uleselige låter, opptak og medieoppføringer rapporteres enkeltvis mens friske oppføringer fortsatt vises. Ugyldige brukerskjemaer hoppes over. Skadede innstillinger overskrives ikke skjult med standardverdier. Ta vare på filbanen i feilmeldingen når du ber om hjelp. Opptakeren bruker en avgrenset diskkø og oppdaterer WAV-hoder jevnlig. Diskfeil rapporteres; delvise filer kan bli igjen, men regnes ikke som vellykket lagrede opptak. Mellomfiler fra rendring bruker diskplass.
+Uleselige låter, opptak og medieoppføringer rapporteres enkeltvis mens friske oppføringer fortsatt vises. Ugyldige brukerskjemaer hoppes over. Ved oppstart bevares skadede innstillinger først som settings.json.broken-<tidsstempel>. Deretter gjenopprettes en gyldig settings.json.bak, eller standardverdier hvis ingen gyldig kopi finnes. En melding viser hvor den skadede filen er bevart. Kontroller lydenhet og MIDI-port før avspilling. Start appen på nytt for å gjenopprette innstillinger som skades mens den kjører. Ved tilgangs- eller diskfeil må det meldte problemet løses. Ta vare på filbanen i feilmeldingen når du ber om hjelp. Opptakeren bruker en avgrenset diskkø og oppdaterer WAV-hoder jevnlig. Diskfeil rapporteres; delvise filer kan bli igjen, men regnes ikke som vellykket lagrede opptak. Mellomfiler fra rendring bruker diskplass.
 
 ## Feilsøking og godkjenning i praksis
 
