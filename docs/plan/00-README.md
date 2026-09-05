@@ -39,7 +39,19 @@ What "better than the manufacturers" means, concretely (from the competitive res
 
 ## Definition of Done for the project
 
-These are the original full-product targets, not claims about the current preview. The project is done when every point below is true and verified, the owner gates in [06-owner-verification.md](06-owner-verification.md) are ticked, and the status board shows every milestone ✅.
+These are the original full-product targets, not claims about the current preview. The V1/V2 decision below supersedes references to friend-led owner acceptance as a V1 release blocker throughout this plan.
+
+### V1 delivery and V2 friend testing (user decision, 2026-09-05)
+
+Vegar wants a finished, polished product to hand to his friend. The friend's usability sessions and checks on his personal Mac/rig are deferred to **V2**. Do not request those sessions to unblock V1, and do not mark them passed. Keep their procedures in [06-owner-verification.md](06-owner-verification.md), labelled **deferred to V2**.
+
+This changes who must test before handoff, not the promised feature scope. Unbuilt voice, stem separation, analysis, time-stretch, realtime generation, calibration and other agreed capabilities remain unfinished work; the deferral does not turn placeholders into completed features. Document external service or hardware requirements and failures clearly.
+
+V1 still requires completed workflows, the agreed focused songwriting UI and personalization, accessible controls, and English/Bokmål help available beside the relevant features. The builder verifies persistence and recovery, audio/export behavior with synthetic fixtures, keyboard/accessibility behavior, rendered UI, and install/startup behavior on the available platforms. Required CI, security, licence and packaging checks remain release gates. Automated checks do not prove the friend's subjective experience or his physical setup.
+
+For each milestone, report implementation status, developer verification evidence and deferred V2 friend checks separately. A passing narrow regression or a merged PR is not proof that the whole milestone is finished. Signing/notarisation and any other missing release prerequisite remain open until completed or explicitly decided by Vegar.
+
+### Original product targets
 
 1. **Installs and runs on the guitarist's Apple Silicon Mac** from a GitHub Release. Onboarding completes with the HeadRush Pedalboard selected as a 4-channel input (dry DI on channel 3) and the HeadRush USB return as output. Latency calibration returns a stable offset within ±2 samples across 5 runs.
 2. **Band.** At least 6 styles, any key, 40 to 240 bpm, chart editor with presets, count-in, cues (fill, crash, stop, ending), intensity following the guitarist's energy.
@@ -54,6 +66,8 @@ These are the original full-product targets, not claims about the current previe
 ## Status board (the builder updates this after every milestone)
 
 2026-09-05 Write follow-up (pending review): the workspace names the arrangement loaded in the band and distinguishes it from the current draft, including band settings and guitar layers. Play, loop and record share the accepted-snapshot update; failed loads preserve the previous indicator. Contextual help and both exported manuals explain Save versus Play versus Space.
+
+2026-09-05 rig persistence follow-up ([PR #117](https://github.com/avoidencez-lgtm/josefines-jamstudio/pull/117), merged): profile, section mapping, follow-section and MIDI connection changes save before replacing the active configuration. IPC regression coverage verifies corrupt-file and write failures leave the previous runtime state and settings file intact, including an existing synthetic MIDI connection. Hardware verification is not claimed.
 
 2026-09-05: PR #77 completes the IPC/store test harness and built-app startup smoke.
 See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-completion.md); this does not close physical owner gates.
@@ -87,7 +101,7 @@ What remains, per open milestone:
 
 History: PRs #2 to #25 marked every milestone ✅ while most of M3, M4 and M6 were stubs returning fixed data. #28 replaced the stubs with working code where it could and honest refusals where it could not, and reset this board to match.
 
-Rules for the board: ☐ becomes ⏳ when work starts, and ✅ only when **all** acceptance criteria in [03-build-plan.md](03-build-plan.md) are green, CI is green on both operating systems, and any owner gate the milestone names is ticked (or explicitly recorded as pending owner). Write the PR number or release tag in the last column. Partially done is ⏳ with one line under the board saying what remains.
+Rules for the board: ☐ becomes ⏳ when work starts, and ✅ only when the implementation and developer acceptance criteria in [03-build-plan.md](03-build-plan.md) are verified and CI is green on both operating systems. Friend-led owner checks are separately recorded as deferred to V2, never as passed. Write the PR number or release tag in the last column. Partially implemented or unverified work stays ⏳ with one line saying what remains. Historical entries below retain their original evidence; read their owner-gate wording under the V1/V2 decision above.
 
 ## Where the truth lives
 

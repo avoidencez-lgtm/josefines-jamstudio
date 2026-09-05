@@ -611,7 +611,10 @@ fn rig_state_dto(rig: &jam_rig::RigOrchestrator) -> RigStateDto {
 }
 
 /// Persists the parts of the rig state worth remembering (profile, port, mappings).
-fn persist_rig(rig: &jam_rig::RigOrchestrator) -> Result<(), String> {
+fn persist_rig(
+    rig: &jam_rig::RigOrchestrator,
+    update: impl FnOnce(&mut settings::RigSettings),
+) -> Result<(), String> {
     let mut settings = load_settings()?;
     settings.rig.profile_id = Some(rig.profile.id.clone());
     settings.rig.midi_port = rig.is_live().then(|| rig.port_description());
@@ -620,6 +623,7 @@ fn persist_rig(rig: &jam_rig::RigOrchestrator) -> Result<(), String> {
         .rig
         .section_mappings
         .insert(rig.profile.id.clone(), rig.section_mappings.clone());
+    update(&mut settings.rig);
     save_settings(&settings)
 }
 
@@ -640,13 +644,21 @@ fn rig_select_profile(
         .remove(&profile_id)
         .unwrap_or_default();
     let mut rig = state.rig.lock();
-    rig.set_profile(profile);
+    let mut mappings = rig.section_mappings.clone();
+    mappings.retain(|_, idx| *idx < profile.scenes.len());
     for (section, idx) in saved {
-        if idx < rig.profile.scenes.len() {
-            rig.set_section_mapping(section, idx);
+        if idx < profile.scenes.len() {
+            mappings.insert(section, idx);
         }
     }
-    persist_rig(&rig)?;
+    persist_rig(&rig, |settings| {
+        settings.profile_id = Some(profile.id.clone());
+        settings
+            .section_mappings
+            .insert(profile.id.clone(), mappings.clone());
+    })?;
+    rig.set_profile(profile);
+    rig.section_mappings = mappings;
     Ok(rig_state_dto(&rig))
 }
 
@@ -664,19 +676,34 @@ fn rig_set_section_mapping(
     state: State<'_, AppState>,
 ) -> Result<RigStateDto, String> {
     let mut rig = state.rig.lock();
+    if let Some(idx) = scene_idx {
+        if idx >= rig.profile.scenes.len() {
+            return Err(format!(
+                "scene {idx} does not exist on {}",
+                rig.profile.name
+            ));
+        }
+    }
+    persist_rig(&rig, |settings| {
+        let mappings = settings
+            .section_mappings
+            .entry(rig.profile.id.clone())
+            .or_default();
+        match scene_idx {
+            Some(idx) => {
+                mappings.insert(section.clone(), idx);
+            }
+            None => {
+                mappings.remove(&section);
+            }
+        }
+    })?;
     match scene_idx {
         Some(idx) => {
-            if idx >= rig.profile.scenes.len() {
-                return Err(format!(
-                    "scene {idx} does not exist on {}",
-                    rig.profile.name
-                ));
-            }
             rig.set_section_mapping(section, idx);
         }
         None => rig.clear_section_mapping(&section),
     }
-    persist_rig(&rig)?;
     Ok(rig_state_dto(&rig))
 }
 
@@ -686,8 +713,8 @@ fn rig_set_follow_sections(
     state: State<'_, AppState>,
 ) -> Result<RigStateDto, String> {
     let mut rig = state.rig.lock();
+    persist_rig(&rig, |settings| settings.follow_sections = enabled)?;
     rig.follow_sections = enabled;
-    persist_rig(&rig)?;
     Ok(rig_state_dto(&rig))
 }
 
@@ -705,13 +732,14 @@ fn rig_list_ports() -> Result<Vec<jam_rig::MidiPortInfo>, String> {
 #[tauri::command]
 fn rig_open_port(port: Option<String>, state: State<'_, AppState>) -> Result<RigStateDto, String> {
     let mut rig = state.rig.lock();
-    match port {
-        Some(name) => {
-            rig.open_port(&name)?;
-        }
-        None => rig.close_port(),
-    }
-    persist_rig(&rig)?;
+    let sink: Box<dyn jam_rig::MidiSink> = match port {
+        Some(name) => Box::new(jam_rig::MidirSink::open(&name)?),
+        None => Box::new(jam_rig::MemorySink::new()),
+    };
+    persist_rig(&rig, |settings| {
+        settings.midi_port = sink.is_live().then(|| sink.describe());
+    })?;
+    rig.set_sink(sink);
     Ok(rig_state_dto(&rig))
 }
 

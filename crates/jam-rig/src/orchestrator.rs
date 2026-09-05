@@ -86,13 +86,18 @@ impl RigOrchestrator {
     pub fn open_port(&mut self, name: &str) -> Result<String, String> {
         let sink = MidirSink::open(name)?;
         let desc = sink.describe();
-        self.sink = Box::new(sink);
+        self.set_sink(Box::new(sink));
         Ok(desc)
     }
 
     /// Back to logging only.
     pub fn close_port(&mut self) {
-        self.sink = Box::new(MemorySink::new());
+        self.set_sink(Box::new(MemorySink::new()));
+    }
+
+    /// Installs a prepared connection after its settings have been saved.
+    pub fn set_sink(&mut self, sink: Box<dyn MidiSink>) {
+        self.sink = sink;
     }
 
     pub fn port_description(&self) -> String {

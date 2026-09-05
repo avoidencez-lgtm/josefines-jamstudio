@@ -242,7 +242,7 @@ Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs befo
 - Jo tool: `rig_scene(name)`.
 - Tests with `MemorySink`: scene bytes and timing ±1 ms of the section boundary minus lookahead, clamps, clock tick spacing at 60 to 240 bpm, panic message set.
 
-**Acceptance criteria M5:** tests green; on the PC with a loopMIDI virtual port the monitor shows the expected bytes at the expected beats; owner gate 5 (real rig) is listed as pending until Vegar ticks it.
+**Acceptance criteria M5:** tests green; on the PC with a loopMIDI virtual port the monitor shows the expected bytes at the expected beats; friend-led owner gate 5 (real rig) is deferred to V2 and does not block V1.
 
 **Demo checklist:** bind "verse" to HeadRush rig 3 and Black Spirit preset 12, "chorus" to rig 4 and preset 20 with gain 90, play the chart, watch the monitor flip at the boundaries.
 
@@ -258,7 +258,7 @@ Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs befo
 - Progress dashboard on Sessions: sessions per week, minutes played, tempo records per chart, timing and pitch trends over the last 20 takes.
 - Tests: SMF written for a three-change tempo map re-parsed with `midly` and compared; analysis on synthetic takes (a DI fixture with known timing offsets and known pitch errors); export folder layout.
 
-**Acceptance criteria M6:** analysis numbers on the synthetic take are within stated tolerances (timing ±2 ms, pitch ±3 cents); the SMF round-trips; export of a 5-minute take completes under 10 seconds on the PC; owner gates 9 and 10 listed as pending.
+**Acceptance criteria M6:** analysis numbers on the synthetic take are within stated tolerances (timing ±2 ms, pitch ±3 cents); the SMF round-trips; export of a 5-minute take completes under 10 seconds on the PC; friend-led owner gates 9 and 10 are deferred to V2, not marked passed.
 
 **Demo checklist:** record a take, open the review, read Jo's drills, export to Logic, open the folder.
 
@@ -275,7 +275,7 @@ Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs befo
 - Diagnostics panel: devices, sample rate, buffer, xruns, log export button, version.
 - `docs/guide/setup.md`: the guitarist's guide with cabling from [../hardware/cabling.md](../hardware/cabling.md), first-run steps, the macOS unsigned-app note (`xattr -dr com.apple.quarantine "/Applications/Josefines Jamstudio.app"` or right-click Open), and troubleshooting.
 
-**Acceptance criteria M7:** a tagged release produces both installers; the Windows installer runs on the PC; the macOS .dmg opens after the documented step (owner gate 1); the DESIGN pre-flight list has no open items; every screen has empty, loading and error states demonstrated in a short screen recording attached to the PR.
+**Acceptance criteria M7:** a tagged release produces both installers; the Windows installer runs on the PC; developer verification confirms the macOS .dmg opens and the installed app starts, with personal-rig owner gate 1 deferred to V2; the DESIGN pre-flight list has no open items; every screen has empty, loading and error states demonstrated in a short screen recording attached to the PR.
 
 **Demo checklist:** fresh install on the PC, onboarding, play the blues, talk to Jo, import a song, export a take.
 
