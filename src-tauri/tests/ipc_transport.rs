@@ -311,6 +311,34 @@ fn count_in_holds_the_song_position_until_the_band_comes_in() {
 }
 
 #[test]
+fn count_in_then_plays_from_the_seeked_bar() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok("band_load_chart", json!({"chartId": "blues-12-bar"}));
+    studio.ok("transport_set_count_in", json!({"bars": 1}));
+    studio.ok("transport_set_tempo", json!({"bpm": 240.0}));
+    wait_for(&studio, "count-in and tempo", |t| {
+        t["transport"]["count_in_bars"] == 1 && t["transport"]["bpm"] == 240.0
+    });
+    studio.ok("transport_seek_bar", json!({"bar": 9}));
+    wait_for(&studio, "seek bar 9", |t| bar(t) == 9);
+
+    studio.ok("transport_play", json!({}));
+    wait_for(&studio, "the count-in", |t| {
+        t["transport"]["state"] == "counting_in"
+    });
+    let playing = wait_for(&studio, "the band to come in at bar 9", |t| {
+        t["transport"]["state"] == "playing"
+    });
+    assert_eq!(
+        bar(&playing),
+        9,
+        "count-in must not rewind the seek: {playing}"
+    );
+    studio.ok("transport_stop", json!({}));
+}
+
+#[test]
 fn seek_bar_clamps_to_bar_one_and_accepts_bars_beyond_the_chart() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

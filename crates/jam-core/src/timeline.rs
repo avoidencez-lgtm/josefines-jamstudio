@@ -275,7 +275,12 @@ impl Timeline {
                 if end_sample >= total_count_in_samples {
                     self.state = TransportState::Playing;
                     events.push(TimelineEvent::CountInComplete);
-                    self.current_sample = 0;
+                    // Keep the pre-count-in playhead (seek / practice range).
+                    // After Stop the playhead is 0; come in at the loop start
+                    // when a loop is armed, instead of always bar 1 (#134).
+                    if self.current_sample == 0 && self.loop_enabled {
+                        self.seek_bar(self.loop_start_bar);
+                    }
                     self.count_in_sample = 0;
 
                     let surplus = end_sample
@@ -483,6 +488,66 @@ mod tests {
         let ev2 = tl.advance(48_000);
         assert_eq!(tl.state, TransportState::Playing);
         assert!(ev2.contains(&TimelineEvent::CountInComplete));
+    }
+
+    #[test]
+    fn count_in_keeps_the_seek_position() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(1);
+        tl.seek_bar(9);
+        tl.play();
+        tl.advance(96_000);
+        assert_eq!(tl.state, TransportState::Playing);
+        assert_eq!(tl.current_position().bar, 9);
+    }
+
+    #[test]
+    fn count_in_comes_in_at_the_loop_start_when_stopped_at_the_top() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(1);
+        tl.set_loop(5, 9, true);
+        tl.play();
+        tl.advance(96_000);
+        assert_eq!(tl.state, TransportState::Playing);
+        assert_eq!(tl.current_position().bar, 5);
+    }
+
+    #[test]
+    fn count_in_surplus_renders_the_current_seek_once_at_the_correct_offset() {
+        for destination in [5, 9] {
+            let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+            tl.seek_bar(9);
+            tl.play();
+            assert!(tl.advance_with_spans(95_900).1.is_empty());
+            tl.play(); // Repeated Play cannot restart an active count-in.
+            if destination == 5 {
+                tl.seek_bar(5); // A later seek replaces the destination.
+            }
+            let (events, spans) = tl.advance_with_spans(256);
+            assert_eq!(
+                spans,
+                vec![Span {
+                    offset: 100,
+                    frames: 156,
+                    start_beats: f64::from((destination - 1) * 4),
+                }]
+            );
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|e| **e == TimelineEvent::CountInComplete)
+                    .count(),
+                1
+            );
+            assert!(events.contains(&TimelineEvent::Beat {
+                bar: destination,
+                beat: 1,
+                is_count_in: false,
+                offset: 100,
+            }));
+            assert_eq!(tl.current_sample, u64::from(destination - 1) * 96_000 + 156);
+            assert!(tl.advance(256).is_empty());
+        }
     }
 
     #[test]
