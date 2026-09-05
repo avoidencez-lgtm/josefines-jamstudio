@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import manual from "../../docs/guide/manual.json";
+import { type HelpLanguage, readHelpLanguage } from "../lib/help";
+import { saveRoomPreference } from "../lib/roomActions";
 import { SHORTCUTS } from "../lib/shortcuts";
+import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 import "./manual.css";
 
@@ -13,10 +16,14 @@ export function ShortcutsHelp({
   room: string;
   onClose: () => void;
 }) {
-  const [language, setLanguage] = useState<"en" | "nb">("en");
+  const savedLanguage = useEngineStore((s) => readHelpLanguage(s.settings));
+  const [language, setLanguage] = useState<HelpLanguage>(savedLanguage);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState("start");
   const search = useRef<HTMLInputElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  // Settings load after the first render; adopt the saved choice when they arrive.
+  useEffect(() => setLanguage(savedLanguage), [savedLanguage]);
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement;
@@ -29,6 +36,13 @@ export function ShortcutsHelp({
   }, [open, room]);
   if (!open) return null;
   const nb = language === "nb";
+  const chooseLanguage = (next: HelpLanguage) => {
+    setLanguage(next);
+    // The choice holds no secrets; it lives with the other app settings.
+    void saveRoomPreference("helpLanguage", next).catch((e) =>
+      useEngineStore.getState().notify("error", `Help language: ${String(e)}`),
+    );
+  };
   const matches = manual.chapters.filter((c) =>
     [
       c.title[language],
@@ -58,7 +72,7 @@ export function ShortcutsHelp({
           {nb ? "Språk" : "Language"}
           <select
             value={language}
-            onChange={(e) => setLanguage(e.target.value as "en" | "nb")}
+            onChange={(e) => chooseLanguage(e.target.value as HelpLanguage)}
           >
             <option value="en">English</option>
             <option value="nb">Norsk bokmål</option>
@@ -86,17 +100,28 @@ export function ShortcutsHelp({
                 type="button"
                 key={c.id}
                 aria-current={chapter?.id === c.id ? "page" : undefined}
-                onClick={() => setSelected(c.id)}
+                onClick={() => {
+                  setSelected(c.id);
+                  // Reading starts at the chapter title, not at the whole chapter text.
+                  requestAnimationFrame(() => heading.current?.focus());
+                }}
               >
                 {c.title[language]}
               </button>
             ))}
           </nav>
         </aside>
-        <article aria-live="polite">
+        <article>
+          <p className="sr-only" aria-live="polite">
+            {chapter
+              ? `${nb ? "Kapittel" : "Chapter"}: ${chapter.title[language]}`
+              : ""}
+          </p>
           {chapter ? (
             <>
-              <h2>{chapter.title[language]}</h2>
+              <h2 ref={heading} tabIndex={-1}>
+                {chapter.title[language]}
+              </h2>
               {chapter.sections.map((s) => (
                 <section key={s.title.en}>
                   <h3>{s.title[language]}</h3>
@@ -118,7 +143,7 @@ export function ShortcutsHelp({
               <h3>{nb ? "Hurtigtaster" : "Keyboard shortcuts"}</h3>
               <p>
                 {nb
-                  ? "Hurtigtastene er av mens du leser hjelpen eller skriver i et felt. I karteditoren spiller Ctrl/Cmd+Enter kartet, og Ctrl/Cmd+S lagrer det."
+                  ? "Hurtigtastene er av mens du leser hjelpen eller skriver i et felt. I skjemaeditoren spiller Ctrl/Cmd+Enter skjemaet, og Ctrl/Cmd+S lagrer det."
                   : "Shortcuts are off while reading help or typing in a field. In the chart editor, Ctrl/Cmd+Enter plays the chart and Ctrl/Cmd+S saves it."}
               </p>
               <dl className="manual-shortcuts">

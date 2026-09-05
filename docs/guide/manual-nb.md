@@ -1,4 +1,4 @@
-# Josefine’s Jam Studio — brukerhåndbok
+# Josefines Jamstudio — brukerhåndbok
 
 ## Start her
 
@@ -24,7 +24,7 @@ Bruk skrivebordsappen for lyd, filer, MIDI, nøkler, agenter og mediegenerering.
 
 ### Språk og navigasjon
 
-Sidepanelet viser navn og formål for hvert rom. Help & guides åpner denne søkbare håndboken uten å forkaste rommet du jobbet i. Velg English eller Norsk bokmål. Redigeringskontrollene beholder engelske navn, og den norske veiledningen bruker de samme knappetekstene. Escape lukker hjelpen. Hurtigtaster for transport er satt på pause mens du leser hjelp.
+Sidepanelet viser navn og formål for hvert rom. Help & guides åpner denne søkbare håndboken uten å forkaste rommet du jobbet i. Velg English eller Norsk bokmål. Redigeringskontrollene beholder engelske navn, og den norske veiledningen bruker de samme knappetekstene. Escape lukker hjelpen. Hurtigtaster for transport er satt på pause mens du leser hjelp. Språkvalget lagres sammen med appinnstillingene og brukes neste gang du åpner hjelpen, også etter en omstart.
 
 ## Write: akkorder og arrangement
 
@@ -367,14 +367,14 @@ Den tospråklige håndbokkilden er docs/guide/manual.json. Hver tittel og tekstb
 - **Enter**: Stopp og gå til starten
 - **L**: Slå repetisjon av/på
 - **C**: Opptelling: av / 1 takt / 2 takter
-- **T**: Trykk inn tempoet (minst to slag)
+- **T**: Slå inn tempoet (minst to slag)
 - **← / →**: Tempo −1 / +1 BPM (Shift: ±5)
 - **R**: Start / stopp opptak
-- **F / K**: Bestill fill / krasj på neste takt
+- **F / K**: Bestill fill / crash på neste takt
 - **S / E**: Bestill stopp / avslutning
 - **M / B / P**: Demp trommer / bass / komp
 - **↑ / ↓**: Endre intensiteten (5 %)
 - **1 – 9**: Gå til takt 1–9 i låtformen
-- **[ / ]**: Transponer kartet ned / opp en halvtone
+- **[ / ]**: Transponer skjemaet ned / opp en halvtone
 - **U**: Vis / skjul stemmeapparatet
 - **?**: Åpne hjelp og veiledninger

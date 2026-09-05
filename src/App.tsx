@@ -199,7 +199,7 @@ export const App: React.FC = () => {
         <div className="studio-brand">
           <span>J</span>
           <div>
-            JOSEFINE’S<small>JAM STUDIO</small>
+            JOSEFINES<small>JAMSTUDIO</small>
           </div>
         </div>
         <div className="studio-nav-items">

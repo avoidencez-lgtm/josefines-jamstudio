@@ -1,4 +1,4 @@
-# Josefine’s Jam Studio — user manual
+# Josefines Jamstudio — user manual
 
 ## Start here
 
@@ -24,7 +24,7 @@ Use the desktop app for audio, disk files, MIDI, keys, agents and media generati
 
 ### Language and navigation
 
-The sidebar names each room and its purpose. Help & guides opens this searchable manual without discarding the room you were using. Choose English or Norsk bokmål. The main editing controls keep their English names, so this Norwegian guide quotes those labels. Escape returns from help. Keyboard transport shortcuts are suspended while you read help.
+The sidebar names each room and its purpose. Help & guides opens this searchable manual without discarding the room you were using. Choose English or Norsk bokmål. The main editing controls keep their English names, so this Norwegian guide quotes those labels. Escape returns from help. Keyboard transport shortcuts are suspended while you read help. Your language choice is saved with the app settings and used the next time help opens, also after a restart.
 
 ## Write: chords and arrangement
 

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { ipc, isPreview } from "../ipc/client";
 import type { AppSettings, Chart, RigState } from "../ipc/contract";
 import { useEngineStore } from "../store/engine";
+import { helpLanguageSchema } from "./help";
 import { songFingerprint } from "./jo/studioTools";
 import { type SongBody, useWriting } from "./originals";
 import {
@@ -38,12 +39,17 @@ export function applySongIdea(body: SongBody, base: string, label: string) {
   });
 }
 
+const PREFERENCE_SCHEMAS = {
+  rehearsalSetlist: setlistSchema,
+  audioProfiles: audioProfileSchema,
+  helpLanguage: helpLanguageSchema,
+} as const;
+
 export async function saveRoomPreference(
-  key: "rehearsalSetlist" | "audioProfiles",
+  key: keyof typeof PREFERENCE_SCHEMAS,
   value: unknown,
 ) {
-  if (key === "rehearsalSetlist") setlistSchema.parse(value);
-  else audioProfileSchema.parse(value);
+  PREFERENCE_SCHEMAS[key].parse(value);
   // Merge into a fresh settings document; credentials are never part of these presets.
   const current = await ipc.invoke<AppSettings>("settings_get");
   const next = { ...current, [key]: value };
