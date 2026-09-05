@@ -192,6 +192,22 @@ it("lets Jo start and stop a take by voice and refuses an unknown or missing act
   expect(store().isRecording).toBe(false);
 });
 
+it("refuses Jo tool calls that do nothing instead of reporting fake success (#90)", async () => {
+  // set_tempo declares no required argument, so a bare call passes schema
+  // validation; it used to answer "Executed set_tempo" and that string then
+  // entered the model's conversation history as a confirmation.
+  await expect(
+    dispatchJoToolCall({ name: "set_tempo", arguments: {} }),
+  ).rejects.toThrow("Set tempo needs a bpm or a delta.");
+  // The enum tools are refused at the validation boundary already.
+  await expect(
+    dispatchJoToolCall({
+      name: "transport_control",
+      arguments: { action: "silence" },
+    }),
+  ).rejects.toThrow("Invalid action for transport_control.");
+});
+
 it.skip("app bug: stopping when nothing is recording invents a zero-second take in the preview instead of refusing like the desktop (No active recording)", async () => {
   const before = (await engineTakes()).map((t) => t.id);
   expect(store().isRecording).toBe(false);

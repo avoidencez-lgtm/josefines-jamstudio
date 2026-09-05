@@ -158,7 +158,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         await store.transportStop();
         return "Stopped playback";
       }
-      break;
+      throw new Error("Unknown transport action. Use play, pause or stop.");
     }
 
     case "set_tempo": {
@@ -172,7 +172,9 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         await store.transportSetTempo(targetBpm);
         return `Tempo set to ${targetBpm} BPM`;
       }
-      break;
+      // A bare set_tempo used to fall through to "Executed set_tempo" — a
+      // fabricated success that then entered the model's conversation history (#90).
+      throw new Error("Set tempo needs a bpm or a delta.");
     }
 
     case "trigger_cue": {
@@ -243,9 +245,9 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         const take = await store.stopRecording();
         return `Recording saved: ${take?.id ?? "take"}`;
       }
-      break;
+      throw new Error("Unknown recording action. Use start or stop.");
     }
   }
 
-  return `Executed ${call.name}`;
+  throw new Error(`${call.name} is not wired to the studio.`);
 }
