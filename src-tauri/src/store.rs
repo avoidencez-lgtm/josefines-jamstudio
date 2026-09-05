@@ -4,7 +4,7 @@
 use jam_audio::recorder::TakeMetadata;
 use rusqlite::{params, Connection};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub fn db_path() -> PathBuf {
     crate::library::Library::default_user_root().join("index.sqlite")
@@ -16,14 +16,34 @@ pub struct IndexStore {
 
 impl IndexStore {
     pub fn open() -> Result<Self, String> {
-        let path = db_path();
+        Self::open_path(&db_path())
+    }
+
+    fn open_path(path: &Path) -> Result<Self, String> {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-
-        let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+        let conn = Connection::open(path).map_err(|e| e.to_string())?;
         Self::init_schema(&conn)?;
         Ok(Self { conn })
+    }
+
+    /// Opens the on-disk cache, or an empty in-memory one when the file cannot be
+    /// used. SQLite is a deletable cache (ADR 0005); a corrupt file must not prevent launch.
+    pub fn open_cache() -> (Self, Option<String>) {
+        Self::open_cache_path(&db_path())
+    }
+
+    pub fn open_cache_path(path: &Path) -> (Self, Option<String>) {
+        match Self::open_path(path) {
+            Ok(store) => (store, None),
+            Err(e) => (
+                Self::open_in_memory().expect("in-memory index"),
+                Some(format!(
+                    "Take index unavailable ({e}). Showing recordings found on disk; delete index.sqlite to rebuild the cache."
+                )),
+            ),
+        }
     }
 
     pub fn open_in_memory() -> Result<Self, String> {
@@ -217,6 +237,40 @@ impl IndexStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_corrupt_index_file_does_not_prevent_launch() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-index-bad-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = root.join("index.sqlite");
+        std::fs::create_dir_all(&path).unwrap();
+        let (store, notice) = IndexStore::open_cache_path(&path);
+        let notice = notice.expect("corrupt index is reported");
+        assert!(notice.contains("Take index unavailable"), "{notice}");
+        store
+            .insert_take(&TakeMetadata {
+                id: "after-fallback".into(),
+                ..Default::default()
+            })
+            .expect("in-memory fallback accepts writes");
+        let good = root.join("good.sqlite");
+        let (ok, quiet) = IndexStore::open_cache_path(&good);
+        assert!(quiet.is_none());
+        ok.insert_take(&TakeMetadata {
+            id: "on-disk".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        drop(store);
+        drop(ok);
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     #[test]
     fn test_store_open_and_rebuild() {

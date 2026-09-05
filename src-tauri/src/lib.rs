@@ -951,10 +951,17 @@ pub fn run() {
         net::CostLog::default_path()
     }));
 
-    let index_store = if is_test {
-        store::IndexStore::open_in_memory().unwrap()
+    let (index_store, index_notice) = if is_test {
+        (
+            store::IndexStore::open_in_memory().expect("in-memory index"),
+            None,
+        )
     } else {
-        store::IndexStore::open().unwrap()
+        store::IndexStore::open_cache()
+    };
+    let recovery_notice = match (recovery_notice, index_notice) {
+        (Some(settings), Some(index)) => Some(format!("{settings} {index}")),
+        (settings, index) => settings.or(index),
     };
     let store_arc = Arc::new(Mutex::new(index_store));
 
