@@ -173,7 +173,7 @@ impl Library {
         let content =
             std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
         let chart: Chart =
-            serde_json::from_str(&content).map_err(|e| format!("{}: {e}", path.display()))?;
+            jam_core::json::from_str(&content).map_err(|e| format!("{}: {e}", path.display()))?;
         validate_chart(&chart)?;
         self.save_chart(&chart)?;
         Ok(chart)
@@ -230,7 +230,7 @@ impl Library {
             p.extension().is_some_and(|x| x == "json")
                 && std::fs::read_to_string(p)
                     .ok()
-                    .and_then(|s| serde_json::from_str::<Chart>(&s).ok())
+                    .and_then(|s| jam_core::json::from_str::<Chart>(&s).ok())
                     .is_some_and(|c| c.id == id)
         })
     }
