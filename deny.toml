@@ -10,10 +10,24 @@ allow = [
     "Zlib",
     "Unicode-3.0",
     "CC0-1.0",
-    "Unlicense",
-    "MPL-2.0",
 ]
 confidence-threshold = 0.8
+# Recorded exceptions to the AGENTS.md allowlist (invariant 9). Each crate below is
+# dual-licensed or a transitive Tauri/WebView dependency; none is GPL, LGPL or AGPL.
+# Unlicense crates are all "Unlicense OR MIT" and could be taken as MIT.
+exceptions = [
+    { allow = ["Unlicense"], crate = "aho-corasick" },
+    { allow = ["Unlicense"], crate = "byteorder" },
+    { allow = ["Unlicense"], crate = "memchr" },
+    { allow = ["Unlicense"], crate = "same-file" },
+    { allow = ["Unlicense"], crate = "walkdir" },
+    # MPL-2.0 (file-level copyleft, no linking obligation): Tauri's CSS parsing and dirs support.
+    { allow = ["MPL-2.0"], crate = "cssparser" },
+    { allow = ["MPL-2.0"], crate = "cssparser-macros" },
+    { allow = ["MPL-2.0"], crate = "dtoa-short" },
+    { allow = ["MPL-2.0"], crate = "option-ext" },
+    { allow = ["MPL-2.0"], crate = "selectors" },
+]
 
 [bans]
 multiple-versions = "warn"

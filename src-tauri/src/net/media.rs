@@ -186,6 +186,8 @@ pub async fn fetch(
     if let Some(b) = body {
         req = req.json(b);
     }
+    // Same rule as provider_fetch and the agent bridge: nothing is sent from a headless run.
+    super::live_guard(&format!("media provider \"{}\"", m.provider))?;
     let started = Instant::now();
     let mut status = 0;
     let result = async {
@@ -363,6 +365,7 @@ pub fn download_url(m: &Model, uri: &str) -> Result<reqwest::Url, String> {
 }
 pub async fn download(m: &Model, uri: &str, store: &dyn SecretStore) -> Result<Vec<u8>, String> {
     let url = download_url(m, uri)?;
+    super::live_guard("a media download")?;
     let mut req = provider_client()
         .no_proxy()
         .timeout(Duration::from_secs(300))

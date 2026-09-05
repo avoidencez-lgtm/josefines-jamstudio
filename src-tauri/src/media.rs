@@ -416,10 +416,13 @@ async fn mix_soundtrack(files: &[PathBuf], output: &Path) -> Result<(), String> 
     for file in files {
         args.extend(["-i".into(), file.to_string_lossy().into_owned()]);
     }
+    // Sum at unity so the band never gets quieter as guitar layers are added (issue #34);
+    // a fast limiter at -1 dBFS keeps the rare over-peak clean. Its 0.1 ms lookahead
+    // delays the file by three frames at 48 kHz, far below anything a cut could show.
     args.extend([
         "-filter_complex".into(),
         format!(
-            "amix=inputs={}:duration=longest:dropout_transition=0:normalize=1",
+            "amix=inputs={}:duration=longest:dropout_transition=0:normalize=0,alimiter=limit=0.891:attack=0.1:release=50:level=0",
             files.len()
         ),
         "-ac".into(),
@@ -813,7 +816,15 @@ mod tests {
         let (audio, rate) = jam_audio::recorder::read_wav_mono(&output).unwrap();
         assert_eq!(rate, 48000);
         assert_eq!(audio.len(), 48000);
-        assert!(audio.iter().all(|s| (*s - 0.3).abs() < 0.0001));
+        // Unity sum of band (0.2) and DI (0.4); the limiter's lookahead is three frames.
+        assert!(audio.iter().skip(3).all(|s| (*s - 0.6).abs() < 0.0001));
+        // Eight loud layers must stay under the -1 dBFS ceiling instead of clipping.
+        let loud: Vec<PathBuf> = (0..8).map(|_| base.join("master.wav")).collect();
+        let ceiling = base.join("ceiling.wav");
+        mix_soundtrack(&loud, &ceiling).await.unwrap();
+        let (audio, _) = jam_audio::recorder::read_wav_mono(&ceiling).unwrap();
+        let peak = audio.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        assert!((0.85..=0.9).contains(&peak), "peak {peak}");
         fs::remove_dir_all(base).unwrap();
     }
     #[tokio::test]

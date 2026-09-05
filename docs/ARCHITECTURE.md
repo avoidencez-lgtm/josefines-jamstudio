@@ -538,7 +538,9 @@ Charts and styles with different meters are refused before playback changes.
 
 Settings writes flush a temporary file, retain the previous valid `.bak`, then
 rename. On startup, malformed settings are archived as `settings.json.broken-<timestamp>` before restoring a valid backup or defaults. A one-time UI notice names the archive. Read/permission failures are reported without replacing the source. Ordinary saves still refuse corrupt input; restart to recover. Unknown fields in a valid backup survive recovery. Song saves and scans enforce the same 2 MB compact JSON limit, with a shared 8 MB formatted-file bound.
-Take scanning reports damaged manifests individually; complete cached manifests
+Take scanning reports damaged manifests individually and once per session; a cache
+row the current code cannot read falls back to its plain columns or is skipped with a
+warning, never hiding the takes on disk. Complete cached manifests
 retain stems, MIDI, snapshots and flags. New code uses the native Mac Keychain
 and Windows credential store. Browser speech APIs are not part of this build.
 
@@ -547,8 +549,9 @@ mutex or logging in the callback. A rejected requested buffer is reported to the
 user; the engine's headless fallback still keeps the editor usable.
 
 Native close requests are guarded for unsaved documents and active work. Film's
-Use take sums band, guitar DI and unmuted guitar layers through FFmpeg with
-normalisation for headroom; master/monitor click and test tone are excluded.
+Use take sums band, guitar DI and unmuted guitar layers through FFmpeg at unity
+gain with a -1 dBFS limiter for headroom (the band never gets quieter as layers
+are added); master/monitor click and test tone are excluded.
 
 ## Bilingual help and finishing tools (2026-09-05)
 

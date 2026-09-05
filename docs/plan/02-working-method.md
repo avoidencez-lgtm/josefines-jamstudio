@@ -58,6 +58,7 @@ A spike is a time-boxed experiment that decides an architectural question ([03-b
 - Keys are entered in the app's Settings screen and stored in the OS keychain through the `SecretStore` seam. There is no `.env` for keys. `.env.example` lists provider *names* only.
 - Automated tests never call a provider. Provider clients are tested against recorded fixtures in `tests/fixtures/providers/<provider>/`. A recorded fixture is captured once with `JAM_RECORD_FIXTURES=1` while a key is present, then scrubbed (the recorder strips headers and any key-like string) and committed.
 - Manual live checks are opt-in: `JAM_LIVE=1 cargo test -p josefines-jamstudio --test live -- --ignored`.
+- Nothing leaves the app from a headless run: under `cfg(test)` or `JAM_HEADLESS=1` (CI, the smoke harness, `tauri dev` as documented above) `provider_fetch`, the media adapters and the installed-agent bridge refuse every request unless `JAM_LIVE=1` is also set. A smoke harness that starts the real binary must set `JAM_HEADLESS=1` itself; `cfg(test)` only covers unit tests inside the crate.
 - Never log a request body that could contain audio or a key. Log provider, model, duration, bytes and estimated cost.
 
 ## Definition of "usable"

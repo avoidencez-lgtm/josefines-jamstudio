@@ -94,9 +94,11 @@ it does not import the chat you already have open in either agent's own UI.
 Install a current native CLI and sign in once using that CLI's supported login.
 In Settings select it, leave Model ID as `default`, and press **Detect installed
 agent**. Detection runs `--version` only; it does not spend model usage or prove
-login. If detection fails, supply its full executable path. On Windows select the
-native `.exe`; on Mac the app also searches common Homebrew and `~/.local/bin`
-locations. `default` uses the CLI's built-in default; custom user CLI configuration
+login. If detection fails, supply its full executable path. On Windows choose either
+the native `.exe` or the `.cmd` shim that `npm install -g` writes (usually under
+`%APPDATA%
+pm`); other script types are refused. On Mac the app also searches
+common Homebrew and `~/.local/bin` locations. `default` uses the CLI's built-in default; custom user CLI configuration
 is deliberately not loaded. Enter a supported model ID to select another model.
 Then save the settings and use **Test agent (uses account)** or send your first
 studio request. No recurring switch to the agent's terminal/app is needed.

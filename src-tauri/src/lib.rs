@@ -23,8 +23,25 @@ use settings::{load_settings, save_settings, AppSettings};
 use std::sync::Arc;
 use tauri::{Emitter, State};
 
+/// Warnings about damaged files are shown once per session, not on every refresh
+/// (issues #32 and #51): the file stays on disk and the message stays true.
+#[derive(Default)]
+pub struct WarnOnce(Mutex<std::collections::HashSet<String>>);
+
+impl WarnOnce {
+    /// Keeps only the warnings that have not been shown before.
+    pub fn fresh(&self, warnings: Vec<String>) -> Vec<String> {
+        let mut seen = self.0.lock();
+        warnings
+            .into_iter()
+            .filter(|w| seen.insert(w.clone()))
+            .collect()
+    }
+}
+
 pub struct AppState {
     pub recovery_notice: Mutex<Option<String>>,
+    pub warnings: WarnOnce,
     pub agents: agents::AgentRunner,
     pub secret_store: Arc<dyn SecretStore>,
     pub engine: Arc<Mutex<AudioEngine>>,
@@ -385,7 +402,7 @@ fn takes_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<jam_audio::recorder::TakeMetadata>, String> {
     let (takes, warnings) = all_takes(&state)?;
-    for warning in warnings {
+    for warning in state.warnings.fresh(warnings) {
         let _ = app.emit("app:error", warning);
     }
     Ok(takes
@@ -770,17 +787,28 @@ fn rig_clear_monitor(state: State<'_, AppState>) -> RigStateDto {
     rig.clear_monitor();
     rig_state_dto(&rig)
 }
+/// Files are truth, SQLite is a cache: a cache that cannot be read is a warning and
+/// the takes found on disk are still listed.
 fn all_takes(
     state: &AppState,
 ) -> Result<(Vec<jam_audio::recorder::TakeMetadata>, Vec<String>), String> {
-    let mut takes: std::collections::BTreeMap<_, _> = state
-        .store
-        .lock()
-        .list_takes()?
-        .into_iter()
-        .map(|t| (t.id.clone(), t))
-        .collect();
-    let (files, warnings) = originals::file_takes()?;
+    let mut warnings = Vec::new();
+    let cached = match state.store.lock().list_takes() {
+        Ok((rows, skipped)) => {
+            warnings.extend(skipped);
+            rows
+        }
+        Err(e) => {
+            warnings.push(format!(
+                "Take index unavailable: {e}. Showing the takes found on disk; delete index.sqlite to rebuild the cache."
+            ));
+            Vec::new()
+        }
+    };
+    let mut takes: std::collections::BTreeMap<_, _> =
+        cached.into_iter().map(|t| (t.id.clone(), t)).collect();
+    let (files, file_warnings) = originals::file_takes()?;
+    warnings.extend(file_warnings);
     for t in files {
         takes.insert(t.id.clone(), t);
     }
@@ -1017,6 +1045,7 @@ pub fn run() {
 
     let app_state = AppState {
         recovery_notice: Mutex::new(recovery_notice),
+        warnings: WarnOnce::default(),
         agents: agents::AgentRunner::default(),
         controller: Arc::new(Mutex::new(None)),
         secret_store,
@@ -1190,6 +1219,27 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod warnings {
+    #[test]
+    fn a_damaged_file_is_reported_once_per_session() {
+        let once = super::WarnOnce::default();
+        let first = once.fresh(vec![
+            "Cannot read a.json".into(),
+            "Cannot read b.json".into(),
+        ]);
+        assert_eq!(first.len(), 2);
+        assert!(once.fresh(vec!["Cannot read a.json".into()]).is_empty());
+        assert_eq!(
+            once.fresh(vec![
+                "Cannot read b.json".into(),
+                "Cannot read c.json".into()
+            ]),
+            vec!["Cannot read c.json".to_string()]
+        );
+    }
 }
 
 #[cfg(test)]
