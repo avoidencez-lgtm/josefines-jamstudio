@@ -1177,6 +1177,7 @@ pub fn run() {
             rig_send_program,
             rig_clear_monitor,
             takes_analyze,
+            originals::takes_melody,
             takes_export_daw,
         ])
         .run(tauri::generate_context!())

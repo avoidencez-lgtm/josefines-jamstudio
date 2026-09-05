@@ -1,3 +1,128 @@
+.room-tools {
+  margin-bottom: 24px;
+  border-block: 1px solid var(--line);
+  background: var(--bg-1);
+}
+.room-tools[hidden] {
+  display: none;
+}
+.room-tools summary {
+  cursor: pointer;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--accent);
+}
+.room-tools summary::after {
+  content: "+";
+  margin-left: auto;
+  font-size: 22px;
+}
+.room-tools[open] summary::after {
+  content: "−";
+}
+.room-tools summary small {
+  display: block;
+  color: var(--fg-1);
+  margin-top: 3px;
+  font-size: 13px;
+}
+.room-tool-body {
+  padding: 4px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.room-tool-body p {
+  color: var(--fg-1);
+  line-height: 1.6;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.room-tool-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+.room-tool-row > section {
+  flex: 1 1 240px;
+}
+.room-tool-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+}
+.room-tool-field input,
+.room-tool-field select,
+.room-tool-field textarea {
+  padding: 9px 10px;
+  color: var(--fg-0);
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  max-width: 100%;
+  min-height: 40px;
+}
+.room-tool-field input[type="number"] {
+  width: 140px;
+}
+.room-tool-field textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--font-mono);
+}
+.room-tools :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.room-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.room-tool-list > li {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+.room-tool-list > li > div:first-child {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.room-tool-status:not(:empty) {
+  padding: 10px;
+  background: var(--accent-soft);
+  color: var(--fg-0);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.room-tool-status:empty {
+  display: none;
+}
+.room-tool-coaches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 20px;
+}
+.room-tool-coaches h3 {
+  text-transform: capitalize;
+  font-weight: 650;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.room-tool-coaches .room-tool-row {
+  margin-top: 12px;
+}
+
 .studio-nav {
   width: 184px;
   padding: 20px 10px 12px;

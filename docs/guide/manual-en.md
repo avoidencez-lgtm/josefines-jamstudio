@@ -48,6 +48,10 @@ Changing Key transposes band chords; Mode changes the harmony palette. Recorded 
 
 Write supports 4/4, 40–240 BPM, up to 256 arranged bars, 64 sections, 128 form entries, 16 guitar layers, 20 named versions and 50 Undo entries. Guitar layers remain at absolute bar numbers after a form edit. Check their placement whenever you move sections, change tempo or change chords.
 
+### Melody → harmony
+
+Open Melody → harmony at the top of Write. Choose an isolated humming or single-note guitar recording, a start offset and 0.1–60 seconds, then Extract notes in the desktop app. Source files must be no longer than two minutes and no larger than 64 MB. Correct the editable note list: one line per note, for example A4 0 0.5 (pitch, start seconds relative to the selected excerpt, duration seconds). Manual entry also works in the browser. Select a 1–32 bar section in a 4/4 original at 40–240 BPM and Preview chord choices. Candidates are ordered by duration spent on chord tones; this is a theory aid, not a quality score. Silent bars keep the first existing chord. Keep as a section variation creates an idea outside the form, preserving the current arrangement and guitar timeline. In Compose, add the variation to the form to audition it. Undo and a named version preserve the old song; Save writes it to disk. The extractor sketches sustained monophonic notes; chords, effects and repeated attacks on the same pitch can confuse it.
+
 ## Lyrics and Song Lab
 
 ### Write words against the music
@@ -136,6 +140,10 @@ Levels shows the input/band signal and engine state. No audio or a headless stat
 
 The engine counts denominator beats: 6/8 at 60 BPM is six seconds per bar. A style and chart must share a meter. Write remains 4/4; other supported meters belong to chart/Stage workflows. MIDI and REAPER export convert this convention to quarter-note BPM.
 
+### Rehearsal setlist
+
+Open Rehearsal setlist at the top of Stage. Choose a Library chart, its tempo (40–240 BPM) and count-in (0–4 bars), then Add to setlist. Up to 32 entries save immediately in settings. Edit loads an entry into the controls; Update entry saves its new chart, tempo and count-in. Cue it again to apply the new setup. Move up and Remove change the order. Cue prepares an entry: it stops transport, loads the chart, applies its tempo/count-in, disables looping and the tempo trainer, then seeks bar one. It does not start playback. Press Play when ready, or Cue next to prepare the following entry. Missing charts must be restored in Library or removed from the list. Recording blocks cue changes. Browser preview retains entries only until reload and has no audio.
+
 ## Library: charts and grooves
 
 ### Find, edit and play
@@ -149,6 +157,10 @@ A title starts with #. Metadata lines use key: A minor, bpm: 100, time: 4/4 and 
 ### Stored content
 
 User charts, styles and rig profiles live in separate folders under the user directory and are loaded through registries. A matching user ID can override bundled content. Chart saves use a temporary file and a previous .json.bak backup. Invalid user charts are reported and skipped; valid bundled charts remain available. Charts are bounded to 4096 arranged bars; the Write limit is smaller. See the developer chapter before hand-editing data files.
+
+### Harmonic discovery
+
+Choose the current original or a Library chart in Harmonic discovery. Results share consecutive root movements and chord qualities in the same meter, even in another key. The list states the actual shared movements; these are not similarity percentages or claims that two songs sound the same. Study in Stage cues a matching chart without starting it. No cloud request or audio analysis is involved. Add more charts if there are no matches.
 
 ## Jo AI and installed agents
 
@@ -170,6 +182,10 @@ The CLI keeps its own credentials. Codex can use a ChatGPT login or API-key logi
 
 Text assistants receive song text/structure, settings, rig name and cached take metrics as needed, not raw take audio or keys. Try “Add a quiet eight-bar bridge”, “Leave locked bass alone and thin out verse drums”, or “Append three concrete chorus images to this section’s lyrics”. Local take metrics are heuristics, not an AI listening judgment. Only media-generation commands send their explicitly selected generation inputs.
 
+### Three perspectives
+
+Enter a specific goal and Ask three perspectives. One request goes to the selected Jo provider or installed agent and returns composition, arrangement and performance experiments. Your chart, lyrics, notes and band settings are sent; no audio is sent or heard. API billing or subscription usage limits can apply. Draft in Jo places one experiment in the conversation input for your review; it never sends automatically and will not overwrite an existing draft. Keep in song notes appends one suggestion with version and Undo protection. Ask again after the song changes. Missing configuration and malformed replies show an error; there is no paid fallback call.
+
 ## Songs: mixes and references
 
 ### Import and listen
@@ -179,6 +195,10 @@ Songs is the audio-asset library, separate from Write song documents and Session
 ### Use a mix in a film
 
 Use in Film sets the selected asset as the current film soundtrack. Save video to keep that choice. Generated audio appears in the same library after its job completes. Generated lyrics/structure are shown when returned by the provider. Automatic stem separation, chord recognition and time-stretch are not available in Songs.
+
+### Reference blueprint
+
+Name a reference or select an imported audio asset, then choose a source section from your original. Map the reference by ear with one line per section: Name | bars | energy 0–100. Preview new form shows the result before applying it. The tool repeats or trims your own chord phrase to the requested section lengths and adjusts unlocked, unmuted parts. It keeps old sections and their lyrics as ideas; it does not copy reference audio, transcribe chords or move lyrics automatically. Limits are 16 blueprint entries and 256 arranged bars, within the original’s existing section ceiling. Guitar layers block a timeline replacement: work from a version without layers. Apply preserves a version and Undo; Save in Write persists the form and reference provenance.
 
 ## AI Music and local models
 
@@ -198,6 +218,10 @@ Install the runtime, trusted custom nodes and licensed weights separately. Start
 
 GPU/runtime requirements vary and some checkpoints require CUDA rather than a Mac GPU. A local endpoint does not guarantee every custom node stays offline. No weights, FFmpeg, ComfyUI or DAW are bundled. Lyria RealTime streaming and general audio transcription/separation remain unbuilt.
 
+### Arrangement brief
+
+Choose Faithful, Stripped or Reimagined as an editable starting direction. Build arrangement brief compiles the current original’s key, tempo, meter, form, chords and band intensity locally. Instrumental omits lyrics; turn it off to include your section lyrics. Review and edit the prompt, then Use prompt in AI Music. This replaces only the project’s generation prompt and instrumental setting, preserving its model and duration. The prompt is a musical request, not guaranteed bar-accurate output. It must stay within 4,000 characters; model-specific limits still apply when generating. No paid request runs until you separately choose Generate in the existing controls. Media Undo restores the previous prompt; Save project keeps it.
+
 ## Film: soundtrack to music video
 
 ### Choose a clean soundtrack
@@ -215,6 +239,10 @@ Let the selected brain direct returns editable shot descriptions from text/timin
 Save video persists project settings and local-model configuration. Render & jobs shows missing footage, missing soundtrack and length mismatch. Fit all cuts to song length scales durations proportionally. Render music video requires all clips and a matching timeline. Output is 720p, 30 fps, cropped to fill the chosen frame, with 48 kHz AAC soundtrack; generated clip audio is discarded. The original audio files remain separate.
 
 The in-app preview is silent. Play film with sound opens the native player. Cancel stops local rendering; it cannot recall a submitted cloud generation. Completed exports and project snapshots remain under music-videos/exports. Limits are 120 shots, 0.1–120 seconds per shot and ten minutes total. Undo restores edits while preserving the disk revision.
+
+### Beat-grid cuts
+
+Enter the soundtrack BPM, cut spacing in beats and the first beat’s offset (0–10 seconds). Preview aligned cuts rounds internal cut positions to that grid. The last cut stays at the original end, so soundtrack duration and source trim starts remain unchanged. A grid that collapses a shot or exceeds the 0.1–120 second per-shot range is rejected: choose a finer grid or adjust short shots. Apply uses existing media Undo and Save. This uses your supplied tempo, not automatic onset detection, and assumes steady tempo. Rendering still checks source duration; a longer shot can need more footage.
 
 ## Sessions and DAW export
 
@@ -234,6 +262,10 @@ Export for Logic / REAPER writes a folder of standard WAV/MIDI files. Import the
 
 If every required stem exists, the export also includes Import into REAPER.lua and REAPER-START-HERE.txt. In a new empty, stopped REAPER project, open Actions → Show action list → New action → Load ReaScript, choose the Lua file and run it. It creates named tracks, markers, tempo/meter and muted editable band-MIDI tracks. Choose instrument plugins before enabling MIDI. Save the REAPER project in the export folder. The importer refuses an existing populated project; REAPER is installed/licensed separately.
 
+### Blind take comparison
+
+Choose two different takes of the same chart and tempo. Set the same 0.1–60 second excerpt inside both recordings and Start blind comparison. A and B are randomly assigned and their identities hidden. Listen A/B auditions guitar-only audio at unity gain; no loudness normalisation is applied. Stop ends playback. Reveal identities shows which recording was which. Keep A/B marks that take as a favourite and reveals it, without changing or deleting the other take. New comparison resets the round. Deleted or moved source files must be restored before listening; desktop audio is required.
+
 ## Rig and hands-free control
 
 ### Connect the correct MIDI path
@@ -250,6 +282,10 @@ In Write → Record & layers → Hands-free controls, choose MIDI input. Click L
 
 CC values trigger on crossing 64 upward; note-on triggers a note binding. Releases and held values do not retrigger. Duplicate Program Changes within 250 ms and matching rig output echoed within 500 ms are suppressed. A HeadRush rig-selection press can also change the hardware tone. Use a suitable MIDI interface and test press/release, reconnect and feedback behavior on the real rig.
 
+### Song tone snapshot
+
+With an original open, Capture current tone stores the current profile ID, scene and controller values in that song. Save in Write persists it; version and Undo protection apply. Recall snapshot to rig validates the saved values against the installed profile before sending MIDI to the currently selected port. It disables section following, selects the profile and scene, then restores controllers. Enable section following again yourself when wanted. It does not change ports or automatically recall on song load. A failed MIDI operation can leave earlier changes applied; inspect the rig before retrying. The snapshot covers values known to Jamstudio, not unreported knob changes on the physical device.
+
 ## Settings, audio and costs
 
 ### Audio devices
@@ -265,6 +301,10 @@ On Mac allow microphone access for Jamstudio when requested; the selected audio 
 AI & models holds provider selection, editable model IDs, native-agent detection and API keys. Keys are saved to Windows credentials or Mac Keychain and are never written to song documents. The key input is cleared after storage; the app reports presence without returning the stored secret. Save AI settings persists the chosen model/limits. Model changes clear stale price estimates.
 
 Usage records provider/model/status/time/bytes and optional estimates, not prompts or credentials. Output token limits and USD-per-million estimates help planning; they are not enforced account spending caps or final invoices. Set account budgets with the provider and check its dashboard. Media requests and installed CLI usage have their own billing rules.
+
+### Audio setup profiles
+
+Give the current audio setup a name and Save current setup. Up to twelve profiles retain input/output device names, guitar channel, sample rate and buffer size in settings, without API keys. Saving the same name replaces its profile. Recall requires the saved devices and channel to be available, then applies the configuration through the native audio engine. A failed or stopped engine shows an error; inspect the device settings and input meter. System-default device names follow the system’s current defaults. Remove deletes only the profile, not the active setup. Recording blocks changes. Browser profiles are temporary and cannot configure hardware.
 
 ## Files, backups and recovery
 

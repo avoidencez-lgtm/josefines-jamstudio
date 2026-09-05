@@ -7,6 +7,7 @@ import {
   sectionBars,
   useWriting,
 } from "../originals";
+import { harmonyVariation, parseBlueprint, referenceForm } from "../roomTools";
 import { checkWritingForm } from "../writingTools";
 import type { JoToolCall } from "./persona";
 import type { JoToolDeclaration } from "./tools";
@@ -22,6 +23,87 @@ interface StudioTool {
   edit: (body: SongBody, args: Record<string, unknown>) => void;
 }
 export const STUDIO_TOOLS: Record<string, StudioTool> = {
+  keep_harmony_variation: {
+    declaration: {
+      name: "keep_harmony_variation",
+      description:
+        "Keep one chord per bar as a new section variation outside the arrangement. Existing form, lyrics and guitar timing stay intact. The user can add the variation to the form in Compose.",
+      parameters: {
+        type: "object",
+        properties: {
+          sectionId: { type: "string" },
+          chords: {
+            type: "string",
+            description:
+              "One chord per bar, separated by spaces, e.g. Am F C G.",
+          },
+        },
+        required: ["sectionId", "chords"],
+      },
+    },
+    edit: (body, raw) => {
+      const a = z
+        .object({
+          sectionId: text(100),
+          chords: text(2000),
+        })
+        .strict()
+        .parse(raw);
+      Object.assign(
+        body,
+        harmonyVariation(
+          body,
+          a.sectionId,
+          a.chords.split(/\s+/),
+          `harmony-${crypto.randomUUID()}`,
+        ),
+      );
+    },
+  },
+  apply_reference_blueprint: {
+    declaration: {
+      name: "apply_reference_blueprint",
+      description:
+        "Develop the user's own chord phrase into a new form with named sections, bar counts and energy (0–100). Requires no guitar layers; keeps original sections and locked parts. Supply the reference name for provenance. This is not audio transcription.",
+      parameters: {
+        type: "object",
+        properties: {
+          sectionId: { type: "string" },
+          reference: { type: "string" },
+          rows: {
+            type: "string",
+            description:
+              "One section per line: Name | bars | energy 0–100. Example: Verse | 8 | 40",
+          },
+        },
+        required: ["sectionId", "reference", "rows"],
+      },
+    },
+    edit: (body, raw) => {
+      const a = z
+        .object({
+          sectionId: text(100),
+          reference: text(120),
+          rows: text(4000),
+        })
+        .strict()
+        .parse(raw);
+      Object.assign(
+        body,
+        referenceForm(
+          body,
+          parseBlueprint(a.rows),
+          a.sectionId,
+          `blueprint-${crypto.randomUUID()}`,
+        ),
+      );
+      body.referenceBlueprint = {
+        reference: a.reference,
+        assetId: null,
+        rows: parseBlueprint(a.rows),
+      };
+    },
+  },
   edit_song: {
     declaration: {
       name: "edit_song",

@@ -3,6 +3,7 @@ import { ipc } from "../ipc/client";
 import type { Chart, TakeMetadata } from "../ipc/contract";
 import { useEngineStore } from "../store/engine";
 import { parseChartText } from "./chart/text";
+import type { Blueprint, RigSnapshot } from "./roomTools";
 import { checkWritingForm } from "./writingTools";
 
 export const PARTS = ["Drums", "Bass", "Comp"] as const;
@@ -37,6 +38,12 @@ export interface SongBody {
   notes: string;
   lyrics?: Record<string, string>;
   toneProfileId?: string | null;
+  rigSnapshot?: RigSnapshot;
+  referenceBlueprint?: {
+    reference: string;
+    assetId: string | null;
+    rows: Blueprint;
+  };
 }
 
 export function arrangementRanges(chart: Chart) {

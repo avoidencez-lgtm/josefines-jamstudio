@@ -48,6 +48,10 @@ Key transponerer bandets akkorder; Mode endrer harmonipaletten. Innspilt gitar b
 
 Write støtter 4/4, 40–240 BPM, inntil 256 arrangerte takter, 64 seksjoner, 128 formledd, 16 gitarlag, 20 navngitte versjoner og 50 angretrinn. Gitarlag blir stående på faste taktnumre når formen endres. Kontroller plasseringen når du flytter seksjoner, endrer tempo eller bytter akkorder.
 
+### Melodi → harmonier
+
+Åpne Melodi → harmonier øverst i Write. Velg et isolert opptak av nynning eller enkelttoner på gitar, et startpunkt og 0,1–60 sekunder, og trykk Extract notes i skrivebordsappen. Kildefilen kan være høyst to minutter og 64 MB. Rett notelisten: én linje per tone, for eksempel A4 0 0.5 (tone, start i sekunder fra det valgte utdraget, varighet i sekunder; bruk punktum som desimalskilletegn). Manuell innskriving fungerer også i nettleseren. Velg en seksjon på 1–32 takter i en egen låt i 4/4 ved 40–240 BPM og forhåndsvis akkordvalgene. Forslagene sorteres etter hvor lenge melodien ligger på akkordtoner; dette er teorihjelp, ikke en kvalitetskarakter. Takter uten toner beholder den første eksisterende akkorden. Keep as a section variation lager en idé utenfor låtformen og bevarer arrangementet og gitarens tidslinje. Legg variasjonen inn i formen i Compose for å høre den. Undo og en navngitt versjon bevarer låten før endringen; Save lagrer på disk. Analysefunksjonen skisserer utholdte enkelttoner; akkorder, effekter og gjentatte anslag på samme tone kan gi feil.
+
 ## Låttekst og Song Lab
 
 ### Skriv ord til musikken
@@ -136,6 +140,10 @@ Levels viser inngangs-/bandsignal og motorstatus. No audio eller headless betyr 
 
 Motoren teller slag etter nevneren: 6/8 ved 60 BPM gir seks sekunder per takt. Stil og skjema må ha samme taktart. Write bruker fortsatt 4/4; øvrige støttede taktarter hører til skjema/Stage. MIDI- og REAPER-eksport konverterer dette til firedels-BPM.
 
+### Øvingssettliste
+
+Åpne Rehearsal setlist øverst i Stage. Velg et akkordskjema fra Library, tempo (40–240 BPM) og opptelling (0–4 takter), og trykk Add to setlist. Inntil 32 oppføringer lagres umiddelbart i innstillingene. Edit henter en oppføring til kontrollene; Update entry lagrer nytt skjema, tempo og opptelling. Bruk Cue igjen for å bruke det nye oppsettet. Move up og Remove endrer rekkefølgen. Cue klargjør en oppføring: stopper avspilling, laster skjemaet, setter tempo og opptelling, slår av løkke og tempotrener og går til første takt. Avspillingen starter ikke automatisk. Trykk Play når du er klar, eller Cue next for neste oppføring. Manglende skjemaer må gjenopprettes i Library eller fjernes fra listen. Du kan ikke bytte mens du tar opp. Nettleservisningen beholder oppføringer bare til siden lastes på nytt og spiller ingen lyd.
+
 ## Library: akkordskjemaer og grooves
 
 ### Finn, rediger og spill
@@ -149,6 +157,10 @@ En tittel starter med #. Metadata bruker key: A minor, bpm: 100, time: 4/4 og ev
 ### Lagret innhold
 
 Egne skjemaer, stiler og riggprofiler ligger i separate mapper under brukermappen og lastes gjennom registre. Samme ID kan overstyre medfølgende innhold. Skjemalagring bruker en midlertidig fil og en tidligere .json.bak-kopi. Ugyldige brukerskjemaer rapporteres og hoppes over; gyldige medfølgende skjemaer er fortsatt tilgjengelige. Skjemaer er begrenset til 4096 arrangerte takter; Write har en lavere grense. Les utviklerkapitlet før du redigerer datafiler manuelt.
+
+### Finn beslektede akkordbevegelser
+
+Velg den åpne egne låten eller et skjema fra Library i Harmonic discovery. Treffene har noen av de samme bevegelsene mellom akkordenes grunntoner og akkordtyper i samme taktart, selv i en annen toneart. Listen viser de konkrete bevegelsene; dette er ikke likhetsprosenter eller påstander om at låtene høres like ut. Study in Stage klargjør et treff uten å starte avspilling. Ingen skyforespørsel eller lydanalyse brukes. Legg til flere skjemaer hvis du ikke får treff.
 
 ## Jo AI og installerte agenter
 
@@ -170,6 +182,10 @@ CLI-en beholder sine egne innloggingsdata. Codex kan bruke ChatGPT-pålogging el
 
 Tekstassistenter får låttekst/struktur, innstillinger, riggnavn og mellomlagrede opptaksmål etter behov, ikke rå opptakslyd eller nøkler. Prøv «Add a quiet eight-bar bridge», «Leave locked bass alone and thin out verse drums» eller «Append three concrete chorus images to this section’s lyrics». Lokale opptaksmål er heuristikker, ikke en AI-lyttevurdering. Bare mediegenereringskommandoer sender sine uttrykkelig valgte genereringsdata.
 
+### Tre perspektiver på låten
+
+Skriv et konkret mål og trykk Ask three perspectives. Én forespørsel går til valgt Jo-leverandør eller installert agent og gir forslag om komposisjon, arrangement og fremføring. Akkordskjema, sangtekst, notater og bandinnstillinger sendes; ingen lyd sendes eller blir hørt. API-kostnader eller abonnementets bruksgrenser kan gjelde. Draft in Jo legger ett eksperiment i samtalefeltet for gjennomgang; det sendes aldri automatisk og overskriver ikke en eksisterende kladd. Keep in song notes legger til ett forslag med versjons- og angrebeskyttelse. Be om nye råd når låten er endret. Manglende oppsett og ugyldige svar gir en feilmelding; ingen ekstra betalt reserveforespørsel kjøres.
+
 ## Songs: mikser og referanser
 
 ### Importer og lytt
@@ -179,6 +195,10 @@ Songs er lydbiblioteket, adskilt fra låtdokumenter i Write og opptak i Sessions
 ### Bruk en miks i en film
 
 Use in Film velger filen som lydspor i gjeldende film. Save video lagrer valget. Generert lyd vises i samme bibliotek når jobben er ferdig. Generert tekst/struktur vises hvis leverandøren returnerer det. Automatisk stemmeseparasjon, akkordgjenkjenning og tidsstrekking er ikke tilgjengelig i Songs.
+
+### Låtform fra en referanse
+
+Gi referansen et navn eller velg en importert lydfil, og velg deretter en kildeseksjon fra din egen låt. Kartlegg formen ved å lytte, med én linje per seksjon: Navn | takter | energi 0–100. Preview new form viser resultatet før det brukes. Verktøyet gjentar eller forkorter din egen akkordfrase til de valgte lengdene og endrer deler som verken er låst eller dempet. Gamle seksjoner og sangtekster beholdes som ideer; referanselyden kopieres ikke, akkorder transkriberes ikke og sangtekst flyttes ikke automatisk. Grensene er 16 oppføringer og 256 arrangerte takter, innenfor låtens seksjonsgrense. Gitarspor blokkerer utskifting av tidslinjen: bruk en versjon uten slike lag. Apply bevarer en versjon og Undo; Save i Write lagrer formen og referansens opphav.
 
 ## AI Music og lokale modeller
 
@@ -198,6 +218,10 @@ Installer kjøremiljø, betrodde tilleggsnoder og modellvekter med riktig lisens
 
 Krav til GPU og kjøremiljø varierer, og noen modeller krever CUDA fremfor Mac-GPU. Et lokalt endepunkt garanterer ikke at alle tilleggsnoder arbeider uten nett. Verken vekter, FFmpeg, ComfyUI eller DAW følger med. Lyria RealTime-strømming og generell lydtranskripsjon/separasjon er fortsatt ikke bygget.
 
+### Arrangement som genereringsbeskrivelse
+
+Velg Faithful, Stripped eller Reimagined som et redigerbart utgangspunkt. Build arrangement brief setter sammen toneart, tempo, taktart, form, akkorder og bandintensitet fra den åpne låten lokalt. Instrumental utelater sangtekst; slå det av for å ta med seksjonenes tekster. Les og rediger beskrivelsen før Use prompt in AI Music. Dette erstatter bare prosjektets genereringsbeskrivelse og instrumentalvalg; modell og varighet beholdes. Beskrivelsen er et musikalsk ønske, ingen garanti for taktnøyaktig resultat. Den må være under 4 000 tegn; modellens egne grenser gjelder fortsatt. Ingen betalt forespørsel kjøres før du velger Generate i de vanlige kontrollene. Medieverktøyets Undo gjenoppretter forrige beskrivelse; Save project beholder den.
+
 ## Film: fra lydspor til musikkvideo
 
 ### Velg et rent lydspor
@@ -215,6 +239,10 @@ Let the selected brain direct gir redigerbare klippbeskrivelser fra tekst/tid al
 Save video lagrer prosjektinnstillinger og lokal modellkonfigurasjon. Render & jobs viser manglende video, manglende lydspor og lengdeavvik. Fit all cuts to song length skalerer klipplengder proporsjonalt. Render music video krever alle klipp og en tidslinje som passer. Resultatet er 720p, 30 bilder/s, beskåret til valgt format, med lydspor i 48 kHz AAC; lyd fra genererte videoklipp fjernes. Originale lydfiler beholdes separat.
 
 Forhåndsvisningen i appen er lydløs. Play film with sound åpner systemets spiller. Cancel stopper lokal rendring; den kan ikke trekke tilbake en innsendt skygenerering. Ferdige eksporter og prosjektkopier ligger under music-videos/exports. Grensene er 120 klipp, 0,1–120 sekunder per klipp og ti minutter totalt. Undo gjenoppretter endringer og beholder diskrevisjonen.
+
+### Klipp på taktslag
+
+Angi lydsporets BPM, klippavstand i taktslag og hvor første slag starter (0–10 sekunder). Preview aligned cuts flytter indre klippepunkter til nærmeste punkt i rutenettet. Siste klipp beholder opprinnelig slutt, slik at totalvarighet og kildeklippenes startpunkter er uendret. Et rutenett som fjerner et klipp eller bryter grensen på 0,1–120 sekunder per klipp, avvises: velg tettere slag eller juster korte klipp. Apply bruker eksisterende Undo og Save for medieprosjektet. Verktøyet bruker tempoet du oppgir, ikke automatisk anslagsanalyse, og forutsetter jevnt tempo. Eksporten sjekker fortsatt kildelengdene; et lengre klipp kan kreve mer opptak.
 
 ## Sessions og eksport til DAW
 
@@ -234,6 +262,10 @@ Export for Logic / REAPER skriver en mappe med standard WAV-/MIDI-filer. Importe
 
 Når alle nødvendige spor finnes, inkluderer eksporten også Import into REAPER.lua og REAPER-START-HERE.txt. I et nytt, tomt og stoppet REAPER-prosjekt åpner du Actions → Show action list → New action → Load ReaScript, velger Lua-filen og kjører den. Den lager navngitte spor, markører, tempo/taktart og mutede, redigerbare band-MIDI-spor. Velg instrumenttillegg før MIDI aktiveres. Lagre REAPER-prosjektet i eksportmappen. Importøren avviser et eksisterende prosjekt med innhold; REAPER installeres/lisensieres separat.
 
+### Blind sammenligning av opptak
+
+Velg to ulike opptak av samme skjema og tempo. Sett et identisk utdrag på 0,1–60 sekunder som finnes i begge, og trykk Start blind comparison. A og B tildeles tilfeldig og navnene skjules. Listen A/B spiller bare gitarlyden ved uendret nivå; lydstyrken normaliseres ikke. Stop avslutter avspillingen. Reveal identities viser hvilket opptak som var hvilket. Keep A/B markerer det valgte opptaket som favoritt og avslører navnet uten å endre eller slette det andre. New comparison starter en ny runde. Slettede eller flyttede kildefiler må gjenopprettes før lytting; lyd krever skrivebordsappen.
+
 ## Rigg og håndfri styring
 
 ### Koble til riktig MIDI-forbindelse
@@ -250,6 +282,10 @@ Velg MIDI-inngang i Write → Record & layers → Hands-free controls. Klikk Lea
 
 CC utløses når verdien passerer 64 oppover; note-on utløser notekoblinger. Slipp og holdte verdier utløser ikke på nytt. Dupliserte Program Change innen 250 ms og samsvarende riggutgang som kommer i retur innen 500 ms undertrykkes. Et HeadRush-trykk for riggvalg kan også endre den fysiske tonen. Bruk et egnet MIDI-grensesnitt, og test trykk/slipp, ny tilkobling og tilbakekobling på den faktiske riggen.
 
+### Lagre gitarlyd med låten
+
+Med en egen låt åpen lagrer Capture current tone profil-ID, scene og kontrollerverdier i låten. Save i Write lagrer på disk, og versjon og Undo bevarer forrige tilstand. Recall snapshot to rig kontrollerer verdiene mot installert profil før MIDI sendes til den valgte porten. Seksjonsfølging slås av, profil og scene velges, og kontrollerverdiene gjenopprettes. Slå selv på seksjonsfølging igjen når du ønsker det. Porten byttes ikke og lyden hentes ikke automatisk når en låt åpnes. En MIDI-feil kan komme etter at noen endringer allerede er utført; sjekk utstyret før du prøver igjen. Øyeblikksbildet dekker verdier Jamstudio kjenner, ikke manuelle knottendringer som enheten ikke har meldt tilbake.
+
 ## Innstillinger, lyd og kostnader
 
 ### Lydenheter
@@ -265,6 +301,10 @@ Tillat mikrofontilgang for Jamstudio på Mac når du blir spurt; valgt lydinngan
 AI & models inneholder leverandørvalg, redigerbare modell-ID-er, deteksjon av installerte agenter og API-nøkler. Nøkler lagres i Windows-legitimasjon eller Mac Keychain, aldri i låtdokumenter. Nøkkelfeltet tømmes etter lagring; appen viser at nøkkelen finnes uten å returnere hemmeligheten. Save AI settings lagrer valgt modell/grenser. Modellbytte tømmer gamle prisanslag.
 
 Usage registrerer leverandør/modell/status/tid/byte og eventuelle anslag, ikke prompter eller innloggingsdata. Tokengrenser og anslag i USD per million hjelper planlegging; de er ikke håndhevede kontobudsjetter eller sluttfakturaer. Sett budsjettgrenser hos leverandøren og kontroller dens kontrollpanel. Medieforespørsler og installert CLI-bruk har egne faktureringsregler.
+
+### Profiler for lydoppsett
+
+Gi gjeldende lydoppsett et navn og trykk Save current setup. Inntil tolv profiler beholder navn på inn- og utenhet, gitarkanal, samplingsfrekvens og bufferstørrelse i innstillingene, uten API-nøkler. Lagring med samme navn erstatter profilen. Recall krever at de lagrede enhetene og kanalen er tilgjengelige, og bruker deretter oppsettet i den innebygde lydmotoren. Feil eller stoppet motor gir en melding; sjekk enhetsinnstillingene og inngangsmåleren. Systemets standardenheter følger det som til enhver tid er valgt i operativsystemet. Remove sletter bare profilen, ikke aktivt oppsett. Endringer blokkeres under opptak. Nettleserprofiler er midlertidige og kan ikke konfigurere maskinvare.
 
 ## Filer, sikkerhetskopier og gjenoppretting
 
