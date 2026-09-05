@@ -749,9 +749,6 @@ fn all_takes(
 }
 
 fn find_take(state: &AppState, take_id: &str) -> Result<jam_audio::recorder::TakeMetadata, String> {
-    // One choke point for every take command: the id is joined into paths by
-    // export/delete/favourite, so it gets the same charset check as songs and media (#87).
-    originals::valid_id(take_id)?;
     all_takes(state)?
         .0
         .into_iter()

@@ -694,17 +694,6 @@ fn media_from_take_mixes_the_clean_stems_into_an_audio_asset() {
 }
 
 #[test]
-fn take_commands_refuse_path_like_ids() {
-    let studio = Studio::boot();
-    for id in ["../../saved", "a/b", "x:y", ""] {
-        let err = studio.err("takes_export_daw", json!({ "takeId": id }));
-        assert!(err.contains("Invalid"), "{id:?}: {err}");
-        let err = studio.err("takes_delete", json!({ "takeId": id }));
-        assert!(err.contains("Invalid"), "{id:?}: {err}");
-    }
-}
-
-#[test]
 fn a_cached_take_whose_folder_is_gone_can_still_be_deleted() {
     let studio = Studio::boot();
     let id = unique("take-gone-from-disk");

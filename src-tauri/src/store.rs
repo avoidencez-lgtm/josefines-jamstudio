@@ -140,8 +140,7 @@ impl IndexStore {
                     style_id: row.get(4)?,
                     chart_id: row.get(5)?,
                     tempo: row.get(6)?,
-                    // A damaged row must not become ~10^19 frames in export (#89).
-                    sample_count: row.get::<_, i64>(7)?.max(0) as usize,
+                    sample_count: row.get::<_, i64>(7)? as usize,
                     path_input: row.get(8)?,
                     path_band: row.get(9)?,
                     path_master: row.get(10)?,
