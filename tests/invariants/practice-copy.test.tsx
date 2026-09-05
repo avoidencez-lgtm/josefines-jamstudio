@@ -29,3 +29,16 @@ it("offers bounded practice controls beside a real library selection and keeps p
     initial.assets = assets;
   }
 });
+
+it("offers cancel while a practice copy is running", () => {
+  const initial = useMedia.getInitialState();
+  const previous = initial.busy;
+  initial.busy = "Preparing practice copy";
+  try {
+    const html = renderToStaticMarkup(createElement(Songs));
+    expect(html).toContain("Preparing practice copy");
+    expect(html).toContain("Cancel practice copy");
+  } finally {
+    initial.busy = previous;
+  }
+});

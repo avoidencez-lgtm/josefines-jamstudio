@@ -284,7 +284,25 @@ async fn run(executable: &Path, args: &[String], seconds: u64) -> Result<Vec<u8>
     };
     tokio::select! {
         result=tokio::time::timeout(Duration::from_secs(seconds),work)=>result.map_err(|_|"Media operation timed out".to_string())?,
-        _=async {loop {tokio::time::sleep(Duration::from_millis(100)).await;if CANCEL.load(Ordering::Relaxed){break;}}}=>Err("Media operation canceled".into())
+        () = wait_cancel() => Err("Media operation canceled".into())
+    }
+}
+
+async fn wait_cancel() {
+    loop {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if CANCEL.load(Ordering::Relaxed) {
+            break;
+        }
+    }
+}
+
+async fn cancellable<T>(
+    work: impl std::future::Future<Output = Result<T, String>>,
+) -> Result<T, String> {
+    tokio::select! {
+        result = work => result,
+        () = wait_cancel() => Err("Media operation canceled".into()),
     }
 }
 async fn probe(path: &Path, kind: &str) -> Result<f64, String> {
@@ -564,7 +582,7 @@ async fn finish_job(
                 job,
             )?;
             (
-                api::download(m, &uri, state.secret_store.as_ref()).await?,
+                cancellable(api::download(m, &uri, state.secret_store.as_ref())).await?,
                 e,
                 String::new(),
             )
@@ -612,13 +630,13 @@ pub async fn media_generate(
     let mut job = json!({"schemaVersion":1,"id":id,"request":request,"status":"unknown","message":"Request started. If interrupted, check provider history before generating again."});
     write(&file, &job)?;
     let result = async {
-        let bytes = api::fetch(
+        let bytes = cancellable(api::fetch(
             &m,
             &path,
             Some(&body),
             state.secret_store.as_ref(),
             &state.cost_log,
-        )
+        ))
         .await?;
         finish_job(&base, &mut job, api::response(&m, bytes)?, &m, &state).await
     }
@@ -657,7 +675,7 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
             let a=import(&base,&path,&m.kind,&m.name).await?;job["assetId"]=json!(a.id);job["status"]=json!("ready");return Ok(());
         }
         let output=if let Some(task)=job["taskId"].as_str() {
-            api::poll(&m,&request,task,state.secret_store.as_ref(),&state.cost_log).await?
+            cancellable(api::poll(&m,&request,task,state.secret_store.as_ref(),&state.cost_log)).await?
         } else if let Some(uri)=job["downloadUri"].as_str() {
             let ext=media_extension(job["extension"].as_str().ok_or("Missing media extension")?)?;
             api::Output::Download(uri.into(),ext.into())
@@ -836,6 +854,27 @@ mod tests {
     }
 
     use super::*;
+
+    #[tokio::test]
+    async fn cancellable_races_work_against_the_cancel_flag() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        assert_eq!(cancellable(async { Ok(11_u8) }).await, Ok(11));
+        CANCEL.store(true, Ordering::Relaxed);
+        let started = std::time::Instant::now();
+        let err = cancellable(async {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            Ok::<u8, String>(0)
+        })
+        .await;
+        CANCEL.store(false, Ordering::Relaxed);
+        assert_eq!(err, Err("Media operation canceled".into()));
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "cancel must not wait for the work timeout"
+        );
+    }
+
     #[tokio::test]
     #[ignore = "requires user-installed FFmpeg and ffprobe; run with JAM_MEDIA_TEST=1"]
     async fn local_practice_copy_decodes_stretches_and_persists_without_touching_source() {

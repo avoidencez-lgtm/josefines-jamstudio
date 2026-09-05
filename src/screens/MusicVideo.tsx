@@ -14,6 +14,7 @@ import {
   applyShotIdeas,
   clampGenerationSeconds,
   fitShots,
+  isCancellableMediaWork,
   newShot,
   newVideo,
   shotsFromChart,
@@ -428,9 +429,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       {(m.message || m.busy) && (
         <output className="video-feedback">
           <span>{m.busy || m.message}</span>
-          {m.busy.startsWith("Rendering") && (
+          {isCancellableMediaWork(m.busy) && (
             <Button onClick={() => void ipc.invoke("media_cancel")}>
-              Cancel render
+              Cancel
             </Button>
           )}
         </output>

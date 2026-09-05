@@ -10,6 +10,16 @@ export const MEDIA_MODELS = catalog;
 /** Same allow-list as `src-tauri/src/net/media.rs` for `runway-veo`. */
 export const VEO_SECONDS = [4, 6, 8] as const;
 
+/** Work that holds the Rust media gate and watches `media_cancel`. */
+export function isCancellableMediaWork(busy: string): boolean {
+  return (
+    busy.startsWith("Generating") ||
+    busy.startsWith("Rendering") ||
+    busy === "Refreshing existing job" ||
+    busy === "Preparing practice copy"
+  );
+}
+
 export function clampGenerationSeconds(
   catalogId: string,
   seconds: number,
