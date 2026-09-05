@@ -8,6 +8,7 @@ import { newOriginal, sectionBars, useWriting } from "../../src/lib/originals";
 import {
   arrangedBars,
   checkWritingForm,
+  deleteSection,
   duplicateSection,
   harmonyChoices,
   setSectionEnergy,
@@ -84,6 +85,32 @@ it("duplicates a section with independent lyrics and band settings, preserving p
   expect(useWriting.getState().song?.body).toEqual(before);
   w.redo();
   expect(useWriting.getState().song?.body).toEqual(changed);
+});
+
+it("deletes only sections outside the form, with their lyrics and settings, and Undo restores them (#58)", () => {
+  const w = useWriting.getState();
+  w.edit((b) => {
+    duplicateSection(b, "verse", "idea");
+    b.lyrics = { idea: "Spare words" };
+    b.chart.arrangement = b.chart.arrangement.filter(
+      (a) => a.sectionId !== "idea",
+    );
+  });
+  const before = structuredClone(currentSong().body);
+  expect(() => deleteSection(before, "verse")).toThrow(/still in the form/);
+  expect(() => deleteSection(before, "missing")).toThrow(/no longer exists/);
+  w.edit((b) => deleteSection(b, "idea"));
+  const after = currentSong().body;
+  expect(after.chart.sections.map((s) => s.id)).toEqual(["verse", "chorus"]);
+  expect(after.sections.idea).toBeUndefined();
+  expect(after.lyrics?.idea).toBeUndefined();
+  expect(() => checkWritingForm(after)).not.toThrow();
+  w.undo();
+  expect(currentSong().body).toEqual(before);
+  const single = structuredClone(newOriginal().body);
+  single.chart.sections = [single.chart.sections[0]];
+  single.chart.arrangement = [];
+  expect(() => deleteSection(single, "verse")).toThrow(/at least one/);
 });
 
 it("groups a slider drag or a run of typing into one Undo step (#38)", () => {

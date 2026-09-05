@@ -30,7 +30,7 @@ Sidepanelet viser navn og formål for hvert rom. Help & guides åpner denne søk
 
 ### Låtkart og koblede seksjoner
 
-Song map viser avspillingsrekkefølgen med taktintervaller, repetisjoner og bandintensitet. Velg en seksjon for å redigere. En gjentatt seksjon deler akkorder, tekst og bandinnstillinger overalt der den brukes. Make variation lager en uavhengig seksjon. Add section kopierer de valgte akkordene med standard bandinnstillinger. Edit order and repeats flytter, fjerner eller gjentar ledd i formen; selve seksjonen slettes ikke.
+Song map viser avspillingsrekkefølgen med taktintervaller, repetisjoner og bandintensitet. Velg en seksjon for å redigere. En gjentatt seksjon deler akkorder, tekst og bandinnstillinger overalt der den brukes. Make variation lager en uavhengig seksjon. Add section kopierer de valgte akkordene med standard bandinnstillinger. Edit order and repeats flytter, fjerner eller gjentar ledd i formen; selve seksjonen slettes ikke. Delete section fjerner en seksjon som ikke lenger er i formen, med tekst og bandinnstillinger; en versjon beholdes først, og Undo gjenoppretter den.
 
 ### Rediger akkorder og harmonikk
 
@@ -142,7 +142,7 @@ Motoren teller slag etter nevneren: 6/8 ved 60 BPM gir seks sekunder per takt. S
 
 ### Øvingssettliste
 
-Åpne Rehearsal setlist øverst i Stage. Velg et akkordskjema fra Library, tempo (40–240 BPM) og opptelling (0–4 takter), og trykk Add to setlist. Inntil 32 oppføringer lagres umiddelbart i innstillingene. Edit henter en oppføring til kontrollene; Update entry lagrer nytt skjema, tempo og opptelling. Bruk Cue igjen for å bruke det nye oppsettet. Move up og Remove endrer rekkefølgen. Cue klargjør en oppføring: stopper avspilling, laster skjemaet, setter tempo og opptelling, slår av løkke og tempotrener og går til første takt. Avspillingen starter ikke automatisk. Trykk Play når du er klar, eller Cue next for neste oppføring. Manglende skjemaer må gjenopprettes i Library eller fjernes fra listen. Du kan ikke bytte mens du tar opp. Nettleservisningen beholder oppføringer bare til siden lastes på nytt og spiller ingen lyd.
+Åpne Rehearsal setlist øverst i Stage. Velg et akkordskjema fra Library, eventuelt en groove i skjemaets taktart (ellers skjemaets egen standard), tempo (40–240 BPM) og opptelling (0–4 takter), og trykk Add to setlist. Inntil 32 oppføringer lagres umiddelbart i innstillingene. Edit henter en oppføring til kontrollene; Update entry lagrer nytt skjema, groove, tempo og opptelling. Bruk Cue igjen for å bruke det nye oppsettet. Move up og Remove endrer rekkefølgen. Cue klargjør en oppføring: stopper avspilling, laster skjemaet, setter oppføringens groove (eller skjemaets standard), tempo og opptelling, slår av løkke og tempotrener og går til første takt. Avspillingen starter ikke automatisk. Trykk Play når du er klar, eller Cue next for neste oppføring. Manglende skjemaer må gjenopprettes i Library eller fjernes fra listen. Du kan ikke bytte mens du tar opp. Nettleservisningen beholder oppføringer bare til siden lastes på nytt og spiller ingen lyd.
 
 ## Library: akkordskjemaer og grooves
 
@@ -166,7 +166,7 @@ Velg den åpne egne låten eller et skjema fra Library i Harmonic discovery. Tre
 
 ### Kommandoer og endringer du godkjenner
 
-Jo AI tar imot skrevne bandkommandoer. Forslagsknapper fyller inn feltet; Send utfører støttede transport-/bandkommandoer direkte. Låtendringer vises for gjennomgang. Assistant-panelet øverst blir værende når du bytter rom og kan foreslå samlede låtendringer, opptaksanalyse eller klippendringer. Kontroller verdiene før Apply; utdaterte eller ugyldige forslag avvises. Samtaler overlever rombytte i økten, ikke omstart. Nativ tale inn/ut er ikke bygget.
+Jo AI tar imot skrevne bandkommandoer. Forslagsknapper fyller inn feltet; Send utfører støttede transport-/bandkommandoer direkte. Låtendringer vises for gjennomgang; sender du en ny melding mens et forslag venter, erstattes forslaget, og ingenting tas i bruk. Assistant-panelet øverst blir værende når du bytter rom og kan foreslå samlede låtendringer, opptaksanalyse eller klippendringer. Kontroller verdiene før Apply; utdaterte eller ugyldige forslag avvises. Samtaler overlever rombytte i økten, ikke omstart. Nativ tale inn/ut er ikke bygget.
 
 ### Koble til en tekst-API
 

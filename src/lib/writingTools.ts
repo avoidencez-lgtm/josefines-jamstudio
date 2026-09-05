@@ -78,6 +78,24 @@ export function duplicateSection(
   );
 }
 
+/**
+ * Removes a section that is no longer in the form, with its lyrics and band
+ * settings (#58). Guitar layers keep their absolute bars and are untouched.
+ */
+export function deleteSection(body: SongBody, id: string): void {
+  const section = body.chart.sections.find((s) => s.id === id);
+  if (!section) throw new Error("Section no longer exists.");
+  if (body.chart.sections.length === 1)
+    throw new Error("A song keeps at least one section.");
+  if (body.chart.arrangement.some((a) => a.sectionId === id))
+    throw new Error(
+      `${section.name} is still in the form. Remove its form entries in Edit order and repeats first.`,
+    );
+  body.chart.sections = body.chart.sections.filter((s) => s.id !== id);
+  delete body.sections[id];
+  if (body.lyrics) delete body.lyrics[id];
+}
+
 export const PHRASE_MOVES = {
   rotate: "Rotate bars",
   reverse: "Reverse bars",

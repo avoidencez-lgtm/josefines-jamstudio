@@ -8,6 +8,7 @@ import { type SongBody, useWriting } from "./originals";
 import {
   type Setlist,
   audioProfileSchema,
+  setlistCue,
   setlistSchema,
   validateRigSnapshot,
 } from "./roomTools";
@@ -62,30 +63,28 @@ export async function saveRoomPreference(
 }
 
 export async function cueSetlistItem(item: Setlist[number]) {
-  setlistSchema.parse([item]);
   if (isPreview)
     throw new Error("Setlist playback needs the desktop audio engine.");
   const e = useEngineStore.getState();
   if (e.isRecording)
     throw new Error("Save the recording before changing the setlist song.");
-  if (!e.charts.some((c) => c.id === item.chartId))
-    throw new Error(
-      "This chart is missing. Restore it in Library or remove the setlist entry.",
-    );
+  const cue = setlistCue(item, e.charts, e.styles);
   await ipc.invoke("transport_stop");
   const chart = await ipc.invoke<Chart>("band_load_chart", {
-    chartId: item.chartId,
+    chartId: cue.chart.id,
     followChart: true,
   });
   // Reflect the successful load even if a later setup command fails.
   useEngineStore.setState({ currentChart: chart });
-  await ipc.invoke("transport_set_tempo", { bpm: item.bpm });
+  // followChart restored the chart's default groove; the entry's own groove wins.
+  if (cue.styleId) await ipc.invoke("band_set_style", { styleId: cue.styleId });
+  await ipc.invoke("transport_set_tempo", { bpm: cue.bpm });
   await ipc.invoke("transport_set_loop", {
     startBar: 1,
     endBar: 2,
     enabled: false,
   });
-  await ipc.invoke("transport_set_count_in", { bars: item.countIn });
+  await ipc.invoke("transport_set_count_in", { bars: cue.countIn });
   await ipc.invoke("transport_seek_bar", { bar: 1 });
   e.setTempoTrainer({ enabled: false });
 }

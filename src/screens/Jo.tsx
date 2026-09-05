@@ -5,6 +5,7 @@ import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
 import { WorkspaceHeader } from "../components/Workspace";
 import {
+  discardPendingProposal,
   documentFingerprint,
   joNeedsReview,
   setInputValue,
@@ -129,12 +130,10 @@ export const Jo: React.FC = () => {
   }, [messages, busy]);
 
   const handleUserQuery = async (query: string) => {
-    if (
-      !query.trim() ||
-      useJoConversation.getState().busy ||
-      useJoConversation.getState().pending
-    )
-      return;
+    if (!query.trim() || useJoConversation.getState().busy) return;
+    discardPendingProposal(
+      "Proposal set aside: your new message replaces it. Nothing was applied.",
+    );
     useJoConversation.setState({ busy: true });
     try {
       const userMsg: JoMessage = {
@@ -224,7 +223,7 @@ export const Jo: React.FC = () => {
           <Button
             key={prompt}
             size="sm"
-            disabled={busy || Boolean(pending)}
+            disabled={busy}
             onClick={() => setInputValue(prompt)}
           >
             {prompt}
@@ -288,6 +287,10 @@ export const Jo: React.FC = () => {
             aria-label="Proposed studio edits"
           >
             <h2>Review studio changes</h2>
+            <p className="workspace-note">
+              Apply or dismiss below, or send a new message to replace this
+              proposal.
+            </p>
             <div className="max-h-48 overflow-auto text-sm">
               {pending.calls.map((call, i) => (
                 <details key={`${call.name}-${i}`} open>
@@ -359,7 +362,7 @@ export const Jo: React.FC = () => {
             <input
               type="text"
               aria-label="Message Jo"
-              disabled={busy || Boolean(pending)}
+              disabled={busy}
               placeholder="Type a command (e.g. 'faster', 'drop the bass', 'record a take')..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
@@ -369,7 +372,7 @@ export const Jo: React.FC = () => {
               type="submit"
               size="md"
               variant="primary"
-              disabled={busy || Boolean(pending) || !inputValue.trim()}
+              disabled={busy || !inputValue.trim()}
             >
               Send
             </Button>

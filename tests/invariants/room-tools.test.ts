@@ -29,6 +29,7 @@ import {
   parseBlueprint,
   parseMelody,
   referenceForm,
+  setlistCue,
   setlistSchema,
   snapCuts,
   validateAudioProfile,
@@ -285,6 +286,29 @@ it("validates setlists and audio profiles without capturing secrets, and rejects
   await saveRoomPreference("audioProfiles", [{ name: "Home", config }]);
   expect(saved?.futureField).toEqual({ keep: true });
   expect(saved?.audioProfiles).toEqual([{ name: "Home", config }]);
+});
+
+it("cues a setlist entry's own groove only when it plays the chart's meter (#64)", () => {
+  const chart = newOriginal().body.chart;
+  const styles = [
+    { id: "rock-straight", name: "Rock", feel: { timeSig: [4, 4] } },
+    { id: "ballad-68", name: "Ballad", feel: { timeSig: [6, 8] } },
+  ] as never;
+  const entry = { id: "a", chartId: chart.id, bpm: 100, countIn: 1 };
+  expect(setlistCue(entry, [chart], styles).styleId).toBeNull();
+  expect(
+    setlistCue({ ...entry, styleId: "rock-straight" }, [chart], styles).styleId,
+  ).toBe("rock-straight");
+  expect(() =>
+    setlistCue({ ...entry, styleId: "ballad-68" }, [chart], styles),
+  ).toThrow(/6\/8/);
+  expect(() =>
+    setlistCue({ ...entry, styleId: "gone" }, [chart], styles),
+  ).toThrow(/groove/);
+  expect(() => setlistCue(entry, [], styles)).toThrow(/missing/);
+  expect(
+    setlistSchema.safeParse([{ ...entry, styleId: "rock-straight" }]).success,
+  ).toBe(true);
 });
 
 it("validates rig snapshot ranges against the installed profile before recall", () => {

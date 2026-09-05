@@ -9,16 +9,28 @@ import { Field, Status, useTool } from "./shared";
 
 export default function SetlistTool() {
   const e = useEngineStore(
-    useShallow((s) => ({ charts: s.charts, settings: s.settings })),
+    useShallow((s) => ({
+      charts: s.charts,
+      styles: s.styles,
+      settings: s.settings,
+    })),
   );
   const { run, message } = useTool();
   const [chartId, setChart] = useState("");
+  const [styleId, setStyle] = useState("");
   const [bpm, setBpm] = useState(100);
   const [countIn, setCountIn] = useState(1);
   const [cued, setCued] = useState("");
   const [editing, setEditing] = useState("");
   const parsed = setlistSchema.safeParse(e.settings?.rehearsalSetlist ?? []);
   const list = parsed.success ? parsed.data : [];
+  const chart = e.charts.find((c) => c.id === chartId);
+  // Only grooves in the chart's meter can play it; the engine refuses the rest anyway.
+  const grooves = e.styles.filter(
+    (s) => !chart || s.feel.timeSig.join("/") === chart.timeSig.join("/"),
+  );
+  const grooveName = (id?: string) =>
+    id ? (e.styles.find((s) => s.id === id)?.name ?? "missing groove") : null;
   const save = (next: Setlist) =>
     run(async () => {
       setlistSchema.parse(next);
@@ -31,8 +43,9 @@ export default function SetlistTool() {
   return (
     <>
       <p>
-        Entries save immediately. Cue sets up the chart without starting
-        playback; use Play when ready. Native timing controls the count-in.
+        Entries save immediately. Cue sets up the chart and its groove without
+        starting playback; use Play when ready. Native timing controls the
+        count-in.
       </p>
       {!parsed.success && (
         <p role="alert">
@@ -45,17 +58,35 @@ export default function SetlistTool() {
           <select
             value={chartId}
             onChange={(event) => {
+              const next = e.charts.find((c) => c.id === event.target.value);
               setChart(event.target.value);
-              setBpm(
-                e.charts.find((c) => c.id === event.target.value)?.defaultBpm ??
-                  100,
-              );
+              setBpm(next?.defaultBpm ?? 100);
+              const groove = e.styles.find((s) => s.id === styleId);
+              if (
+                next &&
+                groove &&
+                groove.feel.timeSig.join("/") !== next.timeSig.join("/")
+              )
+                setStyle("");
             }}
           >
             <option value="">Choose a chart</option>
             {e.charts.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Groove">
+          <select
+            value={styleId}
+            onChange={(event) => setStyle(event.target.value)}
+          >
+            <option value="">Chart's default groove</option>
+            {grooves.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
               </option>
             ))}
           </select>
@@ -85,10 +116,25 @@ export default function SetlistTool() {
               editing
                 ? list.map((item) =>
                     item.id === editing
-                      ? { ...item, chartId, bpm, countIn }
+                      ? {
+                          ...item,
+                          chartId,
+                          styleId: styleId || undefined,
+                          bpm,
+                          countIn,
+                        }
                       : item,
                   )
-                : [...list, { id: crypto.randomUUID(), chartId, bpm, countIn }],
+                : [
+                    ...list,
+                    {
+                      id: crypto.randomUUID(),
+                      chartId,
+                      styleId: styleId || undefined,
+                      bpm,
+                      countIn,
+                    },
+                  ],
             )
           }
         >
@@ -103,8 +149,8 @@ export default function SetlistTool() {
               {i + 1}.{" "}
               {e.charts.find((c) => c.id === item.chartId)?.name ??
                 "Missing chart"}{" "}
-              · {item.bpm} BPM · {item.countIn}-bar count-in{" "}
-              {cued === item.id ? "· cued" : ""}
+              · {grooveName(item.styleId) ?? "chart's groove"} · {item.bpm} BPM
+              · {item.countIn}-bar count-in {cued === item.id ? "· cued" : ""}
             </span>
             <div className="room-tool-row">
               <Button
@@ -112,6 +158,7 @@ export default function SetlistTool() {
                 onClick={() => {
                   setEditing(item.id);
                   setChart(item.chartId);
+                  setStyle(item.styleId ?? "");
                   setBpm(item.bpm);
                   setCountIn(item.countIn);
                   if (cued === item.id) setCued("");

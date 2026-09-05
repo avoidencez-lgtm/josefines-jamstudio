@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 import chart from "../../charts/blues-12-bar.json";
 import type { Chart } from "../../src/ipc/contract";
 import { sectionPassages } from "../../src/lib/chart/passages";
-import { joNeedsReview } from "../../src/lib/jo/conversation";
+import {
+  discardPendingProposal,
+  joNeedsReview,
+  useJoConversation,
+} from "../../src/lib/jo/conversation";
 import { SHORTCUTS, handleShortcut } from "../../src/lib/shortcuts";
 import { SCREENS, SCREEN_ICONS } from "../../src/screens/registry";
 import type { EngineState } from "../../src/store/engine";
@@ -33,6 +37,21 @@ describe("Studio workspaces", () => {
     expect(
       joNeedsReview({ name: "songwriting", arguments: { action: "save" } }),
     ).toBe(false);
+  });
+  it("lets a new message replace a pending proposal without applying it (#41)", () => {
+    const before = useJoConversation.getState().messages.length;
+    expect(discardPendingProposal("unused")).toBe(false);
+    useJoConversation.setState({
+      pending: {
+        calls: [{ name: "write_section", arguments: {} }],
+        expected: "x",
+      },
+    });
+    expect(discardPendingProposal("Proposal set aside")).toBe(true);
+    const state = useJoConversation.getState();
+    expect(state.pending).toBeNull();
+    expect(state.messages).toHaveLength(before + 1);
+    expect(state.messages.at(-1)?.text).toBe("Proposal set aside");
   });
   it("uses one tap-tempo handler on Jo and preserves focused controls", () => {
     const ctx = { toggleHelp: () => {} };

@@ -30,7 +30,7 @@ The sidebar names each room and its purpose. Help & guides opens this searchable
 
 ### Song map and linked sections
 
-The Song map is the played order, with bar ranges, repeats and band intensity. Select a section to edit it. A repeated section shares chords, lyrics and band settings wherever it appears. Make variation creates an independent section. Add section copies the selected chords with default band settings. Edit order and repeats moves, removes or repeats form entries; it does not delete the underlying section.
+The Song map is the played order, with bar ranges, repeats and band intensity. Select a section to edit it. A repeated section shares chords, lyrics and band settings wherever it appears. Make variation creates an independent section. Add section copies the selected chords with default band settings. Edit order and repeats moves, removes or repeats form entries; it does not delete the underlying section. Delete section removes a section that is no longer in the form, with its lyrics and band settings; a version is kept first and Undo restores it.
 
 ### Edit chords and harmony
 
@@ -142,7 +142,7 @@ The engine counts denominator beats: 6/8 at 60 BPM is six seconds per bar. A sty
 
 ### Rehearsal setlist
 
-Open Rehearsal setlist at the top of Stage. Choose a Library chart, its tempo (40–240 BPM) and count-in (0–4 bars), then Add to setlist. Up to 32 entries save immediately in settings. Edit loads an entry into the controls; Update entry saves its new chart, tempo and count-in. Cue it again to apply the new setup. Move up and Remove change the order. Cue prepares an entry: it stops transport, loads the chart, applies its tempo/count-in, disables looping and the tempo trainer, then seeks bar one. It does not start playback. Press Play when ready, or Cue next to prepare the following entry. Missing charts must be restored in Library or removed from the list. Recording blocks cue changes. Browser preview retains entries only until reload and has no audio.
+Open Rehearsal setlist at the top of Stage. Choose a Library chart, an optional groove in the chart's meter (otherwise the chart's own default), its tempo (40–240 BPM) and count-in (0–4 bars), then Add to setlist. Up to 32 entries save immediately in settings. Edit loads an entry into the controls; Update entry saves its new chart, groove, tempo and count-in. Cue it again to apply the new setup. Move up and Remove change the order. Cue prepares an entry: it stops transport, loads the chart, applies the entry's groove (or the chart's default), tempo and count-in, disables looping and the tempo trainer, then seeks bar one. It does not start playback. Press Play when ready, or Cue next to prepare the following entry. Missing charts must be restored in Library or removed from the list. Recording blocks cue changes. Browser preview retains entries only until reload and has no audio.
 
 ## Library: charts and grooves
 
@@ -166,7 +166,7 @@ Choose the current original or a Library chart in Harmonic discovery. Results sh
 
 ### Commands and reviewed edits
 
-Jo AI accepts typed band commands. Suggestion buttons fill the input; Send executes supported direct transport/band commands. Song changes are presented for review. The top Assistant panel stays mounted as you navigate and can propose grouped song edits, take analysis or shot edits. Review the values before Apply; stale or invalid proposals are refused. Conversations survive room changes during the session, not app restarts. Native speech input/output is not built.
+Jo AI accepts typed band commands. Suggestion buttons fill the input; Send executes supported direct transport/band commands. Song changes are presented for review; sending a new message while a proposal waits replaces that proposal, and nothing is applied. The top Assistant panel stays mounted as you navigate and can propose grouped song edits, take analysis or shot edits. Review the values before Apply; stale or invalid proposals are refused. Conversations survive room changes during the session, not app restarts. Native speech input/output is not built.
 
 ### Connect a text API
 
