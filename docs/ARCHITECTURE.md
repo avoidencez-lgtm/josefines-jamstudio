@@ -537,7 +537,7 @@ and REAPER. Recordings snapshot the meter; timing edits are refused during a tak
 Charts and styles with different meters are refused before playback changes.
 
 Settings writes flush a temporary file, retain the previous valid `.bak`, then
-rename. Corrupt settings are reported and are never overwritten by defaults.
+rename. On startup, malformed settings are archived as `settings.json.broken-<timestamp>` before restoring a valid backup or defaults. A one-time UI notice names the archive. Read/permission failures are reported without replacing the source. Ordinary saves still refuse corrupt input; restart to recover. Unknown fields in a valid backup survive recovery. Song saves and scans enforce the same 2 MB compact JSON limit, with a shared 8 MB formatted-file bound.
 Take scanning reports damaged manifests individually; complete cached manifests
 retain stems, MIDI, snapshots and flags. New code uses the native Mac Keychain
 and Windows credential store. Browser speech APIs are not part of this build.

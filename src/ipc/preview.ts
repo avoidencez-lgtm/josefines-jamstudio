@@ -508,6 +508,7 @@ export function createPreviewEngine(
       const s = a.settings as AudioConfig;
       config = { ...config, ...s };
     },
+    settings_recovery_notice: () => null,
     keys_set: () => undefined,
     keys_has: () => false,
     provider_fetch: () => {

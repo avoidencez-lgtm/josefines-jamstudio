@@ -24,6 +24,7 @@ use std::sync::Arc;
 use tauri::{Emitter, State};
 
 pub struct AppState {
+    pub recovery_notice: Mutex<Option<String>>,
     pub agents: agents::AgentRunner,
     pub secret_store: Arc<dyn SecretStore>,
     pub engine: Arc<Mutex<AudioEngine>>,
@@ -174,6 +175,11 @@ fn keys_delete(provider: String, state: State<'_, AppState>) -> Result<(), Strin
 #[tauri::command]
 fn settings_get() -> Result<AppSettings, String> {
     load_settings()
+}
+
+#[tauri::command]
+fn settings_recovery_notice(state: State<'_, AppState>) -> Option<String> {
+    state.recovery_notice.lock().take()
 }
 
 #[tauri::command]
@@ -967,9 +973,9 @@ fn build_rig(settings: &AppSettings, library: &Library) -> jam_rig::RigOrchestra
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let settings = load_settings().unwrap_or_else(|e| {
+    let (settings, recovery_notice) = settings::recover_settings().unwrap_or_else(|e| {
         tracing::error!("{e}");
-        AppSettings::default()
+        (AppSettings::default(), Some(e))
     });
     let mut engine = AudioEngine::new(settings.audio_config());
     if let Err(e) = engine.start() {
@@ -1010,6 +1016,7 @@ pub fn run() {
     let rig_orchestrator = Arc::new(Mutex::new(build_rig(&settings, &library_arc.lock())));
 
     let app_state = AppState {
+        recovery_notice: Mutex::new(recovery_notice),
         agents: agents::AgentRunner::default(),
         controller: Arc::new(Mutex::new(None)),
         secret_store,
@@ -1117,6 +1124,7 @@ pub fn run() {
             cost_log_list,
             cost_log_totals,
             settings_get,
+            settings_recovery_notice,
             settings_set,
             audio_list_devices,
             audio_get_config,

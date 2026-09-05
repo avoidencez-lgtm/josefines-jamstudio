@@ -183,7 +183,6 @@ fn body(doc: &Value) -> Result<SongBody, String> {
 
 fn write_document(root: &Path, mut doc: Value) -> Result<Value, String> {
     let _lock = SAVE_LOCK.lock().map_err(|e| e.to_string())?;
-    body(&doc)?;
     let id = doc["id"].as_str().ok_or("Song id missing")?;
     let file = path(root, id)?;
     let revision = doc["revision"].as_u64().ok_or("Song revision missing")?;
@@ -197,14 +196,15 @@ fn write_document(root: &Path, mut doc: Value) -> Result<Value, String> {
     } else if revision != 0 {
         return Err("The song file was moved. Save a copy to keep your edits.".into());
     }
-    doc["revision"] = Value::from(revision + 1);
+    doc["revision"] = Value::from(revision.checked_add(1).ok_or("Song revision overflow")?);
+    body(&doc)?;
+    let bytes = serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?;
+    if bytes.len() > 8_000_000 {
+        return Err("Song file exceeds the 8 MB disk-read limit. Remove unused versions.".into());
+    }
     fs::create_dir_all(root).map_err(|e| e.to_string())?;
     let temp = file.with_extension("json.tmp");
-    fs::write(
-        &temp,
-        serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
+    fs::write(&temp, bytes).map_err(|e| e.to_string())?;
     fs::OpenOptions::new()
         .write(true)
         .open(&temp)
@@ -240,8 +240,9 @@ fn scan_originals(root: &Path) -> Result<(Vec<Value>, Vec<String>), String> {
         let p = entry.map_err(|e| e.to_string())?.path();
         if p.extension().is_some_and(|x| x == "json") {
             let read = || -> Result<Value, String> {
-                if fs::metadata(&p).map_err(|e| e.to_string())?.len() > 2_000_000 {
-                    return Err("Song file exceeds 2 MB.".into());
+                // Bound disk input separately; body() enforces the same compact 2 MB limit as save.
+                if fs::metadata(&p).map_err(|e| e.to_string())?.len() > 8_000_000 {
+                    return Err("Song file exceeds the 8 MB disk-read limit.".into());
                 }
                 let v: Value = serde_json::from_slice(&fs::read(&p).map_err(|e| e.to_string())?)
                     .map_err(|e| e.to_string())?;
@@ -445,6 +446,22 @@ pub fn takes_favourite(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn near_limit_song_stays_readable_after_pretty_printed_save() {
+        let root = std::env::temp_dir().join(format!("jam-song-size-{}", std::process::id()));
+        let mut doc: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/seams/original.json")).unwrap();
+        // Unknown nested metadata is retained, just like a sizeable version history.
+        doc["futureData"] = serde_json::json!(vec![vec![0; 10]; 40_000]);
+        doc["padding"] = serde_json::json!("x".repeat(1_950_000 - doc.to_string().len()));
+        assert!(doc.to_string().len() < 2_000_000);
+        assert!(serde_json::to_vec_pretty(&doc).unwrap().len() > 2_000_000);
+        let saved = super::write_document(&root, doc).unwrap();
+        let (listed, warnings) = super::scan_originals(&root).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(listed, vec![saved]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn corrupt_song_does_not_hide_healthy_originals() {
         let root = std::env::temp_dir().join(format!("jam-song-scan-{}", std::process::id()));
