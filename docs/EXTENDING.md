@@ -1,6 +1,6 @@
 # Extending Josefines Jamstudio
 
-The product is built to be extended without limit. The rule that makes this possible: **every capability is a seam** (a definition, one registry, consumers), and adding to a seam never touches core files. The invariant test in `tests/invariants/` proves it: every fixture under `tests/fixtures/seams/` must appear in its registry while `tests/invariants/core-files.snapshot.json` stays untouched.
+The product is built to be extended without limit. The rule that makes this possible: **every capability is a seam** (a definition, one registry, consumers), and adding to a seam never touches core files. The invariant test in `tests/invariants/` proves it: every fixture under `tests/fixtures/seams/` must appear in its registry.
 
 Each recipe below names the exact files to add and the test that proves it worked. When a milestone adds a seam, it adds the recipe here and a fixture there, in the same PR. Recipes are executed once by the builder as a test before they are considered true.
 

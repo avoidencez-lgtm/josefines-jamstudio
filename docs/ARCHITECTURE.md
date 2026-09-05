@@ -77,7 +77,7 @@ josefines-jamstudio/
   assets/  manifest.json, LICENSES.md, README.md
   tests/
     fixtures/     audio/, providers/<provider>/, seams/, jo/
-    invariants/   seams.test.ts, core-files.snapshot.json
+    invariants/   seams.test.ts
   scripts/        check-js-licences.mjs, gen-fixtures.mjs, spikes/
   docs/           plan/, adr/, hardware/, spikes/, ARCHITECTURE.md, EXTENDING.md, DESIGN.md, guide/
   .github/workflows/ ci.yml, release.yml
@@ -362,7 +362,7 @@ A seam is a definition (trait or schema), one registry, and consumers. There is 
 | Screens | React component + nav entry | `src/screens/registry.ts` | router, nav |
 | IPC domains | one Rust file + one TS file | `src-tauri/src/ipc/mod.rs`, `src/ipc/index.ts` | everything |
 
-Proof: `tests/invariants/seams.test.ts` and `crates/jam-core/tests/seams.rs` load `tests/fixtures/seams/*` and assert each fixture is visible in its registry; `tests/invariants/core-files.snapshot.json` is the list of files that must be untouched by adding a fixture. Recipes in [EXTENDING.md](EXTENDING.md).
+Proof: `tests/invariants/seams.test.ts` and `crates/jam-core/tests/seams.rs` load `tests/fixtures/seams/*` and assert each fixture is visible in its registry. Recipes in [EXTENDING.md](EXTENDING.md).
 
 ## 9. Verification strategy
 
