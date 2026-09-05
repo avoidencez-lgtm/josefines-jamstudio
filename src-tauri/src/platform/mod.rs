@@ -25,6 +25,20 @@ pub fn command(executable: &std::path::Path) -> tokio::process::Command {
     command
 }
 
+/// Windows executables the app will start: a native `.exe`, or the `.cmd` shim npm
+/// writes for `npm install -g @openai/codex` / `@anthropic-ai/claude-code`. The shim
+/// runs through cmd.exe with the standard library's argument escaping; the prompt
+/// travels over stdin, so no request text ever becomes a command-line argument.
+#[cfg(windows)]
+const WINDOWS_EXTENSIONS: &[&str] = &["exe", "cmd"];
+
+#[cfg(windows)]
+fn windows_extension_allowed(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|ext| WINDOWS_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
 pub fn find_agent(name: &str, configured: &str) -> Result<PathBuf, String> {
     if !configured.is_empty() {
         let path = PathBuf::from(configured);
@@ -32,15 +46,20 @@ pub fn find_agent(name: &str, configured: &str) -> Result<PathBuf, String> {
             return Err("Choose the full path to the installed agent executable.".into());
         }
         #[cfg(windows)]
-        if path.extension().and_then(|s| s.to_str()) != Some("exe") {
-            return Err("Choose the native .exe installation, not a shell script.".into());
+        if !windows_extension_allowed(&path) {
+            return Err(
+                "Choose the native .exe or the npm .cmd shim, not another script type.".into(),
+            );
         }
         return Ok(path);
     }
-    let filename = if cfg!(windows) {
-        format!("{name}.exe")
+    let filenames: Vec<String> = if cfg!(windows) {
+        ["exe", "cmd"]
+            .iter()
+            .map(|ext| format!("{name}.{ext}"))
+            .collect()
     } else {
-        name.into()
+        vec![name.into()]
     };
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|p| std::env::split_paths(&p).collect())
@@ -58,6 +77,26 @@ pub fn find_agent(name: &str, configured: &str) -> Result<PathBuf, String> {
         ]
         .map(PathBuf::from),
     );
-    dirs.into_iter().map(|d| d.join(&filename)).find(|p| p.is_file())
+    // A native executable earlier on PATH wins over a shim later on PATH.
+    dirs.iter()
+        .flat_map(|d| filenames.iter().map(move |f| d.join(f)))
+        .find(|p| p.is_file())
         .ok_or_else(|| format!("{name} is not installed or not on PATH. Install and sign in once, or set its full executable path."))
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    #[test]
+    fn windows_accepts_native_exe_and_npm_cmd_shim_only() {
+        let dir = std::env::temp_dir().join(format!("jam-agent-shim-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["codex.cmd", "claude.EXE", "codex.ps1"] {
+            std::fs::write(dir.join(name), b"@echo off").unwrap();
+        }
+        let path = |n: &str| dir.join(n).to_string_lossy().into_owned();
+        assert!(super::find_agent("codex", &path("codex.cmd")).is_ok());
+        assert!(super::find_agent("claude", &path("claude.EXE")).is_ok());
+        assert!(super::find_agent("codex", &path("codex.ps1")).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }
