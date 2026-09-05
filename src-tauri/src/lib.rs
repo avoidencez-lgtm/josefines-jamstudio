@@ -80,12 +80,45 @@ fn agent_cancel(state: State<'_, AppState>) {
 
 /// The UI has run its close guard (nothing recording, drafts saved or discarded):
 /// exit for real. Both the window's close button and an app-level quit end here.
+/// Refuses while a take is still rolling so `app_exit` cannot throw away the WAV
+/// headers (#152). `finalize_on_exit` is the last-resort save on `RunEvent::Exit`.
 #[tauri::command]
-fn app_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>, state: State<'_, AppState>) {
+fn app_exit<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if state.engine.lock().recorder_is_recording() {
+        return Err("Finish the recording before closing.".into());
+    }
     state
         .exit_confirmed
         .store(true, std::sync::atomic::Ordering::SeqCst);
     app.exit(0);
+    Ok(())
+}
+
+/// Save an in-flight take when the process is actually leaving. Tao does not
+/// drop `AppState`, so `TakeRecorder::drop` never runs.
+pub fn finalize_on_exit(state: &AppState) {
+    let meta = {
+        let eng = state.engine.lock();
+        if !eng.recorder_is_recording() {
+            return;
+        }
+        eng.recorder_stop()
+    };
+    match meta {
+        Ok(meta) => {
+            let _ = state.store.lock().insert_take(&meta);
+        }
+        Err(e) => tracing::error!("could not save the take on exit: {e}"),
+    }
+}
+
+/// Hold an app-level quit only after the UI handshake. Early Cmd+Q must not
+/// sit forever waiting for a listener that is not mounted yet.
+pub fn should_defer_quit(ui_ready: bool, exit_confirmed: bool, window_open: bool) -> bool {
+    ui_ready && window_open && !exit_confirmed
 }
 
 /// Opens an allowlisted https URL in the OS browser. `target="_blank"` is dead in WebView2/WKWebView.
@@ -1325,16 +1358,18 @@ pub fn run() {
     built.run(|app, event| {
         use tauri::Manager;
         if matches!(event, tauri::RunEvent::Exit) {
+            if let Some(state) = app.try_state::<AppState>() {
+                finalize_on_exit(&state);
+            }
             let code = SMOKE_EXIT_CODE.load(std::sync::atomic::Ordering::SeqCst);
             if code >= 0 {
                 std::process::exit(code);
             }
         }
         // An app-level quit (Cmd+Q on macOS) never went through the window's
-        // close guard (#35). While a window is open, hand the decision to the UI;
-        // it answers with app_exit, which sets exit_confirmed. A quit after the
-        // last window closed, or one requested by app_exit itself (code Some),
-        // proceeds untouched.
+        // close guard (#35). After the UI handshake, hand the decision to React;
+        // it answers with app_exit. Before handshake, or after the last window
+        // closed, or when app_exit itself requested the quit (code Some), leave.
         if let tauri::RunEvent::ExitRequested {
             code: None, api, ..
         } = &event
@@ -1344,11 +1379,13 @@ pub fn run() {
                 .webview_windows()
                 .values()
                 .any(|w| w.is_visible().unwrap_or(true));
-            if window_open
-                && !state
+            if should_defer_quit(
+                state.ui_ready.load(std::sync::atomic::Ordering::SeqCst),
+                state
                     .exit_confirmed
-                    .load(std::sync::atomic::Ordering::SeqCst)
-            {
+                    .load(std::sync::atomic::Ordering::SeqCst),
+                window_open,
+            ) {
                 api.prevent_exit();
                 let _ = app.emit("app:exit-requested", ());
             }
@@ -1425,6 +1462,17 @@ mod desktop_permissions {
             cap["permissions"],
             serde_json::json!(["core:event:allow-listen", "core:event:allow-unlisten"])
         );
+    }
+}
+
+#[cfg(test)]
+mod quit {
+    #[test]
+    fn quit_is_deferred_only_after_the_ui_handshake() {
+        assert!(!super::should_defer_quit(false, false, true));
+        assert!(super::should_defer_quit(true, false, true));
+        assert!(!super::should_defer_quit(true, true, true));
+        assert!(!super::should_defer_quit(true, false, false));
     }
 }
 
