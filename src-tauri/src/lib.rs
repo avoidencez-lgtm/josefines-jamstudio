@@ -872,17 +872,10 @@ fn chart_sections(chart: &Chart) -> Vec<(String, u32)> {
 #[tauri::command]
 async fn takes_export_daw(
     take_id: String,
-    output_dir: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<jam_audio::export::ExportReport, String> {
     let take = find_take(&state, &take_id)?;
-    let base_dir = output_dir.map(std::path::PathBuf::from).unwrap_or_else(|| {
-        dirs::document_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("JosefinesJamstudio")
-            .join("Exports")
-    });
-    let export_path = base_dir.join(&take_id);
+    let export_path = Library::default_user_root().join("exports").join(&take.id);
 
     let chart: Option<Chart> = serde_json::from_value(take.snapshot["body"]["chart"].clone())
         .ok()
