@@ -1201,6 +1201,7 @@ pub fn configure<R: tauri::Runtime>(
             media::media_list,
             media::media_save,
             media::media_import,
+            media::media_stretch,
             media::media_from_take,
             media::media_generate,
             media::media_refresh,

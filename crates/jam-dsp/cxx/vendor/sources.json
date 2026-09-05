@@ -1,0 +1,24 @@
+[
+  {
+    "name": "signalsmith-stretch",
+    "source": "https://github.com/Signalsmith-Audio/signalsmith-stretch",
+    "commit": "57b93f4e9206a089a45387eaa39bdc9f310d3308",
+    "license": "MIT",
+    "files": {
+      "signalsmith-stretch.h": "ed7b282f3a8b8bcd62afd7668b8f2b9967c55a9b3d8ad1ec18d4f68e2d386315",
+      "LICENSE-stretch.txt": "ee2ef82481ffb445ecdd4b3a4c1f82c0cddb2da8fe39d8e8dc384fffb3e7f06f"
+    }
+  },
+  {
+    "name": "signalsmith-linear",
+    "source": "https://github.com/Signalsmith-Audio/linear",
+    "commit": "5668673560146a9cfe38c25315071e3fd68c8317",
+    "license": "MIT",
+    "files": {
+      "signalsmith-linear/fft.h": "41a00f8c1d9a937d4a031ce3910dd84c125504b1406d5bd7cf6de3795e34477e",
+      "signalsmith-linear/stft.h": "d9d91f7fd8d867a3873ce64fdf3848dc0bc385440f86cea88e268d49c9960a8a",
+      "signalsmith-linear/linear.h": "794ef56c5acf36753f43725071f0d28ea76a59c31188984960416b7f04f41238",
+      "LICENSE-linear.txt": "072b5e9eb5b22880bdf6256324654cf3ce53dba828edb911921121e1be09d9c3"
+    }
+  }
+]

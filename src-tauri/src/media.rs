@@ -475,6 +475,71 @@ pub async fn media_tools() -> Value {
     let ffprobe = platform::find_agent("ffprobe", "");
     json!({"ready":ffmpeg.is_ok()&&ffprobe.is_ok(),"message":if ffmpeg.is_ok()&&ffprobe.is_ok(){"FFmpeg and ffprobe found. Local MP4 export is available."}else{"Install FFmpeg with ffprobe, add its folder to PATH, then restart Jamstudio."}})
 }
+
+async fn practice_copy(
+    base: &Path,
+    source_id: &str,
+    speed: f64,
+    semitones: f64,
+) -> Result<Asset, String> {
+    // Keep validation before tool lookup, decoding and destination creation.
+    jam_audio::practice::validate(speed, semitones)?;
+    let source = asset(base, source_id)?;
+    if source.kind != "audio"
+        || !source.seconds.is_finite()
+        || !(0.1..=600.1).contains(&source.seconds)
+    {
+        return Err("Choose an audio source up to ten minutes. Use the original when a practice copy is longer.".into());
+    }
+    let exe = platform::find_agent("ffmpeg", "")
+        .map_err(|_| "Install FFmpeg and restart Jamstudio to prepare practice copies.")?;
+    let new_id = id();
+    let work = base.join("work").join(&new_id);
+    fs::create_dir_all(work.parent().unwrap()).map_err(|e| e.to_string())?;
+    fs::create_dir(&work).map_err(|e| e.to_string())?;
+    let decoded = work.join("decoded.wav");
+    let output = base.join("assets").join(format!("{new_id}.wav"));
+    let result = async {
+        let args = ["-nostdin", "-n", "-v", "error", "-protocol_whitelist", "file,pipe", "-i"]
+            .map(String::from).into_iter().chain([source.path.clone()])
+            .chain(["-map", "0:a:0", "-vn", "-ar", "48000", "-ac", "2", "-c:a", "pcm_f32le", "-t", "600.2"].map(String::from))
+            .chain([decoded.to_string_lossy().into_owned()]).collect::<Vec<_>>();
+        run(&exe, &args, 120).await?;
+        let input = decoded.clone();
+        let target = output.clone();
+        let seconds = tauri::async_runtime::spawn_blocking(move || jam_audio::practice::render(&input, &target, speed, semitones, &CANCEL))
+            .await.map_err(|_| "Practice rendering worker stopped.")??;
+        let prepared = Asset {
+            schema_version: 1, id: new_id.clone(), kind: "audio".into(), path: output.to_string_lossy().into_owned(), seconds,
+            label: format!("{} · {:.0}% · {:+} st", source.label.chars().take(120).collect::<String>(), speed * 100.0, semitones),
+            extra: BTreeMap::from([("practice".into(), json!({"sourceAssetId": source.id, "speed": speed, "semitones": semitones, "processor": "signalsmith-stretch-1.3.2"}))]),
+        };
+        let saved = if CANCEL.load(Ordering::Relaxed) { Err("Practice copy canceled.".into()) }
+            else { write(&base.join("assets").join(format!("{new_id}.json")), &serde_json::to_value(&prepared).map_err(|e| e.to_string())?) };
+        if let Err(error) = saved { let _ = fs::remove_file(&output); return Err(error); }
+        Ok(prepared)
+    }.await;
+    let _ = fs::remove_file(&decoded);
+    let _ = fs::remove_dir(&work);
+    result
+}
+
+#[tauri::command]
+pub async fn media_stretch(
+    asset_id: String,
+    speed: f64,
+    semitones: f64,
+    state: State<'_, AppState>,
+) -> Result<Asset, String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    if state.engine.lock().recorder_is_recording() {
+        return Err("Save the recording before preparing a practice copy.".into());
+    }
+    CANCEL.store(false, Ordering::Relaxed);
+    practice_copy(&root(), &asset_id, speed, semitones).await
+}
 async fn finish_job(
     base: &Path,
     job: &mut Value,
@@ -771,6 +836,62 @@ mod tests {
     }
 
     use super::*;
+    #[tokio::test]
+    #[ignore = "requires user-installed FFmpeg and ffprobe; run with JAM_MEDIA_TEST=1"]
+    async fn local_practice_copy_decodes_stretches_and_persists_without_touching_source() {
+        assert_eq!(std::env::var("JAM_MEDIA_TEST").as_deref(), Ok("1"));
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        let base = std::env::temp_dir().join(format!("jam-practice-media-{}", id()));
+        fs::create_dir_all(&base).unwrap();
+        let exe = platform::find_agent("ffmpeg", "").unwrap();
+        let input = base.join("source.wav");
+        run(
+            &exe,
+            &[
+                "-nostdin",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=1000:sample_rate=44100:duration=2",
+                "-ac",
+                "2",
+            ]
+            .map(String::from)
+            .into_iter()
+            .chain([input.to_string_lossy().into_owned()])
+            .collect::<Vec<_>>(),
+            20,
+        )
+        .await
+        .unwrap();
+        let original = import(&base, &input, "audio", "Synthetic reference")
+            .await
+            .unwrap();
+        let bytes = fs::read(&original.path).unwrap();
+        let copy = practice_copy(&base, &original.id, 0.5, 2.0).await.unwrap();
+        assert!((copy.seconds - 4.0).abs() < 0.001);
+        assert_eq!(fs::read(&original.path).unwrap(), bytes);
+        assert_eq!(
+            asset(&base, &copy.id).unwrap().extra["practice"]["sourceAssetId"],
+            original.id
+        );
+        let (audio, rate) = jam_audio::recorder::read_wav_mono(Path::new(&copy.path)).unwrap();
+        assert_eq!(rate, 48000);
+        assert_eq!(audio.len(), 192000);
+        assert!(audio.iter().any(|s| s.abs() > 0.05));
+        assert_eq!(
+            list_media(&base).unwrap()["assets"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert!(fs::read_dir(base.join("work")).unwrap().next().is_none());
+        fs::remove_dir_all(base).unwrap();
+    }
     #[test]
     fn player_accepts_import_formats_but_not_outside_files_or_programs() {
         let base = std::env::temp_dir().join(format!("jam-player-{}", id()));

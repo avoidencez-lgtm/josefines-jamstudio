@@ -6,6 +6,7 @@ pub mod engine;
 pub mod export;
 pub mod io;
 pub mod melody;
+pub mod practice;
 pub mod recorder;
 pub mod voice;
 

@@ -1,4 +1,6 @@
 import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import satisfies from "spdx-satisfies";
 
 /** Base policy from AGENTS.md invariant 9; JS package exceptions are below. */
@@ -119,3 +121,21 @@ if (hasBanned) {
 }
 
 console.log(`JS licence check PASSED: ${count} packages adhere to allowlist.`);
+
+// Vendored C++ is outside Cargo's inventory; verify the reviewed files as well.
+const vendor = new URL("../crates/jam-dsp/cxx/vendor/", import.meta.url);
+const sources = JSON.parse(
+  readFileSync(new URL("sources.json", vendor), "utf8"),
+);
+for (const source of sources) {
+  if (!checkLicense(source.license, source.name))
+    throw new Error(`Unapproved native vendor licence: ${source.name}`);
+  for (const [file, expected] of Object.entries(source.files)) {
+    const actual = createHash("sha256")
+      .update(readFileSync(new URL(file, vendor)))
+      .digest("hex");
+    if (actual !== expected)
+      throw new Error(`Native vendor hash mismatch: ${file}`);
+  }
+}
+console.log("Native vendor licence and SHA-256 checks PASSED.");

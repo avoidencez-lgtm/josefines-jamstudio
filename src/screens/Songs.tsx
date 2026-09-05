@@ -24,6 +24,8 @@ export function Songs() {
   const [path, setPath] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState("");
+  const [speed, setSpeed] = useState(75);
+  const [semitones, setSemitones] = useState(0);
   const [tools, setTools] = useState({
     ready: false,
     message: "Checking local media tools…",
@@ -130,6 +132,17 @@ export function Songs() {
       {(m.busy || m.message) && (
         <output className="workspace-note">{m.busy || m.message}</output>
       )}
+      {m.busy === "Preparing practice copy" && (
+        <Button
+          onClick={() =>
+            void ipc
+              .invoke("media_cancel")
+              .catch((e) => useMedia.setState({ message: String(e) }))
+          }
+        >
+          Cancel practice copy
+        </Button>
+      )}
       {!visible.length ? (
         <div className="workspace-empty">
           <VinylRecord size={52} aria-hidden="true" />
@@ -179,7 +192,7 @@ export function Songs() {
               <VinylRecord size={72} aria-hidden="true" />
               <h2>{song.label}</h2>
               <p className="workspace-note">
-                {song.seconds.toFixed(1)} seconds · original pitch and speed
+                {song.seconds.toFixed(1)} seconds · plays as saved
               </p>
               <div className="workspace-actions">
                 <Button
@@ -203,6 +216,72 @@ export function Songs() {
                   <FilmSlate size={18} aria-hidden="true" /> Use in Film
                 </Button>
               </div>
+              <details className="workspace-stack">
+                <summary className="cursor-pointer text-sm">
+                  Make a practice copy
+                </summary>
+                <p className="workspace-note">
+                  Change speed without changing pitch, or transpose up to an
+                  octave. A new stereo WAV is saved in this library; the
+                  selected file stays unchanged. Rendering happens locally and
+                  may take a little time.
+                </p>
+                <div className="workspace-actions">
+                  <label className="room-tool-field">
+                    Speed · {speed}%
+                    <input
+                      aria-label="Practice speed"
+                      type="range"
+                      min={50}
+                      max={150}
+                      step={1}
+                      value={speed}
+                      disabled={locked}
+                      onChange={(e) => setSpeed(Number(e.target.value))}
+                    />
+                  </label>
+                  <label className="room-tool-field">
+                    Transpose
+                    <select
+                      value={semitones}
+                      disabled={locked}
+                      onChange={(e) => setSemitones(Number(e.target.value))}
+                    >
+                      {Array.from({ length: 25 }, (_, i) => i - 12).map((n) => (
+                        <option key={n} value={n}>
+                          {n > 0 ? "+" : ""}
+                          {n} semitones
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <Button
+                    disabled={locked || isPreview || !tools.ready}
+                    onClick={() =>
+                      void m.work("Preparing practice copy", async () => {
+                        const copy = await ipc.invoke<MediaAsset>(
+                          "media_stretch",
+                          { assetId: song.id, speed: speed / 100, semitones },
+                        );
+                        await m.refresh();
+                        setSelected(copy.id);
+                        setQuery("");
+                        useMedia.setState({
+                          message:
+                            "Practice copy saved. Choose Listen in media player to hear it.",
+                        });
+                      })
+                    }
+                  >
+                    Create practice copy
+                  </Button>
+                </div>
+                <p className="workspace-note">
+                  {!tools.ready && `${tools.message} `}Sources can be up to 10
+                  minutes; slowed copies can be up to 20 minutes. To try another
+                  setting on a longer copy, select the original.
+                </p>
+              </details>
               {lyrics && (
                 <details>
                   <summary>Generated lyrics & structure</summary>
@@ -218,9 +297,11 @@ export function Songs() {
         </div>
       )}
       <p className="workspace-note">
-        Reference playback opens your system player. Stem separation, automatic
-        chord detection and speed changes are not available yet. Use Library for
-        chord charts and Stage for rehearsing them.
+        Reference playback opens your system player. Practice copies support
+        local speed and pitch changes. Stem separation, automatic chord
+        detection and transport-synchronised reference playback are not
+        available yet. Use Library for chord charts and Stage for rehearsing
+        them.
       </p>
     </div>
   );

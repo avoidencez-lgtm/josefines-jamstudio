@@ -3,6 +3,7 @@
 pub mod energy;
 pub mod level;
 pub mod pitch;
+pub mod stretch;
 
 pub use energy::*;
 pub use level::*;
