@@ -68,7 +68,7 @@ export function Originals() {
                 onChange={(e) =>
                   w.edit((b) => {
                     b.chart.name = e.target.value;
-                  })
+                  }, "title")
                 }
               />
             </label>
@@ -300,7 +300,7 @@ export function Originals() {
                             (s) => s.id === section.id,
                           );
                           if (s) s.name = e.target.value;
-                        })
+                        }, `section-name:${section.id}`)
                       }
                     />
                   </label>
@@ -438,7 +438,7 @@ export function Originals() {
                               w.edit((b) => {
                                 b.sections[section.id].parts[i].intensity =
                                   Number(e.target.value) / 100;
-                              })
+                              }, `intensity:${section.id}:${i}`)
                             }
                           />
                         </label>
@@ -453,7 +453,7 @@ export function Originals() {
                               w.edit((b) => {
                                 b.sections[section.id].parts[i].gain =
                                   Number(e.target.value) / 100;
-                              })
+                              }, `gain:${section.id}:${i}`)
                             }
                           />
                         </label>
@@ -566,7 +566,7 @@ export function Originals() {
                       onChange={(e) =>
                         w.edit((b) => {
                           b.clips[i].label = e.target.value;
-                        })
+                        }, `clip-label:${i}`)
                       }
                     />
                   </label>
@@ -739,7 +739,7 @@ export function Originals() {
                   onChange={(e) =>
                     w.edit((b) => {
                       b.notes = e.target.value;
-                    })
+                    }, "notes")
                   }
                   placeholder="What should the next section feel like?"
                 />

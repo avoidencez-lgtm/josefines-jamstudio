@@ -458,8 +458,10 @@ export function EnergyDesk() {
           disabled={!unlocked.length}
           value={amount}
           onChange={(e) =>
-            w.edit((b) =>
-              setSectionEnergy(b, section.id, Number(e.target.value) / 100),
+            w.edit(
+              (b) =>
+                setSectionEnergy(b, section.id, Number(e.target.value) / 100),
+              `energy:${section.id}`,
             )
           }
         />
@@ -502,7 +504,7 @@ export function LyricsDesk() {
               w.edit((b) => {
                 b.lyrics ??= {};
                 b.lyrics[section.id] = e.target.value;
-              })
+              }, `lyrics:${section.id}`)
             }
           />
         </label>
@@ -531,7 +533,7 @@ export function LyricsDesk() {
             onChange={(e) =>
               w.edit((b) => {
                 b.notes = e.target.value;
-              })
+              }, "notes")
             }
           />
         </label>
