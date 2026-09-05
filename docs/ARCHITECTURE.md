@@ -610,6 +610,31 @@ Offline melody extraction is a Rust worker: saved take ID → bounded WAV decode
 
 ## Recording interruption recovery
 
+Recording alignment: each fixed-size output-ring item carries the stereo output,
+reference stems, a render index and a take generation. The output callback copies
+the audible frame and pairs its references with DI from a separate input ring;
+synthetic FileInput retains its render-synchronous sample. Completed frames pass
+through a bounded ring back to the worker. The callback does not allocate, lock,
+write files or emit IPC. The worker matches MIDI to the completed frame index and
+updates retrospective capture. Queue loss or a hardware input/output gap interrupts
+the take rather than silently compressing its timeline. Device round-trip latency
+remains a separate manual guitar offset; no physical calibration is claimed.
+
+Files and their writer are prepared in a separate idle recorder before acquiring
+the render gate. Installing it and starting the song timeline share that gate,
+so disk latency cannot insert an intermediate recorded idle block before bar 1.
+A command-only mutex serialises preparation/finalisation and is never acquired
+by the render worker. Metadata uses the planned song tempo at preparation.
+
+Starting tags subsequent rendered frames with a new take generation. Stopping
+disarms tagging under the render gate, then waits outside that gate for the queued
+tail to reach the recorder, with a two-second deadline for failed outputs. Old
+queued audio cannot leak into a new take. The finished recorder is moved out of
+the shared mutex before joining its writer and saving the manifest. Retrospective
+capture retains its source buffer if saving fails.
+Transport telemetry still describes the render timeline; no varying lead is
+subtracted from stopped, paused, counting-in or tempo-changing positions.
+
 Recording failure reporting: the render worker queues audio and its MIDI as one
 accepted block. A rejected audio block neither advances the accepted-frame count
 nor appends MIDI; later blocks are ignored. The writer remains pending so a new
@@ -619,8 +644,9 @@ plus `app:error` once for a new failure. The UI stops its recording animation,
 shows the interruption and offers Save partial take. `isRecording` retains its
 existing pending-take/close-guard meaning until finalisation; `recordingError`
 distinguishes interrupted capture. WAV finalisation remains on the command thread,
-never the audio callback. This does not resolve recording alignment or blocking
-disk I/O during explicit start/stop (issues #129 and #136).
+never the audio callback. Alignment is covered by an exact 10,000-frame
+callback test with variable buffer sizes and a native WAV/MIDI onset check with
+a two-sample tolerance.
 
 ## Current take-analysis evidence
 

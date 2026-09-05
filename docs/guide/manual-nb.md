@@ -272,7 +272,7 @@ Hvis diskskrivingen ikke kan ta imot lyd, slutter opptaksindikatoren å pulsere,
 
 ### Justering og separate spor
 
-Guitar offset er et manuelt antall sampler som brukes til å justere inngangen mot bandet. Automatisk kalibrering via kabelsløyfe er ikke tilgjengelig. Mål justeringen i DAW på den faktiske riggen. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.
+Opptaket kobler gitarinngangen til bandrammene som sendes til lydutgangen. Save take venter kort på lyd som allerede ligger i kø før filene lukkes. Hvis lydstrømmen eller opptakskøen mister rammer, lagrer du det delvise opptaket og løser det meldte problemet før du tar opp igjen. Guitar offset er fortsatt den manuelle samplejusteringen for forsinkelsen gjennom det fysiske lydkortet. Automatisk kalibrering via kabelsløyfe er ikke tilgjengelig. Mål justeringen i DAW på den faktiske riggen. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.
 
 ### Logic og andre musikkprogrammer
 
