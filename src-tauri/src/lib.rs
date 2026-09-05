@@ -192,8 +192,11 @@ fn audio_set_input_monitor(gain: f32, state: State<'_, AppState>) {
 
 #[tauri::command]
 fn keys_set(provider: String, key: String, state: State<'_, AppState>) -> Result<(), String> {
-    if net::provider(&provider).is_none() || key.trim().is_empty() || key.len() > 4096 {
+    if net::provider(&provider).is_none() || key.trim().is_empty() {
         return Err("Choose a supported provider and enter a non-empty API key.".into());
+    }
+    if key.len() > 4096 {
+        return Err("API key is too long. The limit is 4096 bytes.".into());
     }
     state.secret_store.set(&provider, &key)
 }

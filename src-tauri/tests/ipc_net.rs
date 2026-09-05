@@ -16,7 +16,7 @@ use tauri::{Listener, Manager};
 
 /// The second sentence of every `live_guard` refusal.
 const GUARD_SUFFIX: &str = "An explicitly authorised live check requires JAM_LIVE=1.";
-/// The single message `keys_set` uses for every rejected provider or key.
+/// The message for an unsupported provider or blank key.
 const KEYS_SET_REFUSED: &str = "Choose a supported provider and enter a non-empty API key.";
 
 /// The harness never sets `JAM_LIVE`; every test re-checks after driving the commands.
@@ -184,7 +184,7 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
             "keys_set",
             json!({"provider": "anthropic", "key": too_long})
         ),
-        KEYS_SET_REFUSED
+        "API key is too long. The limit is 4096 bytes."
     );
     assert_eq!(
         studio.ok("keys_has", json!({"provider": "anthropic"})),
@@ -222,10 +222,11 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
 }
 
 #[test]
-#[ignore = "app bug: a 4097-byte key is refused with the 'non-empty' message, which never mentions the length limit"]
 fn keys_set_names_the_length_limit_when_the_key_is_too_long() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
+    let saved = unique("existing-key");
+    studio.ok("keys_set", json!({"provider": "gemini", "key": saved}));
     let err = studio.err(
         "keys_set",
         json!({"provider": "gemini", "key": "k".repeat(4097)}),
@@ -233,6 +234,14 @@ fn keys_set_names_the_length_limit_when_the_key_is_too_long() {
     assert!(
         err.contains("4096") || err.to_ascii_lowercase().contains("too long"),
         "{err}"
+    );
+    assert_eq!(
+        studio
+            .app()
+            .state::<app_lib::AppState>()
+            .secret_store
+            .get("gemini"),
+        Some(saved)
     );
     assert_offline();
 }
