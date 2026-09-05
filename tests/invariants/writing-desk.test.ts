@@ -86,6 +86,34 @@ it("duplicates a section with independent lyrics and band settings, preserving p
   expect(useWriting.getState().song?.body).toEqual(changed);
 });
 
+it("groups a slider drag or a run of typing into one Undo step (#38)", () => {
+  const w = useWriting.getState();
+  for (const value of [0.6, 0.7, 0.8])
+    w.edit((b) => setSectionEnergy(b, "verse", value), "energy:verse");
+  expect(useWriting.getState().past).toHaveLength(1);
+  expect(currentSong().body.sections.verse.parts[0].intensity).toBe(0.8);
+  // Another field starts its own step; the same field after a pause does too.
+  w.edit((b) => {
+    b.notes = "a";
+  }, "notes");
+  w.edit((b) => {
+    b.notes = "ab";
+  }, "notes");
+  expect(useWriting.getState().past).toHaveLength(2);
+  useWriting.setState({ lastEdit: { key: "notes", at: Date.now() - 5000 } });
+  w.edit((b) => {
+    b.notes = "abc";
+  }, "notes");
+  expect(useWriting.getState().past).toHaveLength(3);
+  w.undo();
+  expect(currentSong().body.notes).toBe("ab");
+  w.undo();
+  expect(currentSong().body.notes).toBe("");
+  w.undo();
+  expect(currentSong().body.sections.verse.parts[0].intensity).toBe(0.5);
+  expect(useWriting.getState().past).toHaveLength(0);
+});
+
 it("rejects oversized and empty forms atomically without adding Undo, and counts every repeat", () => {
   const w = useWriting.getState();
   w.edit((b) => {
@@ -145,6 +173,9 @@ it("shares section lyrics with both AI paths and applies reviewed seeds without 
   expect(currentSong().body.lyrics?.verse).toBe(
     "My first line\n\nMy second line",
   );
+  // The lyric lines live in their section; the notebook keeps only the provenance.
+  expect(currentSong().body.notes).toContain("Second line (synthetic fixture)");
+  expect(currentSong().body.notes).not.toContain("My second line");
   applyStudioEdits(
     [
       {
