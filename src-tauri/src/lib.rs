@@ -685,7 +685,10 @@ fn rig_set_section_mapping(
         }
     }
     persist_rig(&rig, |settings| {
-        let mappings = settings.section_mappings.get_mut(&rig.profile.id).unwrap();
+        let mappings = settings
+            .section_mappings
+            .entry(rig.profile.id.clone())
+            .or_default();
         match scene_idx {
             Some(idx) => {
                 mappings.insert(section.clone(), idx);
