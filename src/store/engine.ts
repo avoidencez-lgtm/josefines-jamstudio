@@ -504,6 +504,27 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const current = get().currentChart;
       if (!current) return;
       const moved = transposeChart(current, semitones);
+      const loaded = get().loadedOriginal;
+      if (loaded) {
+        const document: Original = {
+          schemaVersion: 1,
+          id: loaded.id,
+          revision: 0,
+          versions: [],
+          body: { ...loaded.body, chart: moved },
+        };
+        if (
+          await runOk("Transpose song", () =>
+            ipc.invoke("originals_load", { document }),
+          )
+        ) {
+          set({
+            currentChart: moved,
+            loadedOriginal: { id: loaded.id, body: document.body },
+          });
+        }
+        return;
+      }
       await get().playChartInline(moved);
     },
 
