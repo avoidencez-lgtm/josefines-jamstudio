@@ -65,6 +65,19 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-05 build integration: PRs #200 (chart duration precision), #204 (count-in
+destination) and #207 (native logging) are merged. PR #192 replaces estimated
+render-lead delays with output-callback frame pairing and drains the queued take
+tail before finalisation. Synthetic callback alignment and WAV/MIDI onset checks
+cover the implementation; current-head Windows/macOS CI remains the merge gate.
+This does not complete the remaining V1 capabilities or signing, and friend-led
+hardware checks remain deferred to V2.
+
+PR #210 integrates #192 while moving file preparation and finalisation outside
+the render/recorder locks. Recording activates atomically with song playback;
+metadata uses the song tempo and failed capture saves preserve the idea buffer.
+Current-head CI remains required before merge. The remaining V1 scope is unchanged.
+
 2026-09-05 Jo action results (issue #166): transport, band and recording refusals
 reach Jo as explicit failures while retaining the normal UI notice. Success uses
 the accepted command value, including clamped tempo, and unchanged document edits
@@ -177,6 +190,30 @@ Windows/macOS CI and owner acceptance are tracked in #29. No milestones are mark
 complete by this UI slice alone.
 
 ## Build integration
+
+The rate-mismatch follow-up (#211, awaiting renewed review and CI) closes an input
+whose rate differs from the output and refuses jam/song recording and recent-idea
+capture before creating files. A dedicated input-error state supplies the shared
+guard; displayed error wording does not control eligibility. The isolated
+file-input regression verifies all three paths and recovery after a matching
+restart. Settings help explains this in English/Bokmål. This is damage prevention;
+edge resampling and the fixed internal 48 kHz requirement remain unfinished (#184).
+
+The licence-gate follow-up for #157 (awaiting review and CI) uses the existing
+SPDX evaluator so grouped AND/OR expressions retain their meaning. Malformed
+tables, package groups and records fail closed; records require a name and the
+non-empty `versions` array emitted by pinned pnpm 11. Existing allowlist entries,
+package-specific exceptions and the minimum inventory size are unchanged.
+The command-level regressions in `tests/invariants/js-licences.test.mjs` run with
+controlled pnpm output, including failed commands and malformed JSON. The real
+installed inventory is also checked; no generated licence report is trusted
+solely because it contains fifty records.
+
+The follow-up to merged PR #205 (awaiting current-head review and CI)
+routes Settings/Film links through the native browser opener and reports launch
+failures with a copyable URL. The shared macOS browser/player path checks opener
+completion; Windows confirms only the Explorer handoff. A rejected IPC regression
+failed before the notice fix. English/Bokmål troubleshooting explains recovery.
 
 The current build is stabilised separately from the unbuilt roadmap above. See
 [build closeout](../reviews/build-closeout.md) for native IPC, persistence, meter

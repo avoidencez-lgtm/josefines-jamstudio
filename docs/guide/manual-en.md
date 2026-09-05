@@ -272,7 +272,7 @@ If the disk writer cannot accept audio, the recording indicator stops pulsing an
 
 ### Alignment and stems
 
-Guitar offset is the manual sample offset used to align input with the band. Automatic cable-loopback calibration is not available. Measure alignment in your DAW on the actual rig. New full recordings contain separate guitar, drums, bass and comp, plus band/master reference mixes, scheduled band-note MIDI, a tempo map and the performance snapshot. Referenced guitar layers export as aligned WAVs. Capture-only ideas do not reconstruct band MIDI. Missing files are reported in the export result.
+Recording pairs the guitar input with the band frames sent to the audio output. Save take waits briefly for queued audio before closing the files. If the audio stream or capture queue loses frames, save the partial take and resolve the reported problem before recording again. Guitar offset remains the manual sample offset for the physical device round-trip. Automatic cable-loopback calibration is not available. Measure alignment in your DAW on the actual rig. New full recordings contain separate guitar, drums, bass and comp, plus band/master reference mixes, scheduled band-note MIDI, a tempo map and the performance snapshot. Referenced guitar layers export as aligned WAVs. Capture-only ideas do not reconstruct band MIDI. Missing files are reported in the export result.
 
 ### Logic and other DAWs
 
@@ -310,7 +310,7 @@ With an original open, Capture current tone stores the current profile ID, scene
 
 ### Audio devices
 
-Choose input/output device names, the input channel and a supported buffer size. The UI numbers channels from 1; stored configuration is zero-based. HeadRush dry channel 3 is therefore stored as 2, when the driver actually exposes it. Device changes restart audio and are saved after success. Use one interface for input/output where possible. Smaller buffers may lower latency but increase dropouts; use larger buffers if stream errors or input gaps grow. The engine uses 48 kHz internally. Unsupported device formats fail explicitly rather than silently resampling.
+Choose input/output device names, the input channel and a supported buffer size. The UI numbers channels from 1; stored configuration is zero-based. HeadRush dry channel 3 is therefore stored as 2, when the driver actually exposes it. Device changes restart audio and are saved after success. Use one interface for input/output where possible. Smaller buffers may lower latency but increase dropouts; use larger buffers if stream errors or input gaps grow. The engine currently follows the output device sample rate; fixed 48 kHz conversion is unfinished. If input and output rates differ, the input is closed and the status names both rates. Jam recording, song recording and Keep recent idea refuse that input. Select matching devices/rates and use Restart audio; the refusal clears after a matching restart. No automatic resampling is performed.
 
 ### Mac and Windows setup
 
@@ -353,6 +353,8 @@ For misaligned guitar, measure Guitar offset against a known transient in your D
 ### AI, files and media failures
 
 For 401/403, verify the selected connection, stored key/account and model access. For 429, inspect quota/rate limits; do not repeatedly submit paid jobs. Agent not found means install the native CLI or set its full path; detection alone does not prove login. Missing FFmpeg means install both ffmpeg and ffprobe, restart and recheck. Invalid local workflows must run in ComfyUI first and be exported in API format. Missing media means check the recorded file path and backup, not only the cache.
+
+Documentation links in Settings and Film open in your default browser. If the system refuses a link, the error notice includes the URL to copy into your browser. On macOS, a failed system browser or media-player handoff is reported; on Windows the app can confirm only that Explorer started, so check your default browser/player if nothing appears.
 
 ### What automated checks cannot prove
 

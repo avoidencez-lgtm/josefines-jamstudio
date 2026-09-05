@@ -272,7 +272,7 @@ Hvis diskskrivingen ikke kan ta imot lyd, slutter opptaksindikatoren å pulsere,
 
 ### Justering og separate spor
 
-Guitar offset er et manuelt antall sampler som brukes til å justere inngangen mot bandet. Automatisk kalibrering via kabelsløyfe er ikke tilgjengelig. Mål justeringen i DAW på den faktiske riggen. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.
+Opptaket kobler gitarinngangen til bandrammene som sendes til lydutgangen. Save take venter kort på lyd som allerede ligger i kø før filene lukkes. Hvis lydstrømmen eller opptakskøen mister rammer, lagrer du det delvise opptaket og løser det meldte problemet før du tar opp igjen. Guitar offset er fortsatt den manuelle samplejusteringen for forsinkelsen gjennom det fysiske lydkortet. Automatisk kalibrering via kabelsløyfe er ikke tilgjengelig. Mål justeringen i DAW på den faktiske riggen. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.
 
 ### Logic og andre musikkprogrammer
 
@@ -310,7 +310,7 @@ Med en egen låt åpen lagrer Capture current tone profil-ID, scene og kontrolle
 
 ### Lydenheter
 
-Velg navn på inn-/utgangsenheter, inngangskanal og støttet bufferstørrelse. Grensesnittet nummererer kanaler fra 1; lagret konfigurasjon starter på 0. Tørr HeadRush-kanal 3 lagres derfor som 2, når driveren faktisk tilbyr den. Enhetsendringer starter lyden på nytt og lagres etter vellykket oppsett. Bruk helst ett lydkort for inn og ut. Mindre buffer kan redusere forsinkelsen, men øke utfall; bruk større buffer hvis stream errors eller input gaps øker. Motoren bruker 48 kHz internt. Ustøttede formater gir tydelig feil fremfor skjult resampling.
+Velg navn på inn-/utgangsenheter, inngangskanal og støttet bufferstørrelse. Grensesnittet nummererer kanaler fra 1; lagret konfigurasjon starter på 0. Tørr HeadRush-kanal 3 lagres derfor som 2, når driveren faktisk tilbyr den. Enhetsendringer starter lyden på nytt og lagres etter vellykket oppsett. Bruk helst ett lydkort for inn og ut. Mindre buffer kan redusere forsinkelsen, men øke utfall; bruk større buffer hvis stream errors eller input gaps øker. Motoren følger foreløpig utgangsenhetens samplingsfrekvens; konvertering til fast 48 kHz er ikke ferdig. Hvis inngang og utgang har ulik frekvens, stenges inngangen og statusen viser begge verdiene. Jamopptak, låtopptak og Keep recent idea avviser denne inngangen. Velg enheter/frekvenser som samsvarer og bruk Restart audio; sperren fjernes etter en omstart med samsvarende frekvenser. Ingen automatisk resampling utføres.
 
 ### Oppsett på Mac og Windows
 
@@ -353,6 +353,8 @@ Ved feiljustert gitar måles Guitar offset mot en kjent transient i DAW. Hvis kl
 ### Feil i AI, filer og medier
 
 Ved 401/403 kontrollerer du valgt tilkobling, lagret nøkkel/konto og modelltilgang. Ved 429 undersøker du kvote/hastighetsgrenser; ikke send betalte jobber gjentatte ganger. Agent not found betyr at du må installere nativ CLI eller oppgi full filbane; deteksjon alene beviser ikke pålogging. Manglende FFmpeg betyr at både ffmpeg og ffprobe må installeres, før omstart og ny kontroll. Ugyldige lokale arbeidsflyter må først fungere i ComfyUI og eksporteres i API-format. Manglende medier krever kontroll av faktisk filbane og backup, ikke bare hurtigbufferen.
+
+Dokumentasjonslenker i Settings og Film åpnes i standardnettleseren. Hvis systemet avviser en lenke, viser feilmeldingen nettadressen som du kan kopiere til nettleseren. På macOS varsles feil når systemet ikke kan åpne nettleseren eller mediespilleren. På Windows kan appen bare bekrefte at Utforsker startet, så kontroller standardnettleser/-spiller hvis ingenting vises.
 
 ### Hva automatiske tester ikke kan bevise
 

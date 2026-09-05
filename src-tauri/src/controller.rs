@@ -41,7 +41,7 @@ pub fn controller_config() -> Result<Value, String> {
     if !path.exists() {
         return Ok(json!({"schemaVersion":1,"bindings":[]}));
     }
-    let doc = serde_json::from_slice(&std::fs::read(path).map_err(|e| e.to_string())?)
+    let doc = jam_core::json::from_slice(&std::fs::read(path).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
     validate(&doc)?;
     Ok(doc)

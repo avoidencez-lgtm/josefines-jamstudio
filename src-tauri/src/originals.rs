@@ -192,7 +192,7 @@ fn write_document(root: &Path, mut doc: Value) -> Result<Value, String> {
     let revision = doc["revision"].as_u64().ok_or("Song revision missing")?;
     if file.exists() {
         let current: Value =
-            serde_json::from_str(&fs::read_to_string(&file).map_err(|e| e.to_string())?)
+            jam_core::json::from_str(&fs::read_to_string(&file).map_err(|e| e.to_string())?)
                 .map_err(|e| e.to_string())?;
         if current["revision"].as_u64() != Some(revision) {
             return Err("This song changed in another window. Reopen it before saving.".into());
@@ -252,8 +252,9 @@ fn scan_originals(root: &Path) -> Result<(Vec<Value>, Vec<String>), String> {
                 if fs::metadata(&p).map_err(|e| e.to_string())?.len() > 8_000_000 {
                     return Err("Song file exceeds the 8 MB disk-read limit.".into());
                 }
-                let v: Value = serde_json::from_slice(&fs::read(&p).map_err(|e| e.to_string())?)
-                    .map_err(|e| e.to_string())?;
+                let v: Value =
+                    jam_core::json::from_slice(&fs::read(&p).map_err(|e| e.to_string())?)
+                        .map_err(|e| e.to_string())?;
                 body(&v)?;
                 valid_id(v["id"].as_str().ok_or("Song id missing")?)?;
                 if v["revision"].as_u64().is_none() {
@@ -319,7 +320,7 @@ fn scan_takes(root: &Path) -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
         if p.exists() {
             match fs::read(&p)
                 .map_err(|e| e.to_string())
-                .and_then(|s| serde_json::from_slice(&s).map_err(|e| e.to_string()))
+                .and_then(|s| jam_core::json::from_slice(&s).map_err(|e| e.to_string()))
             {
                 Ok(take) => takes.push(take),
                 Err(e) => warnings.push(format!(
@@ -354,7 +355,11 @@ pub fn read_clip(spec: ClipSpec, state: &AppState) -> Result<Clip, String> {
 }
 
 #[tauri::command]
-pub async fn originals_load(document: Value, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn originals_load(
+    document: Value,
+    keep_playback: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let song = body(&document)?;
     let tones = {
         let rig = state.rig.lock();
@@ -395,16 +400,25 @@ pub async fn originals_load(document: Value, state: State<'_, AppState>) -> Resu
             );
         }
     }
-    let clips = song
-        .clips
-        .into_iter()
-        .map(|s| read_clip(s, &state))
-        .collect::<Result<Vec<_>, _>>()?;
     let mut snapshot = document.clone();
     snapshot
         .as_object_mut()
         .ok_or("Song must be an object")?
         .remove("versions");
+    let keep = keep_playback.unwrap_or(false) && !state.engine.lock().song_snapshot.is_null();
+    if keep {
+        state
+            .engine
+            .lock()
+            .replace_song_chart(song.chart.resolve(), sections, snapshot)?;
+        state.rig.lock().song_mappings = Some(tones);
+        return Ok(());
+    }
+    let clips = song
+        .clips
+        .into_iter()
+        .map(|s| read_clip(s, &state))
+        .collect::<Result<Vec<_>, _>>()?;
     state
         .engine
         .lock()
@@ -504,6 +518,36 @@ mod tests {
             "Invalid song or take id."
         );
         assert!(super::valid_id("take-1").is_ok());
+    }
+
+    #[test]
+    fn a_utf8_bom_does_not_hide_a_song_or_take() {
+        let songs = std::env::temp_dir().join(format!("jam-song-bom-{}", std::process::id()));
+        let takes = std::env::temp_dir().join(format!("jam-take-bom-{}", std::process::id()));
+        std::fs::create_dir_all(&songs).unwrap();
+        std::fs::create_dir_all(takes.join("bom-take")).unwrap();
+        let mut song = vec![0xEF, 0xBB, 0xBF];
+        song.extend_from_slice(include_bytes!("../../tests/fixtures/seams/original.json"));
+        std::fs::write(songs.join("good.json"), song).unwrap();
+        let mut take = vec![0xEF, 0xBB, 0xBF];
+        take.extend_from_slice(
+            &serde_json::to_vec(&jam_audio::recorder::TakeMetadata {
+                id: "bom-take".into(),
+                ..Default::default()
+            })
+            .unwrap(),
+        );
+        std::fs::write(takes.join("bom-take/take.json"), take).unwrap();
+        let (docs, song_warnings) = super::scan_originals(&songs).unwrap();
+        let (listed, take_warnings) = super::scan_takes(&takes).unwrap();
+        assert!(song_warnings.is_empty(), "{song_warnings:?}");
+        assert!(take_warnings.is_empty(), "{take_warnings:?}");
+        assert_eq!(docs.len(), 1);
+        assert_eq!(listed[0].id, "bom-take");
+        let saved = super::write_document(&songs, docs[0].clone()).unwrap();
+        assert_eq!(saved["revision"], docs[0]["revision"].as_u64().unwrap() + 1);
+        std::fs::remove_dir_all(songs).unwrap();
+        std::fs::remove_dir_all(takes).unwrap();
     }
 
     #[test]

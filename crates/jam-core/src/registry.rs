@@ -79,7 +79,7 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
         for file in dir.files() {
             if file.path().extension().is_some_and(|ext| ext == "json") {
                 if let Some(content) = file.contents_utf8() {
-                    match serde_json::from_str::<T>(content) {
+                    match crate::json::from_str::<T>(content) {
                         Ok(item) => {
                             self.items.insert(item.id().to_string(), item);
                             count += 1;
@@ -109,7 +109,7 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
                 let p = entry.path();
                 if p.extension().is_some_and(|ext| ext == "json") {
                     match std::fs::read_to_string(&p) {
-                        Ok(content) => match serde_json::from_str::<T>(&content) {
+                        Ok(content) => match crate::json::from_str::<T>(&content) {
                             Ok(item) => {
                                 self.items.insert(item.id().to_string(), item);
                                 count += 1;
@@ -185,6 +185,23 @@ mod tests {
         assert_eq!(count, 0);
         assert_eq!(errors.len(), 1);
         assert!(errors[0].contains("broken.json"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_utf8_bom_does_not_make_a_user_file_unreadable() {
+        let dir = std::env::temp_dir().join(format!("jam-registry-bom-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes
+            .extend_from_slice(br#"{"schemaVersion":1,"id":"bom-map","name":"BOM","bindings":[]}"#);
+        std::fs::write(dir.join("bom-map.json"), bytes).unwrap();
+        let mut maps: SeamRegistry<ControlMapManifest> = SeamRegistry::new();
+        let (count, errors) = maps.load_from_fs_dir(&dir);
+        assert_eq!(errors, Vec::<String>::new());
+        assert_eq!(count, 1);
+        assert_eq!(maps.get("bom-map").unwrap().name, "BOM");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

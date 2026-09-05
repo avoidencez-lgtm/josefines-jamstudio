@@ -68,6 +68,13 @@ impl TakeRecorder {
     pub fn set_latency_compensation(&mut self, samples: usize) {
         self.latency_offset_samples = samples;
     }
+    /// Idle recorder with the same configuration, without a writer or MIDI.
+    pub(crate) fn idle(&self) -> Self {
+        let mut recorder = Self::new(self.sample_rate, self.base_dir.clone());
+        recorder.latency_offset_samples = self.latency_offset_samples;
+        recorder.snapshot = self.snapshot.clone();
+        recorder
+    }
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
@@ -84,6 +91,14 @@ impl TakeRecorder {
     }
     pub fn error(&self) -> Option<&str> {
         self.failure.as_deref().filter(|_| self.is_recording())
+    }
+    pub(crate) fn interrupt(&mut self, reason: &str) {
+        if self.is_recording() && self.failure.is_none() {
+            self.failure = Some(format!(
+                "Recording interrupted: {reason} Save the partial take."
+            ));
+            self.sender = None;
+        }
     }
     pub fn start_take(
         &mut self,

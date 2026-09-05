@@ -52,12 +52,17 @@ it("Stage transpose reloads a loaded original instead of inlining the chart", as
   const song = newOriginal();
   useWriting.getState().openSong(song);
   const commands: string[] = [];
-  let lastLoad: { document?: { body: (typeof song)["body"] } } | undefined;
+  let lastLoad:
+    | { document?: { body: (typeof song)["body"] }; keepPlayback?: boolean }
+    | undefined;
   __setIpcForTests({
     invoke: async <T>(command: string, args?: Record<string, unknown>) => {
       commands.push(command);
       if (command === "originals_load") {
-        lastLoad = args as { document: { body: (typeof song)["body"] } };
+        lastLoad = args as {
+          document: { body: (typeof song)["body"] };
+          keepPlayback?: boolean;
+        };
       }
       if (command === "band_load_chart_inline") {
         throw new Error("inline load must not run after Play song");
@@ -83,6 +88,7 @@ it("Stage transpose reloads a loaded original instead of inlining the chart", as
     (song.body.chart.keyTonic + 1) % 12,
   );
   expect(lastLoad?.document?.body.sections).toEqual(song.body.sections);
+  expect(lastLoad?.keepPlayback).toBe(true);
 });
 
 it("Stage transpose still inlines a jam chart when no original is loaded", async () => {

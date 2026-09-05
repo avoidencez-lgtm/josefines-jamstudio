@@ -100,7 +100,7 @@ static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn load_from(path: &std::path::Path) -> Result<AppSettings, String> {
     match fs::read_to_string(path) {
-        Ok(content) => serde_json::from_str(&content)
+        Ok(content) => jam_core::json::from_str(&content)
             .map_err(|e| format!("Cannot read {}: {e}. Restore settings.json.bak or repair the file; it has not been overwritten.", path.display())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(AppSettings::default()),
         Err(e) => Err(format!("Cannot read {}: {e}", path.display())),
@@ -252,6 +252,20 @@ mod tests {
         assert!(load_from(&path).is_err());
         assert!(save_to(&path, &settings).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), "broken JSON");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_utf8_bom_does_not_make_settings_unreadable() {
+        let root = std::env::temp_dir().join(format!("jam-settings-bom-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("settings.json");
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes.extend_from_slice(br#"{"schemaVersion":1,"buffer_size":512,"kept":true}"#);
+        fs::write(&path, bytes).unwrap();
+        let settings = load_from(&path).unwrap();
+        assert_eq!(settings.buffer_size, 512);
+        assert_eq!(settings.extra.get("kept").unwrap(), true);
         fs::remove_dir_all(root).unwrap();
     }
 
