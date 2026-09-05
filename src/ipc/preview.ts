@@ -787,7 +787,7 @@ export function createPreviewEngine(
       take.analysis = {
         ...analysis,
         schemaVersion: 1,
-        analyzerVersion: 1,
+        analyzerVersion: 2,
         analyzedAtMs: Date.now(),
         sourceSampleRate: 48_000,
         sourceSampleCount: 0,

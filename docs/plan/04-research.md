@@ -83,7 +83,7 @@ Sources: https://ai.google.dev/gemini-api/docs/pricing ✅ · https://developers
 | `signalsmith-stretch` / `ssstretch` | time-stretch and pitch-shift (Signalsmith Stretch, MIT, cxx) | MIT | **S3** decides which binding builds on both |
 | `midir` | MIDI I/O | MIT | `jam-rig` |
 | `midly` | Standard MIDI File write/read | MIT ❓ verify | Logic export |
-| `pitch-detection` | McLeod / YIN | MIT | tuner, offline pitch |
+| `pitch-estimate` 0.1.0 | McLeod | MIT | tuner, offline pitch; replaces pitch-detection per [ADR 0011](../adr/0011-pitch-measurement-precision.md) |
 | `rustfft` | FFT for chroma and onset | MIT/Apache | own DSP |
 | `rusqlite` (bundled) | index cache | MIT | `store` |
 | `keyring` 3.x | OS keychain | MIT/Apache | `keys` |

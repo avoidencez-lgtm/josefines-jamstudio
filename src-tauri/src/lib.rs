@@ -819,7 +819,7 @@ fn takes_analyze(
         .map_err(|e| e.to_string())?
         .as_millis() as u64;
     fields["schemaVersion"] = serde_json::json!(1);
-    fields["analyzerVersion"] = serde_json::json!(1);
+    fields["analyzerVersion"] = serde_json::json!(2);
     fields["analyzedAtMs"] = serde_json::json!(at);
     fields["sourceSampleRate"] = serde_json::json!(sample_rate);
     fields["sourceSampleCount"] = serde_json::json!(samples.len());

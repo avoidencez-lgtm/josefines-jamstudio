@@ -262,6 +262,8 @@ I skrivebordsappen lagres en vellykket analyse sammen med opptaket og vises igje
 
 Hvis lagring melder at take.json.tmp allerede finnes, lukk appen og sikkerhetskopier opptaksmappen før du flytter den midlertidige filen til side og prøver igjen. Appen nekter å overskrive den. Hvis inngangsfilen peker utenfor opptakets egen mappe, må opptaket gjenopprettes fra en sammenhengende sikkerhetskopi før metadata kan lagres.
 
+Den oppdaterte tonedetektoren måler stabile testtoner mer nøyaktig. Bruk Analyze again for eldre resultater. Bend, vibrato og akkorder krever fortsatt en musikalsk vurdering; målingen skiller ikke tilsiktede tonebevegelser fra stemmingsfeil.
+
 ### Justering og separate spor
 
 Guitar offset er et manuelt antall sampler som brukes til å justere inngangen mot bandet. Automatisk kalibrering via kabelsløyfe er ikke tilgjengelig. Mål justeringen i DAW på den faktiske riggen. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.

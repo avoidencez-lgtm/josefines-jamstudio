@@ -29,7 +29,7 @@ jam-rig = { path = "crates/jam-rig" }
 cpal = "0.15"
 rtrb = "0.3"
 hound = "3.5"
-pitch-detection = "0.3"
+pitch-estimate = "=0.1.0"
 
 # MIDI
 midir = "0.10"
