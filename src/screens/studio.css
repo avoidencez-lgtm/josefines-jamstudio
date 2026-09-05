@@ -1,6 +1,8 @@
 .room-tools {
-  margin-bottom: 24px;
-  border-block: 1px solid var(--line);
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.room-tools[open] {
   background: var(--bg-1);
 }
 .room-tools[hidden] {
@@ -8,15 +10,35 @@
 }
 .room-tools summary {
   cursor: pointer;
-  padding: 16px;
+  min-height: 44px;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--accent);
+  color: var(--fg-1);
+}
+.room-tools summary:hover {
+  background: var(--bg-2);
+}
+.room-tools summary > svg {
+  flex-shrink: 0;
+}
+.room-tools summary > span {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-width: 0;
+}
+.room-tools summary strong {
+  color: var(--fg-0);
+  font-size: 14px;
+  font-weight: 500;
 }
 .room-tools summary::after {
   content: "+";
   margin-left: auto;
+  flex-shrink: 0;
   font-size: 22px;
 }
 .room-tools[open] summary::after {
@@ -25,7 +47,6 @@
 .room-tools summary small {
   display: block;
   color: var(--fg-1);
-  margin-top: 3px;
   font-size: 13px;
 }
 .room-tool-body {
