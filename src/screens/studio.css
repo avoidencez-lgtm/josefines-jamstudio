@@ -599,3 +599,71 @@ main :is(button, input, select, textarea, summary):focus-visible {
 .video-studio .video-edit {
   padding-top: 20px;
 }
+
+/* Chord shapes: one playable fingering for the chord now and the chord next. */
+.chord-shapes {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.chord-shape {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.chord-shape figcaption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-1);
+  font-variant-numeric: tabular-nums;
+}
+.chord-shape figcaption strong {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg-0);
+}
+.chord-shape[data-tone="secondary"] figcaption strong {
+  color: var(--fg-1);
+}
+.chord-shape-picker {
+  display: flex;
+  gap: 6px;
+  align-self: center;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.chord-shape-picker button {
+  min-width: 32px;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+.chord-shape-picker button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.chord-shapes-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-2);
+  max-width: 34ch;
+}
+.write-harmony-inspector .chord-shapes {
+  margin: 4px 0 16px;
+  gap: 16px;
+}

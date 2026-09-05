@@ -2,6 +2,7 @@ import type React from "react";
 import { useState } from "react";
 import { BigReadout } from "../components/BigReadout";
 import { Button } from "../components/Button";
+import { ChordShapes } from "../components/ChordShapes";
 import { ChordStrip } from "../components/ChordStrip";
 import { Meter } from "../components/Meter";
 import { Panel } from "../components/Panel";
@@ -313,6 +314,11 @@ export const Stage: React.FC = () => {
             )}
           </Panel>
         </div>
+
+        {/* Where the chord now and the chord next sit on the neck */}
+        {!isCountingIn && band.current_chord && (
+          <ChordShapes now={band.current_chord} next={band.next_chord} />
+        )}
 
         {/* Live steering: parts, energy, cues */}
         <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] px-4 py-2.5 rounded-[var(--radius-m)] border border-[var(--line)]">

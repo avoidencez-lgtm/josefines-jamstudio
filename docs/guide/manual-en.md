@@ -36,7 +36,7 @@ The Song map is the played order, with bar ranges, repeats and band intensity. S
 
 Click a chord cell. The bar field accepts Am:3 G:1 for three beats of Am and one of G, or Dm G for an even split. Enter or leaving the field applies; Escape cancels. Invalid text leaves the previous bar unchanged. Add bar copies the selected bar; Remove bar keeps at least one. Transform phrase rotates, reverses or repeats the bars. Undo restores the previous state.
 
-Find the next colour offers in-key chords, borrowed parallel-key chords and secondary dominants. Shared counts mean common pitch classes with the preceding chord; they are not ratings of musical quality or guarantees of a particular guitar fingering.
+Find the next colour offers in-key chords, borrowed parallel-key chords and secondary dominants. Shared counts mean common pitch classes with the preceding chord; they are not ratings of musical quality or guarantees of a particular guitar fingering. The inspector also shows one playable shape for the selected chord; the numbered buttons cycle the alternatives.
 
 ### Band parts, locks and energy
 
@@ -128,7 +128,7 @@ Save before closing. The native app blocks close during a recording/operation an
 
 ### Perform
 
-The top transport plays, pauses, stops, records, sets count-in and toggles loops. Stage shows the current/next chord and live position. Chart & band settings selects a chart and matching style, changes intensity and band/click volume, and enables tuner or a reference tone. Cues request Fill, Crash, Stop or Ending. Some changes are queued for the next bar and shown as pending. Part mutes affect drums, bass or comp; follow-energy follows measured guitar level, not musical intent.
+The top transport plays, pauses, stops, records, sets count-in and toggles loops. Stage shows the current/next chord and live position. Chart & band settings selects a chart and matching style, changes intensity and band/click volume, and enables tuner or a reference tone. Cues request Fill, Crash, Stop or Ending. Some changes are queued for the next bar and shown as pending. Part mutes affect drums, bass or comp; follow-energy follows measured guitar level, not musical intent. Shapes shows a playable fingering for the chord now and, smaller, the chord next, root in amber; the numbered buttons pick another shape. These are theory suggestions in standard tuning, not a transcription of what was played.
 
 ### Practice and tempo trainer
 
