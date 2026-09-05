@@ -667,3 +667,22 @@ main :is(button, input, select, textarea, summary):focus-visible {
   margin: 4px 0 16px;
   gap: 16px;
 }
+.studio-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.studio-content.with-help {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+}
+.studio-room {
+  min-width: 0;
+  min-height: 0;
+}
+@media (max-width: 1100px) {
+  .studio-content.with-help {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(160px, 1fr) minmax(180px, 40%);
+  }
+}

@@ -132,6 +132,8 @@ export const App: React.FC = () => {
     };
   }, [isPreview]);
   const [showHelp, setShowHelp] = useState(false);
+  const [helpTopic, setHelpTopic] = useState<string | null>(null);
+  const [helpRequest, setHelpRequest] = useState(0);
   useEffect(() => {
     void useAi
       .getState()
@@ -174,12 +176,20 @@ export const App: React.FC = () => {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (showClose) return;
-      if (showHelp) {
-        if (e.key === "Escape") setShowHelp(false);
+      if (
+        showHelp &&
+        e.target instanceof Element &&
+        e.target.closest("#studio-help")
+      ) {
+        if (e.key === "Escape" && !e.defaultPrevented) setShowHelp(false);
         return;
       }
       const consumed = handleShortcut(e, useEngineStore.getState(), {
-        toggleHelp: () => setShowHelp((v) => !v),
+        toggleHelp: () => {
+          setHelpTopic(null);
+          setHelpRequest((n) => n + 1);
+          setShowHelp((v) => !v);
+        },
       });
       if (consumed) e.preventDefault();
     };
@@ -190,7 +200,15 @@ export const App: React.FC = () => {
   const renderScreen = () => {
     switch (currentScreen) {
       case "originals":
-        return <Originals />;
+        return (
+          <Originals
+            onHelp={(topic) => {
+              setHelpTopic(topic);
+              setHelpRequest((n) => n + 1);
+              setShowHelp(true);
+            }}
+          />
+        );
       case "stage":
         return <Stage />;
       case "library":
@@ -255,7 +273,14 @@ export const App: React.FC = () => {
         <button
           type="button"
           className="studio-shortcuts"
-          onClick={() => setShowHelp(true)}
+          aria-label="Help & guides"
+          aria-expanded={showHelp}
+          aria-controls={showHelp ? "studio-help" : undefined}
+          onClick={() => {
+            setHelpTopic(null);
+            setHelpRequest((n) => n + 1);
+            setShowHelp(true);
+          }}
           title="Help & guides (?)"
         >
           <BookOpen size={21} aria-hidden="true" />
@@ -278,27 +303,29 @@ export const App: React.FC = () => {
 
         <TransportBar />
 
-        <main className="flex-1 overflow-y-auto p-8 relative">
-          <div hidden={showHelp}>
+        <div className={`studio-content${showHelp ? " with-help" : ""}`}>
+          <main className="studio-room overflow-y-auto p-8 relative">
             <RoomTools screen={currentScreen} />
             <Suspense
               fallback={<p className="workspace-note">Opening the room…</p>}
             >
               {renderScreen()}
             </Suspense>
-          </div>
+          </main>
           {showHelp && (
             <Suspense
               fallback={<p className="workspace-note">Opening help…</p>}
             >
               <ShortcutsHelp
+                key={helpRequest}
                 open
                 room={currentScreen}
+                topic={helpTopic}
                 onClose={() => setShowHelp(false)}
               />
             </Suspense>
           )}
-        </main>
+        </div>
       </div>
 
       {showClose && (
