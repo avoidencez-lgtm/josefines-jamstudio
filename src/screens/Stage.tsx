@@ -9,22 +9,9 @@ import { SoloHelper } from "../components/SoloHelper";
 import { StatusPill } from "../components/States";
 import { Toggle } from "../components/Toggle";
 import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
-import type { Chart } from "../ipc/contract";
 import { keyName } from "../lib/chart/notes";
+import { sectionPassages } from "../lib/chart/passages";
 import { useEngineStore } from "../store/engine";
-
-export function sectionPassages(chart: Chart | null) {
-  let start = 1;
-  return (chart?.arrangement ?? []).flatMap((a) => {
-    const section = chart?.sections.find((s) => s.id === a.sectionId);
-    if (!section) return [];
-    // Transport loops use a one-based, exclusive end bar.
-    const end = start + section.bars.length * a.repeats;
-    const passage = { label: section.name, start, end };
-    start = end;
-    return [passage];
-  });
-}
 
 export const Stage: React.FC = () => {
   const {

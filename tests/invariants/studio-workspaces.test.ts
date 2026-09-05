@@ -1,9 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import chart from "../../charts/blues-12-bar.json";
 import type { Chart } from "../../src/ipc/contract";
+import { sectionPassages } from "../../src/lib/chart/passages";
+import { joNeedsReview } from "../../src/lib/jo/conversation";
 import { SHORTCUTS, handleShortcut } from "../../src/lib/shortcuts";
-import { joNeedsReview } from "../../src/screens/Jo";
-import { sectionPassages } from "../../src/screens/Stage";
 import { SCREENS, SCREEN_ICONS } from "../../src/screens/registry";
 import type { EngineState } from "../../src/store/engine";
 
@@ -53,6 +55,18 @@ describe("Studio workspaces", () => {
           ctx,
         ),
       ).toBe(false);
+    }
+  });
+  it("keeps screen modules to components so fast refresh and tests stay simple", () => {
+    const dir = path.resolve(process.cwd(), "src/screens");
+    for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".tsx"))) {
+      const source = fs.readFileSync(path.join(dir, file), "utf8");
+      const names = [
+        ...source.matchAll(/^export (?:const|function) (\w+)/gm),
+      ].map((m) => m[1]);
+      expect(names.length, file).toBeGreaterThan(0);
+      for (const name of names)
+        expect(name, `${file} exports ${name}`).toMatch(/^[A-Z]/);
     }
   });
   it("places rehearsal loops in arranged order, including repeats", () => {

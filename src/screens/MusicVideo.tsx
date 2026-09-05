@@ -19,8 +19,8 @@ import {
   videoDuration,
 } from "../lib/media";
 import { useWriting } from "../lib/originals";
+import { openAiSettings } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
-import { openAiSettings } from "./Settings";
 import "./music-video.css";
 
 const time = (seconds: number) =>
