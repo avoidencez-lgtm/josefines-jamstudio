@@ -217,12 +217,12 @@ export function parseChartText(
         case "bpm":
         case "tempo": {
           const v = Number.parseFloat(value);
-          if (Number.isFinite(v) && v >= 20 && v <= 300) {
+          if (Number.isFinite(v) && v >= 40 && v <= 240) {
             bpm = v;
           } else {
             problems.push({
               line: lineNo,
-              message: `tempo must be 20..300, got "${value}"`,
+              message: `tempo must be 40..240, got "${value}"`,
             });
           }
           break;
