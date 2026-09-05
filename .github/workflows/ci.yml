@@ -81,6 +81,7 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      - run: pnpm licenses:check
       - name: Compile Windows desktop with embedded frontend
         if: runner.os == 'Windows'
         run: pnpm tauri build --debug --no-bundle
