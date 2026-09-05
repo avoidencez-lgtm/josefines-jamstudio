@@ -19,7 +19,7 @@ const measurements = z.object({
 });
 const saved = measurements.extend({
   schemaVersion: z.literal(1),
-  analyzerVersion: z.literal(1),
+  analyzerVersion: z.literal(2),
   analyzedAtMs: count,
   sourceSampleRate: z.number().int().positive(),
   sourceSampleCount: count,

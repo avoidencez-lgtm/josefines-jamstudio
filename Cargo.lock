@@ -1874,7 +1874,7 @@ dependencies = [
 name = "jam-dsp"
 version = "0.1.0"
 dependencies = [
- "pitch-detection",
+ "pitch-estimate",
 ]
 
 [[package]]
@@ -2791,12 +2791,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
-name = "pitch-detection"
-version = "0.3.0"
+name = "pitch-estimate"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e086e70dfcfd46cd6097c501a66fb07cd73ee8c27844b0941d9b2b3e43dfbf92"
+checksum = "9b5221ef8b612c7339bf1d6871585024b83353f00f7e3f4e1c8ae25e58bbaba3"
 dependencies = [
- "rustfft",
+ "realfft",
 ]
 
 [[package]]
@@ -3116,6 +3116,15 @@ name = "raw-window-handle"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
+
+[[package]]
+name = "realfft"
+version = "3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f821338fddb99d089116342c46e9f1fbf3828dba077674613e734e01d6ea8677"
+dependencies = [
+ "rustfft",
+]
 
 [[package]]
 name = "redox_syscall"

@@ -301,4 +301,21 @@ mod tests {
         let sharp = analyzer.analyze(&tone(sharp_hz, 1.0, 48_000), 120.0);
         assert!(sharp.intonation_accuracy_pct <= 15.0, "{}", sharp.summary);
     }
+
+    #[test]
+    fn sustained_take_pitch_measurements_match_known_detuning_within_three_cents() {
+        let analyzer = TakeAnalyzer::new(48_000);
+        for base in [82.4069f32, 110.0, 220.0, 440.0, 880.0] {
+            for cents in [-35.0f32, 0.0, 35.0] {
+                let hz = base * 2f32.powf(cents / 1200.0);
+                let analysis = analyzer.analyze(&tone(hz, 0.5, 48_000), 120.0);
+                let measured = analysis.mean_abs_cents.expect("pitched sustained take");
+                assert!(
+                    (measured - cents.abs()).abs() <= 3.0,
+                    "{base} Hz, {cents} cents: {measured}"
+                );
+                assert!(analysis.pitched_frames >= 20);
+            }
+        }
+    }
 }

@@ -264,6 +264,8 @@ In the desktop app, successful analysis is saved with the take and returns when 
 
 If saving reports an existing take.json.tmp, close the app and back up the take folder before moving that temporary file aside, then retry. The app refuses to overwrite it. A take whose input path points outside its own folder must be restored from a consistent backup before metadata can be saved.
 
+The updated pitch detector measures stationary test tones more accurately. Use Analyze again for older results. Bends, vibrato and chords still need musical judgment; the measurement does not separate deliberate pitch movement from tuning error.
+
 ### Alignment and stems
 
 Guitar offset is the manual sample offset used to align input with the band. Automatic cable-loopback calibration is not available. Measure alignment in your DAW on the actual rig. New full recordings contain separate guitar, drums, bass and comp, plus band/master reference mixes, scheduled band-note MIDI, a tempo map and the performance snapshot. Referenced guitar layers export as aligned WAVs. Capture-only ideas do not reconstruct band MIDI. Missing files are reported in the export result.

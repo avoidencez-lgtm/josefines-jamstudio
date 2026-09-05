@@ -12,6 +12,7 @@ import {
   closeDecision,
   hasActiveWork,
   hasUnsavedWork,
+  windowCloseAction,
 } from "./lib/closeGuard";
 import { listenToController } from "./lib/controller";
 import { useAi } from "./lib/jo/providers";
@@ -85,12 +86,18 @@ export const App: React.FC = () => {
     void import("@tauri-apps/api/window")
       .then(async ({ getCurrentWindow }) => {
         const off = await getCurrentWindow().onCloseRequested((event) => {
-          const decision = closeDecision();
-          if (decision === "close") return;
-          event.preventDefault();
-          if (decision === "refuse")
+          const action = windowCloseAction(closeDecision(), () =>
+            event.preventDefault(),
+          );
+          if (action === "refuse")
             useEngineStore.getState().notify("error", ACTIVE_WORK_MESSAGE);
-          else setShowClose(true);
+          else if (action === "ask") setShowClose(true);
+          else
+            void ipc
+              .invoke("app_exit")
+              .catch((e) =>
+                useEngineStore.getState().notify("error", String(e)),
+              );
         });
         if (disposed) off();
         else cleanup = off;

@@ -191,6 +191,13 @@ function errorText(e: unknown): string {
 }
 
 export const useEngineStore = create<EngineState>((set, get) => {
+  const fail = (label: string, e: unknown): null => {
+    const text = `${label}: ${errorText(e)}`;
+    console.error(text);
+    get().notify("error", text);
+    return null;
+  };
+
   /** Runs an engine command; failures become visible notices instead of console noise. */
   const run = async <T>(
     label: string,
@@ -199,10 +206,21 @@ export const useEngineStore = create<EngineState>((set, get) => {
     try {
       return await fn();
     } catch (e) {
-      const text = `${label}: ${errorText(e)}`;
-      console.error(text);
-      get().notify("error", text);
-      return null;
+      return fail(label, e);
+    }
+  };
+
+  /** Tauri serialises `()` as JSON `null`, so `run` cannot tell success from failure (#165). */
+  const runOk = async (
+    label: string,
+    fn: () => Promise<unknown>,
+  ): Promise<boolean> => {
+    try {
+      await fn();
+      return true;
+    } catch (e) {
+      fail(label, e);
+      return false;
     }
   };
 
@@ -444,17 +462,19 @@ export const useEngineStore = create<EngineState>((set, get) => {
       return path;
     },
     deleteUserChart: async (chartId) => {
-      const ok = await run("Delete chart", () =>
-        ipc.invoke("charts_delete_user", { chartId }),
-      );
-      if (ok !== null) await get().reloadLibrary();
+      if (
+        await runOk("Delete chart", () =>
+          ipc.invoke("charts_delete_user", { chartId }),
+        )
+      )
+        await get().reloadLibrary();
     },
     playChartInline: async (chart) => {
-      const ok = await run("Play chart", () =>
+      const ok = await runOk("Play chart", () =>
         ipc.invoke("band_load_chart_inline", { chart }),
       );
-      if (ok !== null) set({ currentChart: chart, loadedOriginal: null });
-      return ok !== null;
+      if (ok) set({ currentChart: chart, loadedOriginal: null });
+      return ok;
     },
     transposeCurrentChart: async (semitones) => {
       const current = get().currentChart;
@@ -510,10 +530,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
       }
     },
     deleteTake: async (takeId) => {
-      const ok = await run("Delete take", () =>
-        ipc.invoke("takes_delete", { takeId }),
-      );
-      if (ok !== null)
+      if (
+        await runOk("Delete take", () => ipc.invoke("takes_delete", { takeId }))
+      )
         set((state) => ({ takes: state.takes.filter((t) => t.id !== takeId) }));
     },
 

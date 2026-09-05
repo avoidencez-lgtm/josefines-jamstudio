@@ -372,8 +372,13 @@ function parseBar(
   return parsed.map((c) => ({ chord: c.chord, beats: c.beats ?? share }));
 }
 
+/** Tokens the band treats as silence. Keep in lockstep with jam-band `is_rest_symbol`. */
+export function isRestSymbol(tok: string): boolean {
+  return /^(n\.?c\.?|rest|-)$/i.test(tok.trim());
+}
+
 function isChordToken(tok: string): boolean {
-  if (/^(n\.?c\.?|rest|-)$/i.test(tok)) return true;
+  if (isRestSymbol(tok)) return true;
   const chord = splitChord(tok);
   return (
     chord !== null &&

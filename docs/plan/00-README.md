@@ -193,12 +193,20 @@ the take. Existing cached scores can be reanalysed. The IPC adds raw measurement
 without removing legacy fields. This advances M6 but does not complete durable
 analysis, bend-aware precision, chord agreement or structured provider reviews.
 
-The persistence follow-up saves versioned measurements and source details into
+The persistence follow-up (PR #126, merged) saves versioned measurements and source details into
 the take manifest before reporting success. Sessions restores them when reopened,
 including with an empty index, and offers Analyze again for damaged or unsupported
 evidence. Metadata writes stay inside the validated take directory and refuse
 pre-existing temporary files. This completes analysis persistence; structured
 provider reviews and the remaining M6 measurement targets are still unfinished.
+
+The pitch-precision follow-up replaces the shared detector per
+[ADR 0011](../adr/0011-pitch-measurement-precision.md). Stationary synthetic
+signals now meet ±3 cents across 648 detector cases and 15 take-analysis cases.
+Saved analysis advances to analyzer version 2; older evidence offers Analyze again.
+This applies to the tuner, melody extraction and take analysis. It does not
+complete bend exclusion, noisy-sweep acceptance, chord agreement or structured
+provider feedback. Friend-led testing remains deferred to V2.
 
 ### Count-in meter changes (PR #167)
 
