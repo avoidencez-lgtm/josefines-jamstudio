@@ -4,6 +4,23 @@
   padding-bottom: 64px;
   color: var(--fg-0);
 }
+.song-loaded-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  color: var(--fg-1);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.song-loaded-state button {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+}
 .song-foot-controls {
   border-bottom: 1px solid var(--line);
   padding: 0 0 18px;

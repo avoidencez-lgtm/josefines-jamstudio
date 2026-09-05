@@ -32,6 +32,8 @@ Sidepanelet viser navn og formål for hvert rom. Help & guides åpner denne søk
 
 Song map viser avspillingsrekkefølgen med taktintervaller, repetisjoner og bandintensitet. Velg en seksjon for å redigere. En gjentatt seksjon deler akkorder, tekst og bandinnstillinger overalt der den brukes. Make variation lager en uavhengig seksjon. Add section kopierer de valgte akkordene med standard bandinnstillinger. Edit order and repeats flytter, fjerner eller gjentar ledd i formen; selve seksjonen slettes ikke. Delete section fjerner en seksjon som ikke lenger er i formen, med tekst og bandinnstillinger; en versjon beholdes først, og Undo gjenoppretter den.
 
+Loaded in band viser arrangementet som sist ble lastet inn uten feil. This draft is loaded betyr at hele utkastet samsvarer med denne kopien, inkludert bandinnstillinger og gitarlag. Redigering eller åpning av en annen låt erstatter den ikke. Play song laster det gjeldende utkastet; Space fortsetter med det innlastede arrangementet. Save song lagrer til disk uten å endre avspillingen. Loop section og Record laster også inn utkastet. Forhåndslytting til et opptak er separat fra bandet; statusen sier ikke at bandet spiller akkurat nå. Spørsmålstegnet ved statusen åpner denne hjelpen.
+
 ### Rediger akkorder og harmonikk
 
 Klikk på en akkordrute. Taktfeltet godtar Am:3 G:1 for tre slag Am og ett slag G, eller Dm G for lik fordeling. Enter eller å forlate feltet bruker endringen; Escape avbryter. Ugyldig tekst lar den gamle takten stå. Add bar kopierer valgt takt; Remove bar beholder minst én. Transform phrase roterer, snur eller gjentar taktene. Undo gjenoppretter forrige tilstand.

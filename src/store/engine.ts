@@ -22,6 +22,7 @@ import type {
   TunerTelemetry,
 } from "../ipc/contract";
 import { transposeChart } from "../lib/chart/transpose";
+import type { Original } from "../lib/originals";
 
 export type ScreenId =
   | "originals"
@@ -119,6 +120,7 @@ export interface EngineState {
   styles: StyleSummary[];
   charts: Chart[];
   currentChart: Chart | null;
+  loadedOriginal: Pick<Original, "id" | "body"> | null;
   libraryInfo: LibraryInfo | null;
   loadLibrary: () => Promise<void>;
   reloadLibrary: () => Promise<void>;
@@ -264,6 +266,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
     styles: [],
     charts: [],
     currentChart: null,
+    loadedOriginal: null,
     libraryInfo: null,
     takes: [],
     isRecording: false,
@@ -390,7 +393,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const chart = await run("Load chart", () =>
         ipc.invoke<Chart>("band_load_chart", { chartId, followChart }),
       );
-      if (chart) set({ currentChart: chart });
+      if (chart) set({ currentChart: chart, loadedOriginal: null });
     },
     bandSet: async (patch) => {
       await run("Band", () => ipc.invoke("band_set", { args: patch }));
@@ -449,7 +452,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const ok = await run("Play chart", () =>
         ipc.invoke("band_load_chart_inline", { chart }),
       );
-      if (ok !== null) set({ currentChart: chart });
+      if (ok !== null) set({ currentChart: chart, loadedOriginal: null });
       return ok !== null;
     },
     transposeCurrentChart: async (semitones) => {

@@ -53,6 +53,8 @@ These are the original full-product targets, not claims about the current previe
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-05 Write follow-up (pending review): the workspace names the arrangement loaded in the band and distinguishes it from the current draft, including band settings and guitar layers. Play, loop and record share the accepted-snapshot update; failed loads preserve the previous indicator. Contextual help and both exported manuals explain Save versus Play versus Space.
+
 2026-09-05: PR #77 completes the IPC/store test harness and built-app startup smoke.
 See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-completion.md); this does not close physical owner gates.
 
