@@ -339,7 +339,11 @@ fn audio_set_config_restarts_the_headless_engine_and_persists_the_devices() {
     assert_eq!(status["input"]["sample_rate"], 44100);
 
     assert_eq!(studio.ok("audio_get_config", json!({})), config);
-    assert_eq!(studio.ok("engine_status", json!({})), status);
+    let mut current = studio.ok("engine_status", json!({}));
+    // The render thread can count more input gaps between these two IPC reads.
+    assert!(current["input_gaps"].as_u64().unwrap() >= status["input_gaps"].as_u64().unwrap());
+    current["input_gaps"] = status["input_gaps"].clone();
+    assert_eq!(current, status);
     let mut expected = default_settings();
     for key in [
         "input_device",
@@ -652,8 +656,16 @@ fn tone_and_tuner_show_up_in_the_telemetry_and_switch_off_again() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     // Tuner on by default, tracking the 440 Hz sine the headless input plays.
-    wait_until("tuner reading", || !telemetry(&studio)["tuner"].is_null());
-    let tuner = telemetry(&studio)["tuner"].clone();
+    // Startup input gaps can skew the first pitch window. Wait for the same
+    // accuracy required below, retaining the snapshot that met it.
+    let mut tuner = Value::Null;
+    wait_until("tuner locked onto 440 Hz within five cents", || {
+        tuner = telemetry(&studio)["tuner"].clone();
+        tuner["hz"]
+            .as_f64()
+            .is_some_and(|hz| (438.0..=442.0).contains(&hz))
+            && tuner["cents"].as_f64().is_some_and(|c| c.abs() <= 5.0)
+    });
     assert_eq!(tuner["note"], "A4", "{tuner}");
     assert!(
         tuner["hz"]

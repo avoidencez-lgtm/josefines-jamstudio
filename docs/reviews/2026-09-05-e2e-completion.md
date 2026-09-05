@@ -17,6 +17,10 @@ replace mouse-driven or physical-hardware acceptance testing.
 - Corrected the bundled Fractal ID, checked each test's own document instead of
   global library counts, accounted for energy-follow intensity and waited for
   complete chart-load telemetry before asserting mutes.
+- Fresh Windows/macOS CI exposed two asynchronous snapshot assumptions: the
+  input-gap counter may advance between status reads, and the first tuner pitch
+  window can be skewed by startup gaps. The tests now check a monotonic counter
+  and await a captured tuner snapshot within the original five-cent tolerance.
 - Fixed frontend lint/formatting, formatted Rust scenarios and corrected the
   nonexistent `tests/e2e/stage.test.ts` documentation command.
 
@@ -69,3 +73,9 @@ are needed. The review removed redundant per-area locks, duplicate clean-boot
 logic and media busy-retry wrappers after shared scenario isolation made them
 unnecessary. An initial Vite build printed a Node shutdown assertion; a repeat
 completed cleanly with exit code 0.
+
+The CI timing follow-up passed all 13 settings scenarios six consecutive times
+locally and passed Clippy/format checks. A full local rerun then hit Windows
+Application Control error 4551 on an unchanged native executable; one normal
+retry progressed further but blocked another unchanged executable. No system
+policy was changed. The full fresh Windows/macOS CI run remains the merge gate.
