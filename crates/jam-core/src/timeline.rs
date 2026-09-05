@@ -126,7 +126,7 @@ impl Timeline {
     }
 
     pub fn set_time_signature(&mut self, ts: (u8, u8)) {
-        if ts.0 == 0 || ts.1 == 0 {
+        if ts.0 == 0 || ts.1 == 0 || ts == self.time_signature {
             return;
         }
         self.time_signature = ts;
@@ -491,33 +491,72 @@ mod tests {
         tl.set_count_in(1);
         tl.play();
 
-        // Four beats of a 6/8 bar at 120 bpm: 4 * 24_000 = 96_000 samples.
-        // Under 6/8 the next 256-frame block would still be counting in;
-        // after a 4/4 load the remaining count-in is only four beats total.
-        let block = 256usize;
-        for _ in 0..(96_000 / block) {
-            let _ = tl.advance_with_spans(block);
-        }
-        assert!(matches!(
-            tl.state,
-            TransportState::CountingIn { beat, .. } if beat >= 4
-        ));
+        // Five elapsed beats exceed the new four-beat duration: the old code
+        // underflowed the next block offset here (exactly four beats did not).
+        tl.advance(120_000);
 
         tl.set_time_signature((4, 4));
-        let (_events, spans) = tl.advance_with_spans(block);
-        assert!(
-            matches!(
-                tl.state,
-                TransportState::Playing | TransportState::CountingIn { .. }
-            ),
-            "state after meter change: {:?}",
-            tl.state
+        assert_eq!(
+            tl.state,
+            TransportState::CountingIn {
+                bar: 1,
+                beat: 1,
+                total_bars: 1
+            }
         );
-        for span in &spans {
-            assert!(
-                span.offset.saturating_add(span.frames) <= block,
-                "span {span:?} walks off a {block}-frame block"
-            );
+        let (events, spans) = tl.advance_with_spans(95_900);
+        assert!(spans.is_empty());
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(
+                    e,
+                    TimelineEvent::Beat {
+                        is_count_in: true,
+                        ..
+                    }
+                ))
+                .count(),
+            4
+        );
+        let (events, spans) = tl.advance_with_spans(256);
+        assert_eq!(tl.state, TransportState::Playing);
+        assert_eq!(tl.current_sample, 156);
+        assert_eq!(
+            spans,
+            vec![Span {
+                offset: 100,
+                frames: 156,
+                start_beats: 0.0
+            }]
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| **e == TimelineEvent::CountInComplete)
+                .count(),
+            1
+        );
+        assert!(events.contains(&TimelineEvent::Beat {
+            bar: 1,
+            beat: 1,
+            is_count_in: false,
+            offset: 100
+        }));
+        assert!(!tl.advance(256).contains(&TimelineEvent::CountInComplete));
+    }
+
+    #[test]
+    fn same_or_invalid_meter_does_not_restart_count_in() {
+        let mut tl = Timeline::new(48_000, 120.0, (6, 8));
+        tl.play();
+        tl.advance(120_000);
+        let state = tl.state;
+        for meter in [(6, 8), (0, 4), (4, 0)] {
+            tl.set_time_signature(meter);
+            assert_eq!(tl.state, state);
+            assert_eq!(tl.count_in_sample, 120_000);
+            assert_eq!(tl.time_signature, (6, 8));
         }
     }
 

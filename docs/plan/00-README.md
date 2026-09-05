@@ -199,3 +199,11 @@ including with an empty index, and offers Analyze again for damaged or unsupport
 evidence. Metadata writes stay inside the validated take directory and refuse
 pre-existing temporary files. This completes analysis persistence; structured
 provider reviews and the remaining M6 measurement targets are still unfinished.
+
+### Count-in meter changes (PR #167)
+
+A different meter restarts an active count-in so its clicks match the new chart.
+An unchanged or invalid meter preserves progress. The regression advances beyond
+the shortened boundary that caused the original underflow, then verifies four
+restarted clicks, exact playback spans and one completion event. This developer
+verification is separate from the friend-led checks deferred to V2.
