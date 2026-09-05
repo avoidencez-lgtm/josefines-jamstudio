@@ -185,6 +185,9 @@ impl RigOrchestrator {
 
     /// Sends a Program Change directly (a HeadRush rig or an amp preset by number).
     pub fn send_program(&mut self, program: u8) -> Result<(), String> {
+        if program > 127 {
+            return Err(format!("program {program} is above 127"));
+        }
         let name = self
             .profile
             .programs
@@ -323,6 +326,8 @@ mod tests {
         assert_eq!(orch.monitor()[0].bytes, vec![0xB1, 20, 100]);
         assert_eq!(orch.monitor()[0].text, "CC 20 = 100 ch2");
         assert!(orch.set_control(200, 1).is_err());
+        assert!(orch.send_program(200).is_err());
+        assert!(orch.send_program(127).is_ok());
     }
 
     #[test]

@@ -432,16 +432,26 @@ fn takes_list<R: tauri::Runtime>(
 
 #[tauri::command]
 fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let mut take = find_take(&state, &take_id)?;
-    take.extra
-        .insert("hidden".into(), serde_json::Value::Bool(true));
-    // Files are truth: when the folder is already gone there is nothing to hide,
-    // but the cache row must still go or the take is listed forever (#88).
-    if std::path::Path::new(&take.path_input)
-        .parent()
-        .is_some_and(|dir| dir.exists())
-    {
-        jam_audio::recorder::save_manifest(&take)?;
+    // Validate the ID and require a known take. Manifest audio paths are untrusted.
+    find_take(&state, &take_id)?;
+    // Only the recorder's root/<validated ID> directory belongs to this deletion.
+    let root = originals::takes_root();
+    let dir = root.join(&take_id);
+    match std::fs::symlink_metadata(&dir) {
+        Ok(meta) => {
+            let root = root.canonicalize().map_err(|e| e.to_string())?;
+            let resolved = dir.canonicalize().map_err(|e| e.to_string())?;
+            if !meta.is_dir() || meta.file_type().is_symlink() || resolved != root.join(&take_id) {
+                return Err(format!(
+                    "take {take_id} is not a regular directory under the takes root"
+                ));
+            }
+            std::fs::remove_dir_all(&resolved)
+                .map_err(|e| format!("could not delete take {take_id}: {e}"))?;
+        }
+        // Files may already be gone; the ghost cache row must still be removed.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("could not inspect take {take_id}: {e}")),
     }
     state.store.lock().delete_take(&take_id)
 }

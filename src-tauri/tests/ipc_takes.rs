@@ -327,10 +327,10 @@ fn takes_delete_drops_the_take_from_the_list_and_refuses_an_unknown_id() {
         find(&studio.ok("takes_list", json!({})), &take.id).is_none(),
         "deleted take is no longer listed"
     );
-    // The manifest is flagged instead of removed, and the other stems stay untouched.
-    assert_eq!(manifest(&take.dir)["hidden"], true);
-    assert_eq!(manifest(&take.dir)["id"], take.id);
-    assert!(take.input.is_file() && take.band.is_file() && take.master.is_file());
+    assert!(
+        !take.dir.exists() && !take.input.exists() && !take.band.exists() && !take.master.exists(),
+        "delete removes the take folder"
+    );
 
     let ghost = unique("no-such-take");
     let err = studio.err("takes_delete", json!({"takeId": ghost}));
@@ -340,7 +340,6 @@ fn takes_delete_drops_the_take_from_the_list_and_refuses_an_unknown_id() {
 }
 
 #[test]
-#[ignore = "app bug: takes_delete only flags take.json hidden; the folder the UI promises to delete permanently stays on disk"]
 fn takes_delete_removes_the_take_folder_from_disk() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
@@ -352,6 +351,29 @@ fn takes_delete_removes_the_take_folder_from_disk() {
         take.dir.display()
     );
     assert!(find(&studio.ok("takes_list", json!({})), &take.id).is_none());
+}
+
+#[test]
+fn takes_delete_ignores_a_manifest_path_pointing_at_another_take() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let keep = synthetic_take(0.2, "1500000000.000");
+    let take = synthetic_take(0.2, "1500000001.000");
+    let mut meta = manifest(&take.dir);
+    meta["pathInput"] = json!(keep.input.to_string_lossy());
+    std::fs::write(
+        take.dir.join("take.json"),
+        serde_json::to_vec(&meta).unwrap(),
+    )
+    .unwrap();
+
+    studio.ok("takes_delete", json!({"takeId": take.id}));
+    assert!(
+        !take.dir.exists(),
+        "only the requested take folder is deleted"
+    );
+    assert!(keep.input.is_file() && keep.band.is_file() && keep.master.is_file());
+    assert!(find(&studio.ok("takes_list", json!({})), &keep.id).is_some());
 }
 
 #[test]

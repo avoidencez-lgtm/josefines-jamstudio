@@ -852,7 +852,15 @@ export function createPreviewEngine(
       return rigSnapshot();
     },
     rig_send_program: (a) => {
-      const program = Math.min(127, Math.max(0, Number(a.program)));
+      const program = a.program;
+      if (
+        typeof program !== "number" ||
+        !Number.isInteger(program) ||
+        program < 0 ||
+        program > 127
+      ) {
+        throw new Error("program must be an integer from 0 to 127");
+      }
       const named = rig.currentProfile.programs.find(
         (p) => p.number === program,
       );

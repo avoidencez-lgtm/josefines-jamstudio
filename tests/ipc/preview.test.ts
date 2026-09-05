@@ -22,6 +22,35 @@ describe("browser preview engine", () => {
   });
   afterEach(() => engine.dispose());
 
+  it("refuses malformed program changes without sending MIDI", async () => {
+    const before = await engine.invoke("rig_get_state", {});
+    for (const program of [
+      null,
+      "",
+      false,
+      true,
+      "42",
+      -1,
+      1.5,
+      128,
+      Number.NaN,
+    ]) {
+      await expect(
+        engine.invoke("rig_send_program", { program }),
+      ).rejects.toThrow();
+    }
+    expect(await engine.invoke("rig_get_state", {})).toEqual(before);
+    for (const program of [0, 127]) {
+      const state = await engine.invoke<RigState>("rig_send_program", {
+        program,
+      });
+      expect(state.monitor.at(-1)?.bytes).toEqual([
+        0xc0 | state.currentProfile.midiChannel,
+        program,
+      ]);
+    }
+  });
+
   it("refuses malformed recording and MIDI inputs without changing state", async () => {
     const before = await engine.invoke<RigState>("rig_get_state", {});
     for (const bad of [null, false, "1", -1, 1.5, Number.NaN]) {
