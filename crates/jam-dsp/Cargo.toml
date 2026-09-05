@@ -6,4 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+cxx = "1"
 pitch-estimate.workspace = true
+
+[build-dependencies]
+cxx-build = "1"

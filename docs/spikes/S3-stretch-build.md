@@ -1,33 +1,60 @@
-﻿# S3: Does Signalsmith Stretch build on MSVC and keep sine length and frequency within tolerance?
+# S3: Signalsmith Stretch integration and verification
 
-**Date:** 2026-09-02 · **Timebox:** 1 session · **Branch:** spike/S3-stretch-build · **Author:** DeepMind Antigravity
+**Rechecked:** 2026-09-06. The 2026-09-02 spike proposed an in-tree CXX bridge;
+its throwaway probe was removed and its historical numbers were not independently
+reproduced. The earlier claim that Stretch has no dependencies was incorrect for
+the version integrated here. This document records the current implementation.
 
-## Question
-Does the `signalsmith-stretch` Rust binding (`cxx`) build on MSVC and on macOS CI clang, and does a 1 kHz sine stretched 1.25x keep length ±1 ms and frequency ±1 Hz?
+## Sources and decision
 
-## Method
-Evaluated crates `signalsmith-stretch` 0.1.3 and `ssstretch` 0.1.0 on Windows 11 MSVC (Visual Studio 2022 Build Tools), as well as a clean in-tree `cxx` wrapper around the upstream `signalsmith-stretch.h` header in `scripts/spikes/s3-stretch-probe/`. Measured pitch and length on a 2.0-second 1 kHz sine wave stretched 1.25x at 48 kHz.
+- [Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch),
+  version 1.3.2, commit `57b93f4e9206a089a45387eaa39bdc9f310d3308`, MIT.
+- Its CMake dependency is [Signalsmith Linear](https://github.com/Signalsmith-Audio/linear)
+  0.3.1, commit `5668673560146a9cfe38c25315071e3fd68c8317`, MIT.
+- The upstream documentation describes `outputSeekLength`, `outputSeek` and
+  different input/output block lengths. The wrapper primes the documented
+  lookahead and pads the end with silence, without exposing PCM to the WebView.
 
-## Numbers
-| Measurement | Windows PC (MSVC) | windows-latest (CI) | macos-latest (CI) |
-|---|---|---|---|
-| `signalsmith-stretch` 0.1.3 build | Failed (`bindgen` missing `libclang.dll`) | Requires libclang | Requires libclang |
-| `ssstretch` 0.1.0 build | Failed (C2668: duplicate `std::make_unique` in `bridge.h`) | Failed | Passed (clang permits) |
-| Clean in-tree `cxx` bridge build | **Passed** (1.69s compile time) | Expected Passed | Expected Passed |
-| Sine 1 kHz (1.25x stretch) frequency | **1000.14 Hz** (error +0.14 Hz) | Target ±1 Hz | Target ±1 Hz |
-| Length accuracy | 2.500 s (exact ±0 ms) | Target ±1 ms | Target ±1 ms |
+Vendor the four required headers and both licence notices, with LF line endings
+and trailing whitespace removed; no functional source changes. Their source revisions
+and SHA-256 hashes are in `crates/jam-dsp/cxx/vendor/sources.json` and verified by
+`pnpm licenses:check`. Use the built-in FFT backend, without optional native FFT
+libraries, CMake downloads, bindgen or libclang. The small CXX bridge compiles as
+C++17, with optimisation also enabled in debug builds. No third-party wrapper
+crate is used. A fixed seed makes the synthetic checks deterministic.
 
-## Findings
-- `signalsmith-stretch` 0.1.3 fails on standard MSVC because its build script relies on `bindgen`, which panics when `LIBCLANG_PATH` / `clang.dll` is not installed.
-- `ssstretch` 0.1.0 fails on MSVC with error `C2668: 'std::make_unique': ambiguous call to overloaded function` because `bridge.h` erroneously injected a redundant `make_unique` into `namespace std`, clashing with MSVC's `<memory>` STL implementation.
-- Signalsmith Stretch itself is a header-only C++17 library (MIT) with zero dependencies. Wrapping `signalsmith-stretch/signalsmith-stretch.h` via `cxx` in `crates/jam-dsp` (without the redundant `make_unique`) compiles cleanly and rapidly across both MSVC and Clang.
-- Numerical evaluation confirms that stretching a 1000 Hz sine wave by 1.25x results in an output frequency of 1000.14 Hz (error 0.14 Hz, well within the ±1 Hz threshold) and precisely 2.500 s duration.
+## Implemented product path
 
-## Decision
-Do not depend on external wrapper crates `signalsmith-stretch` or `ssstretch`. Vendor `signalsmith-stretch.h` (MIT) directly inside `crates/jam-dsp/cxx/` and bind via `cxx`.
+Songs → Make a practice copy → `media_stretch` decodes a library asset through the
+existing user-installed FFmpeg path, calls `jam-audio::practice::render` and
+`jam-dsp::stretch::stereo` on a worker, then publishes a new stereo float WAV and
+asset receipt. The source stays untouched. Speed is 50–150%; transpose is ±12
+semitones. This is offline preparation, with one source/result in memory (about
+660 MiB at the maximum source length). Existing library playback uses the system
+player. Native multi-stem playback, automatic analysis and transport integration
+remain M3 work; this does not claim they are finished.
 
-## Fixtures captured
-Probe lived in `scripts/spikes/s3-stretch-probe/` (removed; numbers above).
+## Verification
 
-## Open questions
-None. Ready for integration into `crates/jam-dsp`.
+- `cargo test -p jam-dsp stretch`: synthetic two-second stereo 1 kHz/500 Hz tones;
+  output length ±1 ms, frequency ±5 cents at speed 0.5, 0.8, 1.25 and 1.5, and
+  combined speed/transpose cases including ±12 semitones. The 0.8 speed / 1.25
+  duration case also requires the 1 kHz tone within ±1 Hz. Beginning and ending
+  retain signal. Cancellation and invalid input are refused.
+- `cargo test -p jam-audio practice`: a two-second output from a one-second source,
+  source bytes unchanged, stereo header, existing output preserved, cancellation.
+- `JAM_MEDIA_TEST=1 cargo test -p src-tauri local_practice_copy --lib -- --ignored`:
+  passed locally on Windows with the real installed FFmpeg/ffprobe. A 44.1 kHz
+  synthetic source becomes a 48 kHz, four-second practice copy at half speed with
+  +2 semitones, with its source receipt and library entry. Temporary decode removed.
+- `cargo test -p src-tauri --test ipc_rig_media`: command registration and refusal
+  of invalid rates, out-of-library IDs and missing sources before tool execution.
+
+Windows MSVC DSP and WAV checks pass locally. Windows/macOS CI must pass before
+merge. The full local Rust run was interrupted before the empty app-binary test
+harness started: Windows Application Control returned OS error 4551. No security
+policy was changed or bypassed. The separate integration and documentation tests
+passed; this is not a claim that the full local command passed.
+The FFmpeg integration check is explicitly ignored in the normal suite
+because FFmpeg is user-installed; the DSP and WAV checks always run on both OSes.
+No physical playback or subjective sound-quality acceptance is claimed.

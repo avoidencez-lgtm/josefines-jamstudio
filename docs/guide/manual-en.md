@@ -210,11 +210,13 @@ Enter a specific goal and Ask three perspectives. One request goes to the select
 
 ### Import and listen
 
-Songs is the audio-asset library, separate from Write song documents and Sessions takes. Paste a full local path, then Import audio. FFmpeg and ffprobe must be available. Supported imports include WAV, MP3, FLAC, M4A, AAC and OGG; files are copied into the local library, with a 512 MB / ten-minute limit. Search the library, select an asset, then Listen in media player. Playback opens the system player at original pitch and speed.
+Songs is the audio-asset library, separate from Write song documents and Sessions takes. Paste a full local path, then Import audio. FFmpeg and ffprobe must be available. Supported imports include WAV, MP3, FLAC, M4A, AAC and OGG; files are copied into the local library, with a 512 MB / ten-minute limit. Search the library, select an asset, then Listen in media player. Playback opens the system player as the file was saved.
+
+Make a practice copy creates a new 48 kHz stereo WAV. Choose Speed from 50 to 150% and Transpose from -12 to +12 semitones, then Create practice copy. Speed changes preserve pitch unless you choose a transposition. Rendering uses native Signalsmith Stretch locally; FFmpeg decodes the source. Nothing is uploaded. The original is unchanged. The new copy is selected when ready; use Listen in media player to hear it. Cancel practice copy stops preparation and removes the incomplete output. Do not quit while preparing. A ten-minute source at half speed becomes a twenty-minute copy; choose the original for another setting when the copy exceeds the source limit. Preparation can use about 660 MiB of memory at the limit and needs disk space for the decoded source and result. The saved file records its source asset, speed and transposition. This is offline preparation; transport-synchronised native playback, stem separation and chord analysis remain unavailable.
 
 ### Use a mix in a film
 
-Use in Film sets the selected asset as the current film soundtrack. Save video to keep that choice. Generated audio appears in the same library after its job completes. Generated lyrics/structure are shown when returned by the provider. Automatic stem separation, chord recognition and time-stretch are not available in Songs.
+Use in Film sets the selected asset as the current film soundtrack. Save video to keep that choice. Generated audio appears in the same library after its job completes. Generated lyrics/structure are shown when returned by the provider. Practice copies can also be selected as soundtracks when they fit the film duration limit. Automatic stem separation and chord recognition are not available in Songs.
 
 ### Reference blueprint
 

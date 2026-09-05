@@ -294,3 +294,16 @@ attempts visible without automatic retries. `net::tests::speech_units_include_un
 `net::voice::tests` and `tests/ipc_voice.rs` cover compatibility, uncertain requests,
 rate validation and persisted settings. Update the Settings usage view and both
 manual languages when adding a unit.
+
+### Reference practice processing
+
+Reuse `media_stretch`, the media operation gate, local path validation and
+`media_cancel` for a new library-processing action. Publish a new asset receipt
+only after the complete output is synced; never replace the source. Native PCM
+work belongs in `jam-audio`, pure DSP in `jam-dsp`, and both must accept bounded
+inputs and cancellation. The synthetic stretch/WAV tests and `ipc_rig_media`
+validation test are the extension fixtures. The optional real FFmpeg scenario
+is `local_practice_copy_decodes_stretches_and_persists_without_touching_source`.
+When upgrading vendored DSP, review both MIT sources, update source revisions and
+hashes together, and run the frequency/length tests on Windows and macOS. Do not
+turn on a third-party FFT backend without its own licence review.

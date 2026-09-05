@@ -1,5 +1,16 @@
 # Sample Pack Licenses
 
+## Bundled native time-stretch code
+
+- Signalsmith Stretch 1.3.2, commit `57b93f4e9206a089a45387eaa39bdc9f310d3308`: MIT,
+  copyright 2022 Geraint Luff / Signalsmith Audio Ltd.
+- Signalsmith Linear 0.3.1, commit `5668673560146a9cfe38c25315071e3fd68c8317`: MIT,
+  copyright 2025 Signalsmith Audio.
+- Headers and full licence notices are in `crates/jam-dsp/cxx/vendor/`. Sources
+  and SHA-256 hashes are pinned in its `sources.json`, checked by
+  `pnpm licenses:check`. No optional Accelerate/IPP/PFFFT backend is included.
+- FFmpeg remains a separately installed user tool; it is not bundled.
+
 ## standard-rock-kit
 - **License**: CC0-1.0 (Creative Commons Zero v1.0 Universal)
 - **Attribution**: Public Domain multisampled acoustic drum kit

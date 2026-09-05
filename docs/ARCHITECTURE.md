@@ -742,3 +742,26 @@ Rust snapshots the estimate into each request's existing log entry; editing a
 rate never rewrites history. STT uses seconds / 3600 and TTS uses characters / 1000.
 `cost:state` refreshes the existing Settings usage view. Unknown entries are counted
 separately from the known estimate subtotal. No account budget or invoice is implied.
+
+### Local reference practice copies (2026-09-06)
+
+`media_stretch(assetId, speed, semitones)` extends the existing media registry and
+returns a new `Asset`. The media operation gate excludes other media jobs; normal
+`media_cancel` cancellation covers FFmpeg decoding and the native block loop.
+The source must be an existing audio asset inside the canonical media library,
+up to ten minutes. The existing user-installed FFmpeg decodes local file/pipe
+protocols only, to 48 kHz stereo float WAV in a private work directory.
+
+`jam-audio::practice::render` validates the decoded format/size, calls the pure
+Signalsmith wrapper on a blocking worker, writes a new float WAV with exclusive
+file creation and syncs it before the asset manifest is written. Normal failures
+remove the incomplete output; a process crash can leave an unlisted partial file.
+The original is never overwritten. The receipt's `practice` object records
+`sourceAssetId`, `speed`, `semitones` and processor version. 50% speed can produce
+a twenty-minute copy; Film's existing duration limits still apply.
+
+The callback and render worker are untouched. This implementation prepares files;
+it does not add a native reference transport, chord timeline, automatic analysis
+or stem bus. See [S3 evidence](spikes/S3-stretch-build.md). The in-memory source and
+result have a known approximately 660 MiB ceiling; streaming is the next step for
+longer/multi-stem preparation. Samples never cross IPC.

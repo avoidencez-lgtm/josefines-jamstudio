@@ -15,6 +15,33 @@ use tauri::Manager;
 const NO_PORT: &str = "no MIDI port open (messages are only logged)";
 
 #[test]
+fn practice_copy_validates_parameters_and_source_before_running_tools() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    for (speed, semitones) in [(0.49, 0), (1.51, 0), (1.0, 13)] {
+        assert!(studio
+            .err(
+                "media_stretch",
+                json!({"assetId":"missing", "speed":speed,"semitones":semitones})
+            )
+            .contains("50–150%"));
+    }
+    assert!(studio
+        .err(
+            "media_stretch",
+            json!({"assetId":"../outside", "speed":0.75,"semitones":2})
+        )
+        .contains("Invalid media ID"));
+    assert!(studio
+        .err(
+            "media_stretch",
+            json!({"assetId":"missing", "speed":0.75,"semitones":2})
+        )
+        .contains("Cannot read media document"));
+    assert!(!media_root().join("work").exists());
+}
+
+#[test]
 fn failed_rig_persistence_keeps_the_runtime_state_unchanged() {
     struct ConnectedSink;
     impl jam_rig::MidiSink for ConnectedSink {

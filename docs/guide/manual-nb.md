@@ -210,11 +210,13 @@ Skriv et konkret mål og trykk Ask three perspectives. Én forespørsel går til
 
 ### Importer og lytt
 
-Songs er lydbiblioteket, adskilt fra låtdokumenter i Write og opptak i Sessions. Lim inn en full lokal filbane og trykk Import audio. FFmpeg og ffprobe må være tilgjengelige. Import støtter blant annet WAV, MP3, FLAC, M4A, AAC og OGG; filer kopieres inn i det lokale biblioteket med grense på 512 MB / ti minutter. Søk, velg en fil og trykk Listen in media player. Avspillingen åpnes i systemets spiller med opprinnelig tonehøyde og hastighet.
+Songs er lydbiblioteket, adskilt fra låtdokumenter i Write og opptak i Sessions. Lim inn en full lokal filbane og trykk Import audio. FFmpeg og ffprobe må være tilgjengelige. Import støtter blant annet WAV, MP3, FLAC, M4A, AAC og OGG; filer kopieres inn i det lokale biblioteket med grense på 512 MB / ti minutter. Søk, velg en fil og trykk Listen in media player. Avspillingen åpnes i systemets spiller slik filen er lagret.
+
+Make a practice copy lager en ny stereo-WAV på 48 kHz. Velg Speed fra 50 til 150 % og Transpose fra -12 til +12 halvtoner, og trykk Create practice copy. Hastighetsendringer bevarer tonehøyden hvis du ikke velger transponering. Signalbehandlingen kjøres lokalt med Signalsmith Stretch; FFmpeg dekoder kilden. Ingenting lastes opp. Originalen beholdes. Den nye kopien velges når den er klar; trykk Listen in media player for å høre den. Cancel practice copy stopper klargjøringen og fjerner uferdig resultat. Ikke avslutt appen mens den klargjør. En kilde på ti minutter blir tjue minutter ved halv hastighet; velg originalen for nye innstillinger hvis kopien er lengre enn kildegrensen. Klargjøringen kan bruke rundt 660 MiB minne ved grensen og trenger diskplass til dekodet kilde og resultat. Filen lagrer referanse til kilden, hastighet og transponering. Dette er forhåndsbehandling; innebygd avspilling synkronisert med transporten, stem-separasjon og akkordanalyse er ennå ikke tilgjengelig.
 
 ### Bruk en miks i en film
 
-Use in Film velger filen som lydspor i gjeldende film. Save video lagrer valget. Generert lyd vises i samme bibliotek når jobben er ferdig. Generert tekst/struktur vises hvis leverandøren returnerer det. Automatisk stemmeseparasjon, akkordgjenkjenning og tidsstrekking er ikke tilgjengelig i Songs.
+Use in Film velger filen som lydspor i gjeldende film. Save video lagrer valget. Generert lyd vises i samme bibliotek når jobben er ferdig. Generert tekst/struktur vises hvis leverandøren returnerer det. Øvingskopier kan også brukes som lydspor når de passer innenfor filmens varighetsgrense. Automatisk stem-separasjon og akkordgjenkjenning er ikke tilgjengelig i Songs.
 
 ### Låtform fra en referanse
 
