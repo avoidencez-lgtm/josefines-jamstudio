@@ -1,6 +1,8 @@
 # Owner verification gates
 
-These can only be proven on the guitarist's Mac with the real rig. The builder lists them as **pending owner** in the PR and the status board; Vegar and the guitarist tick them here (with the date and the build tag) after running the procedure. A milestone that names a gate is not ✅ until the gate is ticked or Vegar explicitly accepts it as pending.
+**Deferred to V2 by Vegar, 2026-09-05.** These procedures are retained for the friend's eventual testing on his Mac and real rig. They do not block the V1 handoff and are not verified or passed. The table's "Blocks" column identifies the associated original milestone, not a current V1 gate. Vegar and the guitarist can record the date and build tag when they eventually run a procedure.
+
+The builder must finish and verify the V1 software before that handoff. This deferral does not excuse unfinished implementation, failing automated checks or incomplete packaging. See the governing [V1/V2 decision](00-README.md).
 
 Before starting: install the build from the GitHub Release (see `docs/guide/setup.md` from M7, or run a CI bundle artifact before that), cable the rig per [../hardware/cabling.md](../hardware/cabling.md), and open Settings → Diagnostics to note the version.
 
