@@ -6,6 +6,7 @@ import {
   VinylRecord,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { WorkspaceHeader } from "../components/Workspace";
 import { ipc, isPreview } from "../ipc/client";
@@ -14,7 +15,12 @@ import { useEngineStore } from "../store/engine";
 
 export function Songs() {
   const m = useMedia();
-  const engine = useEngineStore();
+  const engine = useEngineStore(
+    useShallow((s) => ({
+      isRecording: s.isRecording,
+      setScreen: s.setScreen,
+    })),
+  );
   const [path, setPath] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState("");

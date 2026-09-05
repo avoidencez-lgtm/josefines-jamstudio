@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { ipc, isPreview } from "../ipc/client";
 import {
   buildSectionComp,
@@ -18,7 +19,13 @@ import { Button } from "./Button";
 
 export function FinishingDesk() {
   const w = useWriting();
-  const { takes, isRecording, transportStop } = useEngineStore();
+  const { takes, isRecording, transportStop } = useEngineStore(
+    useShallow((s) => ({
+      takes: s.takes,
+      isRecording: s.isRecording,
+      transportStop: s.transportStop,
+    })),
+  );
   const [index, setIndex] = useState(1);
   const [context, setContext] = useState(2);
   const [strength, setStrength] = useState(25);

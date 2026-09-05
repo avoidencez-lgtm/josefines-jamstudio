@@ -6,6 +6,7 @@ import {
 } from "@phosphor-icons/react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
@@ -30,7 +31,7 @@ export const Rig: React.FC = () => {
     midiPorts,
     midiPortsError,
     currentChart,
-    telemetry,
+    playingSection,
     isPreview,
     loadRigProfiles,
     selectRigProfile,
@@ -42,7 +43,27 @@ export const Rig: React.FC = () => {
     setRigControl,
     sendRigProgram,
     clearRigMonitor,
-  } = useEngineStore();
+  } = useEngineStore(
+    useShallow((s) => ({
+      rigState: s.rigState,
+      availableProfiles: s.availableProfiles,
+      midiPorts: s.midiPorts,
+      midiPortsError: s.midiPortsError,
+      currentChart: s.currentChart,
+      playingSection: s.telemetry.band.current_section,
+      isPreview: s.isPreview,
+      loadRigProfiles: s.loadRigProfiles,
+      selectRigProfile: s.selectRigProfile,
+      selectRigScene: s.selectRigScene,
+      setRigSectionMapping: s.setRigSectionMapping,
+      setRigFollowSections: s.setRigFollowSections,
+      refreshMidiPorts: s.refreshMidiPorts,
+      openMidiPort: s.openMidiPort,
+      setRigControl: s.setRigControl,
+      sendRigProgram: s.sendRigProgram,
+      clearRigMonitor: s.clearRigMonitor,
+    })),
+  );
 
   useEffect(() => {
     loadRigProfiles();
@@ -52,7 +73,6 @@ export const Rig: React.FC = () => {
   const currentScene = rigState?.currentScene ?? 0;
   const sectionMappings = rigState?.sectionMappings ?? {};
   const live = rigState?.live ?? false;
-  const playingSection = telemetry.band.current_section;
 
   // Sections of the loaded chart come first; the usual names fill in the rest so a
   // mapping can be prepared before the chart is loaded.

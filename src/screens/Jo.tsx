@@ -1,5 +1,6 @@
 import type React from "react";
 import { useEffect, useRef } from "react";
+import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
@@ -32,7 +33,13 @@ export const Jo: React.FC = () => {
   const { messages, inputValue, busy, pending, lastBrain } =
     useJoConversation();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const { keysPresent, isPreview, notify } = useEngineStore();
+  const { keysPresent, isPreview, notify } = useEngineStore(
+    useShallow((s) => ({
+      keysPresent: s.keysPresent,
+      isPreview: s.isPreview,
+      notify: s.notify,
+    })),
+  );
   const { preferences, loaded } = useAi();
   const useLlm =
     loaded &&
