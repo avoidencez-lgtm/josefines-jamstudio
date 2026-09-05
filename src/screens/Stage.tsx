@@ -1,10 +1,11 @@
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { BigReadout } from "../components/BigReadout";
 import { Button } from "../components/Button";
 import { ChordShapes } from "../components/ChordShapes";
 import { ChordStrip } from "../components/ChordStrip";
+import { JoStage } from "../components/JoStage";
 import { Meter } from "../components/Meter";
 import { Panel } from "../components/Panel";
 import { SoloHelper } from "../components/SoloHelper";
@@ -13,6 +14,7 @@ import { Toggle } from "../components/Toggle";
 import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import { keyName } from "../lib/chart/notes";
 import { sectionPassages } from "../lib/chart/passages";
+import { committedNumber } from "../lib/numberField";
 import { stylesInMeter } from "../lib/styles";
 import { useEngineStore } from "../store/engine";
 
@@ -100,6 +102,7 @@ export const Stage: React.FC = () => {
         title="Your band. Your lead."
         description="Steer the band live, loop a passage, or build up a difficult part."
       />
+      <JoStage />
       <WorkspaceViews
         labels={["Perform", "Practice", "Levels"]}
         value={view}
@@ -656,20 +659,30 @@ const NumberField: React.FC<{
   max: number;
   suffix?: string;
   onChange: (v: number) => void;
-}> = ({ label, value, min, max, suffix, onChange }) => (
-  <label className="flex items-center gap-1.5 text-xs font-mono text-[var(--fg-2)]">
-    {label}
-    <input
-      type="number"
-      min={min}
-      max={max}
-      value={value}
-      onChange={(e) => {
-        const v = Number.parseInt(e.target.value, 10);
-        if (Number.isFinite(v)) onChange(Math.max(min, Math.min(max, v)));
-      }}
-      className="w-16 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded text-xs font-mono tabular-nums"
-    />
-    {suffix && <span>{suffix}</span>}
-  </label>
-);
+}> = ({ label, value, min, max, suffix, onChange }) => {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const next = committedNumber(draft, value, min, max);
+    setDraft(String(next));
+    if (next !== value) onChange(next);
+  };
+  return (
+    <label className="flex items-center gap-1.5 text-xs font-mono text-[var(--fg-2)]">
+      {label}
+      <input
+        type="number"
+        min={min}
+        max={max}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        className="w-16 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded text-xs font-mono tabular-nums"
+      />
+      {suffix && <span>{suffix}</span>}
+    </label>
+  );
+};

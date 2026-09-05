@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Jamstudio uses your selected audio input to record guitar takes and show the tuner and input levels.</string>
+	<string>Jamstudio uses your selected inputs for guitar recording, tuning and optional push-to-talk commands to Jo. When you use Talk, that microphone recording is sent to ElevenLabs for transcription.</string>
 </dict>
 </plist>

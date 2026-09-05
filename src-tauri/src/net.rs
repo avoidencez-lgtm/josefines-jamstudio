@@ -6,6 +6,7 @@
 
 use crate::keys::SecretStore;
 pub mod media;
+pub mod voice;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
@@ -184,9 +185,8 @@ pub fn validate(req: &FetchRequest) -> Result<(&'static ProviderEntry, String), 
     Ok((entry, format!("{}{}", entry.base_url, path)))
 }
 
-/// One line of the usage log. Estimated cost is left to the UI (it knows the model);
-/// the log records what is measurable.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// One line of measured usage and the request's optional cost estimate.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CostEntry {
     /// Unix time in milliseconds.
@@ -205,6 +205,11 @@ pub struct CostEntry {
     pub model: Option<String>,
     #[serde(default)]
     pub estimated_cost_usd: Option<f64>,
+    /// Submitted units, including failed/uncertain requests; not billed usage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stt_seconds: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tts_characters: Option<u64>,
 }
 
 pub struct CostLog {
@@ -263,6 +268,13 @@ impl CostLog {
             t.calls += 1;
             t.bytes_in += e.bytes_in;
             t.bytes_out += e.bytes_out;
+            t.stt_seconds += e.stt_seconds.unwrap_or(0.0);
+            t.tts_characters += e.tts_characters.unwrap_or(0);
+            if let Some(cost) = e.estimated_cost_usd.filter(|v| v.is_finite() && *v >= 0.0) {
+                *t.estimated_cost_usd.get_or_insert(0.0) += cost;
+            } else {
+                t.unpriced_calls += 1;
+            }
             if !(200..300).contains(&e.status) || e.error.is_some() {
                 t.failures += 1;
             }
@@ -273,7 +285,7 @@ impl CostLog {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CostTotal {
     pub provider: String,
@@ -281,6 +293,10 @@ pub struct CostTotal {
     pub failures: u64,
     pub bytes_in: u64,
     pub bytes_out: u64,
+    pub stt_seconds: f64,
+    pub tts_characters: u64,
+    pub estimated_cost_usd: Option<f64>,
+    pub unpriced_calls: u64,
 }
 
 fn strip_query(path: &str) -> String {
@@ -372,6 +388,7 @@ pub async fn provider_fetch_notifying(
         error: None,
         model: req.model,
         estimated_cost_usd: req.estimated_cost_usd,
+        ..CostEntry::default()
     };
 
     let result = async {
@@ -430,6 +447,44 @@ fn persist_cost(log: &CostLog, cost: &CostEntry, on_log_error: impl FnOnce(&str)
 mod tests {
     use super::*;
     use crate::keys::{FailingStore, MemoryStore};
+
+    #[test]
+    fn speech_units_include_uncertain_requests_and_old_logs_stay_readable() {
+        let dir = std::env::temp_dir().join(format!("jam-speech-cost-{}", std::process::id()));
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        let old = r#"{"atMs":1,"provider":"elevenlabs","method":"POST","path":"/old","status":200,"durationMs":1,"bytesOut":1,"bytesIn":2}"#;
+        let old: CostEntry = serde_json::from_str(old).unwrap();
+        assert_eq!(old.stt_seconds, None);
+        assert_eq!(old.tts_characters, None);
+        for entry in [
+            old,
+            CostEntry {
+                provider: "elevenlabs".into(),
+                status: 200,
+                stt_seconds: Some(3.5),
+                estimated_cost_usd: Some(0.007),
+                ..CostEntry::default()
+            },
+            CostEntry {
+                provider: "elevenlabs".into(),
+                status: 0,
+                tts_characters: Some(12),
+                estimated_cost_usd: Some(0.006),
+                error: Some("Connection interrupted".into()),
+                ..CostEntry::default()
+            },
+        ] {
+            log.append(&entry).unwrap();
+        }
+        let totals = log.totals();
+        assert_eq!(totals[0].calls, 3);
+        assert_eq!(totals[0].failures, 1);
+        assert_eq!(totals[0].unpriced_calls, 1);
+        assert_eq!(totals[0].stt_seconds, 3.5);
+        assert_eq!(totals[0].tts_characters, 12);
+        assert!((totals[0].estimated_cost_usd.unwrap() - 0.013).abs() < 1e-12);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     fn req(provider: &str, path: &str) -> FetchRequest {
         FetchRequest {
@@ -586,6 +641,7 @@ mod tests {
                 error: None,
                 model: Some("test-model".into()),
                 estimated_cost_usd: Some(0.01),
+                ..CostEntry::default()
             })
             .unwrap();
         }
@@ -639,6 +695,7 @@ mod tests {
                 error: None,
                 model: None,
                 estimated_cost_usd: None,
+                ..CostEntry::default()
             },
             |e| reported = Some(e.to_string()),
         );

@@ -170,7 +170,21 @@ Velg den åpne egne låten eller et skjema fra Library i Harmonic discovery. Tre
 
 ### Kommandoer og endringer du godkjenner
 
-Jo AI tar imot skrevne bandkommandoer. Forslagsknapper fyller inn feltet; Send utfører støttede transport-/bandkommandoer direkte. Låtendringer vises for gjennomgang; sender du en ny melding mens et forslag venter, erstattes forslaget, og ingenting tas i bruk. Assistant-panelet øverst blir værende når du bytter rom og kan foreslå samlede låtendringer, opptaksanalyse eller klippendringer. Kontroller verdiene før Apply; utdaterte eller ugyldige forslag avvises. Samtaler overlever rombytte i økten, ikke omstart. Nativ tale inn/ut er ikke bygget.
+Jo AI tar imot skrevne bandkommandoer. Forslagsknapper fyller inn feltet; Send utfører støttede transport-/bandkommandoer direkte. Låtendringer vises for gjennomgang; sender du en ny melding mens et forslag venter, erstattes forslaget, og ingenting tas i bruk. Assistant-panelet øverst blir værende når du bytter rom og kan foreslå samlede låtendringer, opptaksanalyse eller klippendringer. Kontroller verdiene før Apply; utdaterte eller ugyldige forslag avvises. Samtaler overlever rombytte i økten, ikke omstart. Valgfri tale bruker samme kommando- og godkjenningsflyt.
+
+### Snakk med Jo
+
+Lagre en ElevenLabs-nøkkel i AI & models i skrivebordsappen, og start en fungerende fysisk lydutgang. Åpne Jo AI → Voice setup, velg mikrofon, skriv inn en stemme-ID (eller bruk Load voices), velg hvor mye bandet skal dempes, og trykk Save voice setup. Mikrofonen bruker første inngangskanal. Et grensesnitt med bare gitarinngang er ikke en talemikrofon. Taleoppsettet er atskilt fra gitarinngangen.
+
+Hold Hold to talk med pekeren, eller hold Space/Enter mens knappen har fokus. Når du slipper, sendes opptaket til ElevenLabs for transkripsjon. Jo bruker så valgt tekstmodell eller støttede frakoblede engelske kommandoer og leser opp det faktiske resultatet. Forslag til låtendringer krever fortsatt gjennomgang. Et nytt trykk mens Jo snakker avbryter talen. Opptak stopper automatisk etter 20 sekunder; Cancel forkaster ventende resultater, og et aktivt mikrofonopptak avbrytes når du bytter til et annet vindu. Allerede utførte kommandoer beholdes. Innsendte forespørsler kan fortsatt faktureres; appen prøver aldri automatisk på nytt.
+
+Mikrofonlyden holdes i Rust-minnet og sendes bare for talegjenkjenning; den lagres ikke som et opptak. Transkripsjon og svar vises i samtalen. Bandet dempes gradvis over 150 ms; gitarlytting er uendret. Tale og demping skrives ikke til tørr gitar eller separate bandspor. Nettleserforhåndsvisning har ingen mikrofon eller taleavspilling. Verktøylinjen beholder Talk og Cancel på tvers av rom. Stage viser siste runde og har Type a command for tekstkommandoer. Conversation & voice setup åpner Jo AI; låtforslag venter fortsatt der på gjennomgang.
+
+Voice setup har også en global hurtigtast, med CommandOrControl+Shift+J som standard. Save voice setup husker kombinasjonen; Enable shortcut for this session registrerer den til du deaktiverer den eller avslutter appen. Hold og slipp den også når en annen app allerede har fokus. Ta med Control, Command eller Alt; velg en annen kombinasjon hvis den er opptatt. Ingen hurtigtast registreres automatisk ved oppstart.
+
+Lær Talk / send to Jo i Write → Hands-free controls, og aktiver pedalhandlinger. Program Change har ikke slipp-signal: trykk én gang for opptak, igjen for å sende; et trykk under transkripsjon/tenking avbryter. CC-/notepedaler bruker samme to-trykksatferd. Deaktivering eller ny tilkobling av pedalkontroll avbryter opptak. Leverandørens tid til første lyd og en fysisk test med hodesett/pedal er ennå ikke verifisert.
+
+Taleforbruk viser innsendte STT-sekunder og TTS-tegn, også for mislykkede eller avbrutte forespørsler, samt et samlet prisanslag og antall forespørsler uten kjent pris. I Jo AI → Voice setup angir du USD per time for Scribe v2 og USD per 1 000 tegn for Flash v2.5, og trykker Save voice setup. Tomt betyr ukjent; null er et uttrykkelig nullanslag. Ingen priser antas. Hver forespørsel beholder sitt opprinnelige anslag når prisene endres. Inkludert forbruk, avgifter, stemmespesifikke tillegg og leverandørens sluttfaktura beregnes ikke. Eldre loggposter kan fortsatt leses, men manglende taleenheter kan ikke gjenskapes.
 
 ### Koble til en tekst-API
 
@@ -184,7 +198,7 @@ CLI-en beholder sine egne innloggingsdata. Codex kan bruke ChatGPT-pålogging el
 
 ### Personvern og nyttige forespørsler
 
-Tekstassistenter får låttekst/struktur, innstillinger, riggnavn og mellomlagrede opptaksmål etter behov, ikke rå opptakslyd eller nøkler. Prøv «Add a quiet eight-bar bridge», «Leave locked bass alone and thin out verse drums» eller «Append three concrete chorus images to this section’s lyrics». Lokale opptaksmål er heuristikker, ikke en AI-lyttevurdering. Bare mediegenereringskommandoer sender sine uttrykkelig valgte genereringsdata.
+Tekstassistenter får låttekst/struktur, innstillinger, riggnavn og mellomlagrede opptaksmål etter behov, ikke rå opptakslyd eller nøkler. Prøv «Add a quiet eight-bar bridge», «Leave locked bass alone and thin out verse drums» eller «Append three concrete chorus images to this section’s lyrics». Lokale opptaksmål er heuristikker, ikke en AI-lyttevurdering. Mediegenerering sender valgte data; Talk sender mikrofonopptaket til ElevenLabs.
 
 Les handlingsresultatet: Jo viser motorens avvisning i stedet for å melde at handlingen lyktes. Et tempo utenfor tillatt område begrenses til området, og godkjent BPM vises. Bandendringer kan vente til neste takt. En uendret låt eller scene meldes som uendret; låste stemmer forblir låst.
 
@@ -322,6 +336,8 @@ AI & models inneholder leverandørvalg, redigerbare modell-ID-er, deteksjon av i
 
 Usage registrerer leverandør/modell/status/tid/byte og eventuelle anslag, ikke prompter eller innloggingsdata. Tokengrenser og anslag i USD per million hjelper planlegging; de er ikke håndhevede kontobudsjetter eller sluttfakturaer. Sett budsjettgrenser hos leverandøren og kontroller dens kontrollpanel. Medieforespørsler og installert CLI-bruk har egne faktureringsregler.
 
+Taleforbruk viser innsendte STT-sekunder og TTS-tegn, også for mislykkede eller avbrutte forespørsler, samt et samlet prisanslag og antall forespørsler uten kjent pris. I Jo AI → Voice setup angir du USD per time for Scribe v2 og USD per 1 000 tegn for Flash v2.5, og trykker Save voice setup. Tomt betyr ukjent; null er et uttrykkelig nullanslag. Ingen priser antas. Hver forespørsel beholder sitt opprinnelige anslag når prisene endres. Inkludert forbruk, avgifter, stemmespesifikke tillegg og leverandørens sluttfaktura beregnes ikke. Eldre loggposter kan fortsatt leses, men manglende taleenheter kan ikke gjenskapes.
+
 ### Profiler for lydoppsett
 
 Gi gjeldende lydoppsett et navn og trykk Save current setup. Inntil tolv profiler beholder navn på inn- og utenhet, gitarkanal, samplingsfrekvens og bufferstørrelse i innstillingene, uten API-nøkler. Lagring med samme navn erstatter profilen. Recall krever at de lagrede enhetene og kanalen er tilgjengelige, og bruker deretter oppsettet i den innebygde lydmotoren. Feil eller stoppet motor gir en melding; sjekk enhetsinnstillingene og inngangsmåleren. Systemets standardenheter følger det som til enhver tid er valgt i operativsystemet. Remove sletter bare profilen, ikke aktivt oppsett. Endringer blokkeres under opptak. Nettleserprofiler er midlertidige og kan ikke konfigurere maskinvare.
@@ -368,7 +384,7 @@ Oppgi bygg-commit, operativsystem, enhetsnavn, kanal/buffer, skjerm/handling, n�
 
 React/TypeScript eier tekstredigering og UI-tilstand; Rust eier lyd, filer, MIDI, prosesser og byteflyt til leverandører. src/ipc/client.ts sender kommandoer til Tauri eller den tydelige nettlesersimulatoren. src/store/engine.ts holder telemetri; src/lib/originals.ts og media.ts holder utkast. src-tauri/src inneholder native kommandohåndterere. crates/jam-audio eier opptak/rendring, jam-band sekvensering, jam-core skjema/tidslinje og jam-rig MIDI.
 
-Utgangscallbacken driver lydklokken. Den bruker avgrensede buffere uten allokering, låsing eller logging i callbacken. Dette bygget har ingen Web Audio-avspilling, nativ taleimplementasjon eller programvareforsterker/plugin-host. Gitarlytting eies fortsatt av maskinvaren.
+Utgangscallbacken driver lydklokken. Den bruker avgrensede buffere uten allokering, låsing eller logging i callbacken. Dette bygget har ingen Web Audio-avspilling eller programvareforsterker/plugin-host. Gitarlytting eies fortsatt av maskinvaren.
 
 ### Bygg og kontroller
 

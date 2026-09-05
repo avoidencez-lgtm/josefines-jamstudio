@@ -429,8 +429,7 @@
   overflow-wrap: anywhere;
 }
 .jo-workspace {
-  height: calc(100vh - 190px);
-  min-height: 540px;
+  min-height: max(540px, calc(100vh - 190px));
 }
 .jo-chat {
   min-height: 260px;

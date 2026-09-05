@@ -380,7 +380,8 @@ pub async fn media_from_take(take_id: String, state: State<'_, AppState>) -> Res
         .try_lock()
         .map_err(|_| "Another media operation is running")?;
     CANCEL.store(false, Ordering::Relaxed);
-    let take = crate::find_take(&state, &take_id)?;
+    let (takes, _) = crate::all_takes(&state)?;
+    let take = crate::take_from(&takes, &take_id)?.clone();
     let rate = if take.sample_rate > 0 {
         take.sample_rate
     } else {
@@ -403,7 +404,7 @@ pub async fn media_from_take(take_id: String, state: State<'_, AppState>) -> Res
                 if spec.muted {
                     continue;
                 }
-                let clip = crate::originals::read_clip(spec, &state)?;
+                let clip = crate::originals::read_clip(spec, &state, &takes)?;
                 let path = work.join(format!("layer-{i}.wav"));
                 jam_audio::export::write_clip_stem(
                     &path,

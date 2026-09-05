@@ -11,6 +11,7 @@ pub mod originals;
 pub mod platform;
 pub mod settings;
 pub mod store;
+pub mod voice;
 
 use jam_audio::devices::{list_devices, AudioConfig, AudioDevices};
 use jam_audio::engine::{AudioEngine, EngineStatus, EngineTelemetry};
@@ -42,6 +43,7 @@ impl WarnOnce {
 }
 
 pub struct AppState {
+    pub voice: Arc<Mutex<voice::VoiceSession>>,
     pub recovery_notice: Mutex<Option<String>>,
     pub warnings: WarnOnce,
     /// Decoded guitar clips, keyed by file and checked against size and mtime (#44).
@@ -808,7 +810,7 @@ fn rig_clear_monitor(state: State<'_, AppState>) -> RigStateDto {
 }
 /// Files are truth, SQLite is a cache: a cache that cannot be read is a warning and
 /// the takes found on disk are still listed.
-fn all_takes(
+pub(crate) fn all_takes(
     state: &AppState,
 ) -> Result<(Vec<jam_audio::recorder::TakeMetadata>, Vec<String>), String> {
     let mut warnings = Vec::new();
@@ -836,13 +838,20 @@ fn all_takes(
     Ok((list, warnings))
 }
 
-fn find_take(state: &AppState, take_id: &str) -> Result<jam_audio::recorder::TakeMetadata, String> {
+pub(crate) fn take_from<'a>(
+    takes: &'a [jam_audio::recorder::TakeMetadata],
+    take_id: &str,
+) -> Result<&'a jam_audio::recorder::TakeMetadata, String> {
     originals::valid_id(take_id)?;
-    all_takes(state)?
-        .0
-        .into_iter()
+    takes
+        .iter()
         .find(|t| t.id == take_id)
         .ok_or_else(|| format!("take {take_id} is not in the library"))
+}
+
+fn find_take(state: &AppState, take_id: &str) -> Result<jam_audio::recorder::TakeMetadata, String> {
+    let (takes, _) = all_takes(state)?;
+    Ok(take_from(&takes, take_id)?.clone())
 }
 
 /// Analyses the guitarist's recorded DI stem against the tempo the take was played at.
@@ -907,7 +916,8 @@ async fn takes_export_daw(
     take_id: String,
     state: State<'_, AppState>,
 ) -> Result<jam_audio::export::ExportReport, String> {
-    let take = find_take(&state, &take_id)?;
+    let (takes, _) = all_takes(&state)?;
+    let take = take_from(&takes, &take_id)?.clone();
     let export_path = Library::default_user_root().join("exports").join(&take.id);
 
     let chart: Option<Chart> = serde_json::from_value(take.snapshot["body"]["chart"].clone())
@@ -970,7 +980,7 @@ async fn takes_export_daw(
             if spec.muted {
                 continue;
             }
-            let clip = originals::read_clip(spec, &state)?;
+            let clip = originals::read_clip(spec, &state, &takes)?;
             let path = export_path.join(format!("guitar-layer-{}.wav", i + 1));
             jam_audio::export::write_clip_stem(
                 &path,
@@ -1088,6 +1098,7 @@ pub fn build_state() -> AppState {
     let rig_orchestrator = Arc::new(Mutex::new(build_rig(&settings, &library_arc.lock())));
 
     AppState {
+        voice: Arc::new(Mutex::new(voice::VoiceSession::default())),
         recovery_notice: Mutex::new(recovery_notice),
         warnings: WarnOnce::default(),
         clips: Mutex::new(clips::ClipCache::new(clips::ClipCache::DEFAULT_BUDGET)),
@@ -1182,6 +1193,11 @@ pub fn configure<R: tauri::Runtime>(
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            voice::voice_ptt,
+            voice::voice_speak,
+            voice::voice_cancel,
+            voice::voice_status,
+            voice::voice_shortcut,
             media::media_list,
             media::media_save,
             media::media_import,
@@ -1349,7 +1365,9 @@ pub fn jam_log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let built = configure(
-        tauri::Builder::default().plugin(jam_log_plugin()),
+        tauri::Builder::default()
+            .plugin(jam_log_plugin())
+            .plugin(platform::voice_shortcut::plugin()),
         build_state(),
     )
     .build(tauri::generate_context!())

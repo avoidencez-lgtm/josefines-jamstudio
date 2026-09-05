@@ -387,6 +387,12 @@ const UsageLog: React.FC = () => {
               {t.provider}: {t.calls} call{t.calls === 1 ? "" : "s"}
               {t.failures > 0 && ` (${t.failures} failed)`} ·{" "}
               {formatBytes(t.bytesOut)} out / {formatBytes(t.bytesIn)} in
+              {t.sttSeconds > 0 && ` · ${t.sttSeconds.toFixed(1)} STT seconds`}
+              {t.ttsCharacters > 0 && ` · ${t.ttsCharacters} TTS characters`}
+              {t.estimatedCostUsd != null &&
+                ` · est. $${t.estimatedCostUsd.toFixed(4)}`}
+              {t.unpricedCalls > 0 &&
+                ` · ${t.unpricedCalls} calls with unknown cost`}
             </span>
           ))}
         </div>
@@ -394,6 +400,12 @@ const UsageLog: React.FC = () => {
           Refresh
         </Button>
       </div>
+      <p className="text-xs text-[var(--fg-1)] mb-3">
+        All-time submitted usage, including failed or interrupted requests.
+        Estimates use the price saved for each request, exclude unknown costs,
+        and are not invoices or spending limits. Set speech prices in Jo AI →
+        Voice setup; check your provider dashboard for actual charges.
+      </p>
       {error && (
         <div className="text-xs font-mono text-[var(--danger,#e5534b)]">
           {error}
@@ -440,6 +452,12 @@ const UsageLog: React.FC = () => {
                     ? "cost unknown"
                     : `est. $${e.estimatedCostUsd.toFixed(4)}`}
                 </span>
+              )}
+              {e.sttSeconds != null && (
+                <span>{e.sttSeconds.toFixed(1)} STT seconds</span>
+              )}
+              {e.ttsCharacters != null && (
+                <span>{e.ttsCharacters} TTS characters</span>
               )}
               <span className="ml-auto text-[var(--fg-2)] tabular-nums shrink-0">
                 {e.durationMs} ms · {formatBytes(e.bytesOut)}↑{" "}

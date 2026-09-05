@@ -113,7 +113,7 @@ See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-comp
 What remains, per open milestone:
 
 - **M1e**: takes record as 24-bit WAV stems and the take browser works. Latency compensation is a manual offset; the automatic loopback measurement is not built.
-- **M2**: typed Jo, configurable providers, offline intents and installed-agent proposals are available. Native STT/TTS, the voice bus, the planned 30-utterance fixture and the Mac latency gate remain outstanding. Browser speech has been removed.
+- **M2**: typed Jo, configurable providers, offline intents and installed-agent proposals are available. Native STT/TTS and the voice bus are implemented with bounded capture, cancellation and synthetic tests. Stage presence, an explicitly enabled global hold shortcut and two-press MIDI activation now share the same conversation and voice lifecycle. Submitted STT seconds, TTS characters and configurable estimates now appear in the existing usage log. Provider-reported LLM tokens, the planned recorded 30-utterance fixture and live latency gate remain outstanding. Browser speech has been removed.
 - **M3**, **M4**: local media import/reference playback, music/video generation, ComfyUI workflows and Film rendering exist in #29. Automatic stems/analysis/stretch and Lyria RealTime remain unbuilt. Model/GPU acceptance is pending owner.
 - **M5**: six rig profiles, real MIDI out, section-bound scenes and a monitor are in and tested against a memory sink. Owner gate 5 (the real HeadRush and Black Spirit) is pending owner.
 - **M6**: analysis reads the recorded DI (timing, dynamics, McLeod-based intonation) and export writes stems, a tempo map with the chart's markers and a sidecar. The LLM review of a take and the Logic Pro drift measurement (owner gate) are outstanding.
@@ -190,6 +190,12 @@ Windows/macOS CI and owner acceptance are tracked in #29. No milestones are mark
 complete by this UI slice alone.
 
 ## Build integration
+
+The clip-catalog follow-up (#221, awaiting renewed review and CI) reads the take
+catalog once for a layered-song load, DAW export or media mix. Per-clip ID checks
+and decoded-audio caching remain in place. Songs without clips skip the catalog
+entirely, so a broken take folder cannot block their load. A native IPC regression
+uses an unreadable catalog fixture and verifies this independence.
 
 The rate-mismatch follow-up (#211, awaiting renewed review and CI) closes an input
 whose rate differs from the output and refuses jam/song recording and recent-idea

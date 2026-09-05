@@ -2,6 +2,7 @@ import { Pause, Play, Record, Repeat, Stop } from "@phosphor-icons/react";
 import { useShallow } from "zustand/shallow";
 import { useEngineStore } from "../store/engine";
 import { EngineStatusPill } from "./EngineStatusPill";
+import { JoVoiceControls } from "./JoVoice";
 import { StudioAssistant } from "./StudioAssistant";
 
 /** Live transport chrome. Owns the 30 Hz telemetry subscription so App and rooms do not. */
@@ -178,6 +179,7 @@ export function TransportBar() {
           isPreview={isPreview}
           onClick={() => setScreen("settings")}
         />
+        <JoVoiceControls compact />
         <StudioAssistant />
       </div>
       {recordingError && (

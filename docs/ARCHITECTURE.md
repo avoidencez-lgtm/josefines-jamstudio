@@ -13,6 +13,26 @@ assets and exports, excluding generation receipts. Native preview is silent;
 FFmpeg and the user's external media player own exported audiovisual playback.
 See [music-video setup and acceptance](guide/music-video.md).
 
+## Current native Jo voice
+
+This supersedes the target voice names in §6.3. Additive IPC v2 commands are
+`voice_ptt({down})`, `voice_speak({text,generation})`,
+`voice_cancel({generation?})` and `voice_status()`. PTT returns
+`{generation,transcript,seconds}`; status returns `{generation,phase,error}`.
+`src-tauri/src/voice.rs` owns capture lifecycle; `net/voice.rs` alone performs
+speech HTTP. `jam-audio::voice` owns the microphone buffer and speech bus.
+`src/lib/jo/voice.ts` orchestrates the existing Jo text/command flow, discarding
+cancelled results before further dispatch or speech. No audio crosses IPC.
+
+Non-secret `settings.voice` contains `microphone` (name or null), `voiceId` and
+`duckDb` (default -9, accepted -24..0); unknown settings survive edits. Capture
+uses the selected device's first channel at its negotiated rate, max 20 seconds.
+TTS uses 24 kHz PCM and existing interpolation into 48 kHz output. A separate
+voice bus attenuates the generated band over 150 ms; guitar and recorder stems
+are unaffected. Hardware output is required; headless fallback is refused.
+Cancelled requests may still incur provider cost. The existing render-ahead queue
+bounds interruption responsiveness. Live latency acceptance is pending; see [S5 evidence](spikes/S5-jo-voice.md).
+
 ## 1. The governing rule
 
 > **JS owns text and UI. Rust owns bytes and time. The WebView never produces sound and never holds a key.**
@@ -693,3 +713,32 @@ replacing a DI file. Structured provider reviews, chord agreement, bend handling
 and the full M6 pitch acceptance remain unfinished. Stationary synthetic pitch
 now meets ±3 cents; [ADR 0011](adr/0011-pitch-measurement-precision.md) records
 the detector change and limits. Version-1 evidence requires Analyze again.
+
+Native voice controls (2026-09-06): `voice_shortcut({shortcut: string|null})`
+registers/disables a session-only OS shortcut; `voice_status.shortcut` reports
+what is actually registered. `settings.voice.shortcut` remembers the preferred
+combination without enabling it at launch. `platform::voice_shortcut` uses the
+Tauri global-shortcut plugin and emits boolean `voice:ptt` down/up events. One
+app-lifetime listener coalesces key repeat and calls the same capture lifecycle.
+Controller action `voice` reuses the existing learned PC/CC/note press registry:
+first press starts, second sends, and a waiting-turn press cancels. There is no
+fabricated MIDI release edge. The shared `handleJoQuery` in `conversation.ts`
+serves Jo AI, Stage and voice; results/history/review rules remain identical.
+The toolbar exposes hold/cancel throughout navigation. An unrelated typed draft
+is preserved when a global voice command arrives.
+
+### Speech usage accounting (2026-09-06)
+
+Native `net::voice` records `sttSeconds` from the captured frame count/rate and
+`ttsCharacters` as Unicode scalar values in submitted text. These optional fields
+extend `CostEntry`; old JSONL entries remain readable with unknown units. Totals
+add seconds, characters, optional `estimatedCostUsd` and `unpricedCalls`. Estimates
+include attempted requests even when the response fails, because billing may have
+occurred. These are submitted units, not provider-confirmed charges.
+
+`settings.voice.sttUsdPerHour` and `ttsUsdPer1k` are nullable, finite USD rates in
+0..10000, edited in Jo voice setup. Blank is unknown; explicit zero stays zero.
+Rust snapshots the estimate into each request's existing log entry; editing a
+rate never rewrites history. STT uses seconds / 3600 and TTS uses characters / 1000.
+`cost:state` refreshes the existing Settings usage view. Unknown entries are counted
+separately from the known estimate subtotal. No account budget or invoice is implied.

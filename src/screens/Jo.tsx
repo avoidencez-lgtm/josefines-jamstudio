@@ -2,30 +2,24 @@ import type React from "react";
 import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
+import { JoVoice } from "../components/JoVoice";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
 import { WorkspaceHeader } from "../components/Workspace";
 import {
-  discardPendingProposal,
   documentFingerprint,
-  joNeedsReview,
+  handleJoQuery,
   setInputValue,
-  setLastBrain,
   setMessages,
   useJoConversation,
 } from "../lib/jo/conversation";
 import { dispatchJoToolCall } from "../lib/jo/dispatcher";
-import type { JoContext } from "../lib/jo/gemini";
-import { parseNaturalIntent } from "../lib/jo/intent";
-import type { JoMessage, JoToolCall } from "../lib/jo/persona";
-import { BRAINS, askBrain, joRequest, useAi } from "../lib/jo/providers";
+import { BRAINS, useAi } from "../lib/jo/providers";
 import {
   STUDIO_TOOLS,
   applyStudioEdits,
   songFingerprint,
 } from "../lib/jo/studioTools";
-import { useMedia } from "../lib/media";
-import { useWriting } from "../lib/originals";
 import { openAiSettings } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
 
@@ -52,150 +46,11 @@ export const Jo: React.FC = () => {
     ) &&
     !isPreview;
 
-  const snapshotContext = (): JoContext => {
-    const s = useEngineStore.getState();
-    const t = s.telemetry;
-    const w = useWriting.getState();
-    return {
-      transportState: t.transport.state,
-      bpm: t.transport.bpm,
-      bar: t.transport.bar,
-      styleId: t.band.style_id,
-      styleName: t.band.style_name,
-      intensity: t.band.intensity,
-      chartName: s.currentChart?.name ?? null,
-      currentChord: t.band.current_chord,
-      currentSection: t.band.current_section,
-      muted: {
-        drums: t.band.mute_drums,
-        bass: t.band.mute_bass,
-        comp: t.band.mute_comp,
-      },
-      styles: s.styles.map((x) => ({ id: x.id, name: x.name })),
-      charts: s.charts.map((x) => ({ id: x.id, name: x.name })),
-      writing: w.song
-        ? {
-            name: w.song.body.chart.name,
-            chart: w.song.body.chart,
-            notes: w.song.body.notes,
-            lyrics: w.song.body.lyrics,
-            selected: w.selected,
-            sections: w.song.body.chart.sections.map((section) => ({
-              name: section.name,
-              id: section.id,
-              ...w.song?.body.sections[section.id],
-            })),
-            versions: w.song.versions.map((v) => v.name),
-          }
-        : undefined,
-      film: (() => {
-        const p = useMedia.getState().project;
-        return {
-          id: p.id,
-          title: p.title,
-          shots: p.shots.map(({ id, title, seconds }) => ({
-            id,
-            title,
-            seconds,
-          })),
-        };
-      })(),
-    };
-  };
-
-  /** Failed provider requests never become unrelated offline commands. */
-  const think = async (
-    history: JoMessage[],
-    query: string,
-  ): Promise<{ reply: string; toolCalls: JoToolCall[] }> => {
-    const current = useAi.getState();
-    const selected = current.preferences.selected;
-    const engine = useEngineStore.getState();
-    if (!BRAINS[selected].local && engine.keyErrors[selected])
-      throw new Error(engine.keyErrors[selected]);
-    if (
-      current.loaded &&
-      (BRAINS[selected].local || engine.keysPresent[selected]) &&
-      !engine.isPreview
-    ) {
-      const out = await askBrain(
-        joRequest(history, query, snapshotContext()),
-        current.preferences,
-      );
-      setLastBrain(BRAINS[selected].name);
-      return out;
-    }
-    setLastBrain("offline");
-    return parseNaturalIntent(query);
-  };
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll to bottom whenever messages or state updates
   useEffect(() => {
     const list = messagesEndRef.current?.parentElement;
     if (list) list.scrollTop = list.scrollHeight;
   }, [messages, busy]);
-
-  const handleUserQuery = async (query: string) => {
-    if (!query.trim() || useJoConversation.getState().busy) return;
-    discardPendingProposal(
-      "Proposal set aside: your new message replaces it. Nothing was applied.",
-    );
-    useJoConversation.setState({ busy: true });
-    try {
-      const userMsg: JoMessage = {
-        id: crypto.randomUUID(),
-        sender: "user",
-        text: query,
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      };
-
-      const history = useJoConversation.getState().messages;
-      setMessages((prev) => [...prev, userMsg]);
-      setInputValue("");
-
-      const expectedSong = documentFingerprint();
-      const { reply, toolCalls } = await think(history, query);
-
-      const results: string[] = [];
-      const needsReview = toolCalls.some(joNeedsReview);
-      if (needsReview) {
-        useJoConversation.setState({
-          pending: { calls: toolCalls, expected: expectedSong },
-        });
-        results.push("Proposed song edits · awaiting your review below");
-      } else
-        for (const call of toolCalls) {
-          try {
-            results.push(await dispatchJoToolCall(call));
-          } catch (e) {
-            results.push(`${call.name} failed: ${String(e)}`);
-          }
-        }
-
-      const joMsg: JoMessage = {
-        id: crypto.randomUUID(),
-        sender: "jo",
-        // Replies are generated before execution. Preserve actual outcomes in
-        // both the visible conversation and the history sent on the next turn.
-        text: toolCalls.length && !needsReview ? results.join("\n") : reply,
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        toolCalls,
-        toolResults: results,
-      };
-
-      setMessages((prev) => [...prev, joMsg]);
-    } catch (e) {
-      notify("error", String(e));
-    } finally {
-      useJoConversation.setState({ busy: false });
-    }
-  };
 
   return (
     <div className="jo-workspace flex flex-col gap-4 max-w-5xl mx-auto w-full">
@@ -226,7 +81,7 @@ export const Jo: React.FC = () => {
               : "Tempo, cues, styles & recording"}
         </span>
         {lastBrain && <span>Last reply: {lastBrain}</span>}
-        <span>Text commands · native voice is not available in this build</span>
+        <span>Text commands and optional ElevenLabs voice</span>
       </div>
       <div className="jo-suggestions" aria-label="Suggested prompts">
         {[
@@ -247,7 +102,7 @@ export const Jo: React.FC = () => {
       </div>
       {/* Main Chat & Action History Panel */}
       <Panel className="jo-chat flex-1 flex flex-col min-h-0 p-4">
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        <div className="flex-1 min-h-32 overflow-y-auto space-y-4 pr-2">
           {messages.map((m) => (
             <div
               key={m.id}
@@ -366,11 +221,12 @@ export const Jo: React.FC = () => {
           </section>
         )}
         {/* Push-to-Talk & Input Bar */}
+        <JoVoice />
         <div className="jo-composer">
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              handleUserQuery(inputValue);
+              handleJoQuery(inputValue);
             }}
             className="flex-1 flex gap-2"
           >

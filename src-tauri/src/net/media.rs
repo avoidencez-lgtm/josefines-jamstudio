@@ -213,6 +213,7 @@ pub async fn fetch(
         error: result.as_ref().err().cloned(),
         model: Some(m.model.clone()),
         estimated_cost_usd: None,
+        ..CostEntry::default()
     });
     result
 }
