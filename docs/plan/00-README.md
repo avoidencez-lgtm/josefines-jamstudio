@@ -53,6 +53,8 @@ These are the original full-product targets, not claims about the current previe
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-05 rig persistence follow-up: profile, section mapping, follow-section and MIDI connection changes now save before replacing the active configuration. IPC regression coverage verifies corrupt-file and write failures leave the previous runtime state and settings file intact, including an existing synthetic MIDI connection. This addresses the rig portion of issue #45; hardware verification is not claimed.
+
 2026-09-05: PR #77 completes the IPC/store test harness and built-app startup smoke.
 See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-completion.md); this does not close physical owner gates.
 
