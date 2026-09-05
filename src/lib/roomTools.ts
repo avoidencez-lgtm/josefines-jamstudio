@@ -10,7 +10,7 @@ import type {
 import { keyName, splitChord } from "./chart/notes";
 import { resolveChart } from "./chart/text";
 import type { MediaShot } from "./media";
-import { type SongBody, defaultSection } from "./originals";
+import { PARTS, type SongBody, defaultSection } from "./originals";
 import {
   checkWritingForm,
   duplicateSection,
@@ -253,6 +253,45 @@ export function referenceForm(
   });
   checkWritingForm(body);
   return body;
+}
+
+/** One coach request carries at most this much text; askBrain allows 64,000 for the whole envelope. */
+export const COACH_LIMIT = 48_000;
+/**
+ * What the three coaches receive: the writing itself. Guitar clips, tone snapshots
+ * and blueprints stay home; they are not something a coach can read anyway.
+ */
+export function coachBrief(body: SongBody, goal: string): string {
+  checkWritingForm(body);
+  const c = body.chart;
+  const brief = JSON.stringify({
+    goal: goal.trim().slice(0, 2000),
+    song: {
+      name: c.name,
+      key: keyName(c.keyTonic, c.mode),
+      bpm: c.defaultBpm,
+      timeSig: c.timeSig.join("/"),
+      form: c.arrangement.map((a) => `${a.sectionId} x${a.repeats}`),
+      sections: c.sections.map((s) => ({
+        id: s.id,
+        name: s.name,
+        bars: s.bars.map((bar) =>
+          bar.map((ch) => `${ch.chord}:${ch.beats}`).join(" "),
+        ),
+        band: body.sections[s.id]?.parts.map(
+          (p, i) =>
+            `${PARTS[i]} ${p.muted ? "muted" : `${Math.round(p.intensity * 100)}%`}${p.locked ? " locked" : ""}`,
+        ),
+        lyrics: body.lyrics?.[s.id] ?? "",
+      })),
+      notes: body.notes,
+    },
+  });
+  if (brief.length > COACH_LIMIT)
+    throw new Error(
+      `The song text is ${brief.length.toLocaleString("en")} characters; one coach request takes at most ${COACH_LIMIT.toLocaleString("en")}. Shorten the lyrics or notes first.`,
+    );
+  return brief;
 }
 
 export const coachSchema = z
