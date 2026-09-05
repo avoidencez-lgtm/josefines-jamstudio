@@ -80,7 +80,7 @@ jobs:
 ### 0.6 Seam registries and the invariant tests
 - Rust: `jam-core::registry` loaders for `styles/`, `charts/`, `rigs/`, `controls/` (bundled via `include_dir` plus the user folders under `~/JosefinesJamstudio/`), `src-tauri/src/net/registry.rs` for providers (empty list in M0 but the `Provider` trait and the table exist), IPC domain list in `src-tauri/src/ipc/mod.rs`.
 - TS: tool registry `src/ai/tools/index.ts` via `import.meta.glob('./*.tool.ts', { eager: true })`, screen registry, provider id union.
-- `tests/invariants/seams.test.ts` and `crates/jam-core/tests/seams.rs`: load the fixtures in `tests/fixtures/seams/` (one synthetic style, chart, rig, control map, tool, provider) and assert each appears in its registry; `tests/invariants/core-files.snapshot.json` lists the core files that must not change when a fixture is added (the test fails if adding a fixture requires touching them).
+- `tests/invariants/seams.test.ts` checks bundled style, chart, rig and control manifests for `schemaVersion`, `id` and `name`. `crates/jam-core/tests/seams.rs` loads those bundled registries and asserts representative IDs. Neither auto-discovers `tests/fixtures/seams/` nor proves core files were untouched; an extension PR must show its fixture in the relevant registry.
 
 ### 0.7 Spikes S1 to S3
 Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs before 0.3 is finished.
