@@ -31,7 +31,7 @@ impl IndexStore {
             let _ = fs::create_dir_all(parent);
         }
         let conn = Connection::open(path).map_err(|e| e.to_string())?;
-        Self::init_schema(&conn)?;
+        Self::configure(&conn)?;
         Ok(Self { conn })
     }
 
@@ -55,8 +55,14 @@ impl IndexStore {
 
     pub fn open_in_memory() -> Result<Self, String> {
         let conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
-        Self::init_schema(&conn)?;
+        Self::configure(&conn)?;
         Ok(Self { conn })
+    }
+
+    fn configure(conn: &Connection) -> Result<(), String> {
+        conn.busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(|e| e.to_string())?;
+        Self::init_schema(conn)
     }
 
     fn init_schema(conn: &Connection) -> Result<(), String> {
@@ -229,6 +235,16 @@ mod tests {
     #[test]
     fn test_store_open_in_memory() {
         IndexStore::open_in_memory().expect("in-memory db opens");
+    }
+
+    #[test]
+    fn sqlite_waits_when_the_cache_is_busy() {
+        let store = IndexStore::open_in_memory().unwrap();
+        let ms: i32 = store
+            .conn
+            .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(ms, 5_000);
     }
 
     #[test]

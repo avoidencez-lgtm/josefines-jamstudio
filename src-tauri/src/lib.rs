@@ -773,8 +773,17 @@ fn rig_clear_monitor(state: State<'_, AppState>) -> RigStateDto {
     rig.clear_monitor();
     rig_state_dto(&rig)
 }
+fn take_present_on_disk(take: &jam_audio::recorder::TakeMetadata) -> bool {
+    let input = std::path::Path::new(&take.path_input);
+    input.is_file()
+        || input
+            .parent()
+            .is_some_and(|dir| dir.join("take.json").is_file())
+}
+
 /// Files are truth, SQLite is a cache: a cache that cannot be read is a warning and
-/// the takes found on disk are still listed.
+/// the takes found on disk are still listed. Cache rows whose folder was deleted
+/// outside the app are dropped (#149).
 fn all_takes(
     state: &AppState,
 ) -> Result<(Vec<jam_audio::recorder::TakeMetadata>, Vec<String>), String> {
@@ -791,10 +800,17 @@ fn all_takes(
             Vec::new()
         }
     };
-    let mut takes: std::collections::BTreeMap<_, _> =
-        cached.into_iter().map(|t| (t.id.clone(), t)).collect();
     let (files, file_warnings) = originals::file_takes()?;
     warnings.extend(file_warnings);
+    let on_disk: std::collections::HashSet<_> = files.iter().map(|t| t.id.clone()).collect();
+    let mut takes = std::collections::BTreeMap::new();
+    for t in cached {
+        if on_disk.contains(&t.id) || take_present_on_disk(&t) {
+            takes.insert(t.id.clone(), t);
+        } else {
+            let _ = state.store.lock().delete_take(&t.id);
+        }
+    }
     for t in files {
         takes.insert(t.id.clone(), t);
     }
