@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 
 #[test]
 fn boots_headless_and_answers_the_startup_handshake() {
+    let _scenario = common::scenario();
     let studio = Studio::boot();
     let status = studio.ok("engine_status", json!({}));
     assert_eq!(status["mode"], "Headless");
@@ -26,6 +27,7 @@ fn boots_headless_and_answers_the_startup_handshake() {
 
 #[test]
 fn the_handshake_marks_the_ui_ready_for_smoke_runs() {
+    let _scenario = common::scenario();
     use tauri::Manager;
     let studio = Studio::boot();
     let state = studio.app().state::<app_lib::AppState>();
@@ -36,6 +38,7 @@ fn the_handshake_marks_the_ui_ready_for_smoke_runs() {
 
 #[test]
 fn several_studios_can_boot_in_one_process() {
+    let _scenario = common::scenario();
     let first = Studio::boot();
     let second = Studio::boot();
     assert_eq!(first.ok("engine_status", json!({}))["mode"], "Headless");

@@ -5,20 +5,34 @@
 //! on the Windows and macOS CI runners.
 //!
 //! Every test binary under `tests/` uses `mod common;` and `common::Studio::boot()`.
-//! One temporary user folder serves the whole process, so tests must use ids and
-//! file names that cannot collide with another test's (`unique("song")`).
+//! `scenario()` serializes tests and resets their process-specific temporary root.
+//! `unique("song")` separates documents and multiple studios within a scenario.
 #![allow(dead_code)]
 
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Once;
+use std::sync::{Mutex, MutexGuard, Once};
 use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
 use tauri::{ipc::InvokeBody, WebviewWindow};
 
 static ENV: Once = Once::new();
 static COUNTER: AtomicU64 = AtomicU64::new(0);
+// ponytail: file paths are process-wide; serialize scenarios until roots become per-AppState.
+static SCENARIO: Mutex<()> = Mutex::new(());
+
+/// A fresh file sandbox for each scenario; multiple studios within it can share persistence.
+pub fn scenario() -> MutexGuard<'static, ()> {
+    let guard = SCENARIO.lock().unwrap_or_else(|e| e.into_inner());
+    isolate();
+    let root = user_dir();
+    if root.exists() {
+        std::fs::remove_dir_all(&root).expect("clear this test process's temporary files");
+    }
+    std::fs::create_dir_all(root).unwrap();
+    guard
+}
 
 /// The temporary user folder for this test process (`JAM_USER_DIR`).
 pub fn user_dir() -> PathBuf {
@@ -59,7 +73,8 @@ pub struct Studio {
 
 impl Studio {
     /// The desktop app on the mock runtime: same state, same setup hook, same
-    /// command table as `app_lib::run`. Several studios may exist in one process.
+    /// command table as `app_lib::run`. Setup runs when `start_events` is called.
+    /// Several studios may exist in one process.
     pub fn boot() -> Self {
         isolate();
         let app = app_lib::configure(mock_builder(), app_lib::build_state())
@@ -74,6 +89,12 @@ impl Studio {
     /// The Tauri app, for `listen_any`, `state::<AppState>()` and friends.
     pub fn app(&self) -> &tauri::App<tauri::test::MockRuntime> {
         &self.app
+    }
+
+    /// Run the real setup hook and one mock event-loop iteration for event scenarios.
+    #[allow(deprecated)] // One iteration only: runs setup, never the deprecated busy loop.
+    pub fn start_events(&mut self) {
+        self.app.run_iteration(|_, _| {});
     }
 
     /// Invokes a command as the frontend would; `Err` carries the command's error value.

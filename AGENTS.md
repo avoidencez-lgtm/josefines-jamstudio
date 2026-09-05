@@ -29,7 +29,10 @@ corepack pnpm lint; corepack pnpm typecheck; corepack pnpm test; corepack pnpm l
 cargo fmt --all -- --check; cargo clippy --workspace --all-targets -- -D warnings
 $env:JAM_HEADLESS = "1"; cargo test --workspace; cargo deny check
 $env:JAM_HEADLESS = "1"; $env:JAM_FAKE_INPUT = "tests/fixtures/audio/guitar-e-blues-120.wav"; corepack pnpm tauri dev
+corepack pnpm tauri build --debug --no-bundle; $env:JAM_HEADLESS = "1"; $env:JAM_SMOKE_SECONDS = "25"; .\target\debug\src-tauri.exe   # smoke: exit 0 = frontend handshake completed
 ```
+
+End-to-end scenarios (ARCHITECTURE §9.7): `cargo test --workspace` includes the IPC scenarios on Tauri's mock runtime (`src-tauri/tests/ipc_*.rs`), `pnpm test` includes the store scenarios on the preview engine (`tests/e2e/`), and CI smoke-runs the built app on both runners. Run the smoke binary straight after `tauri build`: `cargo test` rebuilds it without the embedded frontend.
 
 ## Stack locks (v1)
 
