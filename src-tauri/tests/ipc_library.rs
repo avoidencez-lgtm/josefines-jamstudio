@@ -530,8 +530,10 @@ fn an_inline_chart_sets_the_transport_tempo_like_a_library_chart_does() {
     let mut chart = four_four(&unique("tempo"));
     chart["defaultBpm"] = json!(132.0);
     studio.ok("band_load_chart_inline", json!({"chart": chart}));
-    let tel = telemetry_where(&studio, "the chart's tempo", |t| {
-        t["transport"]["bpm"] == 132.0
+    // Timing and chart are applied under separate locks. The worker can publish
+    // the new tempo with the previous chord before the full load is visible.
+    let tel = telemetry_where(&studio, "the chart's tempo and first chord", |t| {
+        t["transport"]["bpm"] == 132.0 && t["band"]["current_chord"] == "Gm7"
     });
     assert_eq!(tel["band"]["current_chord"], "Gm7");
 }
