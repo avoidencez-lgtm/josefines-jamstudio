@@ -261,6 +261,8 @@ struct MixParams {
 
 pub struct AudioEngine {
     render_gate: Arc<Mutex<()>>,
+    // Serialises file preparation/finalisation; the render worker never takes it.
+    recording_operation: Mutex<()>,
     recording_clock: Arc<RecordingClock>,
     pub capture: Arc<Mutex<crate::workstation::Capture>>,
     pub clips: Arc<Mutex<Vec<crate::workstation::Clip>>>,
@@ -323,6 +325,7 @@ impl AudioEngine {
 
         Self {
             render_gate: Arc::new(Mutex::new(())),
+            recording_operation: Mutex::new(()),
             recording_clock: Arc::new(RecordingClock::default()),
             capture: Arc::new(Mutex::new(Default::default())),
             clips: Arc::new(Mutex::new(Vec::new())),
@@ -497,11 +500,17 @@ impl AudioEngine {
     // ----- recorder --------------------------------------------------------
 
     pub fn recorder_start(&self, session_id: String) -> Result<String, String> {
+        let _operation = self.recording_operation.lock();
+        let prepared = self.prepare_recorder(session_id, false)?;
         let _gate = self.render_gate.lock();
-        self.recorder_start_inner(session_id)
+        Ok(self.install_recorder(prepared))
     }
 
-    fn recorder_start_inner(&self, session_id: String) -> Result<String, String> {
+    fn prepare_recorder(
+        &self,
+        session_id: String,
+        from_start: bool,
+    ) -> Result<(crate::recorder::TakeRecorder, String), String> {
         if !self.status().running {
             return Err("Start a working audio device before recording.".into());
         }
@@ -516,21 +525,40 @@ impl AudioEngine {
                     .unwrap_or_else(|| "blues-12-bar".into()),
             )
         };
-        let (tempo, meter) = {
+        let (mut tempo, mut meter) = {
             let tl = self.timeline.lock();
             (tl.bpm, tl.time_signature)
         };
-        let mut recorder = self.recorder.lock();
+        if from_start {
+            if let Some(bpm) = self.song_snapshot["body"]["chart"]["defaultBpm"].as_f64() {
+                tempo = bpm;
+                meter = (4, 4);
+            }
+        }
+        let mut recorder = {
+            let current = self.recorder.lock();
+            if current.is_recording() {
+                return Err("A take is already recording. Stop and save it first.".into());
+            }
+            current.idle()
+        };
         recorder.snapshot = self.song_snapshot.clone();
         if recorder.snapshot.is_null() {
             recorder.snapshot = serde_json::json!({});
         }
         recorder.snapshot["timeSignature"] = serde_json::json!(meter);
         let id = recorder.start_take(session_id, style_id, chart_id, tempo)?;
+        Ok((recorder, id))
+    }
+
+    /// Caller holds the render gate; all file creation happened before it.
+    fn install_recorder(&self, (prepared, id): (crate::recorder::TakeRecorder, String)) -> String {
+        let mut current = self.recorder.lock();
+        *current = prepared;
         self.recording_clock.take.fetch_add(1, Ordering::SeqCst);
         self.recording_clock.lost.store(false, Ordering::Release);
         self.recording_clock.active.store(true, Ordering::Release);
-        Ok(id)
+        id
     }
 
     pub fn ensure_timing_editable(&self) -> Result<(), String> {
@@ -541,10 +569,12 @@ impl AudioEngine {
     }
 
     pub fn record_song(&self, session_id: String) -> Result<String, String> {
-        let _gate = self.render_gate.lock();
+        let _operation = self.recording_operation.lock();
         if self.recorder_is_recording() {
             return Err("Save the current take first.".into());
         }
+        let prepared = self.prepare_recorder(session_id, true)?;
+        let _gate = self.render_gate.lock();
         self.transport_stop();
         self.transport_set_count_in(0);
         if let Some(bpm) = self.song_snapshot["body"]["chart"]["defaultBpm"].as_f64() {
@@ -552,7 +582,7 @@ impl AudioEngine {
             self.transport_set_time_signature((4, 4));
             self.transport_set_loop(1, 257, false);
         }
-        let id = self.recorder_start_inner(session_id)?;
+        let id = self.install_recorder(prepared);
         self.timeline.lock().play();
         Ok(id)
     }
@@ -622,6 +652,7 @@ impl AudioEngine {
     }
 
     pub fn recorder_stop(&self) -> Result<crate::recorder::TakeMetadata, String> {
+        let _operation = self.recording_operation.lock();
         let end = {
             let _gate = self.render_gate.lock();
             self.recording_clock.active.store(false, Ordering::Release);
@@ -639,7 +670,12 @@ impl AudioEngine {
             }
             thread::sleep(Duration::from_millis(1));
         }
-        self.recorder.lock().stop_and_save()
+        let mut finished = {
+            let mut current = self.recorder.lock();
+            let idle = current.idle();
+            std::mem::replace(&mut *current, idle)
+        };
+        finished.stop_and_save()
     }
 
     pub fn recorder_set_latency_compensation(&self, offset_samples: usize) {
@@ -1563,6 +1599,7 @@ mod tests {
             .unwrap();
         assert!(engine.recorder_start("no-device".into()).is_err());
         engine.start().unwrap();
+        engine.transport_set_tempo(99.0);
         engine.record_song("test".into()).unwrap();
         assert!(engine.ensure_timing_editable().is_err());
         assert!(engine.record_song("duplicate".into()).is_err());
@@ -1572,6 +1609,10 @@ mod tests {
         let mut recorded = doc.clone();
         recorded["timeSignature"] = serde_json::json!([4, 4]);
         assert_eq!(take.snapshot, recorded);
+        assert_eq!(
+            take.tempo,
+            doc["body"]["chart"]["defaultBpm"].as_f64().unwrap()
+        );
         assert!(take.sample_count > 1000);
         assert!(take.midi.iter().any(|n| n.bytes[0] == 0x99));
         assert!(take.midi.iter().any(|n| n.bytes[0] == 0x90));
@@ -1623,7 +1664,10 @@ mod tests {
             ..Default::default()
         });
 
-        thread::sleep(Duration::from_millis(80));
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while !engine.get_telemetry().band.mute_drums && std::time::Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
         let tel = engine.get_telemetry();
         assert!(tel.band.mute_drums);
         assert!(tel.band.mute_bass);

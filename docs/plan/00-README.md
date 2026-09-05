@@ -73,6 +73,11 @@ cover the implementation; current-head Windows/macOS CI remains the merge gate.
 This does not complete the remaining V1 capabilities or signing, and friend-led
 hardware checks remain deferred to V2.
 
+PR #210 integrates #192 while moving file preparation and finalisation outside
+the render/recorder locks. Recording activates atomically with song playback;
+metadata uses the song tempo and failed capture saves preserve the idea buffer.
+Current-head CI remains required before merge. The remaining V1 scope is unchanged.
+
 2026-09-05 Jo action results (issue #166): transport, band and recording refusals
 reach Jo as explicit failures while retaining the normal UI notice. Success uses
 the accepted command value, including clamped tempo, and unchanged document edits
