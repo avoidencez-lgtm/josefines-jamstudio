@@ -72,7 +72,7 @@ export const JO_TOOLS: JoToolDeclaration[] = [
   {
     name: "analyze_take",
     description:
-      "Run the existing local timing/dynamics/intonation analysis of a saved guitar take. Use a take ID from context. Metrics are heuristic, not a human listening review.",
+      "Run local timing/dynamics/intonation analysis of a saved guitar take. Use a take ID from context. Prefer raw ms, cents, level CV and coverage counts; null means unavailable. Legacy percentage zero can also mean unavailable. Grid distance can reflect intentional syncopation; bends and accents are not necessarily errors. This is heuristic evidence, not a listening review.",
     parameters: {
       type: "object",
       properties: { takeId: { type: "string" } },

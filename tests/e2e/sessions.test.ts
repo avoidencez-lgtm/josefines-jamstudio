@@ -270,6 +270,12 @@ it("analyses a take honestly in the preview (no audio, all zeros), caches it per
   const meta = await recordTake(TODAY, 12);
   const analysis = await s.analyzeTake(meta.id);
   expect(analysis).toEqual({
+    meanGridDistanceMs: null,
+    gridBiasMs: null,
+    gridSpreadMs: null,
+    attackLevelCvPct: null,
+    meanAbsCents: null,
+    pitchedFrames: 0,
     timingAccuracyPct: 0,
     dynamicConsistencyPct: 0,
     intonationAccuracyPct: 0,
