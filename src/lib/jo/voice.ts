@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { ipc } from "../../ipc/client";
+import { ipc, isPreview } from "../../ipc/client";
+import { useJoConversation } from "./conversation";
 
 export type VoicePhase =
   | "idle"
@@ -19,7 +20,8 @@ export const useVoice = create<{
   phase: VoicePhase;
   error: string | null;
   seconds: number;
-}>(() => ({ phase: "idle", error: null, seconds: 0 }));
+  shortcut: string | null;
+}>(() => ({ phase: "idle", error: null, seconds: 0, shortcut: null }));
 let epoch = 0;
 let opening: Promise<Turn> | null = null;
 let cancellation: Promise<void> | null = null;
@@ -29,6 +31,58 @@ const clearTimers = () => {
   clearTimeout(deadline);
   clearInterval(poll);
 };
+
+export async function setVoiceShortcut(shortcut: string | null) {
+  try {
+    useVoice.setState({
+      shortcut: await ipc.invoke<string | null>("voice_shortcut", { shortcut }),
+    });
+  } catch (error) {
+    // Registration may have disabled the previous key before refusing the new one.
+    const status = await ipc.invoke<{ shortcut: string | null }>(
+      "voice_status",
+    );
+    useVoice.setState({ shortcut: status.shortcut });
+    throw error;
+  }
+}
+
+/** One listener for the lifetime of the app; room changes do not duplicate it. */
+export async function listenToVoice(query: VoiceQuery) {
+  if (isPreview) return () => {};
+  let held = false;
+  const off = await ipc.listen<boolean>("voice.ptt", (down) => {
+    if (!useVoice.getState().shortcut) return;
+    // OS auto-repeat must not begin another turn after the 20-second limit.
+    if (down === held) return;
+    held = down;
+    if (down) void startVoice(query);
+    else void releaseVoice(query);
+  });
+  const unwatch = useVoice.subscribe((next, previous) => {
+    if (next.shortcut !== previous.shortcut) held = false;
+  });
+  const blur = () => {
+    if (["opening", "listening"].includes(useVoice.getState().phase))
+      void cancelVoice();
+  };
+  window.addEventListener("blur", blur);
+  return () => {
+    off();
+    unwatch();
+    window.removeEventListener("blur", blur);
+    void cancelVoice();
+    void setVoiceShortcut(null).catch(() => {});
+  };
+}
+
+/** MIDI Program Change has no release edge: successive presses start/send. */
+export async function toggleVoice(query: VoiceQuery) {
+  const phase = useVoice.getState().phase;
+  if (["opening", "listening"].includes(phase)) await releaseVoice(query);
+  else if (["idle", "speaking"].includes(phase)) await startVoice(query);
+  else await cancelVoice();
+}
 
 export async function cancelVoice() {
   if (cancellation) return cancellation;
@@ -51,6 +105,7 @@ export async function cancelVoice() {
 }
 
 export async function startVoice(query: VoiceQuery) {
+  if (useJoConversation.getState().busy) return;
   if (!["idle", "speaking"].includes(useVoice.getState().phase)) return;
   const turn = ++epoch;
   clearTimers();

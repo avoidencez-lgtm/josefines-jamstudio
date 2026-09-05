@@ -24,7 +24,7 @@ fn validate(doc: &Value) -> Result<(), String> {
         let action = b["action"].as_str().unwrap_or("");
         let p: jam_rig::controller::PedalPress =
             serde_json::from_value(b["press"].clone()).map_err(|e| e.to_string())?;
-        if !["keep", "record", "play", "loop", "next", "version"].contains(&action)
+        if !["keep", "record", "play", "loop", "next", "version", "voice"].contains(&action)
             || !["program", "cc", "note"].contains(&p.kind.as_str())
             || !(1..=16).contains(&p.channel)
             || p.number > 127

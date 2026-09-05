@@ -15,7 +15,9 @@ import {
   windowCloseAction,
 } from "./lib/closeGuard";
 import { listenToController } from "./lib/controller";
+import { handleJoQuery } from "./lib/jo/conversation";
 import { useAi } from "./lib/jo/providers";
+import { listenToVoice } from "./lib/jo/voice";
 import { handleShortcut } from "./lib/shortcuts";
 import { SCREENS, SCREEN_ICONS } from "./screens/registry";
 import { useEngineStore } from "./store/engine";
@@ -149,16 +151,20 @@ export const App: React.FC = () => {
   }, []);
   useEffect(() => {
     let closed = false;
-    let off: (() => void) | undefined;
-    void listenToController()
-      .then((cleanup) => {
-        if (closed) cleanup();
-        else off = cleanup;
-      })
-      .catch((e) => useEngineStore.getState().notify("error", String(e)));
+    const cleanups: (() => void)[] = [];
+    for (const listen of [
+      listenToController,
+      () => listenToVoice(handleJoQuery),
+    ])
+      void listen()
+        .then((cleanup) => {
+          if (closed) cleanup();
+          else cleanups.push(cleanup);
+        })
+        .catch((e) => useEngineStore.getState().notify("error", String(e)));
     return () => {
       closed = true;
-      off?.();
+      for (const stop of cleanups) stop();
     };
   }, []);
 

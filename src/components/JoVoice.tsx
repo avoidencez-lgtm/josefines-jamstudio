@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { ipc, isPreview } from "../ipc/client";
 import type { AppSettings, AudioDevices } from "../ipc/contract";
+import { handleJoQuery, useJoConversation } from "../lib/jo/conversation";
 import {
-  type VoiceQuery,
   cancelVoice,
   releaseVoice,
+  setVoiceShortcut,
   startVoice,
   useVoice,
 } from "../lib/jo/voice";
@@ -18,6 +19,7 @@ const configSchema = z
     microphone: z.string().nullable().default(null),
     voiceId: z.string().max(100).default(""),
     duckDb: z.number().min(-24).max(0).default(-9),
+    shortcut: z.string().max(100).default("CommandOrControl+Shift+J"),
   })
   .passthrough();
 type VoiceConfig = z.infer<typeof configSchema>;
@@ -32,8 +34,8 @@ const labels = {
   speaking: "Jo is speaking",
 };
 
-export function JoVoice({ query, busy }: { query: VoiceQuery; busy: boolean }) {
-  const { phase, error } = useVoice();
+export function JoVoice() {
+  const { phase, shortcut } = useVoice();
   const hasKey = useEngineStore((s) => Boolean(s.keysPresent.elevenlabs));
   const [draft, setDraft] = useState<VoiceConfig>(configSchema.parse({}));
   const [saved, setSaved] = useState<VoiceConfig | null>(null);
@@ -45,11 +47,6 @@ export function JoVoice({ query, busy }: { query: VoiceQuery; busy: boolean }) {
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     let mounted = true;
-    const stopOnBlur = () => {
-      if (["opening", "listening"].includes(useVoice.getState().phase))
-        void cancelVoice();
-    };
-    window.addEventListener("blur", stopOnBlur);
     void Promise.all([
       ipc.invoke<AppSettings>("settings_get"),
       ipc.invoke<AudioDevices>("audio_list_devices"),
@@ -66,13 +63,9 @@ export function JoVoice({ query, busy }: { query: VoiceQuery; busy: boolean }) {
       });
     return () => {
       mounted = false;
-      window.removeEventListener("blur", stopOnBlur);
-      if (!isPreview) void cancelVoice();
     };
   }, []);
   const active = phase !== "idle";
-  const ready =
-    !isPreview && hasKey && Boolean(saved?.voiceId) && !busy && !saving;
   const run = async (operation: () => Promise<void>) => {
     setSaving(true);
     setMessage("");
@@ -86,72 +79,12 @@ export function JoVoice({ query, busy }: { query: VoiceQuery; busy: boolean }) {
   };
   return (
     <section className="flex flex-col gap-3" aria-label="Jo voice">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          size="lg"
-          variant={phase === "listening" ? "danger" : "secondary"}
-          disabled={
-            !ready ||
-            !["idle", "opening", "listening", "speaking"].includes(phase)
-          }
-          aria-pressed={phase === "listening"}
-          onPointerDown={(event) => {
-            if (event.button !== 0) return;
-            event.currentTarget.setPointerCapture(event.pointerId);
-            void startVoice(query);
-          }}
-          onPointerUp={() => void releaseVoice(query)}
-          onPointerCancel={() => void cancelVoice()}
-          onKeyDown={(event) => {
-            if ([" ", "Enter"].includes(event.key)) {
-              event.preventDefault();
-              if (!event.repeat) void startVoice(query);
-            }
-          }}
-          onKeyUp={(event) => {
-            if ([" ", "Enter"].includes(event.key)) {
-              event.preventDefault();
-              void releaseVoice(query);
-            }
-          }}
-          onBlur={() => {
-            if (["opening", "listening"].includes(useVoice.getState().phase))
-              void cancelVoice();
-          }}
-        >
-          {phase === "listening" ? "Release to send" : "Hold to talk"}
-        </Button>
-        {active && (
-          <Button type="button" onClick={() => void cancelVoice()}>
-            Cancel voice
-          </Button>
-        )}
-        <output className="text-sm text-[var(--fg-1)]">
-          {isPreview
-            ? "Voice requires the desktop app"
-            : !hasKey
-              ? "Add an ElevenLabs key to enable voice"
-              : !saved?.voiceId
-                ? "Choose a voice below"
-                : labels[phase]}
-        </output>
-        {!hasKey && (
-          <Button type="button" onClick={openAiSettings}>
-            API key settings
-          </Button>
-        )}
-      </div>
+      <JoVoiceControls disabled={!saved?.voiceId || saving} />
       <p className="text-sm text-[var(--fg-1)]">
         Hold the button, Space or Enter while focused. Release to send up to 20
         seconds to ElevenLabs. A new press interrupts Jo. Provider charges
         apply.
       </p>
-      {error && (
-        <p role="alert" className="text-sm text-[var(--record)]">
-          {error}
-        </p>
-      )}
       <details>
         <summary className="cursor-pointer text-sm">Voice setup</summary>
         <div className="flex flex-wrap items-end gap-3 py-3">
@@ -265,10 +198,132 @@ export function JoVoice({ query, busy }: { query: VoiceQuery; busy: boolean }) {
             Save voice setup
           </Button>
         </div>
+        <div className="flex flex-wrap items-end gap-3 py-3">
+          <label className="room-tool-field">
+            Global hold shortcut
+            <input
+              value={draft.shortcut}
+              maxLength={100}
+              disabled={active || saving || Boolean(shortcut)}
+              onChange={(e) => setDraft({ ...draft, shortcut: e.target.value })}
+            />
+          </label>
+          <Button
+            disabled={
+              isPreview ||
+              saving ||
+              (!shortcut && (active || !hasKey || !saved?.voiceId))
+            }
+            onClick={() =>
+              void run(async () => {
+                if (shortcut) await cancelVoice();
+                await setVoiceShortcut(shortcut ? null : draft.shortcut);
+              })
+            }
+          >
+            {shortcut
+              ? "Disable global shortcut"
+              : "Enable shortcut for this session"}
+          </Button>
+        </div>
+        <p className="text-sm text-[var(--fg-1)]">
+          {shortcut ? `Active: ${shortcut}. ` : "Shortcut is off. "}When
+          enabled, hold it in any app and release to send microphone audio to
+          ElevenLabs. Save voice setup to remember the combination; enabling is
+          session-only. In Write → Hands-free controls, learn Talk / send to Jo
+          for a two-press pedal.
+        </p>
         {message && (
           <output className="text-sm text-[var(--fg-1)]">{message}</output>
         )}
       </details>
     </section>
+  );
+}
+
+export function JoVoiceControls({
+  disabled = false,
+  compact = false,
+}: { disabled?: boolean; compact?: boolean }) {
+  const { phase, error } = useVoice();
+  const hasKey = useEngineStore((s) => Boolean(s.keysPresent.elevenlabs));
+  const busy = useJoConversation((s) => s.busy);
+  const ready = !isPreview && hasKey && !busy && !disabled;
+  const active = phase !== "idle";
+  if (compact && isPreview) return null;
+  if (compact && !hasKey)
+    return (
+      <Button
+        size="sm"
+        onClick={() => useEngineStore.getState().setScreen("jo")}
+      >
+        Set up Jo voice
+      </Button>
+    );
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          size={compact ? "sm" : "lg"}
+          variant={phase === "listening" ? "danger" : "secondary"}
+          disabled={
+            !ready ||
+            !["idle", "opening", "listening", "speaking"].includes(phase)
+          }
+          aria-pressed={phase === "listening"}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            void startVoice(handleJoQuery);
+          }}
+          onPointerUp={() => void releaseVoice(handleJoQuery)}
+          onPointerCancel={() => void cancelVoice()}
+          onKeyDown={(event) => {
+            if ([" ", "Enter"].includes(event.key)) {
+              event.preventDefault();
+              if (!event.repeat) void startVoice(handleJoQuery);
+            }
+          }}
+          onKeyUp={(event) => {
+            if ([" ", "Enter"].includes(event.key)) {
+              event.preventDefault();
+              void releaseVoice(handleJoQuery);
+            }
+          }}
+          onBlur={() => {
+            if (["opening", "listening"].includes(useVoice.getState().phase))
+              void cancelVoice();
+          }}
+        >
+          {phase === "listening" ? "Release to send" : "Hold to talk"}
+        </Button>
+        {active && (
+          <Button type="button" onClick={() => void cancelVoice()}>
+            Cancel voice
+          </Button>
+        )}
+        {(!compact || active) && (
+          <output className="text-sm text-[var(--fg-1)]">
+            {isPreview
+              ? "Voice requires the desktop app"
+              : !hasKey
+                ? "Add an ElevenLabs key to enable voice"
+                : labels[phase]}
+          </output>
+        )}
+        {!hasKey && (
+          <Button type="button" onClick={openAiSettings}>
+            API key settings
+          </Button>
+        )}
+      </div>
+
+      {error && (
+        <p role="alert" className="max-w-xl text-sm text-[var(--record)]">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

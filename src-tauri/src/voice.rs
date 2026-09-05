@@ -12,6 +12,7 @@ pub struct VoiceSession {
     microphone: Option<Microphone>,
     phase: &'static str,
     error: Option<String>,
+    shortcut: Option<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -57,6 +58,7 @@ pub struct VoiceStatus {
     generation: u32,
     phase: String,
     error: Option<String>,
+    shortcut: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -82,7 +84,19 @@ pub fn voice_status(state: State<'_, AppState>) -> VoiceStatus {
         }
         .into(),
         error: session.error.clone(),
+        shortcut: session.shortcut.clone(),
     }
+}
+
+#[tauri::command]
+pub fn voice_shortcut<R: tauri::Runtime>(
+    shortcut: Option<String>,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle<R>,
+) -> Result<Option<String>, String> {
+    let mut session = state.voice.lock();
+    crate::platform::voice_shortcut::set(&app, &mut session.shortcut, shortcut)?;
+    Ok(session.shortcut.clone())
 }
 
 #[tauri::command]

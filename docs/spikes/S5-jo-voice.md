@@ -49,8 +49,23 @@ interrupting speech does not erase samples already queued for the device.
   stop, cancelled transcription/LLM, startup cancellation and actual-result speech.
 
 The JSON fixture is authored from the documented response shape, not a recorded
-provider response. Global/MIDI activation, Stage presence, the planned recorded
+provider response. The planned recorded
 30-utterance script, speech usage units and first-audio latency measurement remain
 M2 work. A live headset run must record ten release-to-first-audio measurements,
 their median and duck recovery; the target is median ≤2.5 s. Full-response TTS
 buffering is the present ceiling; stream PCM if live evidence misses that target.
+
+## Stage, global key and MIDI controls (2026-09-06)
+
+The [official Tauri shortcut guide](https://v2.tauri.app/plugin/global-shortcut/)
+and [Rust shortcut API](https://docs.rs/tauri-plugin-global-shortcut/latest/tauri_plugin_global_shortcut/struct.Shortcut.html)
+confirm native Pressed/Released events and portable modifier parsing. The plugin
+is a Rust-only dependency here; its generic JS commands are not exposed. No OS
+shortcut registers until the user enables one. Headless registration is refused.
+Global key repeats are coalesced through the same tested voice lifecycle. MIDI
+uses existing learned presses because Program Change has no release edge. Stage
+and Jo AI now share the conversation implementation and review boundary.
+
+Automated checks prove command registration/validation, state transitions and
+shared dispatcher outcomes. They do not prove physical keyboard interception,
+MIDI wiring, microphone permissions or paid-provider latency on the user's rig.

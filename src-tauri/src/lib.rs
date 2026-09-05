@@ -1189,6 +1189,7 @@ pub fn configure<R: tauri::Runtime>(
             voice::voice_speak,
             voice::voice_cancel,
             voice::voice_status,
+            voice::voice_shortcut,
             media::media_list,
             media::media_save,
             media::media_import,
@@ -1356,7 +1357,9 @@ pub fn jam_log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let built = configure(
-        tauri::Builder::default().plugin(jam_log_plugin()),
+        tauri::Builder::default()
+            .plugin(jam_log_plugin())
+            .plugin(platform::voice_shortcut::plugin()),
         build_state(),
     )
     .build(tauri::generate_context!())

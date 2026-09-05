@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { ipc, isPreview } from "../ipc/client";
 import { useEngineStore } from "../store/engine";
+import { handleJoQuery } from "./jo/conversation";
+import { cancelVoice, toggleVoice, useVoice } from "./jo/voice";
 import { useWriting } from "./originals";
 
 export const PEDAL_ACTIONS = {
@@ -10,6 +12,7 @@ export const PEDAL_ACTIONS = {
   loop: "Loop selected section",
   next: "Next section loop",
   version: "Keep a version",
+  voice: "Talk / send to Jo",
 } as const;
 export type PedalAction = keyof typeof PEDAL_ACTIONS;
 export interface PedalPress {
@@ -84,6 +87,8 @@ export const useController = create<ControllerState>((set, get) => ({
   connect: async (port) => {
     set({ enabled: false, learning: null, busy: true });
     try {
+      if (["opening", "listening"].includes(useVoice.getState().phase))
+        await cancelVoice();
       await ipc.invoke("controller_open", { port: port || null });
       set({
         port,
@@ -135,6 +140,10 @@ export const useController = create<ControllerState>((set, get) => ({
       samePress(b.press, press),
     )?.action;
     if (!action) return;
+    if (action === "voice") {
+      await toggleVoice(handleJoQuery);
+      return;
+    }
     const w = useWriting.getState();
     await w.action(async () => {
       if (action === "keep") await w.keep();
