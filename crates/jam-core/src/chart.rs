@@ -1,6 +1,8 @@
 //! chart: Chord charts, arrangement expansion, and chord resolution math.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +19,8 @@ pub struct ChartSection {
     pub bars: Vec<Vec<BarChord>>,
     #[serde(default)]
     pub style_override_id: Option<String>,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -45,6 +49,8 @@ pub struct Chart {
     pub default_style_id: Option<String>,
     pub sections: Vec<ChartSection>,
     pub arrangement: Vec<ArrangementItem>,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -68,6 +74,8 @@ pub struct ResolvedChart {
 }
 
 impl Chart {
+    pub const SCHEMA_VERSION: u32 = 1;
+
     /// Resolves the chart arrangement into a sequence of bars.
     pub fn resolve(&self) -> ResolvedChart {
         let mut bars = Vec::new();
@@ -242,11 +250,13 @@ mod tests {
                 name: "Verse".into(),
                 bars: verse_bars,
                 style_override_id: None,
+                extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
                 section_id: "verse".into(),
                 repeats: 2, // 2 chorus = 24 bars
             }],
+            extra: HashMap::new(),
         };
 
         let resolved = chart.resolve();
@@ -295,11 +305,13 @@ mod tests {
                     }],
                 ],
                 style_override_id: None,
+                extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
                 section_id: "a".into(),
                 repeats: 1,
             }],
+            extra: HashMap::new(),
         };
         let r = chart.resolve();
         assert_eq!(r.chord_at(1, 1), ("A7".into(), Some("D7".into())));
@@ -312,6 +324,33 @@ mod tests {
         assert_eq!(r.chord_at(2, 1), ("E7".into(), Some("A7".into())));
         // Wraps around the arrangement.
         assert_eq!(r.chord_at(3, 1).0, "A7");
+    }
+
+    #[test]
+    fn unknown_fields_survive_a_rewrite() {
+        let raw = r#"{
+            "schemaVersion": 1,
+            "id": "extra-chart",
+            "name": "Extra",
+            "keyTonic": 0,
+            "mode": "major",
+            "timeSig": [4, 4],
+            "defaultBpm": 120.0,
+            "rigSceneId": "clean",
+            "sections": [{
+                "id": "a",
+                "name": "A",
+                "bars": [[{"chord": "C", "beats": 4}]],
+                "intensity": 0.5
+            }],
+            "arrangement": [{"sectionId": "a", "repeats": 1}]
+        }"#;
+        let chart: Chart = crate::json::from_str(raw).unwrap();
+        assert_eq!(chart.extra["rigSceneId"], "clean");
+        assert_eq!(chart.sections[0].extra["intensity"], 0.5);
+        let again: Chart = crate::json::from_str(&serde_json::to_string(&chart).unwrap()).unwrap();
+        assert_eq!(again.extra["rigSceneId"], "clean");
+        assert_eq!(again.sections[0].extra["intensity"], 0.5);
     }
 
     #[test]

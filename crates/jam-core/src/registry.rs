@@ -11,9 +11,23 @@ pub static BUNDLED_RIGS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../rigs"
 pub static BUNDLED_CONTROLS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../controls");
 
 pub trait VersionedManifest {
+    const MAX_SCHEMA_VERSION: u32;
     fn schema_version(&self) -> u32;
     fn id(&self) -> &str;
     fn name(&self) -> &str;
+}
+
+fn accept_schema<T: VersionedManifest>(item: &T) -> Result<(), String> {
+    if item.schema_version() > T::MAX_SCHEMA_VERSION {
+        Err(format!(
+            "{} needs schemaVersion {} or older (found {}).",
+            item.id(),
+            T::MAX_SCHEMA_VERSION,
+            item.schema_version()
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -27,6 +41,7 @@ pub struct ControlMapManifest {
 }
 
 impl VersionedManifest for ControlMapManifest {
+    const MAX_SCHEMA_VERSION: u32 = 1;
     fn schema_version(&self) -> u32 {
         self.schema_version
     }
@@ -39,6 +54,7 @@ impl VersionedManifest for ControlMapManifest {
 }
 
 impl VersionedManifest for crate::style::Style {
+    const MAX_SCHEMA_VERSION: u32 = crate::style::Style::SCHEMA_VERSION;
     fn schema_version(&self) -> u32 {
         self.schema_version
     }
@@ -51,6 +67,7 @@ impl VersionedManifest for crate::style::Style {
 }
 
 impl VersionedManifest for crate::chart::Chart {
+    const MAX_SCHEMA_VERSION: u32 = crate::chart::Chart::SCHEMA_VERSION;
     fn schema_version(&self) -> u32 {
         self.schema_version
     }
@@ -81,6 +98,8 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
                 if let Some(content) = file.contents_utf8() {
                     match crate::json::from_str::<T>(content) {
                         Ok(item) => {
+                            accept_schema(&item)
+                                .map_err(|e| format!("{}: {e}", file.path().display()))?;
                             self.items.insert(item.id().to_string(), item);
                             count += 1;
                         }
@@ -110,10 +129,13 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
                 if p.extension().is_some_and(|ext| ext == "json") {
                     match std::fs::read_to_string(&p) {
                         Ok(content) => match crate::json::from_str::<T>(&content) {
-                            Ok(item) => {
-                                self.items.insert(item.id().to_string(), item);
-                                count += 1;
-                            }
+                            Ok(item) => match accept_schema(&item) {
+                                Ok(()) => {
+                                    self.items.insert(item.id().to_string(), item);
+                                    count += 1;
+                                }
+                                Err(e) => errors.push(format!("{}: {e}", p.display())),
+                            },
                             Err(e) => errors.push(format!("{}: {e}", p.display())),
                         },
                         Err(e) => errors.push(format!("{}: {e}", p.display())),
@@ -202,6 +224,27 @@ mod tests {
         assert_eq!(errors, Vec::<String>::new());
         assert_eq!(count, 1);
         assert_eq!(maps.get("bom-map").unwrap().name, "BOM");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn future_schema_version_is_refused() {
+        let dir = std::env::temp_dir().join(format!("jam-registry-schema-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut chart: Chart =
+            crate::json::from_str(include_str!("../../../charts/blues-12-bar.json")).unwrap();
+        chart.schema_version = 2;
+        std::fs::write(dir.join("future.json"), serde_json::to_vec(&chart).unwrap()).unwrap();
+        let mut charts: SeamRegistry<Chart> = SeamRegistry::new();
+        let (count, errors) = charts.load_from_fs_dir(&dir);
+        assert_eq!(count, 0);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("schemaVersion") && e.contains('2')),
+            "{errors:?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -96,4 +96,27 @@ pub struct Style {
     #[serde(default)]
     pub endings: Vec<DrumPattern>,
     pub humanize: StyleHumanize,
+    #[serde(default, flatten)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
+}
+
+impl Style {
+    pub const SCHEMA_VERSION: u32 = 1;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_fields_survive_a_rewrite() {
+        let mut style: Style =
+            crate::json::from_str(include_str!("../../../styles/blues-shuffle.json")).unwrap();
+        style
+            .extra
+            .insert("authorNote".into(), serde_json::json!("keep"));
+        let again: Style = crate::json::from_str(&serde_json::to_string(&style).unwrap()).unwrap();
+        assert_eq!(again.extra["authorNote"], "keep");
+        assert_eq!(again.id, "blues-shuffle");
+    }
 }

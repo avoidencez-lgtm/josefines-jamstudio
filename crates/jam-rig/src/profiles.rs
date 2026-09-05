@@ -300,6 +300,7 @@ pub enum Rendered {
 }
 
 impl jam_core::registry::VersionedManifest for RigProfile {
+    const MAX_SCHEMA_VERSION: u32 = 1;
     fn schema_version(&self) -> u32 {
         self.schema_version
     }

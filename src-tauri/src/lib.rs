@@ -1374,6 +1374,7 @@ mod chart_timing {
             default_style_id: None,
             sections: vec![],
             arrangement: vec![],
+            extra: Default::default(),
         }
     }
 
