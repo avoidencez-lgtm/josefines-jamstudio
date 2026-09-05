@@ -29,6 +29,8 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
     transportStop,
     rigState,
     loadRigProfiles,
+    loadedOriginal,
+    currentChart,
   } = useEngineStore(
     useShallow((s) => ({
       styles: s.styles,
@@ -40,12 +42,18 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
       transportStop: s.transportStop,
       rigState: s.rigState,
       loadRigProfiles: s.loadRigProfiles,
+      loadedOriginal: s.loadedOriginal,
+      currentChart: s.currentChart,
     })),
   );
   const [versionName, setVersionName] = useState("");
   const [captureLength, setCaptureLength] = useState(30);
   const [fitBars, setFitBars] = useState(4);
   const song = w.song;
+  const draftLoaded =
+    song &&
+    loadedOriginal?.id === song.id &&
+    JSON.stringify(loadedOriginal.body) === JSON.stringify(song.body);
   const section =
     song?.body.chart.sections.find((s) => s.id === w.selected) ??
     song?.body.chart.sections[0];
@@ -196,6 +204,22 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
               {isRecording ? "Save take" : "Record"}
             </Button>
           </div>
+          <output className="song-loaded-state">
+            <span>
+              <strong>Loaded in band: </strong>
+              {currentChart?.name ?? "No arrangement"}
+              {draftLoaded
+                ? ". This draft is loaded."
+                : ". Play song loads your current draft; Space resumes the loaded arrangement."}
+            </span>
+            <button
+              type="button"
+              onClick={() => onHelp("write.song-map-and-linked-sections")}
+              aria-label="Help with loaded arrangement"
+            >
+              ?
+            </button>
+          </output>
           <div className="write-navigation">
             <nav className="write-views" aria-label="Writing views">
               {(

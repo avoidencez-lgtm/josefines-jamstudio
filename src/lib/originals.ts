@@ -69,6 +69,16 @@ export interface Original {
   [key: string]: unknown;
 }
 
+/** Retain the exact draft accepted by the engine, even if a later play step fails. */
+async function loadOriginal(song: Original) {
+  const snapshot = structuredClone(song);
+  await ipc.invoke("originals_load", { document: snapshot });
+  useEngineStore.setState({
+    currentChart: snapshot.body.chart,
+    loadedOriginal: { id: snapshot.id, body: snapshot.body },
+  });
+}
+
 export function defaultSection(): SectionSettings {
   return {
     swing: 0.5,
@@ -360,8 +370,7 @@ export const useWriting = create<WritingState>((set, get) => ({
   play: async () => {
     const song = get().song;
     if (!song) return;
-    await ipc.invoke("originals_load", { document: song });
-    useEngineStore.setState({ currentChart: song.body.chart });
+    await loadOriginal(song);
     await ipc.invoke("transport_set_count_in", { bars: 0 });
     await ipc.invoke("transport_play");
   },
@@ -399,12 +408,11 @@ export const useWriting = create<WritingState>((set, get) => ({
       endBar > (ranges.at(-1)?.endBar ?? 1)
     )
       throw new Error("Choose a loop inside the song form.");
-    await ipc.invoke("originals_load", { document: song });
+    await loadOriginal(song);
     await ipc.invoke("transport_set_count_in", { bars: 0 });
     await ipc.invoke("transport_set_loop", { startBar, endBar, enabled: true });
     await ipc.invoke("transport_seek_bar", { bar: startBar });
     await ipc.invoke("transport_play");
-    useEngineStore.setState({ currentChart: song.body.chart });
   },
   record: async () => {
     const engine = useEngineStore.getState();
@@ -420,11 +428,13 @@ export const useWriting = create<WritingState>((set, get) => ({
     const song = get().song;
     if (!song) return;
     await get().save();
-    await ipc.invoke("originals_load", { document: get().song });
-    await ipc.invoke("originals_record", { sessionId: song.id });
+    const saved = get().song;
+    if (!saved || saved.id !== song.id)
+      throw new Error("The open song changed while saving. Record again.");
+    await loadOriginal(saved);
+    await ipc.invoke("originals_record", { sessionId: saved.id });
     useEngineStore.setState({
       isRecording: true,
-      currentChart: song.body.chart,
     });
   },
   arm: async (seconds) => {

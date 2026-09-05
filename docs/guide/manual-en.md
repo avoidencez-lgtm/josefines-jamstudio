@@ -32,6 +32,8 @@ The sidebar names each room and its purpose. Help & guides opens this searchable
 
 The Song map is the played order, with bar ranges, repeats and band intensity. Select a section to edit it. A repeated section shares chords, lyrics and band settings wherever it appears. Make variation creates an independent section. Add section copies the selected chords with default band settings. Edit order and repeats moves, removes or repeats form entries; it does not delete the underlying section. Delete section removes a section that is no longer in the form, with its lyrics and band settings; a version is kept first and Undo restores it.
 
+Loaded in band names the arrangement most recently loaded successfully. This draft is loaded means the full draft matches that snapshot, including band settings and guitar layers. Editing or opening another song does not replace it. Play song loads the current draft; Space resumes the loaded arrangement. Save song writes to disk without changing playback. Loop section and Record also load the draft. A take audition is separate from the band; this status does not claim that the band is currently sounding. The ? beside the status opens this help.
+
 ### Edit chords and harmony
 
 Click a chord cell. The bar field accepts Am:3 G:1 for three beats of Am and one of G, or Dm G for an even split. Enter or leaving the field applies; Escape cancels. Invalid text leaves the previous bar unchanged. Add bar copies the selected bar; Remove bar keeps at least one. Transform phrase rotates, reverses or repeats the bars. Undo restores the previous state.

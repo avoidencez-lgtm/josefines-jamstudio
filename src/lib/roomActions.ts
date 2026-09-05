@@ -75,7 +75,7 @@ export async function cueSetlistItem(item: Setlist[number]) {
     followChart: true,
   });
   // Reflect the successful load even if a later setup command fails.
-  useEngineStore.setState({ currentChart: chart });
+  useEngineStore.setState({ currentChart: chart, loadedOriginal: null });
   // followChart restored the chart's default groove; the entry's own groove wins.
   if (cue.styleId) await ipc.invoke("band_set_style", { styleId: cue.styleId });
   await ipc.invoke("transport_set_tempo", { bpm: cue.bpm });
