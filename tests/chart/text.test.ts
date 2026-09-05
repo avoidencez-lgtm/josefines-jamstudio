@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Chart } from "../../src/ipc/contract";
 import {
   chartToText,
+  isRestSymbol,
   parseChartText,
   resolveChart,
 } from "../../src/lib/chart/text";
@@ -35,6 +36,31 @@ describe("chart text parser", () => {
     expect(chart?.sections[0].bars).toHaveLength(12);
     expect(chart?.arrangement).toEqual([{ sectionId: "chorus", repeats: 2 }]);
     expect(resolveChart(chart as Chart)).toHaveLength(24);
+  });
+
+  it("treats N.C., rest and - as playable rest bars (#130)", () => {
+    for (const tok of [
+      "N.C.",
+      "N.C",
+      "NC",
+      "NC.",
+      "n.c.",
+      "rest",
+      "REST",
+      "-",
+    ]) {
+      expect(isRestSymbol(tok)).toBe(true);
+    }
+    expect(isRestSymbol("A7")).toBe(false);
+    expect(isRestSymbol("Am")).toBe(false);
+    const { chart, problems } = parseChartText("[A]\n| A7 | N.C. | rest | - |");
+    expect(problems).toEqual([]);
+    expect(chart?.sections[0].bars.map((b) => b[0].chord)).toEqual([
+      "A7",
+      "N.C.",
+      "rest",
+      "-",
+    ]);
   });
 
   it("splits bars evenly, honours explicit beats and % repeats", () => {

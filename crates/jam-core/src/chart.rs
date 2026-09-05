@@ -113,7 +113,7 @@ impl ResolvedChart {
     /// `beats` durations, so "A7 D7" over two beats each gives D7 from beat 3.
     pub fn chord_at_position(&self, bar: u32, beat_pos: f64) -> (String, Option<String>) {
         if self.bars.is_empty() {
-            return ("A7".into(), None);
+            return (String::new(), None);
         }
 
         let total_bars = self.bars.len();
@@ -138,7 +138,7 @@ impl ResolvedChart {
             .chords
             .get(chord_idx)
             .map(|c| c.chord.clone())
-            .unwrap_or_else(|| "A7".into());
+            .unwrap_or_default();
 
         let next = if chord_idx + 1 < this_bar.chords.len() {
             this_bar.chords.get(chord_idx + 1).map(|c| c.chord.clone())
@@ -312,5 +312,18 @@ mod tests {
         assert_eq!(r.chord_at(2, 1), ("E7".into(), Some("A7".into())));
         // Wraps around the arrangement.
         assert_eq!(r.chord_at(3, 1).0, "A7");
+    }
+
+    #[test]
+    fn empty_chart_is_silent() {
+        let chart = ResolvedChart {
+            id: "empty".into(),
+            name: "empty".into(),
+            key_tonic: 0,
+            time_sig: (4, 4),
+            default_bpm: 120.0,
+            bars: vec![],
+        };
+        assert_eq!(chart.chord_at_position(1, 0.0), (String::new(), None));
     }
 }
