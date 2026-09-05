@@ -208,6 +208,7 @@ export function createPreviewEngine(
   let clickVolume = 0.7;
   let countInRemainingBeats = 0;
   let lastBar = -1;
+  let resumeBar = 1;
   let takes: TakeMetadata[] = [];
   let recording: { since: number; id: string; sessionId: string } | null = null;
   let previewLatency = 0;
@@ -380,7 +381,7 @@ export function createPreviewEngine(
       transport.bar_progress = (done % beatsPerBar()) / beatsPerBar();
       if (countInRemainingBeats <= 0) {
         transport.state = "playing";
-        seekBar(transport.loop_enabled ? transport.loop_start_bar : 1);
+        seekBar(resumeBar);
         lastBar = transport.bar;
         onBarBoundary();
       }
@@ -576,6 +577,12 @@ export function createPreviewEngine(
         transport.state = "playing";
         return;
       }
+      resumeBar =
+        transport.bar > 1
+          ? transport.bar
+          : transport.loop_enabled
+            ? transport.loop_start_bar
+            : 1;
       if (transport.count_in_bars > 0) {
         transport.state = "counting_in";
         countInRemainingBeats = transport.count_in_bars * beatsPerBar();
@@ -583,7 +590,7 @@ export function createPreviewEngine(
         transport.beat = 1;
       } else {
         transport.state = "playing";
-        seekBar(transport.loop_enabled ? transport.loop_start_bar : 1);
+        seekBar(resumeBar);
         lastBar = transport.bar;
         onBarBoundary();
       }

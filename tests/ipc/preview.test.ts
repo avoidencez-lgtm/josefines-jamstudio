@@ -119,6 +119,24 @@ describe("browser preview engine", () => {
     expect(seen.band?.next_chord).toBe("D7");
   });
 
+  it("comes in at the seeked bar after the count-in", async () => {
+    const seen: { transport?: TransportTelemetry } = {};
+    await engine.listen<TransportTelemetry>("transport.state", (t) => {
+      seen.transport = t;
+    });
+    await engine.invoke("band_load_chart", { chartId: "blues-12-bar" });
+    await engine.invoke("transport_set_count_in", { bars: 1 });
+    await engine.invoke("transport_set_tempo", { bpm: 240 });
+    await engine.invoke("transport_seek_bar", { bar: 9 });
+    await engine.invoke("transport_play", {});
+    engine.tick(0.01);
+    expect(seen.transport?.state).toBe("counting_in");
+    // One bar at 240 BPM is 1 second.
+    for (let i = 0; i < 12; i++) engine.tick(0.1);
+    expect(seen.transport?.state).toBe("playing");
+    expect(seen.transport?.bar).toBe(9);
+  });
+
   it("applies style changes at the next bar while playing", async () => {
     const seen: { band?: BandTelemetry } = {};
     await engine.listen<BandTelemetry>("band.state", (b) => {
