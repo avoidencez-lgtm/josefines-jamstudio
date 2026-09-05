@@ -307,3 +307,16 @@ is `local_practice_copy_decodes_stretches_and_persists_without_touching_source`.
 When upgrading vendored DSP, review both MIT sources, update source revisions and
 hashes together, and run the frequency/length tests on Windows and macOS. Do not
 turn on a third-party FFT backend without its own licence review.
+
+### Native reference sources
+
+Prepare bounded 48 kHz stereo off the render thread, then use `AudioEngine::load_reference`.
+Reuse the shared transport and recording queue, not a new output device or timer.
+`ReferenceSong` owns the deterministic seconds cursor/loop; metadata goes through
+`reference:state`, never PCM. A future beat map must replace the explicit grid
+refusal and supply genuine bar/chord positions before enabling those controls.
+Keep source switching and seeking protected during recording. Synthetic rate,
+pause/seek/loop/end tests live in `jam-audio::song`, native stereo recording in
+`engine`, command boundaries in `ipc_rig_media`, and the shared UI invariant in
+`tests/invariants/practice-copy.test.tsx`. The opt-in FFmpeg scenario also loads
+the rendered practice copy and plays one second through the native source.

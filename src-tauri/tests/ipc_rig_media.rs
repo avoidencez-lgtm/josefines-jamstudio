@@ -15,6 +15,96 @@ use tauri::Manager;
 const NO_PORT: &str = "no MIDI port open (messages are only logged)";
 
 #[test]
+fn native_reference_uses_shared_transport_and_refuses_unanalysed_grid_edits() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    assert!(studio
+        .err("media_reference_load", json!({"assetId":"../outside"}))
+        .contains("Invalid media ID"));
+    assert!(studio
+        .err("media_reference_seek", json!({"seconds":0}))
+        .contains("Load a reference"));
+    let state = studio.app().state::<app_lib::AppState>();
+    state
+        .engine
+        .lock()
+        .load_reference(
+            jam_audio::song::ReferenceSong::new(
+                "fixture".into(),
+                "Stereo fixture".into(),
+                vec![0.1; 96_000],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    studio.ok("transport_play", json!({}));
+    assert_eq!(
+        studio.ok("audio_get_telemetry", json!({}))["reference"]["state"],
+        "playing"
+    );
+    studio.ok("transport_pause", json!({}));
+    studio.ok("media_reference_seek", json!({"seconds":0.25}));
+    studio.ok(
+        "media_reference_loop",
+        json!({"start":0.2,"end":0.5,"enabled":true}),
+    );
+    let tel = studio.ok("audio_get_telemetry", json!({}));
+    assert_eq!(tel["reference"]["position"], 0.25);
+    assert_eq!(tel["reference"]["state"], "paused");
+    assert_eq!(tel["band"]["current_chord"], "");
+    assert!(studio
+        .err("media_reference_seek", json!({"seconds":2}))
+        .contains("inside"));
+    assert!(studio
+        .err(
+            "media_reference_loop",
+            json!({"start":0.5,"end":0.2,"enabled":true})
+        )
+        .contains("0.1"));
+    for (command, args) in [
+        ("transport_set_tempo", json!({"bpm":90})),
+        ("transport_seek_bar", json!({"bar":2})),
+        (
+            "transport_set_loop",
+            json!({"startBar":1,"endBar":3,"enabled":true}),
+        ),
+        ("transport_set_count_in", json!({"bars":1})),
+        (
+            "transport_set_time_signature",
+            json!({"numerator":4,"denominator":4}),
+        ),
+        ("metronome_set", json!({"on":true,"bpm":90})),
+    ] {
+        assert!(studio.err(command, args).contains("no analysed beat grid"));
+    }
+    studio.ok("transport_stop", json!({}));
+    assert_eq!(
+        studio.ok("audio_get_telemetry", json!({}))["reference"]["position"],
+        0.0
+    );
+    studio.ok("media_reference_unload", json!({}));
+    assert!(studio.ok("audio_get_telemetry", json!({}))["reference"].is_null());
+    studio.ok("transport_set_tempo", json!({"bpm":90}));
+    state
+        .engine
+        .lock()
+        .load_reference(
+            jam_audio::song::ReferenceSong::new(
+                "second".into(),
+                "Second reference".into(),
+                vec![0.1; 9600],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    studio.ok(
+        "band_load_chart",
+        json!({"chartId":"blues-12-bar","followChart":true}),
+    );
+    assert!(studio.ok("audio_get_telemetry", json!({}))["reference"].is_null());
+}
+
+#[test]
 fn practice_copy_validates_parameters_and_source_before_running_tools() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

@@ -253,11 +253,32 @@ describe("desktop startup against the preview engine", () => {
       "input.meters",
       "meters",
       "recorder.error",
+      "reference.state",
       "rig.error",
       "rig.state",
       "transport.state",
       "tuner.state",
     ]);
+    const reference = {
+      asset_id: "fixture",
+      label: "Reference",
+      seconds: 4,
+      position: 1,
+      state: "playing",
+      loop_start: 0,
+      loop_end: 4,
+      loop_enabled: false,
+    };
+    const onReference = listen.mock.calls.find(
+      ([event]) => event === "reference.state",
+    )?.[1];
+    expect(onReference).toBeDefined();
+    onReference?.(reference);
+    expect(store().telemetry.reference).toEqual(reference);
+    expect(store().activeSource).toBe("song");
+    onReference?.(null);
+    expect(store().telemetry.reference).toBeNull();
+    expect(store().activeSource).toBe("band");
   });
 
   it("delivers live telemetry to the store only once the engine ticks", async () => {

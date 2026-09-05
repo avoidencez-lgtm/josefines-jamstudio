@@ -155,7 +155,19 @@ export interface BandPatch {
   atNextBar?: boolean;
 }
 
+export interface ReferenceState {
+  asset_id: string;
+  label: string;
+  seconds: number;
+  position: number;
+  state: "stopped" | "playing" | "paused";
+  loop_start: number;
+  loop_end: number;
+  loop_enabled: boolean;
+}
+
 export interface EngineTelemetry {
+  reference?: ReferenceState | null;
   xruns: number;
   input_level: MeterTelemetry;
   output_level: MeterTelemetry;

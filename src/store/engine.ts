@@ -13,6 +13,7 @@ import type {
   LibraryInfo,
   MeterTelemetry,
   MidiPortInfo,
+  ReferenceState,
   RigProfile,
   RigState,
   StyleSummary,
@@ -762,6 +763,16 @@ export const useEngineStore = create<EngineState>((set, get) => {
 
     initListeners: async () => {
       const subscriptions = await Promise.allSettled([
+        ipc.listen<ReferenceState | null>("reference.state", (reference) => {
+          set((state) => ({
+            telemetry: { ...state.telemetry, reference },
+            activeSource: reference
+              ? "song"
+              : state.telemetry.reference
+                ? "band"
+                : state.activeSource,
+          }));
+        }),
         ipc.listen<MeterTelemetry>("meters", (output_level) => {
           set((state) => ({ telemetry: { ...state.telemetry, output_level } }));
         }),
@@ -785,6 +796,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
               transport.bar_progress < prev.bar_progress);
           if (
             trainer.enabled &&
+            !get().telemetry.reference &&
             !get().isRecording &&
             prev.state === "playing" &&
             transport.state === "playing" &&
