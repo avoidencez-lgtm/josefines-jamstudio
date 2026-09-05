@@ -89,12 +89,13 @@ export function buildRequest(
   ctx: JoContext,
 ): GeminiRequest {
   const turns: GeminiContent[] = history
-    .filter((m) => m.id !== "msg-welcome")
+    .filter((m) => m.id !== "welcome")
     .slice(-8)
     .map((m) => ({
       role: m.sender === "user" ? "user" : "model",
       parts: [{ text: m.text }],
     }));
+  while (turns[0]?.role === "model") turns.shift();
   turns.push({ role: "user", parts: [{ text: userText }] });
   return {
     systemInstruction: {

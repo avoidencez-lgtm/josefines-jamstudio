@@ -44,6 +44,25 @@ describe("Jo's Gemini request", () => {
     ).toContain("shot-a");
   });
 
+  it("does not send the UI welcome as a model turn", () => {
+    const welcome = {
+      id: "welcome",
+      sender: "jo" as const,
+      text: "Tell me what the band should do.",
+      timestamp: "Jo",
+    };
+    const leftover = {
+      id: "notice",
+      sender: "jo" as const,
+      text: "Still here.",
+      timestamp: "Jo",
+    };
+    const req = buildRequest([welcome, leftover], "play some funk", ctx);
+    expect(req.contents).toEqual([
+      { role: "user", parts: [{ text: "play some funk" }] },
+    ]);
+  });
+
   it("declares every tool the dispatcher understands and keeps recent history", () => {
     const history = Array.from({ length: 12 }, (_, i) => ({
       id: `m${i}`,
@@ -58,6 +77,7 @@ describe("Jo's Gemini request", () => {
       role: "user",
       parts: [{ text: "faster please" }],
     });
+    expect(req.contents[0]?.role).toBe("user");
     expect(req.systemInstruction.parts[0].text).toMatch(/You are Jo/);
     const names = JO_TOOLS.map((t) => t.name);
     for (const n of [
