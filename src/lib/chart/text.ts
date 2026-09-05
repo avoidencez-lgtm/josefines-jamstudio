@@ -336,7 +336,7 @@ function parseBar(
   const tokens = cell.split(/\s+/).filter((t) => t.length > 0);
   const parsed: { chord: string; beats: number | null }[] = [];
   for (const tok of tokens) {
-    const m = /^(.+?)(?::(\d+(?:\.\d+)?))?$/.exec(tok);
+    const m = /^(.+?)(?::(\d+(?:\.\d+)?(?:e[+-]?\d+)?))?$/i.exec(tok);
     if (!m) continue;
     const chord = m[1];
     const beats = m[2] !== undefined ? Number.parseFloat(m[2]) : null;
@@ -428,7 +428,7 @@ export function chartToText(chart: Chart): string {
   out.push(`id: ${chart.id}`);
   out.push(`key: ${keyName(chart.keyTonic, chart.mode)}`);
   out.push(`time: ${chart.timeSig[0]}/${chart.timeSig[1]}`);
-  out.push(`bpm: ${formatNumber(chart.defaultBpm)}`);
+  out.push(`bpm: ${chart.defaultBpm}`);
   if (chart.defaultStyleId) out.push(`style: ${chart.defaultStyleId}`);
 
   const inOrder =
@@ -467,16 +467,10 @@ export function chartToText(chart: Chart): string {
 }
 
 function formatBar(bar: BarChord[], beatsPerBar: number): string {
-  const even = bar.every(
-    (c) => Math.abs(c.beats - beatsPerBar / bar.length) < 1e-6,
-  );
-  return bar
-    .map((c) => (even ? c.chord : `${c.chord}:${formatNumber(c.beats)}`))
-    .join(" ");
-}
-
-function formatNumber(n: number): string {
-  return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+  const even = bar.every((c) => c.beats === beatsPerBar / bar.length);
+  if (even) return bar.map((c) => c.chord).join(" ");
+  // Keep numeric precision: rounding each duration can change or erase the bar.
+  return bar.map((c) => `${c.chord}:${c.beats}`).join(" ");
 }
 
 export interface FlatBar {

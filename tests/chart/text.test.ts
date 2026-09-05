@@ -93,6 +93,43 @@ describe("chart text parser", () => {
     ]);
   });
 
+  it("round-trips mixed splits and thirds without dropping the bar", () => {
+    for (const cell of [
+      "C:2 F G A",
+      "C:3 F G A",
+      "C:1 F G",
+      "C:0.123456789 F:0.234567891 G",
+      "C:0.0000001 G",
+    ]) {
+      const { chart, problems } = parseChartText(`[A]\n| ${cell} |`);
+      expect(problems, cell).toEqual([]);
+      const text = chartToText(chart as Chart);
+      const again = parseChartText(text);
+      expect(again.problems, cell).toEqual([]);
+      expect(again.chart?.sections[0].bars[0], cell).toEqual(
+        chart?.sections[0].bars[0],
+      );
+    }
+    const rounded = parseChartText("[A]\n| C:2 F:0.67 G:0.67 A:0.67 |");
+    expect(rounded.problems[0].message).toContain("expected 4");
+    expect(rounded.chart).toBeNull();
+  });
+
+  it("preserves dense mixed bars without a subset search or repeated rounding drift", () => {
+    // 32 slots also exercise the signed 32-bit shift ceiling of the old search.
+    const cell = `C:1 ${Array.from({ length: 31 }, () => "G").join(" ")}`;
+    const parsed = parseChartText(`[Dense]\n| ${cell} |`);
+    expect(parsed.problems).toEqual([]);
+    let chart = parsed.chart as Chart;
+    const original = chart.sections[0].bars[0];
+    for (let pass = 0; pass < 10; pass++) {
+      const next = parseChartText(chartToText(chart));
+      expect(next.problems).toEqual([]);
+      expect(next.chart?.sections[0].bars[0]).toEqual(original);
+      chart = next.chart as Chart;
+    }
+  });
+
   it("reports problems with line numbers instead of throwing", () => {
     const { chart, problems } = parseChartText(
       "[A]\n| C | Xyz |\n| Dm7:3 G7:3 |\n| % |\nkey: H minor",
