@@ -93,6 +93,23 @@ describe("chart text parser", () => {
     ]);
   });
 
+  it("round-trips mixed splits and thirds without dropping the bar", () => {
+    for (const cell of ["C:2 F G A", "C:3 F G A", "C:1 F G"]) {
+      const { chart, problems } = parseChartText(`[A]\n| ${cell} |`);
+      expect(problems, cell).toEqual([]);
+      const text = chartToText(chart as Chart);
+      expect(text, cell).toContain(`| ${cell} |`);
+      const again = parseChartText(text);
+      expect(again.problems, cell).toEqual([]);
+      expect(again.chart?.sections[0].bars[0], cell).toEqual(
+        chart?.sections[0].bars[0],
+      );
+    }
+    const rounded = parseChartText("[A]\n| C:2 F:0.67 G:0.67 A:0.67 |");
+    expect(rounded.problems).toEqual([]);
+    expect(rounded.chart?.sections[0].bars[0]).toHaveLength(4);
+  });
+
   it("reports problems with line numbers instead of throwing", () => {
     const { chart, problems } = parseChartText(
       "[A]\n| C | Xyz |\n| Dm7:3 G7:3 |\n| % |\nkey: H minor",

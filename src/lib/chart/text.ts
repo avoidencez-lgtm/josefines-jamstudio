@@ -361,7 +361,7 @@ function parseBar(
     });
     return null;
   }
-  if (free === 0 && Math.abs(remaining) > 1e-6) {
+  if (free === 0 && Math.abs(remaining) > 0.02) {
     problems.push({
       line: lineNo,
       message: `bar "${cell}" holds ${explicit} beats, expected ${beatsPerBar}`,
@@ -468,9 +468,32 @@ function formatBar(bar: BarChord[], beatsPerBar: number): string {
   const even = bar.every(
     (c) => Math.abs(c.beats - beatsPerBar / bar.length) < 1e-6,
   );
+  if (even) return bar.map((c) => c.chord).join(" ");
+  const free = freeShareSlots(bar, beatsPerBar);
   return bar
-    .map((c) => (even ? c.chord : `${c.chord}:${formatNumber(c.beats)}`))
+    .map((c, i) => (free[i] ? c.chord : `${c.chord}:${formatNumber(c.beats)}`))
     .join(" ");
+}
+
+/** Chords that equally share the leftover beats stay uncounted (`C:2 F G A`). */
+function freeShareSlots(bar: BarChord[], beatsPerBar: number): boolean[] {
+  const n = bar.length;
+  let best = bar.map(() => false);
+  let bestCount = 0;
+  for (let mask = 1; mask < 1 << n; mask++) {
+    const slots = bar.map((_, i) => (mask & (1 << i)) !== 0);
+    const idxs = slots.flatMap((on, i) => (on ? [i] : []));
+    const share = bar[idxs[0]].beats;
+    if (idxs.some((i) => Math.abs(bar[i].beats - share) > 1e-6)) continue;
+    let explicit = 0;
+    for (let i = 0; i < n; i++) if (!slots[i]) explicit += bar[i].beats;
+    if (Math.abs(beatsPerBar - explicit - share * idxs.length) > 1e-6) continue;
+    if (idxs.length > bestCount) {
+      best = slots;
+      bestCount = idxs.length;
+    }
+  }
+  return best;
 }
 
 function formatNumber(n: number): string {
