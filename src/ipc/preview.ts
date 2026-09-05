@@ -208,7 +208,6 @@ export function createPreviewEngine(
   let clickVolume = 0.7;
   let countInRemainingBeats = 0;
   let lastBar = -1;
-  let resumeBar = 1;
   let takes: TakeMetadata[] = [];
   let recording: { since: number; id: string; sessionId: string } | null = null;
   let previewLatency = 0;
@@ -330,6 +329,18 @@ export function createPreviewEngine(
     seekBar(transport.loop_enabled ? transport.loop_start_bar : 1);
   }
 
+  function enterPlayback() {
+    transport.state = "playing";
+    // position_beats holds the song seek; bar/beat temporarily show count-in clicks.
+    seekBar(
+      transport.position_beats === 0 && transport.loop_enabled
+        ? transport.loop_start_bar
+        : Math.floor(transport.position_beats / beatsPerBar()) + 1,
+    );
+    lastBar = transport.bar;
+    onBarBoundary();
+  }
+
   function onBarBoundary() {
     // Pending cues and style changes land here, like the sequencer.
     if (band.pending_style_id) {
@@ -380,10 +391,7 @@ export function createPreviewEngine(
       transport.beat = (Math.floor(done) % beatsPerBar()) + 1;
       transport.bar_progress = (done % beatsPerBar()) / beatsPerBar();
       if (countInRemainingBeats <= 0) {
-        transport.state = "playing";
-        seekBar(resumeBar);
-        lastBar = transport.bar;
-        onBarBoundary();
+        enterPlayback();
       }
     } else if (transport.state === "playing") {
       transport.position_beats += (dt * transport.bpm) / 60;
@@ -571,28 +579,20 @@ export function createPreviewEngine(
       tunerOn = Boolean(a.on);
     },
     transport_play: () => {
-      if (transport.state === "playing") return;
+      if (transport.state === "playing" || transport.state === "counting_in")
+        return;
       rigLastSection = null;
       if (transport.state === "paused") {
         transport.state = "playing";
         return;
       }
-      resumeBar =
-        transport.bar > 1
-          ? transport.bar
-          : transport.loop_enabled
-            ? transport.loop_start_bar
-            : 1;
       if (transport.count_in_bars > 0) {
         transport.state = "counting_in";
         countInRemainingBeats = transport.count_in_bars * beatsPerBar();
         transport.bar = 1;
         transport.beat = 1;
       } else {
-        transport.state = "playing";
-        seekBar(resumeBar);
-        lastBar = transport.bar;
-        onBarBoundary();
+        enterPlayback();
       }
     },
     transport_pause: () => {

@@ -223,6 +223,13 @@ the shortened boundary that caused the original underflow, then verifies four
 restarted clicks, exact playback spans and one completion event. This developer
 verification is separate from the friend-led checks deferred to V2.
 
+The destination follow-up (PR #204, awaiting review and CI) preserves the selected
+bar when the count-in completes. At the song beginning an armed loop supplies the
+entry bar. Preview playback reads the existing song position instead of caching
+the count-in display bar, so repeated Play, late seeks and newly armed loops do
+not lose the destination. Native tests verify the surplus render span and one
+downbeat at the correct offset. English/Bokmål Stage help documents this behavior.
+
 ### Recording interruption feedback (issue #137)
 
 Rejected disk-queue blocks no longer advance the accepted-frame count or collect

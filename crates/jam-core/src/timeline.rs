@@ -513,6 +513,44 @@ mod tests {
     }
 
     #[test]
+    fn count_in_surplus_renders_the_current_seek_once_at_the_correct_offset() {
+        for destination in [5, 9] {
+            let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+            tl.seek_bar(9);
+            tl.play();
+            assert!(tl.advance_with_spans(95_900).1.is_empty());
+            tl.play(); // Repeated Play cannot restart an active count-in.
+            if destination == 5 {
+                tl.seek_bar(5); // A later seek replaces the destination.
+            }
+            let (events, spans) = tl.advance_with_spans(256);
+            assert_eq!(
+                spans,
+                vec![Span {
+                    offset: 100,
+                    frames: 156,
+                    start_beats: f64::from((destination - 1) * 4),
+                }]
+            );
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|e| **e == TimelineEvent::CountInComplete)
+                    .count(),
+                1
+            );
+            assert!(events.contains(&TimelineEvent::Beat {
+                bar: destination,
+                beat: 1,
+                is_count_in: false,
+                offset: 100,
+            }));
+            assert_eq!(tl.current_sample, u64::from(destination - 1) * 96_000 + 156);
+            assert!(tl.advance(256).is_empty());
+        }
+    }
+
+    #[test]
     fn shrinking_the_meter_during_count_in_does_not_panic() {
         let mut tl = Timeline::new(48_000, 120.0, (6, 8));
         tl.set_count_in(1);

@@ -132,7 +132,7 @@ Save before closing. The native app blocks close during a recording/operation an
 
 The top transport plays, pauses, stops, records, sets count-in and toggles loops. Stage shows the current/next chord and live position. Chart & band settings selects a chart and matching style, changes intensity and band/click volume, and enables tuner or a reference tone. Cues request Fill, Crash, Stop or Ending. Some changes are queued for the next bar and shown as pending. Part mutes affect drums, bass or comp; follow-energy follows measured guitar level, not musical intent. Shapes shows a playable fingering for the chord now and, smaller, the chord next, root in amber; the numbered buttons pick another shape. These are theory suggestions in standard tuning, not a transcription of what was played.
 
-Loading a chart with a different meter during count-in restarts the count-in in the new meter, then the band enters. Loading the same meter keeps the current count-in position.
+Loading a chart with a different meter during count-in restarts the count-in in the new meter, then the band enters. Loading the same meter keeps the current count-in position. After a count-in, playback starts at the selected bar. If the playhead is at the beginning and a loop is armed, it enters at the loop start. Pressing Play again during count-in does not restart it; selecting another bar updates where the band enters.
 
 ### Practice and tempo trainer
 
