@@ -12,7 +12,7 @@ latest Write/room changes. This table records what the integration actually fixe
 | Finding | Disposition |
 |---|---|
 | F1 desktop events | Fixed: local main event ACL; partial subscription failure no longer prevents startup; late subscriptions are cleaned up. Native smoke also found invalid dotted Tauri event names, now translated to colon names at the boundary. |
-| F2 WebView boundary | Fixed CSP and least-privilege event capability. No remote capabilities, browser network API or shell permission. |
+| F2 WebView boundary | Fixed CSP and least-privilege event capability. No remote capabilities, browser network API or shell permission. Tauri injects a CSP only into assets it serves itself, so `pnpm tauri dev` (Vite dev server) runs without one; the `--debug` build is the CSP proof, never `tauri dev`. |
 | F3 meter/export drift | Fixed quarter-note conversion in tempo map, band MIDI and REAPER; recorded meter is retained; incompatible chart/style combinations and timing edits during recording are refused. |
 | F4 browser speech | Removed. Typed Jo/assistant remain. Native STT/TTS and voice-bus routing are explicitly unbuilt. |
 | F5 shortcuts | One T handler for tap tempo; text fields retain native input. |

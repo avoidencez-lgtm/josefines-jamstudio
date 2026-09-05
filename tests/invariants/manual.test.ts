@@ -27,3 +27,10 @@ it("documents every studio room and shortcut in both languages with current expo
   );
   execFileSync(process.execPath, ["scripts/export-manual.mjs", "--check"]);
 });
+
+it("keeps the Norwegian vocabulary consistent: skjema for chart, crash, slå inn tempoet", () => {
+  const text = JSON.stringify(manual);
+  // "tempokartet" and "CC-kartet" are maps and stay; a bare "kartet" would mean chart.
+  expect(text).not.toMatch(/(^|[^-a-zæøå])kartet|karteditor|krasj|Trykk inn/i);
+  expect(text).not.toMatch(/Josefine['’]s/);
+});

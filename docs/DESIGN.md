@@ -127,7 +127,7 @@ Motivated only: state transitions (source switch cross-fade 220 ms), pending-at-
 | Rig | ports, profiles, scenes, monitor | "No MIDI output found. Plug in the interface." | port disappeared |
 | Settings | audio, keys, providers, controls, assets, budget, diagnostics, about | never empty | key rejected by provider ("test key" result) |
 
-The Studio assistant opens from the top bar on every screen. Jo's push-to-talk is available in the Jo room when supported by the WebView; T is reserved there and never also taps tempo.
+The Studio assistant opens from the top bar on every screen. Jo is text-only in the current preview and T taps tempo outside editors; see the close of this document.
 
 ## 8. Copy
 

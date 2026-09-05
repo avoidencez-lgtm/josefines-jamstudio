@@ -45,8 +45,8 @@
             "nb": "Språk og navigasjon"
           },
           "text": {
-            "en": "The sidebar names each room and its purpose. Help & guides opens this searchable manual without discarding the room you were using. Choose English or Norsk bokmål. The main editing controls keep their English names, so this Norwegian guide quotes those labels. Escape returns from help. Keyboard transport shortcuts are suspended while you read help.",
-            "nb": "Sidepanelet viser navn og formål for hvert rom. Help & guides åpner denne søkbare håndboken uten å forkaste rommet du jobbet i. Velg English eller Norsk bokmål. Redigeringskontrollene beholder engelske navn, og den norske veiledningen bruker de samme knappetekstene. Escape lukker hjelpen. Hurtigtaster for transport er satt på pause mens du leser hjelp."
+            "en": "The sidebar names each room and its purpose. Help & guides opens this searchable manual without discarding the room you were using. Choose English or Norsk bokmål. The main editing controls keep their English names, so this Norwegian guide quotes those labels. Escape returns from help. Keyboard transport shortcuts are suspended while you read help. Your language choice is saved with the app settings and used the next time help opens, also after a restart.",
+            "nb": "Sidepanelet viser navn og formål for hvert rom. Help & guides åpner denne søkbare håndboken uten å forkaste rommet du jobbet i. Velg English eller Norsk bokmål. Redigeringskontrollene beholder engelske navn, og den norske veiledningen bruker de samme knappetekstene. Escape lukker hjelpen. Hurtigtaster for transport er satt på pause mens du leser hjelp. Språkvalget lagres sammen med appinnstillingene og brukes neste gang du åpner hjelpen, også etter en omstart."
           }
         }
       ]
@@ -868,15 +868,15 @@
     "Enter": "Stopp og gå til starten",
     "L": "Slå repetisjon av/på",
     "C": "Opptelling: av / 1 takt / 2 takter",
-    "T": "Trykk inn tempoet (minst to slag)",
+    "T": "Slå inn tempoet (minst to slag)",
     "← / →": "Tempo −1 / +1 BPM (Shift: ±5)",
     "R": "Start / stopp opptak",
-    "F / K": "Bestill fill / krasj på neste takt",
+    "F / K": "Bestill fill / crash på neste takt",
     "S / E": "Bestill stopp / avslutning",
     "M / B / P": "Demp trommer / bass / komp",
     "↑ / ↓": "Endre intensiteten (5 %)",
     "1 – 9": "Gå til takt 1–9 i låtformen",
-    "[ / ]": "Transponer kartet ned / opp en halvtone",
+    "[ / ]": "Transponer skjemaet ned / opp en halvtone",
     "U": "Vis / skjul stemmeapparatet",
     "?": "Åpne hjelp og veiledninger"
   },

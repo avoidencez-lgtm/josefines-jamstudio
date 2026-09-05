@@ -4,8 +4,8 @@ const manual = JSON.parse(readFileSync(new URL("manual.json", root), "utf8"));
 for (const language of ["en", "nb"]) {
   const title =
     language === "en"
-      ? "Josefine’s Jam Studio — user manual"
-      : "Josefine’s Jam Studio — brukerhåndbok";
+      ? "Josefines Jamstudio — user manual"
+      : "Josefines Jamstudio — brukerhåndbok";
   let text = `# ${title}\n\n${manual.chapters
     .map(
       (c) =>
