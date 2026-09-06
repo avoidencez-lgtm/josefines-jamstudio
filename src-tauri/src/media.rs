@@ -172,10 +172,12 @@ fn save_project(base: &Path, mut document: Value) -> Result<Value, String> {
     let file = base.join("projects").join(format!("{}.json", p.id));
     if file.exists() {
         if read(&file)?["revision"].as_u64() != Some(p.revision) {
-            return Err("This video changed in another window. Reopen it before saving.".into());
+            return Err(
+                "This video changed in another window. Use Save copy to keep your edits.".into(),
+            );
         }
     } else if p.revision != 0 {
-        return Err("Video project was moved. Save a new copy.".into());
+        return Err("The video file was moved. Save a copy to keep your edits.".into());
     }
     document["revision"] = json!(p.revision + 1);
     write(&file, &document)?;

@@ -10,6 +10,7 @@ import {
   shotsFromChart,
   useMedia,
   videoDuration,
+  videoSaveCopy,
 } from "../../src/lib/media";
 
 describe("music video seam", () => {
@@ -95,6 +96,20 @@ describe("music video seam", () => {
     expect(clampGenerationSeconds("veo", Number.POSITIVE_INFINITY)).toBe(8);
     expect(clampGenerationSeconds("omni", 2)).toBe(2);
   });
+  it("Save copy is a new id at revision 0 so it cannot overwrite the other window", () => {
+    const original = newVideo();
+    original.revision = 4;
+    original.title = "Take one";
+    original.shots[0].assetId = "clip-1";
+    const copy = videoSaveCopy(original);
+    expect(copy.id).not.toBe(original.id);
+    expect(copy.revision).toBe(0);
+    expect(copy.title).toBe("Take one (copy)");
+    expect(copy.shots[0].assetId).toBe("clip-1");
+    expect(original.id).not.toBe(copy.id);
+    expect(original.revision).toBe(4);
+  });
+
   it("director edits preserve clips and timing and reject missing or duplicated shots", () => {
     const p = newVideo();
     p.shots[0].assetId = "existing";

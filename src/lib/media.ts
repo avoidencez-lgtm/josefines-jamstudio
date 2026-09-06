@@ -82,6 +82,15 @@ export function newShot(title = "Opening", seconds = 8): MediaShot {
     trimStart: 0,
   };
 }
+/** New file identity so a conflicting save cannot overwrite the other window. */
+export function videoSaveCopy(project: VideoProject): VideoProject {
+  const copy = structuredClone(project);
+  copy.id = crypto.randomUUID();
+  copy.revision = 0;
+  copy.title = `${copy.title} (copy)`.slice(0, 300);
+  return copy;
+}
+
 export function newVideo(): VideoProject {
   return {
     schemaVersion: 1,
@@ -203,6 +212,7 @@ interface MediaState extends MediaLibrary {
   open: (project: VideoProject) => void;
   refresh: () => Promise<void>;
   save: () => Promise<void>;
+  saveCopy: () => Promise<void>;
   work: (label: string, task: () => Promise<void>) => Promise<void>;
   direct: () => Promise<void>;
 }
@@ -281,6 +291,28 @@ export const useMedia = create<MediaState>((set, get) => ({
           : "Video saved.",
       };
     });
+    await get().refresh();
+  },
+  saveCopy: async () => {
+    if (isPreview)
+      throw new Error(
+        "Saving projects requires the desktop app. This preview keeps edits until reload.",
+      );
+    const project = get().project;
+    const saved = await ipc.invoke<VideoProject>("media_save", {
+      document: videoSaveCopy(project),
+    });
+    if (get().project === project) {
+      set({
+        project: saved,
+        dirty: false,
+        message: "Copy saved. Original kept.",
+      });
+    } else {
+      set({
+        message: "Copy saved. Your newer draft is still open and needs saving.",
+      });
+    }
     await get().refresh();
   },
   work: async (label, task) => {

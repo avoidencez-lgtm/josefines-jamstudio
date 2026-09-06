@@ -301,6 +301,13 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             New project
           </Button>
           <Button
+            disabled={locked || isPreview}
+            title="Write this draft as a new video so a conflicting save does not overwrite the other version"
+            onClick={() => work("Saving copy", m.saveCopy)}
+          >
+            Save copy
+          </Button>
+          <Button
             variant="primary"
             disabled={locked || isPreview}
             onClick={() => work("Saving video", m.save)}
