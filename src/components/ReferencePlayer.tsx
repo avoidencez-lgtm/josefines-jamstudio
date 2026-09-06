@@ -305,9 +305,9 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
         </output>
         <p className="workspace-note">
           {!song.grid && "Confirm bars in Songs, then reload this reference. "}
-          Pause preserves progress. Stop returns to the start speed; Stop ramp
-          holds the current speed. Seek, loop changes and manual speed/key
-          changes cancel the ramp. Q or a learned Ramp pedal toggles these
+          Pause preserves progress. Stop returns to the start speed and, with a
+          section loop, to that downbeat; Stop ramp holds the current speed.
+          Seek, loop changes and manual speed/key changes cancel the ramp. Q or a learned Ramp pedal toggles these
           session settings. Loading a song never starts a ramp; this does not
           change its saved speed. Arm before recording.
         </p>

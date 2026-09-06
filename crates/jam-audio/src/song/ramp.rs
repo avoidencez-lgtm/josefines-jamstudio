@@ -235,4 +235,41 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn stop_rearms_a_section_loop_from_its_downbeat_not_the_file_start() {
+        let config: Config = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/seams/reference-ramp.json"
+        ))
+        .unwrap();
+        let grid: Grid = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/seams/reference-grid.json"
+        ))
+        .unwrap();
+        let mut song =
+            ReferenceSong::new("ramp".into(), "Fixture".into(), vec![0.1; 480_000]).unwrap();
+        song.set_grid(grid).unwrap();
+        song.loop_section("chorus").unwrap();
+        song.configure_ramp(Some(config)).unwrap();
+        song.stop();
+        assert!(
+            (song.info.position - 2.2).abs() <= 1.0 / 48_000.0,
+            "Stop must return to the section loop, not the file start"
+        );
+        song.play();
+        // 2.3 s of source at 50% is past the verse (2.2) and still inside the chorus (4.6).
+        let past_verse = (2.3_f64 / 0.5 * 48_000.0).ceil() as usize;
+        song.render(
+            48_000,
+            &mut vec![0.0; past_verse],
+            &mut vec![0.0; past_verse],
+        );
+        assert_eq!(
+            song.info.ramp.unwrap().completed_bars,
+            0,
+            "the verse before a chorus loop must not count after Stop"
+        );
+        assert_eq!(song.info.ramp.unwrap().speed_percent, 50);
+        assert_eq!(song.info.speed, 0.5);
+    }
 }

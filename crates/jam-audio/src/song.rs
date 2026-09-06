@@ -463,6 +463,10 @@ impl ReferenceSong {
         self.fade_in = 96.0;
         self.info.position = 0.0;
         self.info.state = "stopped".into();
+        if self.info.ramp.is_some() && self.info.loop_enabled {
+            self.position = self.info.loop_start * 48_000.0;
+            self.info.position = self.info.loop_start;
+        }
         if let Err(error) = self.configure_ramp(self.info.ramp.map(|r| r.config)) {
             self.info.processing_error = Some(error);
         }
