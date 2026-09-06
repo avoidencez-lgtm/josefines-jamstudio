@@ -230,9 +230,11 @@ Velg en sang og trykk Analyze tempo & chords. FFmpeg dekoder lokalt, og Rust ans
 
 Estimated harmony viser tidsområder og akkordpassasjer med sidevisning. Unknown chord, Tempo not found og Key not found betyr at grunnlaget var utilstrekkelig. Alle lokale resultater har lav sikkerhet: lytt og kontroller dem. Temposøket dekker omtrent 50–200 BPM; halvt/dobbelt tempo, uttrykksfull timing, utvidede akkorder og tette mikser kan feiltolkes. Toneart krever flere toneklasser. Ingen seksjoner eller førsteslag utledes, ingen gitar fjernes, og spilleren bruker fortsatt sekundlooper. Anslagene erstatter ikke transportens tempokart. Analyser på nytt etter endring av lagret lyd eller klargjøring av en annen øvingskopi.
 
+Etter analysen laster du referansen i Jamstudio på nytt. Songs og Stage viser Now/Next-akkordanslag, toneart, tempo og slagtall fra én. Unknown vises når grunnlaget mangler. Posisjonen følger lyden som sendes til utgangen, også ved søking og sekundlooper; fysisk enhetsforsinkelse kommer i tillegg. Lastingen kontrollerer lagret kildehash og dekodet varighet. Hvis filen eller analysen er utdatert eller ugyldig, kan lyden fortsatt spilles, med en synlig beskjed om å analysere på nytt. En ny øvingskopi trenger sin egen analyse.
+
 ### Bruk en miks i en film
 
-Use in Film velger filen som lydspor i gjeldende film. Save video lagrer valget. Generert lyd vises i samme bibliotek når jobben er ferdig. Generert tekst/struktur vises hvis leverandøren returnerer det. Øvingskopier kan også brukes som lydspor når de passer innenfor filmens varighetsgrense. Automatisk stem-separasjon og akkordgjenkjenning er ikke tilgjengelig i Songs.
+Use in Film velger filen som lydspor i gjeldende film. Save video lagrer valget. Generert lyd vises i samme bibliotek når jobben er ferdig. Generert tekst/struktur vises hvis leverandøren returnerer det. Øvingskopier kan også brukes som lydspor når de passer innenfor filmens varighetsgrense. Stem-separasjon er fortsatt utilgjengelig; lokale akkordanslag er beskrevet over.
 
 ### Låtform fra en referanse
 

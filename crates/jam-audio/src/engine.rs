@@ -45,6 +45,7 @@ struct OutputFrame {
     synthetic: bool,
     take: u64,
     index: u64,
+    reference_position: u64,
 }
 
 struct OutputTap {
@@ -54,15 +55,18 @@ struct OutputTap {
     xruns: Arc<AtomicU64>,
     lost: Arc<AtomicBool>,
     recording: bool,
+    reference_position: Arc<AtomicU64>,
 }
 
 impl OutputTap {
     fn render(&mut self, buffer: &mut [f32]) {
         let mut underrun = false;
+        let mut reference_position = None;
         for stereo in buffer.as_chunks_mut::<2>().0 {
             let input = self.input.pop().ok();
             match self.playback.pop() {
                 Ok(mut frame) => {
+                    reference_position = Some(frame.reference_position);
                     // FileInput samples travel with their rendered frame;
                     // timer scheduling gaps do not lose synthetic samples.
                     self.recording = frame.take != 0 && !frame.synthetic;
@@ -93,6 +97,9 @@ impl OutputTap {
         }
         if underrun {
             self.xruns.fetch_add(1, Ordering::Relaxed);
+        }
+        if let Some(position) = reference_position {
+            self.reference_position.store(position, Ordering::Release);
         }
     }
 }
@@ -272,6 +279,7 @@ pub struct AudioEngine {
     pub audition: Arc<Mutex<Option<crate::workstation::Audition>>>,
     pub voice: Arc<Mutex<crate::voice::VoiceBus>>,
     reference: Arc<Mutex<Option<crate::song::ReferenceSong>>>,
+    reference_position: Arc<AtomicU64>,
     config: AudioConfig,
     running: Arc<AtomicBool>,
     tone_active: Arc<AtomicBool>,
@@ -350,6 +358,7 @@ impl AudioEngine {
             audition: Arc::new(Mutex::new(None)),
             voice: Arc::new(Mutex::new(crate::voice::VoiceBus::default())),
             reference: Arc::new(Mutex::new(None)),
+            reference_position: Arc::new(AtomicU64::new(0)),
             config: config.clone(),
             running: Arc::new(AtomicBool::new(false)),
             tone_active: Arc::new(AtomicBool::new(false)),
@@ -797,7 +806,11 @@ impl AudioEngine {
     pub fn get_telemetry(&self) -> EngineTelemetry {
         let mut tel = self.latest_telemetry.lock().clone();
         tel.status = self.status.lock().clone();
-        tel.reference = self.reference.lock().as_ref().map(|song| song.info.clone());
+        tel.reference = self
+            .reference
+            .lock()
+            .as_ref()
+            .map(|song| song.played_state(self.reference_position.load(Ordering::Acquire)));
         if let Some(reference) = &tel.reference {
             tel.transport.state = reference.state.clone();
             tel.band.current_chord.clear();
@@ -855,6 +868,7 @@ impl AudioEngine {
         // A failed `start` consumes its callback, so each attempt gets a fresh ring.
         let xruns = Arc::clone(&self.xruns);
         let lost = Arc::clone(&self.recording_clock.lost);
+        let reference_position = Arc::clone(&self.reference_position);
         let make_output = move || {
             let (prod, playback) = RingBuffer::new(ring_capacity / 2);
             let (input_prod, input) = RingBuffer::new(ring_capacity);
@@ -866,6 +880,7 @@ impl AudioEngine {
                 xruns: Arc::clone(&xruns),
                 lost: Arc::clone(&lost),
                 recording: false,
+                reference_position: Arc::clone(&reference_position),
             };
             let cb: crate::io::OutputCallback = Box::new(move |buffer| tap.render(buffer));
             (prod, cb, input_prod, captured)
@@ -1151,6 +1166,7 @@ impl AudioEngine {
                             tuner_active.load(Ordering::SeqCst),
                         );
                         let reference_loaded = {
+                            ctx.reference_positions.fill(0);
                             let mut reference = reference.lock();
                             if let Some(song) = reference.as_mut() {
                                 ctx.render_reference(song);
@@ -1236,6 +1252,7 @@ impl AudioEngine {
                                 synthetic: wait_for_input,
                                 take,
                                 index: output_index + i as u64,
+                                reference_position: ctx.reference_positions[i],
                             });
                         }
                         output_index += block_len as u64;
@@ -1285,6 +1302,7 @@ impl AudioEngine {
         if let Some(mut out) = self.output_driver.take() {
             let _ = out.stop();
         }
+        self.reference_position.store(0, Ordering::Release);
         if let Some(mut inp) = self.input_driver.take() {
             let _ = inp.stop();
         }
@@ -1329,6 +1347,7 @@ impl Drop for AudioEngine {
 /// Per-thread render scratch state.
 struct RenderContext {
     sample_rate: u32,
+    reference_positions: Vec<u64>,
     band_volume: f32,
     voice_audio: Vec<f32>,
     voice_duck: Vec<f32>,
@@ -1364,7 +1383,12 @@ impl RenderContext {
             self.out_left[i] -= self.band_left[i] * self.band_volume;
             self.out_right[i] -= self.band_right[i] * self.band_volume;
         }
-        song.render(self.sample_rate, &mut self.band_left, &mut self.band_right);
+        song.render_timed(
+            self.sample_rate,
+            &mut self.band_left,
+            &mut self.band_right,
+            &mut self.reference_positions,
+        );
         for i in 0..self.out_left.len() {
             self.out_left[i] += self.band_left[i] * self.band_volume;
             self.out_right[i] += self.band_right[i] * self.band_volume;
@@ -1388,6 +1412,7 @@ impl RenderContext {
     fn new(sample_rate: u32) -> Self {
         Self {
             sample_rate,
+            reference_positions: vec![0; RENDER_BLOCK],
             band_volume: 0.0,
             voice_audio: vec![0.0; RENDER_BLOCK],
             voice_duck: vec![1.0; RENDER_BLOCK],
@@ -1663,12 +1688,24 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         *engine.recorder.lock() = crate::recorder::TakeRecorder::new(48_000, root.clone());
         let samples = (0..96_000).flat_map(|_| [0.25, -0.125]).collect();
-        engine
-            .load_reference(
-                crate::song::ReferenceSong::new("source".into(), "Reference".into(), samples)
-                    .unwrap(),
-            )
-            .unwrap();
+        let mut song =
+            crate::song::ReferenceSong::new("source".into(), "Reference".into(), samples).unwrap();
+        song.set_analysis(jam_dsp::offline::SongAnalysis {
+            schema_version: 1,
+            analyzer: "local-chroma-v1".into(),
+            confidence: "low".into(),
+            seconds: 2.0,
+            bpm: Some(120.0),
+            beats: vec![0.0, 0.5, 1.0, 1.5],
+            key: Some("C major".into()),
+            chords: vec![jam_dsp::offline::ChordEstimate {
+                start: 0.0,
+                end: 2.0,
+                chord: Some("C".into()),
+            }],
+        })
+        .unwrap();
+        engine.load_reference(song).unwrap();
         assert!(engine.ensure_band_grid().is_err());
         engine.start().unwrap();
         engine.transport_play();
@@ -1677,6 +1714,9 @@ mod tests {
         assert!(engine.reference_loop(0.0, 1.0, true).is_err());
         assert!(engine.unload_reference().is_err());
         thread::sleep(Duration::from_millis(300));
+        let reference = engine.get_telemetry().reference.unwrap();
+        assert!(reference.position > 0.0);
+        assert_eq!(reference.analysis.unwrap().chord.as_deref(), Some("C"));
         let take = engine.recorder_stop().unwrap();
         engine.stop().unwrap();
         assert!(take.sample_count > 1000);
@@ -1746,6 +1786,7 @@ mod tests {
             xruns: Arc::new(AtomicU64::new(0)),
             lost: Arc::clone(&lost),
             recording: false,
+            reference_position: Arc::new(AtomicU64::new(0)),
         };
         // Render a long way ahead. Actual DI arrives only at each output callback.
         for index in 0..10_000 {
@@ -1757,6 +1798,7 @@ mod tests {
                     take: 7,
                     index,
                     synthetic: false,
+                    reference_position: (23 << 32) | index,
                 })
                 .unwrap();
         }
@@ -1769,6 +1811,11 @@ mod tests {
             }
             let mut buffer = vec![0.0; count * 2];
             tap.render(&mut buffer);
+            assert_eq!(
+                tap.reference_position.load(Ordering::Acquire),
+                (23 << 32) | (position + count - 1) as u64,
+                "position follows consumed audio, not the 10,000 queued frames"
+            );
             for i in 0..count {
                 let frame = captured.pop().unwrap();
                 let expected = if (position + i) % 997 == 0 { 0.25 } else { 0.0 };

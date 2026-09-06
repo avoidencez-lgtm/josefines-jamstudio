@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import { ReferencePlayer } from "../../src/components/ReferencePlayer";
 import { TransportBar } from "../../src/components/TransportBar";
+import type { ReferenceState } from "../../src/ipc/contract";
 import { useMedia } from "../../src/lib/media";
 import { Songs } from "../../src/screens/Songs";
 import { useEngineStore } from "../../src/store/engine";
@@ -83,4 +84,47 @@ it("keeps the chart meter readout in band mode and uses seconds for references",
   } finally {
     initial.telemetry = telemetry;
   }
+});
+
+it("shows native audible chord estimates and explicit stale or unknown analysis", () => {
+  const song: ReferenceState = {
+    asset_id: "reference",
+    label: "Synthetic reference",
+    seconds: 4,
+    position: 1,
+    state: "playing",
+    loop_start: 0,
+    loop_end: 4,
+    loop_enabled: false,
+    analysis: {
+      confidence: "low",
+      bpm: 90,
+      key: "C major",
+      chord: "C",
+      next_chord: "F",
+      beat: 2,
+      beat_count: 6,
+    },
+  };
+  const render = () =>
+    renderToStaticMarkup(createElement(ReferencePlayer, { song }));
+  const html = render();
+  expect(html).toContain("Now: C");
+  expect(html).toContain("Next: F");
+  expect(html).toContain("Beat 2 of 6");
+  expect(html).toContain("low confidence");
+  expect(html).not.toContain("<audio");
+  if (!song.analysis) throw new Error("Missing fixture analysis");
+  song.analysis = {
+    ...song.analysis,
+    chord: null,
+    next_chord: null,
+    beat: null,
+  };
+  expect(render()).toContain("Now: Unknown");
+  song.analysis = null;
+  song.analysis_error =
+    "Audio has changed since analysis. Analyze it again in Songs.";
+  expect(render()).toContain(song.analysis_error);
+  expect(render()).not.toContain("Now:");
 });
