@@ -226,6 +226,12 @@ Record in the top bar while playing to capture guitar DI and the stereo referenc
 
 The native player holds one decoded stereo source, up to about 440 MiB; replacing it can temporarily hold two. Disk space is needed for temporary decoding. Local tempo, chord and key estimates are available in Songs. Stem separation, analysed-grid playback, minus-guitar and tempo ramps for references remain unfinished.
 
+### Ask Jo to load a song
+
+Type load song Blå natt or last inn sangen Blå natt in Jo or the Stage command field. Quotes around the title are optional. These explicit commands work without a text provider; configured speech uses the same action after transcription. Jo searches the current local Songs library even if you have not opened Songs. An exact ID takes priority, then a full title ignoring case, then a unique part of a title. If several files match, use a full title or the exact ID Jo lists. A missing song must be imported in Songs first.
+
+A successful load opens Stage paused with the saved stems, speed, key and confirmed sections. Press Play when ready. Ask for speed, transposition or section changes in the next message after the reference appears. Loading itself makes no upload or paid generation request; configured speech/text services retain their normal charges. Recording or another media operation blocks loading. A failed load keeps the previous source and stops the remaining commands in that message, so a following Play cannot accidentally start the old song.
+
 ### Separate instruments and play minus guitar
 
 Open Separate instruments / import stems on the selected song. For ElevenLabs, add its API key in Settings, check your account price, optionally enter USD per minute, and tick the upload/charge agreement before Upload & separate stems. This sends the song to the provider and may take several minutes. Instrument labels come from the ZIP; identify the guitar by listening. No guitar label is assumed.

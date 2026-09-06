@@ -14,6 +14,23 @@ export function parseNaturalIntent(
   const lower = text.toLowerCase().trim();
   const toolCalls: JoToolCall[] = [];
   const reply = "Got it!";
+  const load = /^(?:load song|last(?: inn)? sang(?:en)?)\s+(.+)$/i.exec(
+    text.trim(),
+  );
+  if (load) {
+    const query = load[1].replace(/^["“](.*)["”]$/, "$1").trim();
+    return {
+      reply: "Looking for the song in your local library.",
+      toolCalls: [{ name: "load_song", arguments: { query } }],
+    };
+  }
+  // Do not let song titles in questions/negations become legacy style commands.
+  if (/\b(?:load song|last(?: inn)? sang(?:en)?)\b/i.test(text))
+    return {
+      reply:
+        "Use load song followed by its title, or last inn sangen followed by its title.",
+      toolCalls: [],
+    };
   if (reference) {
     const loop = /^(?:loop|gjenta)\s+(.+?)[.!]?$/.exec(lower);
     if (loop) {

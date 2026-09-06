@@ -518,6 +518,17 @@
           }
         },
         {
+          "id": "songs.jo-load-song",
+          "title": {
+            "en": "Ask Jo to load a song",
+            "nb": "Be Jo laste en sang"
+          },
+          "text": {
+            "en": "Type load song Blå natt or last inn sangen Blå natt in Jo or the Stage command field. Quotes around the title are optional. These explicit commands work without a text provider; configured speech uses the same action after transcription. Jo searches the current local Songs library even if you have not opened Songs. An exact ID takes priority, then a full title ignoring case, then a unique part of a title. If several files match, use a full title or the exact ID Jo lists. A missing song must be imported in Songs first.\n\nA successful load opens Stage paused with the saved stems, speed, key and confirmed sections. Press Play when ready. Ask for speed, transposition or section changes in the next message after the reference appears. Loading itself makes no upload or paid generation request; configured speech/text services retain their normal charges. Recording or another media operation blocks loading. A failed load keeps the previous source and stops the remaining commands in that message, so a following Play cannot accidentally start the old song.",
+            "nb": "Skriv load song Blå natt eller last inn sangen Blå natt i Jo eller kommandofeltet på Stage. Anførselstegn rundt tittelen er valgfrie. Disse uttrykkelige kommandoene fungerer uten tekstleverandør; konfigurert tale bruker samme handling etter transkripsjon. Jo søker i det gjeldende lokale Songs-biblioteket selv om du ikke har åpnet Songs. En nøyaktig ID kommer først, deretter full tittel uten hensyn til store og små bokstaver, så en entydig del av tittelen. Hvis flere filer passer, bruk full tittel eller den nøyaktige ID-en Jo viser. En manglende sang må først importeres i Songs.\n\nVellykket lasting åpner Stage på pause med lagrede stems, hastighet, toneart og bekreftede seksjoner. Trykk Play når du er klar. Be om hastighet, transponering eller seksjonsendringer i neste melding etter at referansen vises. Selve lastingen sender ingen lyd eller betalt genereringsforespørsel; konfigurerte tale- og teksttjenester beholder sine vanlige kostnader. Opptak eller en annen medieoperasjon blokkerer lasting. Mislykket lasting beholder forrige kilde og stopper resten av kommandoene i meldingen, slik at en etterfølgende Play ikke starter feil sang."
+          }
+        },
+        {
           "id": "songs.stems",
           "title": {
             "en": "Separate instruments and play minus guitar",

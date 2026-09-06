@@ -216,6 +216,11 @@ export const handleJoQuery = async (query: string, current = () => true) => {
           results.push(await dispatchJoToolCall(call));
         } catch (e) {
           results.push(`${call.name} failed: ${String(e)}`);
+          if (call !== toolCalls.at(-1))
+            results.push(
+              "Remaining commands were not applied. Ask again after resolving the failure.",
+            );
+          break;
         }
       }
 

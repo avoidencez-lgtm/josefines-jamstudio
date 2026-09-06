@@ -469,7 +469,7 @@ A seam is a definition (trait or schema), one registry, and consumers. There is 
 | Charts | `Chart` schema | `jam-core::registry::charts` + TS parser for text charts | band, Stage, Jo `load_chart` |
 | Rig profiles | `RigProfile` schema | `jam-core::registry::rigs` | `jam-rig`, Rig screen |
 | Control maps | `ControlMap` schema | `jam-core::registry::controls` | `src/lib/controls/` dispatcher, `jam-rig::input` |
-| Jo tools | `{ name, description, schema, run }` | `src/ai/tools/index.ts` (`import.meta.glob('./*.tool.ts')`) | LLM tool list, control-map actions, later Agents export |
+| Jo tools | `JoAction { declaration, run }`, `StudioTool { declaration, edit }`; shared argument validation | `JO_ACTIONS` / `JO_TOOLS` in `src/lib/jo/tools.ts`, document edits in `STUDIO_TOOLS`; legacy actions remain in `dispatcher.ts` | provider declarations, conversation/voice dispatch; planned control-map export remains separate |
 | Providers | traits in §6.1 | `src-tauri/src/net/registry.rs` | analysis pipeline, voice, music, `provider_fetch` |
 | Instruments | `Instrument` trait (`note_on`, `note_off`, `render(&mut [f32])`) | `jam-band::instruments::factory` | sequencer |
 | Audio I/O | `AudioInput` / `AudioOutput` | `jam-audio::io::select(config, env)` | engine |

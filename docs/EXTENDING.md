@@ -60,19 +60,30 @@ Ask Jo to author one: the `create_style` tool (backlog) writes the same JSON.
 
 ## Add a Jo tool
 
-1. Create `src/ai/tools/<name>.tool.ts`:
-   ```ts
-   import { z } from 'zod';
-   import { defineTool } from './define';
-   export default defineTool({
-     name: 'set_swing',
-     description: 'Set the swing amount of the band, 0 = straight, 1 = full triplet swing. Applies at the next bar.',
-     schema: z.object({ amount: z.number().min(0).max(1) }),
-     async run({ amount }, ctx) { await ctx.ipc.band.set({ swing: amount }, 'next_bar'); return `Swing ${Math.round(amount * 100)} percent at the next bar.`; },
-   });
-   ```
-2. The registry (`src/ai/tools/index.ts`) collects it automatically. Add one case to `tests/fixtures/jo/script.json` and a recorded LLM fixture if the tool changes what Jo says.
-3. `pnpm test -- tools` validates the schema and runs the script. The tool is now callable by voice, by text, and from control maps.
+1. For an immediate action, create `src/lib/jo/<name>.ts` with a `JoAction`
+   (`declaration` and async `run`) from `src/lib/jo/tools.ts`. Follow
+   `loadSong.ts`: validate at execution, reuse native IPC, and return the actual
+   outcome. Do not call the error-swallowing `useMedia.work` from Jo.
+2. Import it and add one entry to `JO_ACTIONS` in `src/lib/jo/tools.ts`.
+   `JO_TOOLS` collects its declaration and the dispatcher invokes `run` after
+   shared argument validation. Providers and offline intents use this same
+   tool name. Existing legacy actions still live in the dispatcher; new tools
+   do not need another switch case. Document edits instead use `STUDIO_TOOLS`
+   and its existing review/undo flow.
+3. Add a fixture-backed test under `tests/invariants/`. The synthetic library in
+   `load-song.test.ts` proves declarations, English/Bokmål offline intent,
+   fresh lookup, exact/ambiguous matching, busy/recording guards and native
+   failure propagation through the conversation. No network or audio hardware
+   is needed. Run `pnpm vitest run tests/invariants/load-song.test.ts tests/jo`.
+
+`load_song` matches an exact ID first, then a case-insensitive NFC-normalized
+full title, then a unique title substring. It never chooses the first of
+several matches. At most five candidate titles/IDs are returned, without file
+paths. Native `media_reference_load` remains responsible for source/stem hash
+checks and recording guards during preparation. Songs and Jo share
+`loadReference` for post-success UI reconciliation. Stage opens paused; a later
+reference command uses refreshed native telemetry. Command sequences stop at
+the first failure so a failed load cannot play the previous source.
 
 Rules: one tool does one thing; the return string is what Jo may say (twelve words or fewer); tools never read secrets; tools that only explain return text and have no side effects.
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { create } from "zustand";
 import { ipc, isPreview } from "../ipc/client";
 import type { Chart } from "../ipc/contract";
+import { useEngineStore } from "../store/engine";
 import { askBrain } from "./jo/providers";
 import catalog from "./media-catalog.json";
 
@@ -32,6 +33,20 @@ export interface MediaAsset {
   stemSet?: unknown;
   referencePractice?: unknown;
   referenceGrid?: unknown;
+}
+
+/** Shared by Songs and Jo; only reconcile UI state after native acceptance. */
+export async function loadReference(assetId: string, useStems?: boolean) {
+  const engine = useEngineStore.getState();
+  if (engine.isPreview)
+    throw new Error("Open the desktop app to load reference audio.");
+  if (engine.isRecording)
+    throw new Error("Finish recording before loading another song.");
+  await ipc.invoke("media_reference_load", { assetId, useStems });
+  useEngineStore.setState((s) => ({
+    loadedOriginal: null,
+    tempoTrainer: { ...s.tempoTrainer, enabled: false },
+  }));
 }
 
 export async function applyReferencePractice(
