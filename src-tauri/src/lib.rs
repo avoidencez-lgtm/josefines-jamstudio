@@ -923,7 +923,7 @@ async fn takes_export_daw(
     state: State<'_, AppState>,
 ) -> Result<jam_audio::export::ExportReport, String> {
     let (takes, _) = all_takes(&state)?;
-    let take = take_from(&takes, &take_id)?.clone();
+    let mut take = take_from(&takes, &take_id)?.clone();
     let export_path = Library::default_user_root().join("exports").join(&take.id);
 
     let chart: Option<Chart> = serde_json::from_value(take.snapshot["body"]["chart"].clone())
@@ -934,16 +934,29 @@ async fn takes_export_daw(
         .iter()
         .map(|(n, b)| (n.as_str(), *b))
         .collect();
-    let time_sig = serde_json::from_value::<(u8, u8)>(take.snapshot["timeSignature"].clone())
-        .ok()
-        .or_else(|| chart.as_ref().map(|c| c.time_sig))
-        .unwrap_or((4, 4));
+    let time_sig = match take.snapshot.get("timeSignature").filter(|v| !v.is_null()) {
+        Some(value) => serde_json::from_value::<(u8, u8)>(value.clone()).map_err(|_| {
+            "Invalid recorded time signature. Repair the take snapshot before exporting."
+                .to_string()
+        })?,
+        None => chart.as_ref().map(|c| c.time_sig).unwrap_or((4, 4)),
+    };
     let sample_rate = if take.sample_rate > 0 {
         take.sample_rate
     } else {
         jam_audio::recorder::wav_sample_rate(std::path::Path::new(&take.path_master))?
     };
 
+    // Old take manifests may need the rate recovered from the WAV.
+    take.sample_rate = sample_rate;
+    let performance_midi = if take.midi.is_empty() {
+        None
+    } else {
+        Some(
+            jam_audio::export::build_performance_midi(&take, time_sig)
+                .map_err(|e| e.to_string())?,
+        )
+    };
     let mut stem_paths = take.stems.clone();
     if stem_paths.is_empty() {
         stem_paths.extend([
@@ -966,13 +979,8 @@ async fn takes_export_daw(
     };
     let mut report = jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
         .map_err(|e| e.to_string())?;
-    if !take.midi.is_empty() {
-        jam_audio::export::write_performance_midi(
-            &export_path.join("band-notes.mid"),
-            &take,
-            time_sig,
-        )
-        .map_err(|e| e.to_string())?;
+    if let Some(bytes) = performance_midi {
+        std::fs::write(export_path.join("band-notes.mid"), bytes).map_err(|e| e.to_string())?;
     }
     std::fs::write(
         export_path.join("song-snapshot.json"),

@@ -1113,3 +1113,27 @@ section wraps within one output step plus one source frame. IPC verifies stale
 IDs, recording guards and the take snapshot. The real FFmpeg opt-in test verifies
 map reload and stale-hash recovery. Provider detection quality is not proved by
 these deterministic transport checks.
+
+### MIDI export validation (2026-09-06)
+
+Tempo-map and performance SMF builders return errors for unrepresentable data.
+They share validation of finite 20–400 BPM (the existing DAW export range),
+positive binary meter, and nonzero 24-bit microseconds per quarter. Source BPM
+continues to count the meter denominator. Marker bars must be positive and
+ordered; widened arithmetic precedes a checked four-byte VLQ encoding. MIDI
+notes must contain note-on/off bytes with 7-bit data and frames inside the take.
+Note ticks use the encoded microseconds, limiting conversion error to half a tick.
+No timing value is silently clamped or a meter replaced with 4/4.
+
+`takes_export_daw` validates both MIDI documents
+before writing bundle files. An explicitly malformed snapshot meter is an error;
+absent legacy meters retain the chart/default fallback. A legacy missing sample
+rate is recovered from the recorded WAV before both MIDI encoders run. Validation
+failure preserves an existing export and the original take. This is not a disk
+transaction: later I/O errors still surface and may leave partial output.
+Reference-grid/ramp trajectories remain pending; the existing map is constant.
+
+Format authority: [MIDI Association Standard MIDI Files](https://midi.org/standard-midi-files),
+RP-001 v1.0, verified 2026-09-06. The regression covers VLQ boundary bytes,
+overflow, invalid meters/tempos/notes, compound-meter note timing, and IPC
+preservation of the previous bundle.

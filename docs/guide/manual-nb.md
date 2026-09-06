@@ -370,6 +370,8 @@ Opptaket kobler gitarinngangen til bandrammene som sendes til lydutgangen. Save 
 
 Export for Logic / REAPER skriver en mappe med standard WAV-/MIDI-filer. Importer tempokartet først, og plasser sporene på takt 1 med opprinnelig hastighet/tonehøyde. Slå av band-/masterreferansene når du mikser enkeltinstrumenter, slik at lyden ikke dobles. Hold filene samlet når prosjektet flyttes. Kontroller justering og drift over en hel låt på mål-Macen; dette er en enveisoverføring, ikke løpende synkronisering.
 
+Ugyldig lagret tempo, taktart, seksjonstid eller MIDI-noter stopper eksporten før filer i en tidligere eksport erstattes. Gjenopprett opptaksmetadata fra en sikkerhetskopi før du prøver igjen; appen endrer aldri musikalsk timing ved å begrense verdiene lydløst. Originale WAV-opptak beholdes. Denne valideringen beskytter ikke mot en senere diskskrivefeil. Referanselåtens slagkart og hastighetsendringer i øvingsrampen er ennå ikke med i DAW-tempokartet.
+
 ### Øktbygger for REAPER
 
 Når alle nødvendige spor finnes, inkluderer eksporten også Import into REAPER.lua og REAPER-START-HERE.txt. I et nytt, tomt og stoppet REAPER-prosjekt åpner du Actions → Show action list → New action → Load ReaScript, velger Lua-filen og kjører den. Den lager navngitte spor, markører, tempo/taktart og mutede, redigerbare band-MIDI-spor. Velg instrumenttillegg før MIDI aktiveres. Lagre REAPER-prosjektet i eksportmappen. Importøren avviser et eksisterende prosjekt med innhold; REAPER installeres/lisensieres separat.
