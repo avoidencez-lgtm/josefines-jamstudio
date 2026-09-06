@@ -129,7 +129,13 @@ async fn install(
     model: &str,
 ) -> Result<Asset, String> {
     let set_id = id();
-    let folder = base.join("assets").join(format!("{set_id}-stems"));
+    let song_dir = songs::folder(base, &source.id)?;
+    let parent = if song_dir.exists() {
+        song_dir
+    } else {
+        base.join("assets")
+    };
+    let folder = parent.join(format!("{set_id}-stems"));
     fs::create_dir_all(folder.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::create_dir(&folder).map_err(|e| e.to_string())?;
     let input = raw.to_path_buf();
@@ -182,10 +188,7 @@ async fn install(
     if CANCEL.load(Ordering::Relaxed) {
         return Err("Stem import canceled.".into());
     }
-    write(
-        &base.join("assets").join(format!("{}.json", source.id)),
-        &serde_json::to_value(&current).map_err(|e| e.to_string())?,
-    )?;
+    save_asset(base, &current)?;
     Ok(current)
 }
 
@@ -202,17 +205,11 @@ pub(super) async fn load(base: &Path, source: &Asset, hash: &str) -> Result<Refe
     validate_stem_mix(&mix)?;
     let mut paths = Vec::new();
     let mut total = 0;
-    let assets = base
-        .join("assets")
-        .canonicalize()
-        .map_err(|e| e.to_string())?;
     for entry in entries {
         let path = PathBuf::from(entry["path"].as_str().ok_or("Missing stem path")?)
             .canonicalize()
             .map_err(|e| e.to_string())?;
-        if !path.starts_with(&assets) || !path.is_file() {
-            return Err("Stem is outside the audio library.".into());
-        }
+        library_audio_path(base, &path)?;
         total += fs::metadata(&path).map_err(|e| e.to_string())?.len();
         if total > SET_LIMIT + 8192 {
             return Err("Saved stem set exceeds 2 GiB.".into());
@@ -410,10 +407,7 @@ fn save_mix(base: &Path, asset_id: &str, mix: &[StemMix]) -> Result<(), String> 
         entry["guitar"] = json!(stem.guitar);
     }
     // Update only mix fields so future metadata survives.
-    write(
-        &base.join("assets").join(format!("{asset_id}.json")),
-        &serde_json::to_value(a).map_err(|e| e.to_string())?,
-    )
+    save_asset(base, &a)
 }
 
 #[cfg(test)]

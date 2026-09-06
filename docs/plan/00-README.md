@@ -104,7 +104,7 @@ See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-comp
 | M1d | Live steering and the Stage screen | ✅ | #10, #28 |
 | M1e | Recorder, latency calibration, take browser | ⏳ | #12, #28 |
 | M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ⏳ | #14, #28 |
-| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native stem mixing, ElevenLabs upload, live per-stem speed/key and Jo controls added; real provider/guitar-removal acceptance, provider analysis, automatic downbeats/sections and full transport-grid integration pending; confirmed section loops added |
+| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native stem mixing, ElevenLabs upload, live per-stem speed/key and Jo controls added; real provider/guitar-removal acceptance, provider analysis, automatic downbeats/sections and full transport-grid integration pending; confirmed section loops and canonical song-file storage added |
 | M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ⏳ | file-generation catalog/workflows in #29; RealTime and owner acceptance pending |
 | M5 | Rig orchestration over MIDI | ⏳ | #20, #28 |
 | M6 | Sessions: take analysis, LLM review, Logic export, progress | ⏳ | #22, #28 |
@@ -379,3 +379,18 @@ Music.ai/provider analysis still needs verified response fixtures and real-song
 acceptance; the public-schema ambiguity is recorded in 04-research.md. Canonical
 song-file migration, full band/MIDI/DAW tempo-map integration, practice ramps,
 realtime Lyria and the rest of V1 remain unfinished. Friend rig checks remain V2.
+
+### M3 canonical song-file storage — 2026-09-06
+
+New imported/generated audio, clean take mixes and practice copies now publish
+`songs/<id>/source.wav` and `song.json`. Existing Songs entries can be consolidated
+with their verified stems, retaining IDs, unknown metadata and legacy files.
+Analysis, confirmed maps, stem mixes and practice settings share that canonical
+file; relative paths permit moving the whole song folder. Film resolves the same
+asset ID. Corrupt/future canonical files report warnings instead of silently
+falling back. The import still uses installed FFmpeg. Native symphonia decoding,
+file dialogs/drop, the richer provider `analysis[]`/`tempoMap`/chart contract,
+Music.ai orchestration, automatic analysis acceptance, full grid integration,
+practice ramps and Lyria realtime remain V1 work. This is not M3/V1 completion.
+
+Local validation: 324 Rust tests passed (seven opt-in tests ignored), 267 frontend tests passed. Real FFmpeg migration, practice/analysis, stems and Film timing checks passed separately. Formatting, Clippy, lint/types/build and licence gates passed; the native desktop build completed its 25-second frontend-handshake smoke. CI on Windows/macOS remains the merge gate.

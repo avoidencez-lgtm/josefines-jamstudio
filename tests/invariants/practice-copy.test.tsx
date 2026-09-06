@@ -26,6 +26,9 @@ it("offers bounded practice controls beside a real library selection and keeps p
   try {
     const html = renderToStaticMarkup(createElement(Songs));
     expect(html).toContain("Make a practice copy");
+    expect(html).toMatch(
+      /<button[^>]*disabled=""[^>]*>Keep song files together/,
+    );
     expect(html).toContain('aria-label="Practice speed"');
     expect(html).toContain('min="50" max="150"');
     expect(html).toContain('value="-12"');

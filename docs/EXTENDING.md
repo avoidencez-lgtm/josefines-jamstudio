@@ -391,3 +391,17 @@ cursor test in `jam-audio::song`, and the archive/native FFmpeg tests in
 `media::stems::tests`. Run the latter with `JAM_HEADLESS=1 JAM_MEDIA_TEST=1` and
 `cargo test --workspace --lib local_stem_zip -- --ignored` on a machine with
 FFmpeg. It creates synthetic WAV and MP3 ZIPs, not a paid provider capture.
+
+### Canonical song files
+
+Audio imports and practice copies use `media::songs::store`; metadata edits use
+`media::asset` / `save_asset`, never a hard-coded legacy asset sidecar. The shared
+`tests/fixtures/seams/song-file.json` fixture defines the version-1 persisted
+identity/source fields. Runtime analysis/grid/stem/practice documents remain
+additive fields, with unknown fields preserved. Relative source/stem paths are
+resolved only in Rust. Add new audio-producing flows through the existing import
+helper so Songs, reference playback and Film see the same ID and `song.json`.
+Legacy migration is the registered `media_store_song` command under the media
+operation gate. It preserves the old files and publishes a staged song folder.
+A future schema bump needs one explicit migration; never fall back to a stale
+legacy sidecar when a canonical file is unreadable.

@@ -1211,6 +1211,7 @@ pub fn configure<R: tauri::Runtime>(
             media::media_list,
             media::media_save,
             media::media_import,
+            media::songs::media_store_song,
             media::media_stretch,
             media::media_reference_load,
             media::stems::media_stems_import,
