@@ -21,7 +21,7 @@ use parking_lot::Mutex;
 use rtrb::RingBuffer;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -56,6 +56,7 @@ struct OutputTap {
     lost: Arc<AtomicBool>,
     recording: bool,
     reference_position: Arc<AtomicU64>,
+    live_serial: Arc<AtomicU32>,
 }
 
 impl OutputTap {
@@ -66,7 +67,13 @@ impl OutputTap {
             let input = self.input.pop().ok();
             match self.playback.pop() {
                 Ok(mut frame) => {
-                    reference_position = Some(frame.reference_position);
+                    let serial = (frame.reference_position >> 32) as u32;
+                    if serial == self.live_serial.load(Ordering::Acquire) {
+                        reference_position = Some(frame.reference_position);
+                    } else {
+                        // Previous source still in the ring after load/unload.
+                        frame.output = [0.0; 2];
+                    }
                     // FileInput samples travel with their rendered frame;
                     // timer scheduling gaps do not lose synthetic samples.
                     self.recording = frame.take != 0 && !frame.synthetic;
@@ -280,6 +287,7 @@ pub struct AudioEngine {
     pub voice: Arc<Mutex<crate::voice::VoiceBus>>,
     reference: Arc<Mutex<Option<crate::song::ReferenceSong>>>,
     reference_position: Arc<AtomicU64>,
+    live_reference_serial: Arc<AtomicU32>,
     config: AudioConfig,
     running: Arc<AtomicBool>,
     tone_active: Arc<AtomicBool>,
@@ -359,6 +367,7 @@ impl AudioEngine {
             voice: Arc::new(Mutex::new(crate::voice::VoiceBus::default())),
             reference: Arc::new(Mutex::new(None)),
             reference_position: Arc::new(AtomicU64::new(0)),
+            live_reference_serial: Arc::new(AtomicU32::new(0)),
             config: config.clone(),
             running: Arc::new(AtomicBool::new(false)),
             tone_active: Arc::new(AtomicBool::new(false)),
@@ -492,6 +501,9 @@ impl AudioEngine {
         self.stop_transport_under_render_gate();
         self.clips.lock().clear();
         self.song_snapshot = serde_json::json!({"reference": song.info, "beatGrid": "unanalysed"});
+        self.live_reference_serial
+            .store(song.serial(), Ordering::Release);
+        self.reference_position.store(0, Ordering::Release);
         *self.reference.lock() = Some(song);
         Ok(())
     }
@@ -500,6 +512,8 @@ impl AudioEngine {
         self.ensure_timing_editable()?;
         let _gate = self.render_gate.lock();
         self.stop_transport_under_render_gate();
+        self.live_reference_serial.store(0, Ordering::Release);
+        self.reference_position.store(0, Ordering::Release);
         self.reference.lock().take();
         self.song_snapshot = serde_json::Value::Null;
         Ok(())
@@ -883,6 +897,7 @@ impl AudioEngine {
         let xruns = Arc::clone(&self.xruns);
         let lost = Arc::clone(&self.recording_clock.lost);
         let reference_position = Arc::clone(&self.reference_position);
+        let live_serial = Arc::clone(&self.live_reference_serial);
         let make_output = move || {
             let (prod, playback) = RingBuffer::new(ring_capacity / 2);
             let (input_prod, input) = RingBuffer::new(ring_capacity);
@@ -895,6 +910,7 @@ impl AudioEngine {
                 lost: Arc::clone(&lost),
                 recording: false,
                 reference_position: Arc::clone(&reference_position),
+                live_serial: Arc::clone(&live_serial),
             };
             let cb: crate::io::OutputCallback = Box::new(move |buffer| tap.render(buffer));
             (prod, cb, input_prod, captured)
@@ -1826,6 +1842,7 @@ mod tests {
             lost: Arc::clone(&lost),
             recording: false,
             reference_position: Arc::new(AtomicU64::new(0)),
+            live_serial: Arc::new(AtomicU32::new(23)),
         };
         // Render a long way ahead. Actual DI arrives only at each output callback.
         for index in 0..10_000 {
@@ -1879,6 +1896,43 @@ mod tests {
             position += count;
         }
         assert_eq!(position, 10_000);
+        let previous = tap.reference_position.load(Ordering::Acquire);
+        playback
+            .push(OutputFrame {
+                output: [0.9; 2],
+                stems: [0.9; 9],
+                take: 7,
+                index: 10_000,
+                synthetic: false,
+                reference_position: (99 << 32) | 10_000,
+            })
+            .unwrap();
+        input.push(0.0).unwrap();
+        let mut stale = vec![1.0; 2];
+        tap.render(&mut stale);
+        assert_eq!(stale, [0.0, 0.0]);
+        assert_eq!(tap.reference_position.load(Ordering::Acquire), previous);
+        assert_eq!(captured.pop().unwrap().output, [0.0, 0.0]);
+        tap.live_serial.store(99, Ordering::Release);
+        playback
+            .push(OutputFrame {
+                output: [0.5; 2],
+                stems: [0.5; 9],
+                take: 7,
+                index: 10_001,
+                synthetic: false,
+                reference_position: (99 << 32) | 42,
+            })
+            .unwrap();
+        input.push(0.0).unwrap();
+        let mut next = vec![0.0; 2];
+        tap.render(&mut next);
+        assert_eq!(next, [0.5, 0.5]);
+        assert_eq!(
+            tap.reference_position.load(Ordering::Acquire),
+            (99 << 32) | 42
+        );
+        let _ = captured.pop().unwrap();
         assert!(
             !lost.load(Ordering::Acquire),
             "zero samples may be lost or repeated"

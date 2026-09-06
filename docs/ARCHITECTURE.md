@@ -840,7 +840,8 @@ beat and chord bounds and supported labels before accepting the map.
 Each queued output frame carries one u64: decoded-source generation and its 48 kHz
 source frame. The callback publishes the last consumed word once per buffer using
 an atomic store, without allocation, locks or IPC. A source generation prevents
-an old queued tail from moving a replacement song's display. Underruns hold the
+an old queued tail from moving a replacement song's display, and the callback
+silences frames whose generation no longer matches the loaded source. Underruns hold the
 last delivered position; stopping the device clears it. `get_telemetry` looks up
 current/next different chord estimates and the one-based beat index from this
 position, outside the callback. Songs and Stage share the resulting readout.

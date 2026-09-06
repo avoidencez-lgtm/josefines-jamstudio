@@ -205,6 +205,10 @@ impl ReferenceSong {
         Ok(())
     }
 
+    pub(crate) fn serial(&self) -> u32 {
+        self.serial
+    }
+
     /// One atomic word identifies both the decoded source and its 48 kHz frame.
     /// The source cap is under 58 million frames, comfortably within u32.
     fn stamp(&self) -> u64 {
