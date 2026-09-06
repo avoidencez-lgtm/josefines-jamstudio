@@ -953,9 +953,30 @@ fn media_save_enforces_revisions_and_project_rules() {
     let err = studio.err("media_save", json!({"document": doc(0)}));
     assert_eq!(
         err,
-        "This video changed in another window. Reopen it before saving."
+        "This video changed in another window. Use Save copy to keep your edits."
     );
     assert_eq!(read_json(&file)["revision"], 1);
+    let copy_id = unique("film-copy");
+    let mut copy = doc(0);
+    copy["id"] = json!(copy_id);
+    copy["title"] = json!("Take one (copy)");
+    assert_eq!(
+        studio.ok("media_save", json!({"document": copy}))["revision"],
+        1
+    );
+    assert_eq!(
+        read_json(&file)["revision"],
+        1,
+        "the original file stays at the other window's revision"
+    );
+    assert_eq!(
+        read_json(
+            &media_root()
+                .join("projects")
+                .join(format!("{copy_id}.json"))
+        )["revision"],
+        1
+    );
     assert_eq!(
         studio.ok("media_save", json!({"document": doc(1)}))["revision"],
         2
@@ -975,7 +996,10 @@ fn media_save_enforces_revisions_and_project_rules() {
             "audioId": null, "ratio": "16:9", "shots": []
         }}),
     );
-    assert_eq!(err, "Video project was moved. Save a new copy.");
+    assert_eq!(
+        err,
+        "The video file was moved. Save a copy to keep your edits."
+    );
     assert!(!media_root()
         .join("projects")
         .join(format!("{moved}.json"))
