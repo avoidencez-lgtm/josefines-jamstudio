@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { BRAINS, askBrain, estimateRequest, useAi } from "../lib/jo/providers";
 import {
@@ -14,7 +14,11 @@ import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 
 export function SongLab() {
-  const { song, selected } = useWriting();
+  const { song, selected } = useWriting(
+    useShallow((s) => ({ song: s.song, selected: s.selected })),
+  );
+  const body = song?.body;
+  const bodyJson = useMemo(() => (body ? JSON.stringify(body) : ""), [body]);
   const { preferences, loaded } = useAi();
   const { keysPresent, isPreview, isRecording, setScreen } = useEngineStore(
     useShallow((s) => ({
@@ -159,7 +163,7 @@ export function SongLab() {
                 busy ||
                 isRecording ||
                 !song ||
-                JSON.stringify(song.body) !== proposal.originalBody ||
+                bodyJson !== proposal.originalBody ||
                 song.id !== proposal.songId
               }
               onClick={() => {
@@ -183,7 +187,7 @@ export function SongLab() {
               Dismiss
             </Button>
           </div>
-          {song && JSON.stringify(song.body) !== proposal.originalBody && (
+          {song && bodyJson !== proposal.originalBody && (
             <p className="song-help">
               The song has changed. Generate a fresh idea before applying.
             </p>
