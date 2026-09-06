@@ -370,6 +370,8 @@ Recording pairs the guitar input with the band frames sent to the audio output. 
 
 Export for Logic / REAPER writes a folder of standard WAV/MIDI files. Import the tempo map first, then place stems at bar 1 with original speed/pitch. Mute the band/master reference mixes while mixing the individual instruments to avoid double playback. Keep all files together when moving the project. Verify alignment and drift over a full song on the destination Mac; this is a one-way handoff, not live sync.
 
+Invalid recorded tempo, time signature, section timing or MIDI notes stop the export before it replaces any previous bundle files. Recover the take metadata from a backup before trying again; the app never fixes musical timing by silently clamping it. Original WAV recordings are kept. This validation does not protect against a later disk-write failure. Reference beat maps and practice-ramp speed changes are not yet included in DAW tempo maps.
+
 ### REAPER session builder
 
 If every required stem exists, the export also includes Import into REAPER.lua and REAPER-START-HERE.txt. In a new empty, stopped REAPER project, open Actions → Show action list → New action → Load ReaScript, choose the Lua file and run it. It creates named tracks, markers, tempo/meter and muted editable band-MIDI tracks. Choose instrument plugins before enabling MIDI. Save the REAPER project in the export folder. The importer refuses an existing populated project; REAPER is installed/licensed separately.

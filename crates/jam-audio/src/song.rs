@@ -378,8 +378,9 @@ impl ReferenceSong {
 
     pub(crate) fn played_state(&self, stamp: u64) -> ReferenceState {
         let mut state = self.info.clone();
+        let playing = state.state == "playing";
         let serial = (stamp >> 32) as u32;
-        let parameters = if serial == self.serial {
+        let parameters = if !playing || serial == self.serial {
             Some((self.info.speed, self.info.semitones, self.info.ramp))
         } else {
             self.previous_parameters
@@ -387,26 +388,20 @@ impl ReferenceSong {
                 .find(|(id, _, _, _)| *id == serial)
                 .map(|(_, speed, semitones, ramp)| (*speed, *semitones, *ramp))
         };
-        if parameters.is_some() {
-            state.position = (stamp as u32) as f64 / 48_000.0;
-        } else if state.state == "playing" {
+        let Some((speed, semitones, ramp)) = parameters else {
             state.position = 0.0;
-        }
-        if parameters.is_none() && state.state == "playing" {
             state.ramp = None;
             if self.analysis.is_some() {
                 state.analysis_error = Some("Waiting for updated reference output.".into());
             }
             return state;
-        }
-        let (speed, semitones, ramp) =
-            parameters.unwrap_or((self.info.speed, self.info.semitones, self.info.ramp));
-        // While stopped/paused, expose newly armed controls without requiring new audio.
-        state.ramp = if state.state == "playing" {
-            ramp
-        } else {
-            self.info.ramp
         };
+        // Once paused/stopped, commands own the cursor and prepared parameters.
+        // A completed old output buffer must not undo Stop, seek or a speed edit.
+        if playing {
+            state.position = (stamp as u32) as f64 / 48_000.0;
+        }
+        state.ramp = ramp;
         state.grid = self.grid.as_ref().map(|g| g.state(state.position, speed));
         state.analysis = self.analysis.as_ref().map(|a| {
             let index = a.chords.partition_point(|c| c.end <= state.position);
@@ -635,6 +630,38 @@ impl ReferenceSong {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn queued_positions_cannot_override_stop_or_paused_edits() {
+        let mut song =
+            ReferenceSong::new("source".into(), "Fixture".into(), vec![0.0; 480_000]).unwrap();
+        song.set_grid(
+            serde_json::from_str(include_str!(
+                "../../../tests/fixtures/seams/reference-grid.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        song.seek(0.25).unwrap();
+        let before_stop = song.stamp();
+        song.stop();
+        assert_eq!(song.played_state(before_stop).position, 0.0);
+        song.seek(2.5).unwrap();
+        let before_edit = song.stamp();
+        song.pause();
+        song.seek(3.1).unwrap();
+        song.set_processing(0.75, 2).unwrap();
+        let paused = song.played_state(before_edit);
+        assert_eq!(paused.position, 3.1);
+        assert!((paused.grid.unwrap().position.unwrap().bpm - 75.0).abs() < 1e-9);
+        song.play();
+        let playing = song.played_state(before_edit);
+        assert_eq!(
+            playing.position, 2.5,
+            "playing still follows the consumed queue"
+        );
+        assert!((playing.grid.unwrap().position.unwrap().bpm - 100.0).abs() < 1e-9);
+    }
+
     #[test]
     fn processing_changes_declick_without_losing_old_queued_chord_parameters() {
         let samples: Vec<f32> = (0..192_000)

@@ -32,7 +32,7 @@ pub struct ExportReport {
 
 impl DawExporter {
     /// Generates Standard MIDI File (SMF Type 1) with tempo, time signature, and section markers.
-    pub fn build_tempo_map_midi(tempo: f64, sections: &[(&str, u32)]) -> Vec<u8> {
+    pub fn build_tempo_map_midi(tempo: f64, sections: &[(&str, u32)]) -> std::io::Result<Vec<u8>> {
         Self::build_tempo_map_midi_with_meter(tempo, (4, 4), sections)
     }
 
@@ -40,7 +40,8 @@ impl DawExporter {
         tempo: f64,
         time_sig: (u8, u8),
         sections: &[(&str, u32)],
-    ) -> Vec<u8> {
+    ) -> std::io::Result<Vec<u8>> {
+        let micros = midi_tempo(tempo, time_sig)?;
         let mut midi = Vec::new();
 
         // SMF Header: 'MThd', length 6, format 1 (multi-track / tempo map), 1 track, 480 ticks/quarter
@@ -55,28 +56,35 @@ impl DawExporter {
 
         // 1. Time Signature: FF 58 04 nn dd cc bb. dd is log2 of the denominator,
         // cc = 24 MIDI clocks per metronome click, bb = 8 32nd notes per quarter.
-        let (num, den) = (time_sig.0.max(1), time_sig.1.max(1));
+        let (num, den) = time_sig;
         let den_pow = den.trailing_zeros() as u8;
         track_data.extend_from_slice(&[0x00, 0xFF, 0x58, 0x04, num, den_pow, 0x18, 0x08]);
 
         // 2. Set Tempo: delta 0, FF 51 03 [24-bit microsec/quarter]
-        let us_per_quarter = (60_000_000.0 / (tempo.max(20.0) * 4.0 / den as f64)).round() as u32;
-        let t_bytes = us_per_quarter.to_be_bytes();
+        let t_bytes = micros.to_be_bytes();
         track_data.extend_from_slice(&[0x00, 0xFF, 0x51, 0x03, t_bytes[1], t_bytes[2], t_bytes[3]]);
 
         // 3. Section Markers. A bar is `num` beats of `4/den` quarter notes each.
-        let ticks_per_bar = (num as u32 * 480 * 4) / den as u32;
-        let mut prev_tick = 0u32;
+        let ticks_per_bar = (u64::from(num) * 480 * 4) / u64::from(den);
+        let mut prev_tick = 0u64;
         for &(name, bar) in sections {
-            let target_tick = (bar.saturating_sub(1)) * ticks_per_bar;
-            let delta = target_tick.saturating_sub(prev_tick);
+            let target_tick = u64::from(bar.checked_sub(1).ok_or_else(|| {
+                invalid_midi(
+                    "Section bars must start at 1. Repair the take snapshot before exporting.",
+                )
+            })?) * ticks_per_bar;
+            let delta = target_tick.checked_sub(prev_tick).ok_or_else(|| {
+                invalid_midi(
+                    "Section markers are out of order. Repair the snapshot before exporting.",
+                )
+            })?;
             prev_tick = target_tick;
 
-            write_var_len(&mut track_data, delta);
+            write_var_len(&mut track_data, delta)?;
             track_data.push(0xFF);
             track_data.push(0x06); // Marker meta event
             let name_bytes = name.as_bytes();
-            write_var_len(&mut track_data, name_bytes.len() as u32);
+            write_var_len(&mut track_data, name_bytes.len() as u64)?;
             track_data.extend_from_slice(name_bytes);
         }
 
@@ -85,10 +93,14 @@ impl DawExporter {
 
         // Track Chunk: 'MTrk', length, data
         midi.extend_from_slice(b"MTrk");
-        midi.extend_from_slice(&(track_data.len() as u32).to_be_bytes());
+        midi.extend_from_slice(
+            &u32::try_from(track_data.len())
+                .map_err(|_| invalid_midi("MIDI track is too large. Export a shorter take."))?
+                .to_be_bytes(),
+        );
         midi.extend_from_slice(&track_data);
 
-        midi
+        Ok(midi)
     }
 
     /// Writes the bundle a DAW needs to reopen a take at bar 1: the recorded stems, an
@@ -97,10 +109,14 @@ impl DawExporter {
         output_dir: &Path,
         job: &ExportJob<'_>,
     ) -> std::io::Result<ExportReport> {
-        std::fs::create_dir_all(output_dir)?;
-
+        if job.sample_rate == 0 {
+            return Err(invalid_midi(
+                "Take sample rate is missing. Recover the take before exporting.",
+            ));
+        }
         let midi_bytes =
-            Self::build_tempo_map_midi_with_meter(job.tempo, job.time_sig, job.sections);
+            Self::build_tempo_map_midi_with_meter(job.tempo, job.time_sig, job.sections)?;
+        std::fs::create_dir_all(output_dir)?;
         let midi_path = output_dir.join(format!("{}-tempo-map.mid", job.take_id));
         File::create(&midi_path)?.write_all(&midi_bytes)?;
 
@@ -163,16 +179,9 @@ pub fn write_reaper_import(
     report: &ExportReport,
     notes: &[crate::workstation::MidiNote],
 ) -> std::io::Result<String> {
-    let invalid = |message| std::io::Error::new(std::io::ErrorKind::InvalidData, message);
-    if !report.missing_stems.is_empty()
-        || report.copied_stems.is_empty()
-        || !job.tempo.is_finite()
-        || !(20.0..=400.0).contains(&job.tempo)
-        || job.sample_rate == 0
-        || job.time_sig.0 == 0
-        || !job.time_sig.1.is_power_of_two()
-    {
-        return Err(invalid(
+    midi_tempo(job.tempo, job.time_sig)?;
+    if !report.missing_stems.is_empty() || report.copied_stems.is_empty() || job.sample_rate == 0 {
+        return Err(invalid_midi(
             "A complete export and valid tempo/meter are required for REAPER.",
         ));
     }
@@ -180,12 +189,14 @@ pub fn write_reaper_import(
     for path in &report.copied_stems {
         let path = Path::new(path);
         if path.parent() != Some(output_dir) {
-            return Err(invalid("REAPER media must be inside the export folder."));
+            return Err(invalid_midi(
+                "REAPER media must be inside the export folder.",
+            ));
         }
         let name = path
             .file_name()
             .and_then(|n| n.to_str())
-            .ok_or_else(|| invalid("Invalid media name"))?;
+            .ok_or_else(|| invalid_midi("Invalid media name"))?;
         let role = name
             .strip_prefix(&format!("{}-", job.take_id))
             .unwrap_or(name)
@@ -193,7 +204,7 @@ pub fn write_reaper_import(
         let wav = hound::WavReader::open(path).map_err(std::io::Error::other)?;
         let length = wav.duration() as f64 / wav.spec().sample_rate as f64;
         if !length.is_finite() || length <= 0.0 {
-            return Err(invalid("Cannot import an empty WAV into REAPER."));
+            return Err(invalid_midi("Cannot import an empty WAV into REAPER."));
         }
         files.push((name, role, length));
     }
@@ -257,7 +268,32 @@ pub fn write_reaper_import(
     Ok(path.to_string_lossy().into_owned())
 }
 
-fn write_var_len(buf: &mut Vec<u8>, mut val: u32) {
+fn invalid_midi(message: &str) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, message)
+}
+
+/// SMF tempo is a nonzero 24-bit count of microseconds per quarter note.
+fn midi_tempo(tempo: f64, meter: (u8, u8)) -> std::io::Result<u32> {
+    if meter.0 == 0 || !meter.1.is_power_of_two() {
+        return Err(invalid_midi("Invalid time signature: use a positive numerator and a power-of-two denominator before exporting."));
+    }
+    if !tempo.is_finite() || !(20.0..=400.0).contains(&tempo) {
+        return Err(invalid_midi(
+            "Invalid take tempo: recover a finite value from 20 to 400 BPM before exporting.",
+        ));
+    }
+    let micros = (60_000_000.0 / (tempo * 4.0 / f64::from(meter.1))).round();
+    if !(1.0..=16_777_215.0).contains(&micros) {
+        return Err(invalid_midi("This tempo and beat unit cannot fit a MIDI tempo event. Choose a representable tempo or beat unit before exporting."));
+    }
+    Ok(micros as u32)
+}
+
+/// Refuse values beyond the SMF four-byte limit; never shorten musical time.
+fn write_var_len(buf: &mut Vec<u8>, mut val: u64) -> std::io::Result<()> {
+    if val > 0x0FFF_FFFF {
+        return Err(invalid_midi("MIDI event distance or length exceeds the four-byte limit. Export a shorter take or repair its section markers."));
+    }
     let mut buffer = [0u8; 4];
     let mut i = 0;
     buffer[i] = (val & 0x7F) as u8;
@@ -271,6 +307,7 @@ fn write_var_len(buf: &mut Vec<u8>, mut val: u32) {
         i -= 1;
     }
     buf.push(buffer[0]);
+    Ok(())
 }
 
 /// Actual scheduled notes, not inferred notes from the recorded guitar.
@@ -279,24 +316,53 @@ pub fn write_performance_midi(
     take: &crate::recorder::TakeMetadata,
     time_sig: (u8, u8),
 ) -> std::io::Result<()> {
+    std::fs::write(path, build_performance_midi(take, time_sig)?)
+}
+
+/// Build before any bundle write so invalid notes cannot replace a previous export.
+pub fn build_performance_midi(
+    take: &crate::recorder::TakeMetadata,
+    time_sig: (u8, u8),
+) -> std::io::Result<Vec<u8>> {
+    let tempo = midi_tempo(take.tempo, time_sig)?;
+    if take.sample_rate == 0 {
+        return Err(invalid_midi(
+            "Take sample rate is missing. Recover the take before exporting.",
+        ));
+    }
     let mut notes = take.midi.clone();
     notes.sort_by_key(|n| (n.frame, n.bytes[0]));
     let mut track = vec![0, 0xff, 0x51, 3];
-    let quarter_bpm = take.tempo.max(20.0) * 4.0 / time_sig.1.max(1) as f64;
-    let tempo = (60_000_000.0 / quarter_bpm).round() as u32;
     track.extend_from_slice(&tempo.to_be_bytes()[1..]);
     let mut previous = 0;
-    let rate = take.sample_rate.max(1) as f64;
+    // Use the encoded tempo for note placement, so rounding never accumulates drift.
+    let ticks = |frame: u64| -> std::io::Result<u64> {
+        let tick =
+            (frame as f64 / f64::from(take.sample_rate) * 480_000_000.0 / f64::from(tempo)).round();
+        if !tick.is_finite() || tick >= (1_u64 << 53) as f64 {
+            return Err(invalid_midi(
+                "MIDI timing is too large to represent exactly. Export a shorter take.",
+            ));
+        }
+        Ok(tick as u64)
+    };
     for n in notes {
-        let tick = (n.frame.min(take.sample_count as u64) as f64 / rate * quarter_bpm / 60.0
-            * 480.0)
-            .round() as u32;
-        write_var_len(&mut track, tick.saturating_sub(previous));
+        if n.frame > take.sample_count as u64
+            || !matches!(n.bytes[0] & 0xf0, 0x80 | 0x90)
+            || n.bytes[1] > 127
+            || n.bytes[2] > 127
+        {
+            return Err(invalid_midi(
+                "Invalid recorded MIDI note or frame. Repair the take metadata before exporting.",
+            ));
+        }
+        let tick = ticks(n.frame)?;
+        write_var_len(&mut track, tick - previous)?;
         track.extend_from_slice(&n.bytes);
         previous = tick;
     }
-    let end = (take.sample_count as f64 / rate * quarter_bpm / 60.0 * 480.0).round() as u32;
-    write_var_len(&mut track, end.saturating_sub(previous));
+    let end = ticks(take.sample_count as u64)?;
+    write_var_len(&mut track, end - previous)?;
     track.extend_from_slice(&[
         0xb0, 123, 0, 0, 0xb1, 123, 0, 0, 0xb9, 123, 0, 0, 0xff, 0x2f, 0,
     ]);
@@ -304,9 +370,13 @@ pub fn write_performance_midi(
     out.extend_from_slice(&6u32.to_be_bytes());
     out.extend_from_slice(&[0, 0, 0, 1, 1, 224]);
     out.extend_from_slice(b"MTrk");
-    out.extend_from_slice(&(track.len() as u32).to_be_bytes());
+    out.extend_from_slice(
+        &u32::try_from(track.len())
+            .map_err(|_| invalid_midi("MIDI track is too large. Export a shorter take."))?
+            .to_be_bytes(),
+    );
     out.extend(track);
-    std::fs::write(path, out)
+    Ok(out)
 }
 
 /// Longest stem the exporter will write (same ten-minute cap as `media_from_take`).
@@ -446,9 +516,87 @@ mod tests {
     }
 
     #[test]
+    fn invalid_midi_timing_is_refused_without_clamping_or_overwriting() {
+        for (value, expected) in [
+            (0, vec![0]),
+            (127, vec![127]),
+            (128, vec![129, 0]),
+            (0x0FFF_FFFF, vec![255, 255, 255, 127]),
+        ] {
+            let mut bytes = Vec::new();
+            write_var_len(&mut bytes, value).unwrap();
+            assert_eq!(bytes, expected);
+        }
+        let mut keep = vec![42];
+        for value in [0x1000_0000, u64::from(u32::MAX), u64::MAX] {
+            assert!(write_var_len(&mut keep, value).is_err());
+            assert_eq!(keep, [42]);
+        }
+        for sections in [
+            vec![("Too far", u32::MAX)],
+            vec![("Zero", 0)],
+            vec![("Later", 4), ("Earlier", 2)],
+        ] {
+            assert!(DawExporter::build_tempo_map_midi(120.0, &sections).is_err());
+        }
+        for (tempo, meter) in [
+            (f64::NAN, (4, 4)),
+            (f64::INFINITY, (4, 4)),
+            (0.0, (4, 4)),
+            (401.0, (4, 4)),
+            (120.0, (4, 6)),
+            (120.0, (0, 4)),
+            (120.0, (4, 0)),
+            (20.0, (4, 32)),
+        ] {
+            assert!(DawExporter::build_tempo_map_midi_with_meter(tempo, meter, &[]).is_err());
+        }
+        let path = std::env::temp_dir().join(format!("jam-midi-keep-{}.mid", std::process::id()));
+        std::fs::write(&path, b"previous export").unwrap();
+        let take = crate::recorder::TakeMetadata {
+            tempo: 123.0,
+            sample_count: 48_000 * 300,
+            sample_rate: 48_000,
+            midi: vec![crate::workstation::MidiNote {
+                frame: 48_000 * 299,
+                bytes: [0x90, 60, 100],
+            }],
+            ..Default::default()
+        };
+        let bytes = build_performance_midi(&take, (6, 8)).unwrap();
+        let micros = u32::from_be_bytes([0, bytes[26], bytes[27], bytes[28]]);
+        let mut ticks = 0u64;
+        for byte in &bytes[29..] {
+            ticks = (ticks << 7) | u64::from(byte & 127);
+            if byte & 128 == 0 {
+                break;
+            }
+        }
+        let seconds = ticks as f64 * f64::from(micros) / 480_000_000.0;
+        assert!(
+            (seconds - 299.0).abs() <= f64::from(micros) / 960_000_000.0,
+            "note timing must stay within half a MIDI tick"
+        );
+        for case in 0..6 {
+            let mut bad = take.clone();
+            match case {
+                0 => bad.sample_rate = 0,
+                1 => bad.sample_count = usize::MAX,
+                2 => bad.midi[0].frame = u64::MAX,
+                3 => bad.midi[0].bytes[0] = 0xf0,
+                4 => bad.midi[0].bytes[1] = 128,
+                _ => bad.tempo = f64::NAN,
+            }
+            assert!(write_performance_midi(&path, &bad, (6, 8)).is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), b"previous export");
+        }
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn test_tempo_map_smf1_generation() {
         let sections = [("Verse", 1), ("Chorus", 5), ("Solo", 9)];
-        let midi = DawExporter::build_tempo_map_midi(120.0, &sections);
+        let midi = DawExporter::build_tempo_map_midi(120.0, &sections).unwrap();
 
         // Check header 'MThd'
         assert_eq!(&midi[0..4], b"MThd");
@@ -470,7 +618,8 @@ mod tests {
     #[test]
     fn markers_follow_the_meter() {
         // In 3/4 a bar is 3 * 480 ticks, so the marker at bar 5 sits at 5760 ticks.
-        let midi = DawExporter::build_tempo_map_midi_with_meter(100.0, (3, 4), &[("B", 5)]);
+        let midi =
+            DawExporter::build_tempo_map_midi_with_meter(100.0, (3, 4), &[("B", 5)]).unwrap();
         assert_eq!(
             &midi[22..30],
             &[0x00, 0xFF, 0x58, 0x04, 0x03, 0x02, 0x18, 0x08]
@@ -479,7 +628,8 @@ mod tests {
         assert_eq!(&midi[37..39], &[0xAD, 0x00]);
         assert_eq!(&midi[39..41], &[0xFF, 0x06]);
         for meter in [(6, 8), (12, 8), (4, 4)] {
-            let midi = DawExporter::build_tempo_map_midi_with_meter(60.0, meter, &[("B", 9)]);
+            let midi =
+                DawExporter::build_tempo_map_midi_with_meter(60.0, meter, &[("B", 9)]).unwrap();
             let micros = u32::from_be_bytes([0, midi[34], midi[35], midi[36]]);
             let mut tick = 0_u32;
             for byte in &midi[37..] {

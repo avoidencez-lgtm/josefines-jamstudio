@@ -65,6 +65,16 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-06 M6 export validation: oversized MIDI deltas, malformed meters/tempos,
+misordered section markers and invalid note frames/bytes now fail before bundle
+writes. Existing exports and source recordings survive validation failures;
+legacy take sample rates are recovered from WAV. Synthetic native and IPC tests
+cover refusal, preservation and compound-meter timing. A CI-discovered reference
+readout race is also fixed: old queued positions cannot undo Stop or paused edits.
+Cross-platform CI remains the merge gate. This repairs the existing constant-tempo path; recorded reference
+beat/ramp trajectories, remaining providers/realtime and release work stay open.
+Friend-operated rig checks remain V2.
+
 2026-09-06 M3 practice ramps: Songs/Stage, Q, a learned Ramp pedal and Jo now
 arm native speed progression over complete confirmed bars. The render worker
 counts loop boundaries and applies each step to all reference tracks. Pause,
