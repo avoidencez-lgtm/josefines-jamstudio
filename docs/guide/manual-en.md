@@ -230,9 +230,11 @@ Select a song, then Analyze tempo & chords. FFmpeg decodes locally and Rust esti
 
 Estimated harmony shows time ranges and paged chord passages. Unknown chord, Tempo not found and Key not found mean there was insufficient evidence. All local results have low confidence: listen and check them. The tempo search covers about 50–200 BPM; half/double tempo, expressive timing, extended chords and dense mixes can be misread. Key identification needs several pitch classes. No sections or downbeats are inferred, no guitar is removed, and the player still uses seconds loops. These estimates do not replace the transport tempo map. Reanalyse after modifying the stored audio or preparing a different practice copy.
 
+After analysis, load the reference in Jamstudio again. Songs and Stage show Now/Next chord estimates, key, tempo and a one-based beat count. Unknown remains explicit. Position follows audio sent to the output, including seeks and seconds-loop wraps; physical device latency is additional. Loading checks the saved source hash and decoded duration. If the file or analysis is stale or invalid, audio remains playable with a visible instruction to analyse again. A new practice copy needs its own analysis.
+
 ### Use a mix in a film
 
-Use in Film sets the selected asset as the current film soundtrack. Save video to keep that choice. Generated audio appears in the same library after its job completes. Generated lyrics/structure are shown when returned by the provider. Practice copies can also be selected as soundtracks when they fit the film duration limit. Automatic stem separation and chord recognition are not available in Songs.
+Use in Film sets the selected asset as the current film soundtrack. Save video to keep that choice. Generated audio appears in the same library after its job completes. Generated lyrics/structure are shown when returned by the provider. Practice copies can also be selected as soundtracks when they fit the film duration limit. Stem separation remains unavailable; local chord estimates are described above.
 
 ### Reference blueprint
 

@@ -559,7 +559,9 @@ async fn reference_source(
     asset_id: &str,
 ) -> Result<jam_audio::song::ReferenceSong, String> {
     let source = asset(base, asset_id)?;
-    if source.kind != "audio"
+    if source.schema_version != 1
+        || source.id != asset_id
+        || source.kind != "audio"
         || !source.seconds.is_finite()
         || !(0.1..=1200.2).contains(&source.seconds)
     {
@@ -570,12 +572,40 @@ async fn reference_source(
     fs::create_dir(&work).map_err(|e| e.to_string())?;
     let decoded = work.join("decoded.wav");
     let result = async {
+        let original = PathBuf::from(&source.path);
+        let before = if source.extra.contains_key("songAnalysis") {
+            let path = original.clone();
+            Some(
+                tauri::async_runtime::spawn_blocking(move || source_hash(&path))
+                    .await
+                    .map_err(|_| "Source hashing worker stopped.")??,
+            )
+        } else {
+            None
+        };
         decode_audio(&source.path, &decoded, "1200.3").await?;
         let path = decoded.clone();
         tauri::async_runtime::spawn_blocking(move || {
             let (samples, _) =
                 jam_audio::practice::read_stereo(&path, 48_000 * 1200 + 9600, &CANCEL)?;
-            jam_audio::song::ReferenceSong::new(source.id, source.label, samples)
+            let mut song = jam_audio::song::ReferenceSong::new(source.id, source.label, samples)?;
+            if let Some(value) = source.extra.get("songAnalysis") {
+                let after = source_hash(&original)?;
+                if before.as_deref() != Some(&after) {
+                    return Err("Audio changed while loading. Load the reference again.".into());
+                }
+                let analysis = if value["sourceHash"].as_str() == Some(&after) {
+                    serde_json::from_value(value.clone())
+                        .map_err(|_| {
+                            "Saved analysis is unreadable. Analyze it again in Songs.".to_string()
+                        })
+                        .and_then(|a| song.set_analysis(a))
+                } else {
+                    Err("Audio has changed since analysis. Analyze it again in Songs.".into())
+                };
+                song.info.analysis_error = analysis.err();
+            }
+            Ok(song)
         })
         .await
         .map_err(|_| "Reference loading worker stopped.")?
@@ -1129,6 +1159,23 @@ mod tests {
             "a continuous tone has no pulse"
         );
         assert_eq!(fs::read(&original.path).unwrap(), before);
+        let reference = reference_source(&base, &original.id).await.unwrap();
+        assert!(reference.info.analysis_error.is_none());
+        let mut engine =
+            jam_audio::engine::AudioEngine::new(jam_audio::devices::AudioConfig::default());
+        engine.load_reference(reference).unwrap();
+        assert!(engine.get_telemetry().reference.unwrap().analysis.is_some());
+        // Wrong source identity never produces apparently synchronized chords.
+        let mut stale = serde_json::to_value(&saved).unwrap();
+        stale["songAnalysis"]["sourceHash"] = json!("0".repeat(64));
+        write(&manifest, &stale).unwrap();
+        let reference = reference_source(&base, &original.id).await.unwrap();
+        assert!(reference
+            .info
+            .analysis_error
+            .unwrap()
+            .contains("changed since analysis"));
+        write(&manifest, &serde_json::to_value(&saved).unwrap()).unwrap();
         let previous = fs::read(&manifest).unwrap();
         CANCEL.store(true, Ordering::Relaxed);
         assert!(analyze_source(&base, &original.id)
