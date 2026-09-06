@@ -100,6 +100,7 @@ pub struct ReferenceSong {
     position: f64,
     fade_in: f64,
     serial: u32,
+    source_serial: u32,
     analysis: Option<jam_dsp::offline::SongAnalysis>,
     extra_samples: Vec<Vec<f32>>,
     stem_gains: Vec<f32>,
@@ -123,6 +124,7 @@ impl ReferenceSong {
             return Err("Reference audio must be finite 48 kHz stereo, between 0.1 seconds and twenty minutes.".into());
         }
         let seconds = samples.len() as f64 / 96_000.0;
+        let serial = SOURCE_SERIAL.fetch_add(1, Ordering::Relaxed);
         Ok(Self {
             info: ReferenceState {
                 asset_id,
@@ -143,7 +145,8 @@ impl ReferenceSong {
             samples,
             position: 0.0,
             fade_in: 96.0,
-            serial: SOURCE_SERIAL.fetch_add(1, Ordering::Relaxed),
+            serial,
+            source_serial: serial,
             analysis: None,
             extra_samples: Vec::new(),
             stem_gains: Vec::new(),
@@ -275,8 +278,8 @@ impl ReferenceSong {
         Ok(())
     }
 
-    pub(crate) fn serial(&self) -> u32 {
-        self.serial
+    pub(crate) fn source_serial(&self) -> u32 {
+        self.source_serial
     }
 
     /// One atomic word identifies both the decoded source and its 48 kHz frame.

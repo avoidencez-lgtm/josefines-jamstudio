@@ -46,6 +46,7 @@ struct OutputFrame {
     take: u64,
     index: u64,
     reference_position: u64,
+    source_serial: u32,
 }
 
 struct OutputTap {
@@ -67,11 +68,11 @@ impl OutputTap {
             let input = self.input.pop().ok();
             match self.playback.pop() {
                 Ok(mut frame) => {
-                    let serial = (frame.reference_position >> 32) as u32;
-                    if serial == self.live_serial.load(Ordering::Acquire) {
+                    if frame.source_serial == self.live_serial.load(Ordering::Acquire) {
                         reference_position = Some(frame.reference_position);
                     } else {
-                        // Previous source still in the ring after load/unload.
+                        // Previous decoded source still in the ring after load/unload.
+                        // Processing serials on the same source must still play (#256).
                         frame.output = [0.0; 2];
                     }
                     // FileInput samples travel with their rendered frame;
@@ -502,7 +503,7 @@ impl AudioEngine {
         self.clips.lock().clear();
         self.song_snapshot = serde_json::json!({"reference": song.info, "beatGrid": "unanalysed"});
         self.live_reference_serial
-            .store(song.serial(), Ordering::Release);
+            .store(song.source_serial(), Ordering::Release);
         self.reference_position.store(0, Ordering::Release);
         *self.reference.lock() = Some(song);
         Ok(())
@@ -1212,8 +1213,10 @@ impl AudioEngine {
                         );
                         let reference_loaded = {
                             ctx.reference_positions.fill(0);
+                            ctx.reference_source = 0;
                             let mut reference = reference.lock();
                             if let Some(song) = reference.as_mut() {
+                                ctx.reference_source = song.source_serial();
                                 ctx.render_reference(song);
                             }
                             reference.is_some()
@@ -1298,6 +1301,7 @@ impl AudioEngine {
                                 take,
                                 index: output_index + i as u64,
                                 reference_position: ctx.reference_positions[i],
+                                source_serial: ctx.reference_source,
                             });
                         }
                         output_index += block_len as u64;
@@ -1393,6 +1397,7 @@ impl Drop for AudioEngine {
 struct RenderContext {
     sample_rate: u32,
     reference_positions: Vec<u64>,
+    reference_source: u32,
     band_volume: f32,
     voice_audio: Vec<f32>,
     voice_duck: Vec<f32>,
@@ -1458,6 +1463,7 @@ impl RenderContext {
         Self {
             sample_rate,
             reference_positions: vec![0; RENDER_BLOCK],
+            reference_source: 0,
             band_volume: 0.0,
             voice_audio: vec![0.0; RENDER_BLOCK],
             voice_duck: vec![1.0; RENDER_BLOCK],
@@ -1946,6 +1952,7 @@ mod tests {
                     index,
                     synthetic: false,
                     reference_position: (23 << 32) | index,
+                    source_serial: 23,
                 })
                 .unwrap();
         }
@@ -1987,15 +1994,40 @@ mod tests {
             position += count;
         }
         assert_eq!(position, 10_000);
+        playback
+            .push(OutputFrame {
+                output: [0.4; 2],
+                stems: [0.4; 9],
+                take: 7,
+                index: 10_000,
+                synthetic: false,
+                reference_position: (88 << 32) | 7,
+                source_serial: 23,
+            })
+            .unwrap();
+        input.push(0.0).unwrap();
+        let mut processed = vec![0.0; 2];
+        tap.render(&mut processed);
+        assert_eq!(
+            processed,
+            [0.4, 0.4],
+            "speed/key serials on the same source still play"
+        );
+        assert_eq!(
+            tap.reference_position.load(Ordering::Acquire),
+            (88 << 32) | 7
+        );
+        let _ = captured.pop().unwrap();
         let previous = tap.reference_position.load(Ordering::Acquire);
         playback
             .push(OutputFrame {
                 output: [0.9; 2],
                 stems: [0.9; 9],
                 take: 7,
-                index: 10_000,
+                index: 10_001,
                 synthetic: false,
                 reference_position: (99 << 32) | 10_000,
+                source_serial: 99,
             })
             .unwrap();
         input.push(0.0).unwrap();
@@ -2010,9 +2042,10 @@ mod tests {
                 output: [0.5; 2],
                 stems: [0.5; 9],
                 take: 7,
-                index: 10_001,
+                index: 10_002,
                 synthetic: false,
                 reference_position: (99 << 32) | 42,
+                source_serial: 99,
             })
             .unwrap();
         input.push(0.0).unwrap();
