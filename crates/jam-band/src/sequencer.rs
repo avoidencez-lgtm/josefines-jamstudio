@@ -62,11 +62,25 @@ struct SpanEvent {
     kind: SpanEventKind,
 }
 
+struct SpanWindow {
+    start: f64,
+    end: f64,
+    samples_per_beat: f64,
+    frames: usize,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct PendingNoteOff {
     at_beats: f64,
     channel: u8,
     key: u8,
+}
+
+/// A humanised or strum-spread hit that belongs in a later span.
+#[derive(Debug, Clone)]
+struct PendingHit {
+    at_beats: f64,
+    kind: SpanEventKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,9 +130,11 @@ pub struct BandSequencer {
     is_playing_ending: bool,
     ending_complete: bool,
     pending_note_offs: Vec<PendingNoteOff>,
+    pending_hits: Vec<PendingHit>,
     /// Position (absolute beats) up to which pattern events have been scheduled.
     cursor_beats: Option<f64>,
     sample_rate: u32,
+    seed: u64,
 }
 
 impl BandSequencer {
@@ -162,8 +178,10 @@ impl BandSequencer {
             is_playing_ending: false,
             ending_complete: false,
             pending_note_offs: Vec::with_capacity(64),
+            pending_hits: Vec::with_capacity(16),
             cursor_beats: None,
             sample_rate,
+            seed,
         };
         seq.update_pattern_for_intensity();
         seq
@@ -197,6 +215,7 @@ impl BandSequencer {
         self.sampler = Sampler::new_with_synthetic_kit(sample_rate);
         self.synth = Sf2Synth::new(sample_rate);
         self.pending_note_offs.clear();
+        self.pending_hits.clear();
         self.cursor_beats = None;
     }
 
@@ -265,6 +284,7 @@ impl BandSequencer {
         self.sampler.all_off();
         self.synth.all_notes_off();
         self.pending_note_offs.clear();
+        self.pending_hits.clear();
         self.pending_cue = Cue::None;
         self.active_cue = Cue::None;
         self.is_stopped = false;
@@ -357,6 +377,7 @@ impl BandSequencer {
                         self.is_playing_fill = false;
                         self.synth.all_notes_off();
                         self.pending_note_offs.clear();
+                        self.pending_hits.clear();
                     }
                     Cue::Ending => {
                         self.is_stopped = false;
@@ -375,6 +396,7 @@ impl BandSequencer {
                             self.ending_complete = true;
                             self.synth.all_notes_off();
                             self.pending_note_offs.clear();
+                            self.pending_hits.clear();
                             self.update_pattern_for_intensity();
                         }
                     }
@@ -403,6 +425,7 @@ impl BandSequencer {
 
             TimelineEvent::LoopWrapped { .. } => {
                 self.pending_note_offs.clear();
+                self.pending_hits.clear();
                 self.update_pattern_for_intensity();
             }
         }
@@ -631,14 +654,73 @@ impl BandSequencer {
         }
     }
 
-    fn humanize_offset(&mut self, nominal: f64, frames: usize) -> usize {
-        let jitter_samples = self.style.humanize.timing_ms as f64 * 1e-3 * self.sample_rate as f64;
-        let jitter = if jitter_samples > 0.0 {
-            (self.rng.gen::<f64>() - 0.5) * 2.0 * jitter_samples
-        } else {
-            0.0
+    fn max_timing_beats(&self, samples_per_beat: f64) -> f64 {
+        if samples_per_beat <= 0.0 {
+            return 0.0;
+        }
+        self.style.humanize.timing_ms as f64 * 1e-3 * self.sample_rate as f64 / samples_per_beat
+    }
+
+    /// Jitter for one pattern occurrence. Same `t` and seed always match, so a late
+    /// hit belongs in the next span without a second random draw.
+    fn timing_jitter_beats(&self, t: f64, samples_per_beat: f64) -> f64 {
+        let max_samples = self.style.humanize.timing_ms as f64 * 1e-3 * self.sample_rate as f64;
+        if max_samples <= 0.0 || samples_per_beat <= 0.0 {
+            return 0.0;
+        }
+        let unit = Pcg32::new(self.seed, t.to_bits()).gen::<f64>();
+        ((unit - 0.5) * 2.0 * max_samples) / samples_per_beat
+    }
+
+    fn scheduled_offset(window: &SpanWindow, at_beats: f64) -> usize {
+        let offset = ((at_beats - window.start) * window.samples_per_beat).round();
+        offset.clamp(0.0, (window.frames.saturating_sub(1)) as f64) as usize
+    }
+
+    fn belongs_in_span(window: &SpanWindow, at_beats: f64) -> bool {
+        if at_beats >= window.end {
+            return false;
+        }
+        if at_beats < window.start && at_beats >= 0.0 && window.start > 0.0 {
+            return false;
+        }
+        true
+    }
+
+    fn occurrence_plays(&self, t: f64, prob: Option<f32>) -> bool {
+        let Some(p) = prob else {
+            return true;
         };
-        (nominal + jitter).round().clamp(0.0, (frames - 1) as f64) as usize
+        Pcg32::new(self.seed ^ 1, t.to_bits()).gen::<f32>() <= p
+    }
+
+    fn push_in_span(
+        events: &mut Vec<SpanEvent>,
+        window: &SpanWindow,
+        at_beats: f64,
+        kind: SpanEventKind,
+    ) {
+        if !Self::belongs_in_span(window, at_beats) {
+            return;
+        }
+        events.push(SpanEvent {
+            offset: Self::scheduled_offset(window, at_beats),
+            kind,
+        });
+    }
+
+    fn push_or_carry(
+        &mut self,
+        events: &mut Vec<SpanEvent>,
+        window: &SpanWindow,
+        at_beats: f64,
+        kind: SpanEventKind,
+    ) {
+        if at_beats >= window.end {
+            self.pending_hits.push(PendingHit { at_beats, kind });
+            return;
+        }
+        Self::push_in_span(events, window, at_beats, kind);
     }
 
     fn humanize_velocity(&mut self, velocity: f32) -> f32 {
@@ -708,6 +790,24 @@ impl BandSequencer {
     ) {
         // Borrow the pattern by value while we mutate the RNG; restored below.
         let pattern = std::mem::take(&mut self.current_pattern);
+        let pad = self.max_timing_beats(samples_per_beat);
+        let spread_beats = STRUM_SPREAD_SECS * self.sample_rate as f64 / samples_per_beat;
+        let window = SpanWindow {
+            start,
+            end,
+            samples_per_beat,
+            frames,
+        };
+
+        let mut i = 0;
+        while i < self.pending_hits.len() {
+            if self.pending_hits[i].at_beats < end {
+                let hit = self.pending_hits.swap_remove(i);
+                Self::push_in_span(events, &window, hit.at_beats, hit.kind);
+            } else {
+                i += 1;
+            }
+        }
 
         if !self.mute_drums {
             let len = pattern.drums.length_beats;
@@ -716,22 +816,24 @@ impl BandSequencer {
                     continue;
                 }
                 let at = self.swung(hit.at_beats);
-                for t in Self::occurrences(at, len, start, end) {
-                    if let Some(p) = hit.prob {
-                        if self.rng.gen::<f32>() > p {
-                            continue;
-                        }
+                for t in Self::occurrences(at, len, start - pad, end + pad) {
+                    if !self.occurrence_plays(t, hit.prob) {
+                        continue;
                     }
-                    let nominal = (t - start) * samples_per_beat;
-                    let offset = self.humanize_offset(nominal, frames);
+                    let scheduled = t + self.timing_jitter_beats(t, samples_per_beat);
+                    if !Self::belongs_in_span(&window, scheduled) {
+                        continue;
+                    }
                     let velocity = self.humanize_velocity(hit.velocity);
-                    events.push(SpanEvent {
-                        offset,
-                        kind: SpanEventKind::Drum {
+                    Self::push_in_span(
+                        events,
+                        &window,
+                        scheduled,
+                        SpanEventKind::Drum {
                             instrument: hit.instrument.clone(),
                             velocity,
                         },
-                    });
+                    );
                 }
             }
         }
@@ -740,7 +842,7 @@ impl BandSequencer {
             let len = pattern.bass.length_beats;
             for note in &pattern.bass.notes {
                 let at = self.swung(note.at_beats);
-                for t in Self::occurrences(at, len, start, end) {
+                for t in Self::occurrences(at, len, start - pad, end + pad) {
                     let chord = self.chord_at_abs_beats(t, beats_per_bar);
                     let Some((root, quality)) = parse_chord(&chord) else {
                         continue;
@@ -751,48 +853,60 @@ impl BandSequencer {
                     } else {
                         bass_note_for_chord(root, quality, note.degree, note.octave)
                     };
-                    let nominal = (t - start) * samples_per_beat;
-                    let offset = self.humanize_offset(nominal, frames);
+                    let scheduled = t + self.timing_jitter_beats(t, samples_per_beat);
+                    if !Self::belongs_in_span(&window, scheduled) {
+                        continue;
+                    }
                     let velocity = self.humanize_velocity(note.velocity);
                     let dur = note.dur_beats.max(0.05);
-                    events.push(SpanEvent {
-                        offset,
-                        kind: SpanEventKind::NoteOn {
+                    Self::push_in_span(
+                        events,
+                        &window,
+                        scheduled,
+                        SpanEventKind::NoteOn {
                             channel: CH_BASS,
                             key,
                             velocity,
-                            off_at_beats: t + dur * 0.92,
+                            off_at_beats: scheduled + dur * 0.92,
                         },
-                    });
+                    );
                 }
             }
         }
 
         if !self.mute_comp {
             let len = pattern.comp.length_beats;
-            let spread = (STRUM_SPREAD_SECS * self.sample_rate as f64) as usize;
             for strum in &pattern.comp.strums {
                 let at = self.swung(strum.at_beats);
-                for t in Self::occurrences(at, len, start, end) {
+                for t in Self::occurrences(at, len, start - pad, end + pad) {
                     let chord = self.chord_at_abs_beats(t, beats_per_bar);
                     let mut notes = voice_chord(&chord, &pattern.comp.voicing);
                     if strum.direction == "up" {
                         notes.reverse();
                     }
-                    let nominal = (t - start) * samples_per_beat;
-                    let base_offset = self.humanize_offset(nominal, frames);
+                    let scheduled = t + self.timing_jitter_beats(t, samples_per_beat);
+                    let look_around = t < start || t >= end;
+                    if look_around && !Self::belongs_in_span(&window, scheduled) {
+                        continue;
+                    }
                     let velocity = self.humanize_velocity(strum.velocity);
                     let dur = strum.dur_beats.max(0.05);
                     for (i, key) in notes.into_iter().enumerate() {
-                        events.push(SpanEvent {
-                            offset: (base_offset + i * spread).min(frames - 1),
-                            kind: SpanEventKind::NoteOn {
-                                channel: CH_COMP,
-                                key,
-                                velocity,
-                                off_at_beats: t + dur * 0.9,
-                            },
-                        });
+                        if look_around && i > 0 {
+                            break;
+                        }
+                        let at_beats = scheduled + i as f64 * spread_beats;
+                        let kind = SpanEventKind::NoteOn {
+                            channel: CH_COMP,
+                            key,
+                            velocity,
+                            off_at_beats: at_beats + dur * 0.9,
+                        };
+                        if i == 0 {
+                            Self::push_in_span(events, &window, at_beats, kind);
+                        } else {
+                            self.push_or_carry(events, &window, at_beats, kind);
+                        }
                     }
                 }
             }
@@ -1027,6 +1141,75 @@ mod tests {
         seq.render_span(&span2, spb, 4.0, &mut l, &mut r);
         assert_eq!(seq.pending_note_offs.len(), 0);
         assert_eq!(seq.synth.sustaining_voices(CH_BASS), 0);
+    }
+
+    fn drum_count(events: &[SpanEvent]) -> usize {
+        events
+            .iter()
+            .filter(|e| matches!(e.kind, SpanEventKind::Drum { .. }))
+            .count()
+    }
+
+    #[test]
+    fn humanize_can_place_a_downbeat_in_the_next_span() {
+        let mut style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
+        style.humanize.timing_ms = 10.0;
+        let sr = 48_000;
+        let spb = 24_000.0;
+        let frames = 256;
+        let span = frames as f64 / spb;
+        for seed in 0..800u64 {
+            let mut seq = BandSequencer::new(style.clone(), sr, seed);
+            let mut first = Vec::new();
+            let mut second = Vec::new();
+            seq.collect_pattern_events(0.0, span, spb, 4.0, frames, &mut first);
+            seq.collect_pattern_events(span, span * 2.0, spb, 4.0, frames, &mut second);
+            if drum_count(&first) == 0 && drum_count(&second) == 1 {
+                return;
+            }
+        }
+        panic!("no seed placed the downbeat after the first 256-frame span");
+    }
+
+    #[test]
+    fn humanize_can_place_a_span_start_hit_in_the_previous_span() {
+        let sr = 48_000;
+        let spb = 24_000.0;
+        let frames = 256;
+        let span = frames as f64 / spb;
+        let mut style = style_with(0.5, vec![kick(span)], vec![], vec![]);
+        style.humanize.timing_ms = 10.0;
+        for seed in 0..800u64 {
+            let mut seq = BandSequencer::new(style.clone(), sr, seed);
+            let mut first = Vec::new();
+            let mut second = Vec::new();
+            seq.collect_pattern_events(0.0, span, spb, 4.0, frames, &mut first);
+            seq.collect_pattern_events(span, span * 2.0, spb, 4.0, frames, &mut second);
+            if drum_count(&first) == 1 && drum_count(&second) == 0 {
+                return;
+            }
+        }
+        panic!("no seed pulled the span-start kick into the previous span");
+    }
+
+    #[test]
+    fn humanize_is_deterministic_per_seed() {
+        let mut style = style_with(0.5, vec![kick(0.0), kick(1.0)], vec![], vec![]);
+        style.humanize.timing_ms = 8.0;
+        let collect = |seed: u64| {
+            let mut seq = BandSequencer::new(style.clone(), 48_000, seed);
+            let mut events = Vec::new();
+            seq.collect_pattern_events(0.0, 4.0, 24_000.0, 4.0, 96_000, &mut events);
+            events
+                .into_iter()
+                .filter_map(|e| match e.kind {
+                    SpanEventKind::Drum { .. } => Some(e.offset),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(collect(7), collect(7));
+        assert_ne!(collect(7), collect(8));
     }
 
     #[test]
