@@ -402,8 +402,33 @@ fn native_reference_uses_shared_transport_and_refuses_unanalysed_grid_edits() {
         ),
         ("metronome_set", json!({"on":true,"bpm":90})),
     ] {
-        assert!(studio.err(command, args).contains("no analysed beat grid"));
+        assert!(
+            studio
+                .err(command, args)
+                .contains("while a reference is loaded"),
+            "{command}"
+        );
     }
+    {
+        let mut song = jam_audio::song::ReferenceSong::new(
+            "gridded".into(),
+            "Confirmed grid".into(),
+            vec![0.1; 96_000],
+        )
+        .unwrap();
+        song.set_grid(jam_audio::song::grid::Grid {
+            schema_version: 1,
+            origin: "confirmed-local".into(),
+            beats_per_bar: 4,
+            beats: vec![0.0, 0.1, 0.2, 0.3, 0.4],
+            sections: vec![],
+        })
+        .unwrap();
+        state.engine.lock().load_reference(song).unwrap();
+    }
+    let still = studio.err("transport_set_tempo", json!({"bpm": 90}));
+    assert!(still.contains("while a reference is loaded"), "{still}");
+    assert!(!still.contains("no analysed beat grid"), "{still}");
     studio.ok("transport_stop", json!({}));
     assert_eq!(
         studio.ok("audio_get_telemetry", json!({}))["reference"]["position"],

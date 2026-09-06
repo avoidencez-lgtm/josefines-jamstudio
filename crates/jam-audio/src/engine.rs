@@ -482,7 +482,7 @@ impl AudioEngine {
 
     pub fn ensure_band_grid(&self) -> Result<(), String> {
         if self.reference.lock().is_some() {
-            return Err("Reference playback has no analysed beat grid. Use its seconds loop in Songs; make a practice copy to change speed or pitch.".into());
+            return Err("The band clock is idle while a reference is loaded. Change speed and looping on the reference, or return to the band.".into());
         }
         Ok(())
     }
@@ -1814,7 +1814,9 @@ mod tests {
         engine.load_reference(song).unwrap();
         assert!(engine.reference_mix("wrong", mix.clone()).is_err());
         engine.reference_mix("source", mix.clone()).unwrap();
-        assert!(engine.ensure_band_grid().is_err());
+        let refused = engine.ensure_band_grid().unwrap_err();
+        assert!(refused.contains("while a reference is loaded"), "{refused}");
+        assert!(!refused.contains("no analysed beat grid"), "{refused}");
         engine.start().unwrap();
         engine.transport_play();
         engine.recorder_start("reference".into()).unwrap();
