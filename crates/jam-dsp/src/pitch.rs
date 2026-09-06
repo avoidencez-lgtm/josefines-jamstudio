@@ -6,6 +6,16 @@ const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 
+/// Mean-square floor for McLeod (`pitch-estimate` screens mean square, not
+/// total energy). −45 dBFS RMS keeps a decaying plucked note on the needle;
+/// clarity 0.7 rejects unpitched noise. The previous `5 / N` floor was ≈ −26 dBFS.
+const TUNER_FLOOR_DBFS: f32 = -45.0;
+
+fn mean_square_floor(dbfs: f32) -> f32 {
+    let rms = 10f32.powf(dbfs / 20.0);
+    rms * rms
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PitchResult {
     pub hz: f32,
@@ -25,8 +35,7 @@ impl PitchTracker {
         Self {
             detector: McLeodDetector::new(window_size, window_size / 2)
                 .expect("supported pitch window")
-                // The previous gate was total energy 5; this API uses mean square.
-                .with_power_threshold(5.0 / window_size as f32)
+                .with_power_threshold(mean_square_floor(TUNER_FLOOR_DBFS))
                 .with_clarity_threshold(0.7),
             window_size,
             sample_rate,
@@ -93,6 +102,24 @@ mod tests {
         assert!(tracker.detect(&quiet).is_none());
         assert!(PitchTracker::new(2048, 0).detect(&good).is_none());
         assert!((tracker.detect(&good).unwrap().hz - 440.0).abs() < 0.1);
+    }
+
+    fn sine_at_rms_dbfs(dbfs: f32) -> Vec<f32> {
+        let amp = 10f32.powf(dbfs / 20.0) * std::f32::consts::SQRT_2;
+        (0..2048)
+            .map(|i| (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48_000.0).sin() * amp)
+            .collect()
+    }
+
+    #[test]
+    fn plucked_decay_at_minus_forty_stays_on_the_needle() {
+        let mut tracker = PitchTracker::new(2048, 48_000);
+        let audible = sine_at_rms_dbfs(-40.0);
+        let pitch = tracker
+            .detect(&audible)
+            .expect("−40 dBFS is still an audible plucked note");
+        assert!((pitch.hz - 440.0).abs() < 1.0);
+        assert!(tracker.detect(&sine_at_rms_dbfs(-50.0)).is_none());
     }
 
     #[test]
