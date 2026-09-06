@@ -1,17 +1,40 @@
 import { useState } from "react";
-import { chordPassages, readSongAnalysis } from "../lib/songAnalysis";
+import {
+  chordPassages,
+  readAnalysisStatus,
+  readSongAnalysis,
+} from "../lib/songAnalysis";
 import { Button } from "./Button";
 
-export function SongAnalysis({ value }: { value: unknown }) {
+export function SongAnalysis({
+  value,
+  status,
+}: { value: unknown; status?: unknown }) {
   const [page, setPage] = useState(0);
   const analysis = readSongAnalysis(value);
+  const preparation = readAnalysisStatus(status);
+  const notice = status ? (
+    <output className="workspace-note">
+      {preparation?.message ??
+        "Saved analysis status is unreadable. Update the app before retrying."}
+      {analysis &&
+        preparation &&
+        !["ready", "unavailable"].includes(preparation.state) &&
+        " The previous estimates are still shown below."}
+    </output>
+  ) : null;
   if (!analysis)
-    return value ? (
-      <p className="workspace-note">
-        Saved analysis is unreadable or from another version. Analyze again to
-        replace it.
-      </p>
-    ) : null;
+    return (
+      <>
+        {notice}
+        {value ? (
+          <p className="workspace-note">
+            Saved analysis is unreadable or from another version. Analyze again
+            to replace it.
+          </p>
+        ) : null}
+      </>
+    );
   const passages = chordPassages(analysis);
   const current = Math.min(
     page,
@@ -19,6 +42,7 @@ export function SongAnalysis({ value }: { value: unknown }) {
   );
   return (
     <section className="workspace-stack" aria-label="Saved song analysis">
+      {notice}
       <h3>Estimated harmony</h3>
       <p className="workspace-note">
         {analysis.bpm === null

@@ -316,6 +316,23 @@ One step per `AnalysisKind`; each step picks the enabled provider (Music.ai for 
 
 ### Native audio import (2026-09-06)
 
+New imports and recovered/generated audio run local analysis after publishing
+the canonical song. `analysisStatus` (version 1) records pending/running,
+ready, unavailable, failed or canceled, with analyzer and a user-facing message.
+Failed/canceled analysis preserves audio and previous measurements; manual
+analysis still reports an IPC error. A canonical source-hash mismatch is a
+refusal, never a new certified source. Future status versions are not rewritten.
+
+Generation receipts reserve `targetAssetId` before import and retain it across
+retries. It is withheld from public job responses; `assetId` denotes a published
+output. Recovery prepares the existing song when present, otherwise imports
+the retained raw output into that reserved destination. It never resubmits
+generation. Failed estimates leave job status `analysis` for local retry; old
+ready receipts remain untouched. AI Music routes completed generated/recovered
+audio to the native reference player with playback stopped. Film keeps its
+soundtrack selection. This is local fallback orchestration, not the remaining
+Music.ai provider pipeline or automatic downbeat/section detection.
+
 Songs uses `song_pick_file()` (native Tauri dialog returning `string | null`),
 WebView path-only drop events, or a pasted path. All route to the existing
 `media_import(path, kind: audio)` and canonical song store. No file bytes or new

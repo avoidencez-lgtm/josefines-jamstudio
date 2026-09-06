@@ -13,6 +13,7 @@ import {
   type MediaShot,
   applyShotIdeas,
   clampGenerationSeconds,
+  completeGeneratedAudio,
   fitShots,
   newShot,
   newVideo,
@@ -254,6 +255,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
           message:
             "Generation queued. Use Refresh job below to check it; you can close the app and resume later.",
         });
+      if (audioOnly && kind === "audio") await completeGeneratedAudio(job);
     });
   const chartStoryboard = () =>
     work("Planning section cuts", async () => {
@@ -410,7 +412,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
           </button>
         </div>
       )}
-      <p className="video-note">
+      <p className="video-note" hidden={audioOnly}>
         {tools.message}{" "}
         {!isPreview && !tools.ready && (
           <a
@@ -428,9 +430,14 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       {(m.message || m.busy) && (
         <output className="video-feedback">
           <span>{m.busy || m.message}</span>
-          {m.busy.startsWith("Rendering") && (
+          {[
+            "Rendering",
+            "Generating",
+            "Importing",
+            "Refreshing existing job",
+          ].some((label) => m.busy.startsWith(label)) && (
             <Button onClick={() => void ipc.invoke("media_cancel")}>
-              Cancel render
+              Cancel local work
             </Button>
           )}
         </output>
@@ -535,7 +542,6 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               disabled={
                 locked ||
                 isPreview ||
-                !tools.ready ||
                 (chosenAudio?.protocol !== "comfy" &&
                   !engine.keysPresent[chosenAudio?.provider ?? ""])
               }
@@ -550,9 +556,13 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             </Button>
           </div>
           <p className="video-note">
-            {chosenAudio?.description} Generated audio becomes a separate
-            soundtrack; your recordings stay in the library. Model access and
-            API billing are separate from ChatGPT and Claude subscriptions.
+            {chosenAudio?.description} Generated audio is saved and analyzed
+            locally. AI Music opens completed songs in Stage, stopped and ready
+            for practice. Failed analysis can be retried from the saved job
+            without generating again. Cancel local work keeps any received
+            provider output; an already submitted request may still finish and
+            be billed. Model access and API billing are separate from ChatGPT
+            and Claude subscriptions.
           </p>
         </details>
       </div>
@@ -698,7 +708,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               />
             </label>
             <Button
-              disabled={locked || isPreview || !path.trim() || !tools.ready}
+              disabled={locked || isPreview || !path.trim()}
               onClick={() => importFile("audio")}
             >
               Import soundtrack
@@ -1224,10 +1234,13 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                           await m.refresh();
                           if (job.message)
                             useMedia.setState({ message: job.message });
+                          if (audioOnly) await completeGeneratedAudio(job);
                         })
                       }
                     >
-                      Refresh job
+                      {j.status === "analysis"
+                        ? "Retry local analysis"
+                        : "Refresh job"}
                     </Button>
                   )}
                   {j.assetId && (

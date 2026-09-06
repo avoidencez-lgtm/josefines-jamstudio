@@ -65,6 +65,18 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-06 automatic local preparation (M3/M4): imported and generated audio
+now runs the existing low-confidence tempo/chord/key analyzer automatically.
+Versioned status survives interruption; failed/canceled estimates keep the
+audio and previous results. Generated-job recovery reuses a reserved song ID,
+including after the raw duplicate is removed, and never creates another paid
+request. AI Music opens completed tracks for native practice without starting
+playback. Audio generation/import no longer depends on the Film FFmpeg check.
+Synthetic native/IPC and UI regressions cover the flow; cross-platform CI is
+still the merge gate. Music.ai fixtures/orchestration, automatic downbeats and
+sections, reference ramps, realtime generation and distribution remain open.
+Friend-operated checks remain deferred to V2; no provider quality is claimed.
+
 2026-09-06 M3 Jo song loading: `load_song(query)` searches fresh native library
 metadata and loads an exact title/ID or unique title fragment through the
 existing reference player. English `load song …` and Bokmål `last inn sangen …`

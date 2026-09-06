@@ -15,6 +15,7 @@ import { StemPreparation } from "../components/Stems";
 import { WorkspaceHeader } from "../components/Workspace";
 import { ipc, isPreview } from "../ipc/client";
 import { type MediaAsset, loadReference, useMedia } from "../lib/media";
+import { readAnalysisStatus } from "../lib/songAnalysis";
 import { useEngineStore } from "../store/engine";
 
 export function Songs() {
@@ -48,17 +49,23 @@ export function Songs() {
         });
         return;
       }
-      void m.work("Importing song", async () => {
-        const asset = await ipc.invoke<MediaAsset>("media_import", {
-          path: source,
-          kind: "audio",
-        });
+      void m.work("Importing and analyzing song", async () => {
+        const asset = await ipc
+          .invoke<MediaAsset>("media_import", {
+            path: source,
+            kind: "audio",
+          })
+          .catch(async (error) => {
+            // A published song survives an analysis/storage error. Show it if possible.
+            await m.refresh().catch(() => undefined);
+            throw error;
+          });
         await m.refresh();
         setSelected(asset.id);
         setQuery("");
         setPath("");
         useMedia.setState({
-          message: "Song imported locally. Load in Jamstudio to play it.",
+          message: `Song imported locally. ${readAnalysisStatus(asset.analysisStatus)?.message ?? "Load in Jamstudio to play it."}`,
         });
       });
     },
@@ -200,7 +207,7 @@ export function Songs() {
         m.busy === "Loading reference" ||
         m.busy === "Analyzing song locally" ||
         m.busy === "Consolidating song files" ||
-        m.busy === "Importing song") && (
+        m.busy === "Importing and analyzing song") && (
         <Button
           onClick={() =>
             void ipc
@@ -254,7 +261,9 @@ export function Songs() {
                     <small>
                       {Math.floor(a.seconds / 60)}:
                       {String(Math.floor(a.seconds % 60)).padStart(2, "0")} ·
-                      audio
+                      audio · analysis{" "}
+                      {readAnalysisStatus(a.analysisStatus)?.state ??
+                        (a.songAnalysis ? "saved" : "not started")}
                     </small>
                   </span>
                 </button>
@@ -278,7 +287,12 @@ export function Songs() {
                   }
                   onClick={() =>
                     void m.work("Analyzing song locally", async () => {
-                      await ipc.invoke("media_analyze", { assetId: song.id });
+                      try {
+                        await ipc.invoke("media_analyze", { assetId: song.id });
+                      } catch (error) {
+                        await m.refresh().catch(() => undefined);
+                        throw error;
+                      }
                       await m.refresh();
                       useMedia.setState({
                         message:
@@ -342,7 +356,11 @@ export function Songs() {
                   <FilmSlate size={18} aria-hidden="true" /> Use in Film
                 </Button>
               </div>
-              <SongAnalysis key={song.id} value={song.songAnalysis} />
+              <SongAnalysis
+                key={song.id}
+                value={song.songAnalysis}
+                status={song.analysisStatus}
+              />
               <ReferenceGridEditor
                 key={`grid-${song.id}`}
                 song={song}

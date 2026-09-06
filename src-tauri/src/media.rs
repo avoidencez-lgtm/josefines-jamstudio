@@ -11,6 +11,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::State;
+mod analysis;
 pub mod grid;
 pub mod songs;
 pub mod stems;
@@ -351,6 +352,17 @@ async fn probe(path: &Path, kind: &str) -> Result<f64, String> {
     Ok(duration)
 }
 async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Asset, String> {
+    import_as(base, path, kind, label, &id()).await
+}
+
+async fn import_as(
+    base: &Path,
+    path: &Path,
+    kind: &str,
+    label: &str,
+    asset_id: &str,
+) -> Result<Asset, String> {
+    valid_id(asset_id)?;
     if !path.is_absolute()
         || !path.is_file()
         || !["audio", "video"].contains(&kind)
@@ -366,9 +378,9 @@ async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Ass
     if !MEDIA_EXTENSIONS.contains(&ext.as_str()) {
         return Err("Choose MP4/MOV/WebM/MKV video or WAV/MP3/FLAC/M4A/AAC/AIFF/OGG audio.".into());
     }
-    let id = id();
+    let id = asset_id.to_string();
     if kind == "audio" {
-        return songs::store(
+        let saved = songs::store(
             base,
             Asset {
                 schema_version: 1,
@@ -377,10 +389,16 @@ async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Ass
                 path: path.to_string_lossy().into_owned(),
                 seconds: 0.0, // New imports derive their duration from decoded audio.
                 label: label.chars().take(160).collect(),
-                extra: BTreeMap::new(),
+                extra: BTreeMap::from([("analysisStatus".into(), json!({"schemaVersion":1,"state":"pending","analyzer":"local-chroma-v1","message":"Audio saved. Local analysis has not finished; retry in Songs."}))]),
             },
         )
-        .await;
+        .await?;
+        return analysis::prepare(base, &saved.id).await.map_err(|e| {
+            format!(
+                "Song {} was imported and kept; preparation failed: {e}",
+                saved.id
+            )
+        });
     }
     let seconds = probe(path, kind).await?;
     let dest = base.join("assets").join(format!("{id}.{ext}"));
@@ -726,6 +744,13 @@ async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
     let source_hash = tauri::async_runtime::spawn_blocking(move || source_hash(&path))
         .await
         .map_err(|_| "Source hashing worker stopped.")??;
+    if source
+        .extra
+        .get("sourceHash")
+        .is_some_and(|saved| saved.as_str() != Some(&source_hash))
+    {
+        return Err("Stored song audio changed. Import the source again as a new song.".into());
+    }
     let work = base.join("work").join(id());
     fs::create_dir_all(work.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::create_dir(&work).map_err(|e| e.to_string())?;
@@ -775,7 +800,11 @@ pub async fn media_analyze(asset_id: String, state: State<'_, AppState>) -> Resu
         .map_err(|_| "Another media operation is running")?;
     state.engine.lock().ensure_timing_editable()?;
     CANCEL.store(false, Ordering::Relaxed);
-    analyze_source(&root(), &asset_id).await
+    let source = analysis::prepare(&root(), &asset_id).await?;
+    if source.extra["analysisStatus"]["state"] != "ready" {
+        return Err(analysis::message(&source).into());
+    }
+    Ok(source)
 }
 
 #[tauri::command]
@@ -928,8 +957,61 @@ async fn finish_job(
         &base.join("jobs").join(format!("{}.json", job_id(job)?)),
         job,
     )?;
-    let a = import(base, &raw, &m.kind, &m.name).await?;
-    job["assetId"] = json!(a.id);
+    finish_import(base, job, m).await
+}
+
+/// Persist the destination before publishing audio so recovery never creates a duplicate.
+async fn finish_import(base: &Path, job: &mut Value, model: &api::Model) -> Result<(), String> {
+    let file = base.join("jobs").join(format!("{}.json", job_id(job)?));
+    let asset_id = match job.get("targetAssetId").or_else(|| job.get("assetId")) {
+        Some(value) => value
+            .as_str()
+            .ok_or("Invalid generated asset ID")?
+            .to_string(),
+        None => id(),
+    };
+    valid_id(&asset_id)?;
+    job["targetAssetId"] = json!(asset_id);
+    job["status"] = json!("importing");
+    write(&file, job)?;
+    let existing = songs::folder(base, &asset_id)?.exists()
+        || base
+            .join("assets")
+            .join(format!("{asset_id}.json"))
+            .exists();
+    let source = if existing {
+        let source = asset(base, &asset_id)?;
+        if source.id != asset_id || source.kind != model.kind {
+            return Err(
+                "Generated asset identity changed. Restore the matching job and song.".into(),
+            );
+        }
+        if source.kind == "audio" {
+            analysis::prepare(base, &asset_id).await?
+        } else {
+            source
+        }
+    } else {
+        let raw = job["rawPath"]
+            .as_str()
+            .ok_or("Missing saved generation output")?;
+        let path = fs::canonicalize(raw).map_err(|e| e.to_string())?;
+        if !path.starts_with(fs::canonicalize(base.join("assets")).map_err(|e| e.to_string())?) {
+            return Err("Raw media outside library".into());
+        }
+        import_as(base, &path, &model.kind, &model.name, &asset_id).await?
+    };
+    job["assetId"] = json!(source.id);
+    if source.kind == "audio"
+        && !["ready", "unavailable"].contains(
+            &source.extra["analysisStatus"]["state"]
+                .as_str()
+                .unwrap_or(""),
+        )
+    {
+        job["status"] = json!("analysis");
+        return Err(analysis::message(&source).into());
+    }
     job["status"] = json!("ready");
     Ok(())
 }
@@ -975,6 +1057,7 @@ pub async fn media_generate(
 fn public_job(mut job: Value) -> Value {
     if let Some(o) = job.as_object_mut() {
         o.remove("downloadUri");
+        o.remove("targetAssetId");
     }
     job
 }
@@ -988,6 +1071,9 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
     let base = root();
     let file = base.join("jobs").join(format!("{job_id}.json"));
     let mut job = read(&file)?;
+    if job["schemaVersion"] != 1 || job["id"] != job_id {
+        return Err("Unsupported or mismatched media job. File left intact.".into());
+    }
     let request: api::Generate =
         serde_json::from_value(job["request"].clone()).map_err(|e| e.to_string())?;
     let (mut m, _, _) = api::request(&request)?;
@@ -996,10 +1082,8 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
         return Ok(public_job(job));
     }
     let result=async {
-        if let Some(raw)=job["rawPath"].as_str() {
-            let path=fs::canonicalize(raw).map_err(|e|e.to_string())?;
-            if !path.starts_with(fs::canonicalize(base.join("assets")).map_err(|e|e.to_string())?) {return Err("Raw media outside library".into());}
-            let a=import(&base,&path,&m.kind,&m.name).await?;job["assetId"]=json!(a.id);job["status"]=json!("ready");return Ok(());
+        if job.get("rawPath").is_some() || job.get("assetId").is_some() || job.get("targetAssetId").is_some() {
+            return finish_import(&base, &mut job, &m).await;
         }
         let output=if let Some(task)=job["taskId"].as_str() {
             api::poll(&m,&request,task,state.secret_store.as_ref(),&state.cost_log).await?
@@ -1158,6 +1242,139 @@ pub async fn media_open(path: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    fn synthetic_audio(path: &Path, seconds: usize) {
+        let mut wav = hound::WavWriter::create(
+            path,
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: 48000,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .unwrap();
+        for i in 0..48000 * seconds {
+            wav.write_sample(
+                (4000.0 * (i as f64 * 440.0 * std::f64::consts::TAU / 48000.0).sin()) as i16,
+            )
+            .unwrap();
+        }
+        wav.finalize().unwrap();
+    }
+
+    #[tokio::test]
+    async fn imported_audio_is_analyzed_and_interrupted_generation_resumes_the_same_song() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        let home = std::env::temp_dir().join(format!("jam-auto-analysis-{}", id()));
+        let base = home.join("music-videos");
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let raw = base.join("assets/generated-source.wav");
+        synthetic_audio(&raw, 3);
+        let original = fs::read(&raw).unwrap();
+        let imported = import(&base, &raw, "audio", "Synthetic import")
+            .await
+            .unwrap();
+        assert_eq!(imported.extra["analysisStatus"]["state"], "ready");
+        assert_eq!(
+            imported.extra["songAnalysis"]["analyzer"],
+            "local-chroma-v1"
+        );
+        assert_eq!(
+            imported.extra["songAnalysis"]["sourceHash"],
+            imported.extra["sourceHash"]
+        );
+        assert!(
+            imported.extra["songAnalysis"]["bpm"].is_null(),
+            "a sine has no pulse"
+        );
+        let model = api::catalog()
+            .into_iter()
+            .find(|m| m.id == "lyria")
+            .unwrap();
+        let mut job =
+            json!({"schemaVersion":1,"id":"synthetic-job","rawPath":raw,"future":{"keep":true}});
+        finish_import(&base, &mut job, &model).await.unwrap();
+        assert_eq!(job["status"], "ready");
+        let song_id = job["assetId"].as_str().unwrap().to_string();
+        let saved = asset(&base, &song_id).unwrap();
+        let bytes = fs::read(&saved.path).unwrap();
+        // Crash after preparing the song but before the caller's final ready write.
+        let file = base.join("jobs/synthetic-job.json");
+        let mut resumed = read(&file).unwrap();
+        assert_eq!(resumed["targetAssetId"], song_id);
+        assert!(
+            resumed.get("assetId").is_none(),
+            "a reserved ID is not yet a public asset"
+        );
+        assert_ne!(resumed["status"], "ready");
+        fs::remove_file(&raw).unwrap();
+        finish_import(&base, &mut resumed, &model).await.unwrap();
+        assert_eq!(resumed["assetId"], song_id);
+        assert_eq!(resumed["status"], "ready");
+        assert_eq!(resumed["future"], json!({"keep":true}));
+        assert_eq!(
+            list_media(&base).unwrap()["assets"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(fs::read(&saved.path).unwrap(), bytes);
+        assert_eq!(
+            fs::read(songs::folder(&base, &song_id).unwrap().join("original.wav")).unwrap(),
+            original
+        );
+        CANCEL.store(true, Ordering::Relaxed);
+        assert!(finish_import(&base, &mut resumed, &model).await.is_err());
+        assert_eq!(resumed["status"], "analysis");
+        let canceled = asset(&base, &song_id).unwrap();
+        assert_eq!(canceled.extra["analysisStatus"]["state"], "canceled");
+        assert_eq!(canceled.extra["songAnalysis"], saved.extra["songAnalysis"]);
+        CANCEL.store(false, Ordering::Relaxed);
+        finish_import(&base, &mut resumed, &model).await.unwrap();
+        assert_eq!(resumed["status"], "ready");
+        assert_eq!(fs::read(&saved.path).unwrap(), bytes);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn automatic_analysis_preserves_short_audio_and_refuses_future_status_versions() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        let home = std::env::temp_dir().join(format!("jam-short-analysis-{}", id()));
+        let base = home.join("music-videos");
+        fs::create_dir_all(&base).unwrap();
+        let raw = base.join("short.wav");
+        synthetic_audio(&raw, 1);
+        let mut imported = import(&base, &raw, "audio", "Short sound").await.unwrap();
+        assert_eq!(imported.extra["analysisStatus"]["state"], "unavailable");
+        assert!(!imported.extra.contains_key("songAnalysis"));
+        imported.extra.insert(
+            "analysisStatus".into(),
+            serde_json::from_str(include_str!(
+                "../../tests/fixtures/seams/analysis-status.json"
+            ))
+            .unwrap(),
+        );
+        save_asset(&base, &imported).unwrap();
+        imported = analysis::prepare(&base, &imported.id).await.unwrap();
+        assert_eq!(imported.extra["analysisStatus"]["state"], "unavailable");
+        assert_eq!(imported.extra["analysisStatus"]["futureField"], "preserve");
+        imported.extra.insert(
+            "analysisStatus".into(),
+            json!({"schemaVersion":2,"state":"future","unknown":"keep"}),
+        );
+        save_asset(&base, &imported).unwrap();
+        let manifest = songs::folder(&base, &imported.id)
+            .unwrap()
+            .join("song.json");
+        let before = fs::read(&manifest).unwrap();
+        assert!(analysis::prepare(&base, &imported.id).await.is_err());
+        assert_eq!(fs::read(&manifest).unwrap(), before);
+        fs::remove_dir_all(home).unwrap();
+    }
+
     #[test]
     fn media_scan_keeps_good_documents_and_clean_mix_excludes_monitor() {
         let root = std::env::temp_dir().join(format!("jam-media-scan-{}", super::id()));
