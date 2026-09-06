@@ -314,6 +314,45 @@ One step per `AnalysisKind`; each step picks the enabled provider (Music.ai for 
 
 ## 7. Data model and files on disk
 
+### Native audio import (2026-09-06)
+
+Songs uses `song_pick_file()` (native Tauri dialog returning `string | null`),
+WebView path-only drop events, or a pasted path. All route to the existing
+`media_import(path, kind: audio)` and canonical song store. No file bytes or new
+filesystem permissions reach JS. Canceling the dialog changes nothing; media
+work is serialized and audio import refuses recording. Listener cleanup handles
+screen changes and late registration. Headless picker calls fail explicitly.
+
+`jam-audio::import` uses Symphonia 0.6.1 and Rubato 5.0.0 on a blocking worker.
+WAV, MP3, FLAC, AAC/ALAC in M4A, AIFF and Ogg Vorbis decode locally, with
+mono duplicated at unity and stereo preserved. Input is bounded to 512 MB,
+8–192 kHz, and the caller's duration limit (ten minutes for imports, twenty for
+existing practice copies). FFT conversion removes its filter delay and emits
+exactly ceil(input frames * 48000 / input rate) frames. Even FFT sizes avoid a
+fractional-frame delay at rational ratios. Conversion checks finite samples,
+packet bounds, cancellation and declared duration, and never overwrites output.
+Memory holds bounded 48 kHz output plus one packet/converter block, not the full
+high-rate source. Playback and the audio callback are unchanged.
+
+Symphonia's MP4 demuxer does not apply edit lists. The separate bounded metadata
+reader handles version-0/1 static trims, optionally preceded by silence, using
+the selected track ID and movie/media time scales. Priming and final padding are
+removed before resampling. Multiple content edits, non-unit rates, mismatched
+time scales, fragmented/unknown-duration tracks and metadata over 8 MB are
+refused with a WAV/FLAC export instruction. Raw ADTS AAC and protected formats
+also need conversion. No invented fixed AAC delay or silent timing fallback.
+
+`decode_audio` shares this path with reference loading, analysis, stems and
+practice copies. FFmpeg remains separate for Film probe/encoding and clean-take
+soundtrack mixing. `import::tests` checks alias rejection below 1e-4 RMS,
+resampling phase error below 3e-4 RMS, bounded/cancelable writes and malformed
+edit lists. `native_song_import_normalizes_preserves_and_loads_audio_without_external_tools`
+covers the native IPC/storage/player path; the UI fixture checks native-only
+controls stay disabled in browser preview. `scripts/check-native-import.ps1`
+generates seven original codec fixtures with FFmpeg, then tests native decode:
+one-second duration within one frame and phase/amplitude RMS error below 0.015.
+This optional codec test is distinct from ordinary CI and makes no provider call.
+
 ### Implemented song storage (2026-09-06)
 
 New audio imports (including generated media and clean take mixes) and rendered
@@ -344,8 +383,7 @@ removes the private staging folder, keeping original/legacy/paid output files.
 Migration rebinds only schema-1 analysis/grid/stem hashes matching the old source;
 stale metadata remains stale. Unknown fields survive and reserved-field collisions
 are refused before copying. Rewrites use the existing temp-file/sync/backup
-helper (`song.bak`). No decoder dependency was added: user-installed FFmpeg is
-still used, and native symphonia import/file-dialog work remains pending.
+helper (`song.bak`). The shared decoder is now bundled Symphonia/Rubato (see Native audio import below).
 
 `song_files_are_authoritative_portable_and_preserve_unknown_metadata` covers
 canonical precedence, version/path refusals and rewrite preservation in ordinary
@@ -787,10 +825,9 @@ separately from the known estimate subtotal. No account budget or invoice is imp
 
 `media_stretch(assetId, speed, semitones)` extends the existing media registry and
 returns a new `Asset`. The media operation gate excludes other media jobs; normal
-`media_cancel` cancellation covers FFmpeg decoding and the native block loop.
+`media_cancel` cancellation covers native decoding and the native block loop.
 The source must be an existing audio asset inside the canonical media library,
-up to ten minutes. The existing user-installed FFmpeg decodes local file/pipe
-protocols only, to 48 kHz stereo float WAV in a private work directory.
+up to ten minutes. The bundled Symphonia/Rubato decoder writes 48 kHz stereo float WAV in a private work directory.
 
 `jam-audio::practice::render` validates the decoded format/size, calls the pure
 Signalsmith wrapper on a blocking worker, writes a new float WAV with exclusive
@@ -809,7 +846,7 @@ longer/multi-stem preparation. Samples never cross IPC.
 ### Native reference playback (2026-09-06)
 
 `media_reference_load(assetId)` reuses the media gate, local path validation,
-FFmpeg decoder and cancellation. It decodes up to twenty minutes to a temporary
+bundled decoder and cancellation. It decodes up to twenty minutes to a temporary
 48 kHz stereo float WAV, reads a bounded source on a blocking worker, then installs
 `jam-audio::song::ReferenceSong` under the render gate. Normal completion/failure
 removes the temporary decode. No library document or source is rewritten. Loading
@@ -913,7 +950,7 @@ only after all tracks validate. Previous stem folders are retained.
 The ZIP reader accepts 2–8 audio files, at most 32 entries, 192 MiB compressed,
 512 MiB per expanded file and 2 GiB total. Paths must be enclosed; symlinks,
 encryption and non-audio entries are rejected. Entry names are labels only;
-output names are generated. FFmpeg decodes each file to 48 kHz stereo float WAV.
+output names are generated. The bundled decoder converts each file to 48 kHz stereo float WAV.
 Tracks must have identical decoded lengths and be within 100 ms of the original
 asset duration. This catches duration mismatches, not musical misalignment:
 local imports must be exported from the same start. Native loaded tracks are

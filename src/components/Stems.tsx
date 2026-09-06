@@ -130,15 +130,14 @@ export function StemMixer({ song }: { song: ReferenceState }) {
 export function StemPreparation({
   song,
   locked,
-  toolsReady,
-}: { song: MediaAsset; locked: boolean; toolsReady: boolean }) {
+}: { song: MediaAsset; locked: boolean }) {
   const m = useMedia();
   const models = MEDIA_MODELS.filter((model) => model.kind === "stems");
   const [catalogId, setCatalogId] = useState(models[0]?.id ?? "");
   const [path, setPath] = useState("");
   const [price, setPrice] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const disabled = locked || isPreview || !toolsReady || song.seconds > 600;
+  const disabled = locked || isPreview || song.seconds > 600;
   return (
     <details className="workspace-stack">
       <summary className="cursor-pointer text-sm">

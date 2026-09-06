@@ -405,3 +405,21 @@ Legacy migration is the registered `media_store_song` command under the media
 operation gate. It preserves the old files and publishes a staged song folder.
 A future schema bump needs one explicit migration; never fall back to a stale
 legacy sidecar when a canonical file is unreadable.
+
+### Native import formats and file selection
+
+Reuse `jam-audio::import::normalize` for offline audio decoding, including new
+producer/provider paths. Keep sample buffers in Rust and call from a blocking
+worker. Extend Symphonia's concrete feature list only for a verified format;
+record each licence exception in `deny.toml` and ship its notice under
+`assets/licenses/`. Retain exact duration, finite-sample and cancellation checks.
+Extend the synthetic codec fixture generator in `scripts/check-native-import.ps1`
+and its native regression together, with a stated timing/signal tolerance.
+Never mask an unsupported M4A edit list by discarding its priming metadata.
+
+The native picker returns one local path or null via `song_pick_file`; it opens
+no window in headless mode. Native file-drop events and pasted paths use the
+same Songs import callback and `media_import` validation. Do not add JS file
+reads, audio playback or dialog/filesystem permissions to implement an import
+button. The existing `tests/invariants/practice-copy.test.tsx` fixture covers the
+Songs controls; `src-tauri/tests/ipc_rig_media.rs` covers persistence and reload.

@@ -1211,6 +1211,7 @@ pub fn configure<R: tauri::Runtime>(
             media::media_list,
             media::media_save,
             media::media_import,
+            platform::song_dialog::song_pick_file,
             media::songs::media_store_song,
             media::media_stretch,
             media::media_reference_load,
@@ -1390,6 +1391,7 @@ pub fn run() {
     let built = configure(
         tauri::Builder::default()
             .plugin(jam_log_plugin())
+            .plugin(tauri_plugin_dialog::init())
             .plugin(platform::voice_shortcut::plugin()),
         build_state(),
     )

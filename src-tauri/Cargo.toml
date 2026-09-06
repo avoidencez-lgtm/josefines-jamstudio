@@ -29,8 +29,10 @@ tokio.workspace = true
 tracing.workspace = true
 reqwest.workspace = true
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-dialog = "2.7.3"
 
 [dev-dependencies]
+hound.workspace = true
 # Mock runtime for tests/ipc_e2e.rs; feature unification keeps it out of release builds.
 tauri = { version = "2.11", features = ["test"] }
 
