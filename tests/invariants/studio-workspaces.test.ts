@@ -144,6 +144,34 @@ describe("Studio workspaces", () => {
     ).toBe(false);
     expect(transportStop).not.toHaveBeenCalled();
   });
+  it("does not transpose the chart while a reference is loaded", () => {
+    vi.stubGlobal("HTMLInputElement", class HTMLInputElement {});
+    vi.stubGlobal("HTMLTextAreaElement", class HTMLTextAreaElement {});
+    vi.stubGlobal("HTMLSelectElement", class HTMLSelectElement {});
+    const transposeCurrentChart = vi.fn();
+    const notify = vi.fn();
+    const store = {
+      transposeCurrentChart,
+      notify,
+      telemetry: {
+        transport: {},
+        band: {},
+        reference: { asset_id: "fixture" },
+      },
+    } as unknown as EngineState;
+    expect(
+      handleShortcut(
+        { key: "]", code: "BracketRight", target: null } as KeyboardEvent,
+        store,
+        { toggleHelp: () => {} },
+      ),
+    ).toBe(true);
+    expect(transposeCurrentChart).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(
+      "error",
+      expect.stringContaining("while a reference is loaded"),
+    );
+  });
   it("keeps screen modules to components so fast refresh and tests stay simple", () => {
     const dir = path.resolve(process.cwd(), "src/screens");
     for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".tsx"))) {
