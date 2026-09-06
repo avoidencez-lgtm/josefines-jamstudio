@@ -252,7 +252,7 @@ export function Songs() {
                 >
                   Load in Jamstudio
                 </Button>
-                {Boolean(song.stemSet) && (
+                {Boolean(song.stemSet || song.referencePractice) && (
                   <Button
                     disabled={locked || isPreview || !tools.ready}
                     onClick={() =>
@@ -267,7 +267,7 @@ export function Songs() {
                         }));
                         useMedia.setState({
                           message:
-                            "Original stereo mix loaded. Saved stems are kept.",
+                            "Original stereo mix loaded at 100% in its original key. Saved stems and practice settings are kept.",
                         });
                       })
                     }

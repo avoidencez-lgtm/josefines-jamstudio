@@ -250,6 +250,16 @@ Use in Film velger filen som lydspor i gjeldende film. Save video lagrer valget.
 
 Gi referansen et navn eller velg en importert lydfil, og velg deretter en kildeseksjon fra din egen låt. Kartlegg formen ved å lytte, med én linje per seksjon: Navn | takter | energi 0–100. Preview new form viser resultatet før det brukes. Verktøyet gjentar eller forkorter din egen akkordfrase til de valgte lengdene og endrer deler som verken er låst eller dempet. Gamle seksjoner og sangtekster beholdes som ideer; referanselyden kopieres ikke, akkorder transkriberes ikke og sangtekst flyttes ikke automatisk. Grensene er 16 oppføringer og 256 arrangerte takter, innenfor låtens seksjonsgrense. Gitarspor blokkerer utskifting av tidslinjen: bruk en versjon uten slike lag. Apply bevarer en versjon og Undo; Save i Write lagrer formen og referansens opphav.
 
+### Endre hastighet og toneart under avspilling
+
+Last en referanse inn i Jamstudio, og bruk Practice speed & key i Songs eller Stage. Velg 50–150 % hastighet og -12 til +12 halvtoner, og trykk Apply & save speed/key. Hvert innlastede spor behandles lokalt, med samme spornivåer og valg av gitar som skal dempes. Gitarsignalet ditt (DI) endres ikke. Innstillingene brukes neste gang du laster denne referansen. 100% · original key nullstiller behandlingen; Load original mix laster originalmiksen uten lagrede stems eller behandling, men beholder innstillingene.
+
+Posisjon, søk og løkker bruker sekunder fra originalen. Lagrede akkord- og toneartestimater transponeres med lyden, og estimert BPM følger hastigheten. Estimatene har fortsatt lav sikkerhet og ingen justering mot taktstart eller seksjoner. Nye innstillinger høres etter lyden som allerede står i kø. Record tar opp det behandlede stereokompet og lagrer de faktiske innstillingene med opptaket. Lagre opptaket før du endrer hastighet, toneart, løkke eller miks.
+
+Når referansen er lastet, kan Jo endre hastighet og toneart gjennom de samme kontrollene. Eksempler uten språkmodell: «sett hastighet til 75 prosent», «transponer til 2 halvtoner», «saktere», «raskere». Engelske eksempler: «speed 75%», «transpose +2», «slower», «faster». En kommando som bare endrer hastighet, beholder transponeringen, og omvendt. Endringer under opptak, automatiske tempoøkninger og analyserte seksjonsløkker er ikke tilgjengelige ennå.
+
+Dette endrer avspilling i Jamstudio, ikke kildefiler, Film, systemavspilling eller ferdiglagde øvingskopier. Ved behandlingsfeil pauses referansen, og du blir bedt om å laste den på nytt. Velg Load original mix hvis lagrede innstillinger er ugyldige. Nettleservisningen behandler ingen lyd.
+
 ## AI Music og lokale modeller
 
 ### Generer med et bevisst valg

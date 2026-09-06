@@ -15,6 +15,80 @@ use tauri::Manager;
 const NO_PORT: &str = "no MIDI port open (messages are only logged)";
 
 #[test]
+fn reference_processing_preserves_partial_settings_metadata_and_rejects_stale_sources() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let id = unique("reference-practice");
+    let folder = app_lib::media::root().join("assets");
+    std::fs::create_dir_all(&folder).unwrap();
+    let source = folder.join(format!("{id}.wav"));
+    let manifest = folder.join(format!("{id}.json"));
+    // The decoded source comes through the native test seam; FFmpeg reload is
+    // covered separately by the opt-in media scenario.
+    std::fs::write(&source, b"source must stay unchanged").unwrap();
+    std::fs::write(&manifest, serde_json::to_vec(&json!({"schemaVersion":1,"id":id,"kind":"audio","path":source.to_string_lossy(),"seconds":1.0,"label":"Synthetic reference","future":42,"referencePractice":{"schemaVersion":1,"future":true}})).unwrap()).unwrap();
+    let state = studio.app().state::<app_lib::AppState>();
+    state
+        .engine
+        .lock()
+        .load_reference(
+            jam_audio::song::ReferenceSong::new(id.clone(), "Test".into(), vec![0.1; 96_000])
+                .unwrap(),
+        )
+        .unwrap();
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/seams/reference-practice.json"
+    ))
+    .unwrap();
+    let speed = fixture["speed"]["arguments"]["speedPercent"]
+        .as_f64()
+        .unwrap()
+        / 100.0;
+    assert_eq!(
+        studio.ok(
+            "media_reference_processing",
+            json!({"assetId":id,"speed":speed})
+        ),
+        json!({"speed":0.75,"semitones":0})
+    );
+    assert_eq!(
+        studio.ok(
+            "media_reference_processing",
+            json!({"assetId":id,"semitones":2})
+        ),
+        fixture["applied"]
+    );
+    let saved: Value = serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    assert_eq!(saved["future"], 42);
+    assert_eq!(saved["referencePractice"]["future"], true);
+    assert_eq!(saved["referencePractice"]["speed"], 0.75);
+    assert_eq!(saved["referencePractice"]["semitones"], 2);
+    for args in [
+        json!({"assetId":"stale","speed":1}),
+        json!({"assetId":id}),
+        json!({"assetId":id,"speed":0.49}),
+        json!({"assetId":id,"semitones":13}),
+    ] {
+        studio.err("media_reference_processing", args);
+        assert_eq!(
+            serde_json::from_slice::<Value>(&std::fs::read(&manifest).unwrap()).unwrap(),
+            saved
+        );
+    }
+    assert_eq!(
+        std::fs::read(&source).unwrap(),
+        b"source must stay unchanged"
+    );
+    assert_eq!(
+        studio.ok("audio_get_telemetry", json!({}))["reference"]["speed"],
+        0.75
+    );
+    studio.ok("media_reference_unload", json!({}));
+    std::fs::remove_file(manifest).unwrap();
+    std::fs::remove_file(source).unwrap();
+}
+
+#[test]
 fn native_reference_uses_shared_transport_and_refuses_unanalysed_grid_edits() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

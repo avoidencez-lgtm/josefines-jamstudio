@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 const RATE: usize = 48_000;
 const HOP: usize = 960;
 const FFT: usize = 8192;
-const NOTES: [&str; 12] = [
+pub const NOTES: [&str; 12] = [
     "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B",
 ];
 

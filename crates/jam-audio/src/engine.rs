@@ -551,6 +551,21 @@ impl AudioEngine {
         song.set_stem_mix(mix)
     }
 
+    pub fn reference_processing(
+        &self,
+        asset_id: &str,
+        speed: f64,
+        semitones: i32,
+    ) -> Result<(), String> {
+        self.ensure_timing_editable()?;
+        let mut reference = self.reference.lock();
+        let song = reference.as_mut().ok_or("Load the reference first.")?;
+        if song.info.asset_id != asset_id {
+            return Err("The loaded reference changed.".into());
+        }
+        song.set_processing(speed, semitones)
+    }
+
     // ----- band ------------------------------------------------------------
 
     pub fn validate_style_meter(&self, style: &Style) -> Result<(), String> {
@@ -1764,6 +1779,7 @@ mod tests {
         engine.transport_play();
         engine.recorder_start("reference".into()).unwrap();
         assert!(engine.reference_mix("source", mix).is_err());
+        assert!(engine.reference_processing("source", 1.0, 0).is_err());
         assert!(engine.reference_seek(0.5).is_err());
         assert!(engine.reference_loop(0.0, 1.0, true).is_err());
         assert!(engine.unload_reference().is_err());
@@ -1776,6 +1792,8 @@ mod tests {
         assert!(take.sample_count > 1000);
         assert_eq!(take.snapshot["reference"]["asset_id"], "source");
         assert_eq!(take.snapshot["reference"]["stems"][0]["muted"], true);
+        assert_eq!(take.snapshot["reference"]["speed"], 1.0);
+        assert_eq!(take.snapshot["reference"]["semitones"], 0);
         assert_eq!(take.snapshot["beatGrid"], "unanalysed");
         assert!(take.midi.is_empty());
         let mut band = hound::WavReader::open(&take.path_band).unwrap();
@@ -1803,6 +1821,79 @@ mod tests {
         engine.unload_reference().unwrap();
         assert!(engine.ensure_band_grid().is_ok());
         assert!(engine.get_telemetry().reference.is_none());
+        drop(band);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn processed_reference_records_transposed_stereo_at_half_speed() {
+        let mut engine = headless_engine();
+        let root =
+            std::env::temp_dir().join(format!("jam-processed-reference-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        *engine.recorder.lock() = crate::recorder::TakeRecorder::new(48_000, root.clone());
+        let samples = (0..96_000)
+            .flat_map(|i| {
+                let tone = 0.2 * (std::f32::consts::TAU * 1000.0 * i as f32 / 48_000.0).sin();
+                [tone, -tone * 0.5]
+            })
+            .collect();
+        engine
+            .load_reference(
+                crate::song::ReferenceSong::new("processed".into(), "Processed".into(), samples)
+                    .unwrap(),
+            )
+            .unwrap();
+        engine.reference_processing("processed", 0.5, 2).unwrap();
+        engine.start().unwrap();
+        engine.transport_play();
+        engine.recorder_start("processed".into()).unwrap();
+        thread::sleep(Duration::from_millis(650));
+        let take = engine.recorder_stop().unwrap();
+        engine.stop().unwrap();
+        assert!(take.notes.is_empty(), "{}", take.notes);
+        assert_eq!(take.snapshot["reference"]["speed"], 0.5);
+        assert_eq!(take.snapshot["reference"]["semitones"], 2);
+        assert!(take.midi.is_empty());
+        let mut band = hound::WavReader::open(&take.path_band).unwrap();
+        let samples: Vec<f64> = band
+            .samples::<i32>()
+            .map(|s| s.unwrap() as f64 / 8_388_608.0)
+            .collect();
+        // Exclude only the 100 ms startup region; measure actual output-tap WAV data.
+        let frames = &samples.as_chunks::<2>().0[4800..];
+        assert!(frames.len() > 12_000);
+        let rms = |channel: usize| {
+            (frames.iter().map(|p| p[channel].powi(2)).sum::<f64>() / frames.len() as f64).sqrt()
+        };
+        assert!((0.10..0.18).contains(&rms(0)), "left RMS {}", rms(0));
+        assert!(
+            (rms(1) / rms(0) - 0.5).abs() < 0.02,
+            "stereo gain within 4%"
+        );
+        let error = (frames
+            .iter()
+            .map(|p| (p[0] + 2.0 * p[1]).powi(2))
+            .sum::<f64>()
+            / frames.len() as f64)
+            .sqrt();
+        assert!(error < 0.005, "stereo correlation residual {error}");
+        let crossings: Vec<f64> = frames
+            .windows(2)
+            .enumerate()
+            .filter(|(_, p)| p[0][0] <= 0.0 && p[1][0] > 0.0)
+            .map(|(i, p)| i as f64 - p[0][0] / (p[1][0] - p[0][0]))
+            .collect();
+        let hz =
+            (crossings.len() - 1) as f64 * 48_000.0 / (crossings.last().unwrap() - crossings[0]);
+        let cents = 1200.0 * (hz / (1000.0 * 2.0_f64.powf(2.0 / 12.0))).log2();
+        assert!(cents.abs() < 5.0, "recorded pitch {hz} Hz ({cents} cents)");
+        assert!(
+            frames
+                .chunks(256)
+                .all(|block| block.iter().any(|p| p[0].abs() > 0.01)),
+            "no silent 256-frame blocks in the recorded tone"
+        );
         drop(band);
         std::fs::remove_dir_all(root).unwrap();
     }

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "note": "Synthetic reference-practice commands; speed and transpose update independently without resetting each other.",
+  "speed": {
+    "name": "set_reference_practice",
+    "arguments": { "assetId": "fixture", "speedPercent": 75 }
+  },
+  "transpose": {
+    "name": "set_reference_practice",
+    "arguments": { "assetId": "fixture", "semitones": 2 }
+  },
+  "applied": { "speed": 0.75, "semitones": 2 }
+}

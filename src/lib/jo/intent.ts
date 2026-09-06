@@ -1,12 +1,47 @@
 import type { JoToolCall } from "./persona";
 
-export function parseNaturalIntent(text: string): {
+export function parseNaturalIntent(
+  text: string,
+  reference?: { assetId: string; speed: number },
+): {
   reply: string;
   toolCalls: JoToolCall[];
 } {
   const lower = text.toLowerCase().trim();
   const toolCalls: JoToolCall[] = [];
   const reply = "Got it!";
+  if (reference) {
+    const percent =
+      /^(?:(?:set|sett) )?(?:speed|hastighet)(?: to| til)?\s+(\d{1,3})\s*(?:%|percent|prosent)?[.!]?$/.exec(
+        lower,
+      );
+    const pitch =
+      /^(?:transpose|transponer)(?: to| til)?\s+([+-]?\d{1,2})\s*(?:semitones?|halvtoner?)?[.!]?$/.exec(
+        lower,
+      );
+    const faster = /^(?:a bit )?(faster|speed up|raskere)[.!]?$/.test(lower);
+    const slower = /^(?:a bit )?(slower|slow down|saktere)[.!]?$/.test(lower);
+    if (percent || pitch || faster || slower) {
+      const arguments_: Record<string, unknown> = {
+        assetId: reference.assetId,
+      };
+      if (pitch) arguments_.semitones = Number(pitch[1]);
+      else
+        arguments_.speedPercent = percent
+          ? Number(percent[1])
+          : Math.max(
+              50,
+              Math.min(
+                150,
+                Math.round(reference.speed * 100) + (faster ? 5 : -5),
+              ),
+            );
+      return {
+        reply: "Updating reference practice settings.",
+        toolCalls: [{ name: "set_reference_practice", arguments: arguments_ }],
+      };
+    }
+  }
   if (lower === "next section")
     return {
       reply: "Moving to the next section.",

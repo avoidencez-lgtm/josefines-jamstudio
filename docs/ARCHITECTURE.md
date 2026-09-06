@@ -903,4 +903,47 @@ recording, ZIP path/count bounds, upload guards, and an opt-in real FFmpeg
 WAV/MP3 archive/import/reload/hash-corruption scenario. The documentation-derived
 provider request fixture is not a recorded service response. Live provider
 quality, real-song residual guitar at or below -6 dB, Music.ai workflow support,
-stem-aware stretch and analysed-grid controls remain V1 acceptance/work.
+analysed-grid controls remain V1 acceptance/work.
+
+### Live reference speed and transposition
+
+`jam-dsp::stretch::Stream` reuses the vendored Signalsmith bridge in 256-frame
+48 kHz blocks on the render worker. Each source/stem owns preallocated DSP and
+seek buffers, prepared before loading. Exclusive CXX ownership permits `Send`,
+not `Sync`; the wrapper holds no external pointers or thread-local state.
+The callback still only consumes its existing ring. Speed is 0.5–1.5 and
+transposition is an integer from -12 to +12. Unity/original-key playback retains
+the direct path. Per-stem gain/mute follows processing; DI bypasses it.
+
+One original-source cursor advances by speed times the output-rate ratio.
+Seek, loop boundaries and EOF remain source seconds; lookahead is zero-padded
+at the boundary. Seek/parameter changes invalidate prepared caches, with a
+2 ms ramp from the last output level on processor restart. This is a short
+de-click ramp, not parallel rendering of two complete mixes. Source stamps
+retain up to 16 previous parameter generations so queued old audio keeps its
+old chord/key/BPM readout until consumed; older stamps yield an unknown readout.
+Estimated chords/key transpose, estimated BPM scales, analysis confidence stays low.
+
+`media_reference_processing(assetId,speed?,semitones?)` requires at least one
+field, validates the loaded source and refuses changes during recording. Missing
+fields resolve from native state under the engine control lock, not JS telemetry.
+The media gate serializes an additive `referencePractice` asset object
+(`schemaVersion:1`, `speed`, `semitones`); unknown fields survive. Save precedes
+application under the same control lock. `useStems:false` loads original stereo
+at unity/original key without deleting saved stems or practice settings. Bad
+saved settings fail visibly and this original-load path remains recovery.
+
+Songs/Stage share the native controls. Jo's `set_reference_practice` uses the
+same IPC, including partial updates. Recording contains processed backing and
+the actual source/mix/processing snapshot, while DI remains untouched. Runtime
+DSP errors pause the reference and surface `processing_error`. Film, system
+playback and offline practice-copy generation continue reading original files.
+Automated ramps and parameter changes during recording remain separate work.
+
+Synthetic checks cover 44.1/48/96 kHz, variable blocks, speed/pitch extremes,
+pitch within 5 cents, cursor within one source frame, de-click bounds and queued
+readouts. A NullOutput recording at 50%/+2 verifies pitch, RMS, stereo correlation
+and absence of silent 256-frame blocks. The raw recording retains its two-LSB
+stereo test. The opt-in eight-stem CPU probe rendered 8 seconds in 1.230 seconds
+on the local Windows PC (worst block 10.582 ms); this is throughput evidence,
+not a physical-device dropout or subjective sound-quality acceptance.

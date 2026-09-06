@@ -123,6 +123,20 @@ export const JO_TOOLS: JoToolDeclaration[] = [
     },
   },
   {
+    name: "set_reference_practice",
+    description:
+      "Change and save playback speed (50–150 percent) or whole-semitone transposition (-12 to +12 from the original key) for the loaded native reference and all its stems. Use its current assetId from reference context. This preserves the guitar DI, loop bounds and the other setting. Unavailable during recording or browser preview; does not edit Write song chords.",
+    parameters: {
+      type: "object",
+      properties: {
+        assetId: { type: "string" },
+        speedPercent: { type: "number" },
+        semitones: { type: "number" },
+      },
+      required: ["assetId"],
+    },
+  },
+  {
     name: "set_tempo",
     description:
       "Set the tempo. Give an absolute bpm, or a delta in BPM for 'faster'/'slower' (default ±5).",
