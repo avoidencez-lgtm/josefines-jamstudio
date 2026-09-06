@@ -151,7 +151,7 @@ Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs befo
 - Energy following: `jam-dsp::energy` (RMS envelope on the DI with 300 ms attack, 1.5 s release) mapped to intensity with hysteresis; toggle `band_set({ followEnergy })`; the current energy shown on the Stage.
 - Section loop: choose a section on the chart to loop (transport loop from the resolved bar range).
 - Stage layout per [DESIGN.md](../DESIGN.md): the big chord now/next, bar:beat, tempo, key, style, intensity dial, parts toggles, cue buttons, count-in, loop, energy meter. Keyboard shortcuts for all of it.
-- Control maps: `controls/default.json` maps keys to actions; the registry loads user maps; a `ControlMap` action dispatcher in TS (`src/lib/controls/`).
+- Control maps: planned as `controls/default.json` plus a TS dispatcher. **Not built.** The live map is `controller.json` + `PEDAL_ACTIONS`; `controls/` is a registry fixture only.
 
 **Acceptance criteria M1d:** every Stage control has a keyboard shortcut listed in the shortcuts panel; changing intensity, parts or style never causes an xrun; energy following raises intensity within 2 seconds when the fixture's loud section starts (test with the fixture's known dynamics); a section loop wraps at the bar boundary.
 

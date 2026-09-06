@@ -52,11 +52,17 @@ Ask Jo to author one: the `create_style` tool (backlog) writes the same JSON.
 2. `cargo test -p jam-core rigs` validates it; `cargo test -p jam-rig profile_<id>` (add a two-line test that sends a program change through `MemorySink` and asserts the bytes).
 3. Open the Rig screen, assign a port, press "send now". Document the device in `docs/hardware/<id>.md` if it is a real device.
 
-## Add a control map (pedal, keyboard, MIDI controller)
+## Add a pedal binding (live control map)
 
-1. Write `controls/<id>.json`: bindings from `key`, `midi_pc` or `midi_cc` sources to action ids. Action ids are the Jo tool names plus `ptt`; arguments are the tool's arguments.
-2. `pnpm test -- controls` validates every binding against the tool registry (unknown action ids fail).
-3. Select it in Settings → Controls.
+The live map is `~/JosefinesJamstudio/controller.json`, not `controls/*.json`. Action ids are the keys of `PEDAL_ACTIONS` in `src/lib/controller.ts` (`keep`, `record`, `play`, `loop`, `next`, `version`, `voice`). Presses are MIDI program, CC or note.
+
+1. Learn the press in Write (Settings → pedals), or copy `tests/fixtures/seams/controller.json` and change `action` / `press`.
+2. `pnpm test -- seams` checks that fixture bindings are in `PEDAL_ACTIONS`. Unknown action ids fail.
+3. `controls/black-spirit-200.json` is only the versioned `ControlMapManifest` fixture for `crates/jam-core/tests/seams.rs`. The app never loads it.
+
+## Add a control map (planned key/tool dispatcher)
+
+The older `ControlMap` schema (`key` / `midi_pc` / `midi_cc` → Jo tool ids plus `ptt`) is not wired. Do not add `controls/<id>.json` expecting Settings to list it.
 
 ## Add a Jo tool
 

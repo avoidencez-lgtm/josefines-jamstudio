@@ -1,4 +1,5 @@
-//! registry: Seam definitions and loaders for styles, charts, rigs, and control maps.
+//! registry: Seam definitions and loaders for styles, charts, and rigs.
+//! `BUNDLED_CONTROLS` is the versioned control-map fixture only; the app never loads it.
 
 use include_dir::{include_dir, Dir};
 use serde::{Deserialize, Serialize};

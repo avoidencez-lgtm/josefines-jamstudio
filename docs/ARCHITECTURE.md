@@ -92,8 +92,8 @@ josefines-jamstudio/
     design/       tokens.css, motion.ts
     ipc/          contract.ts + one file per domain wrapping invoke/listen; engine store (zustand)
     ai/           llm/ (AI SDK + fetch shim), tools/*.tool.ts + index.ts, jo/ (persona.md, session.ts, transcript.ts)
-    lib/          chart/ (parse, transpose, resolve), controls/ (control-map dispatcher), format/
-  styles/  charts/  rigs/  controls/     bundled data files (seams)
+    lib/          chart/ (parse, transpose, resolve), controller.ts (pedal map), format/
+  styles/  charts/  rigs/  controls/     bundled data files (controls/ is a registry fixture only)
   assets/  manifest.json, LICENSES.md, README.md
   tests/
     fixtures/     audio/, providers/<provider>/, seams/, jo/
@@ -320,7 +320,8 @@ Files are truth; SQLite is a cache ([ADR 0005](adr/0005-files-are-truth-sqlite-i
 ~/JosefinesJamstudio/
   settings.json  index.sqlite  logs/
   assets/<packId>/            downloaded packs (kit.json + wav, or .sf2)
-  styles/  charts/  rigs/  controls/     user-added seam files (same schemas as the bundled ones)
+  styles/  charts/  rigs/                user-added seam files (same schemas as the bundled ones)
+  controller.json                        learned pedal bindings (PEDAL_ACTIONS)
   songs/<slug>/               song.json, source.wav (48 kHz), stems/<name>.wav, analysis/<kind>-<provider>.json
   sessions/<date>-<slug>/     session.json, takes/<n>/take.json + <kind>.wav
   exports/<session>/<take>/   stems + tempo.mid + README.txt
@@ -384,8 +385,9 @@ A seam is a definition (trait or schema), one registry, and consumers. There is 
 | Styles | `Style` schema (`jam-core`, zod mirror) | `jam-core::registry::styles` (bundled `styles/` via `include_dir` + `~/JosefinesJamstudio/styles/`) | band sequencer, Stage picker, Jo `set_style` |
 | Charts | `Chart` schema | `jam-core::registry::charts` + TS parser for text charts | band, Stage, Jo `load_chart` |
 | Rig profiles | `RigProfile` schema | `jam-core::registry::rigs` | `jam-rig`, Rig screen |
-| Control maps | `ControlMap` schema | `jam-core::registry::controls` | `src/lib/controls/` dispatcher, `jam-rig::input` |
-| Jo tools | `{ name, description, schema, run }` | `src/ai/tools/index.ts` (`import.meta.glob('./*.tool.ts')`) | LLM tool list, control-map actions, later Agents export |
+| Pedal map | `controller.json` + `PEDAL_ACTIONS` | user file; fixture `tests/fixtures/seams/controller.json` | `src/lib/controller.ts`, `ControllerInput` |
+| Control-map fixture | `ControlMapManifest` | `jam-core::registry::controls` (`controls/`, not loaded by the app) | `crates/jam-core/tests/seams.rs` only |
+| Jo tools | `{ name, description, schema, run }` | `src/ai/tools/index.ts` (`import.meta.glob('./*.tool.ts')`) | LLM tool list, later Agents export |
 | Providers | traits in §6.1 | `src-tauri/src/net/registry.rs` | analysis pipeline, voice, music, `provider_fetch` |
 | Instruments | `Instrument` trait (`note_on`, `note_off`, `render(&mut [f32])`) | `jam-band::instruments::factory` | sequencer |
 | Audio I/O | `AudioInput` / `AudioOutput` | `jam-audio::io::select(config, env)` | engine |
