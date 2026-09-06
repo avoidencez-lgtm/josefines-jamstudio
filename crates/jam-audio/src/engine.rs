@@ -21,7 +21,7 @@ use parking_lot::Mutex;
 use rtrb::RingBuffer;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -46,6 +46,7 @@ struct OutputFrame {
     take: u64,
     index: u64,
     reference_position: u64,
+    source_serial: u32,
 }
 
 struct OutputTap {
@@ -56,6 +57,7 @@ struct OutputTap {
     lost: Arc<AtomicBool>,
     recording: bool,
     reference_position: Arc<AtomicU64>,
+    live_serial: Arc<AtomicU32>,
 }
 
 impl OutputTap {
@@ -66,7 +68,13 @@ impl OutputTap {
             let input = self.input.pop().ok();
             match self.playback.pop() {
                 Ok(mut frame) => {
-                    reference_position = Some(frame.reference_position);
+                    if frame.source_serial == self.live_serial.load(Ordering::Acquire) {
+                        reference_position = Some(frame.reference_position);
+                    } else {
+                        // Previous decoded source still in the ring after load/unload.
+                        // Processing serials on the same source must still play (#256).
+                        frame.output = [0.0; 2];
+                    }
                     // FileInput samples travel with their rendered frame;
                     // timer scheduling gaps do not lose synthetic samples.
                     self.recording = frame.take != 0 && !frame.synthetic;
@@ -280,6 +288,7 @@ pub struct AudioEngine {
     pub voice: Arc<Mutex<crate::voice::VoiceBus>>,
     reference: Arc<Mutex<Option<crate::song::ReferenceSong>>>,
     reference_position: Arc<AtomicU64>,
+    live_reference_serial: Arc<AtomicU32>,
     config: AudioConfig,
     running: Arc<AtomicBool>,
     tone_active: Arc<AtomicBool>,
@@ -359,6 +368,7 @@ impl AudioEngine {
             voice: Arc::new(Mutex::new(crate::voice::VoiceBus::default())),
             reference: Arc::new(Mutex::new(None)),
             reference_position: Arc::new(AtomicU64::new(0)),
+            live_reference_serial: Arc::new(AtomicU32::new(0)),
             config: config.clone(),
             running: Arc::new(AtomicBool::new(false)),
             tone_active: Arc::new(AtomicBool::new(false)),
@@ -492,6 +502,9 @@ impl AudioEngine {
         self.stop_transport_under_render_gate();
         self.clips.lock().clear();
         self.song_snapshot = serde_json::json!({"reference": song.info, "beatGrid": "unanalysed"});
+        self.live_reference_serial
+            .store(song.source_serial(), Ordering::Release);
+        self.reference_position.store(0, Ordering::Release);
         *self.reference.lock() = Some(song);
         Ok(())
     }
@@ -500,6 +513,8 @@ impl AudioEngine {
         self.ensure_timing_editable()?;
         let _gate = self.render_gate.lock();
         self.stop_transport_under_render_gate();
+        self.live_reference_serial.store(0, Ordering::Release);
+        self.reference_position.store(0, Ordering::Release);
         self.reference.lock().take();
         self.song_snapshot = serde_json::Value::Null;
         Ok(())
@@ -898,6 +913,7 @@ impl AudioEngine {
         let xruns = Arc::clone(&self.xruns);
         let lost = Arc::clone(&self.recording_clock.lost);
         let reference_position = Arc::clone(&self.reference_position);
+        let live_serial = Arc::clone(&self.live_reference_serial);
         let make_output = move || {
             let (prod, playback) = RingBuffer::new(ring_capacity / 2);
             let (input_prod, input) = RingBuffer::new(ring_capacity);
@@ -910,6 +926,7 @@ impl AudioEngine {
                 lost: Arc::clone(&lost),
                 recording: false,
                 reference_position: Arc::clone(&reference_position),
+                live_serial: Arc::clone(&live_serial),
             };
             let cb: crate::io::OutputCallback = Box::new(move |buffer| tap.render(buffer));
             (prod, cb, input_prod, captured)
@@ -1196,8 +1213,10 @@ impl AudioEngine {
                         );
                         let reference_loaded = {
                             ctx.reference_positions.fill(0);
+                            ctx.reference_source = 0;
                             let mut reference = reference.lock();
                             if let Some(song) = reference.as_mut() {
+                                ctx.reference_source = song.source_serial();
                                 ctx.render_reference(song);
                             }
                             reference.is_some()
@@ -1282,6 +1301,7 @@ impl AudioEngine {
                                 take,
                                 index: output_index + i as u64,
                                 reference_position: ctx.reference_positions[i],
+                                source_serial: ctx.reference_source,
                             });
                         }
                         output_index += block_len as u64;
@@ -1377,6 +1397,7 @@ impl Drop for AudioEngine {
 struct RenderContext {
     sample_rate: u32,
     reference_positions: Vec<u64>,
+    reference_source: u32,
     band_volume: f32,
     voice_audio: Vec<f32>,
     voice_duck: Vec<f32>,
@@ -1442,6 +1463,7 @@ impl RenderContext {
         Self {
             sample_rate,
             reference_positions: vec![0; RENDER_BLOCK],
+            reference_source: 0,
             band_volume: 0.0,
             voice_audio: vec![0.0; RENDER_BLOCK],
             voice_duck: vec![1.0; RENDER_BLOCK],
@@ -1917,6 +1939,7 @@ mod tests {
             lost: Arc::clone(&lost),
             recording: false,
             reference_position: Arc::new(AtomicU64::new(0)),
+            live_serial: Arc::new(AtomicU32::new(23)),
         };
         // Render a long way ahead. Actual DI arrives only at each output callback.
         for index in 0..10_000 {
@@ -1929,6 +1952,7 @@ mod tests {
                     index,
                     synthetic: false,
                     reference_position: (23 << 32) | index,
+                    source_serial: 23,
                 })
                 .unwrap();
         }
@@ -1970,6 +1994,69 @@ mod tests {
             position += count;
         }
         assert_eq!(position, 10_000);
+        playback
+            .push(OutputFrame {
+                output: [0.4; 2],
+                stems: [0.4; 9],
+                take: 7,
+                index: 10_000,
+                synthetic: false,
+                reference_position: (88 << 32) | 7,
+                source_serial: 23,
+            })
+            .unwrap();
+        input.push(0.0).unwrap();
+        let mut processed = vec![0.0; 2];
+        tap.render(&mut processed);
+        assert_eq!(
+            processed,
+            [0.4, 0.4],
+            "speed/key serials on the same source still play"
+        );
+        assert_eq!(
+            tap.reference_position.load(Ordering::Acquire),
+            (88 << 32) | 7
+        );
+        let _ = captured.pop().unwrap();
+        let previous = tap.reference_position.load(Ordering::Acquire);
+        playback
+            .push(OutputFrame {
+                output: [0.9; 2],
+                stems: [0.9; 9],
+                take: 7,
+                index: 10_001,
+                synthetic: false,
+                reference_position: (99 << 32) | 10_000,
+                source_serial: 99,
+            })
+            .unwrap();
+        input.push(0.0).unwrap();
+        let mut stale = vec![1.0; 2];
+        tap.render(&mut stale);
+        assert_eq!(stale, [0.0, 0.0]);
+        assert_eq!(tap.reference_position.load(Ordering::Acquire), previous);
+        assert_eq!(captured.pop().unwrap().output, [0.0, 0.0]);
+        tap.live_serial.store(99, Ordering::Release);
+        playback
+            .push(OutputFrame {
+                output: [0.5; 2],
+                stems: [0.5; 9],
+                take: 7,
+                index: 10_002,
+                synthetic: false,
+                reference_position: (99 << 32) | 42,
+                source_serial: 99,
+            })
+            .unwrap();
+        input.push(0.0).unwrap();
+        let mut next = vec![0.0; 2];
+        tap.render(&mut next);
+        assert_eq!(next, [0.5, 0.5]);
+        assert_eq!(
+            tap.reference_position.load(Ordering::Acquire),
+            (99 << 32) | 42
+        );
+        let _ = captured.pop().unwrap();
         assert!(
             !lost.load(Ordering::Acquire),
             "zero samples may be lost or repeated"
