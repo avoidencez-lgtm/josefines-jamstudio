@@ -256,6 +256,14 @@ fn safe_file_stem(id: &str) -> String {
 
 /// Structural checks a chart must pass before the band will play it.
 pub fn validate_chart(chart: &Chart) -> Result<(), String> {
+    if chart.schema_version > Chart::SCHEMA_VERSION {
+        return Err(format!(
+            "{} needs schemaVersion {} or older (found {}).",
+            chart.id,
+            Chart::SCHEMA_VERSION,
+            chart.schema_version
+        ));
+    }
     if !chart.default_bpm.is_finite() || !(40.0..=240.0).contains(&chart.default_bpm) {
         return Err("Chart tempo must be within 40–240 BPM.".into());
     }
@@ -400,5 +408,51 @@ mod tests {
         chart.sections[0].bars[0][0].beats = f64::NAN;
         assert!(validate_chart(&chart).is_err());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unknown_chart_fields_survive_save_and_reload() {
+        let root = temp_root("extra");
+        let mut lib = Library::load_from(root.clone());
+        let mut chart = lib.chart("blues-12-bar").unwrap();
+        chart
+            .extra
+            .insert("rigSceneId".into(), serde_json::json!("clean"));
+        chart.sections[0]
+            .extra
+            .insert("intensity".into(), serde_json::json!(0.5));
+        lib.save_chart(&chart).unwrap();
+        lib.reload();
+        let again = lib.chart("blues-12-bar").unwrap();
+        assert_eq!(again.extra["rigSceneId"], "clean");
+        assert_eq!(again.sections[0].extra["intensity"], 0.5);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn future_chart_schema_is_refused() {
+        let root = temp_root("schema");
+        let mut lib = Library::load_from(root.clone());
+        let mut chart = lib.chart("blues-12-bar").unwrap();
+        chart.schema_version = 2;
+        assert!(validate_chart(&chart)
+            .unwrap_err()
+            .contains("schemaVersion"));
+        std::fs::create_dir_all(lib.charts_dir()).unwrap();
+        std::fs::write(
+            lib.charts_dir().join("future.json"),
+            serde_json::to_vec(&chart).unwrap(),
+        )
+        .unwrap();
+        lib.reload();
+        assert!(
+            lib.load_errors()
+                .iter()
+                .any(|e| e.contains("schemaVersion") && e.contains('2')),
+            "{:?}",
+            lib.load_errors()
+        );
+        assert_eq!(lib.chart("blues-12-bar").unwrap().schema_version, 1);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -312,6 +312,7 @@ fn default_style() -> Style {
                 timing_ms: 2.0,
                 velocity: 0.05,
             },
+            extra: Default::default(),
         }
     })
 }
