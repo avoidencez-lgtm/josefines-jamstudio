@@ -65,6 +65,16 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-06 S4 protocol probe: a standalone Rust WebSocket helper verifies setup
+ordering, controls, two connections and 28,800,000 synthetic stereo frames with
+zero mismatches. The old unmeasured S4 claims are replaced by
+[current findings](../spikes/S4-lyria-ws.md). Google documentation conflicts on
+API version/output format; an actual provider session remains unverified and
+the local Gemini key is absent. No live or paid request was made. The reusable
+helper is outside the application dependency graph, and both CI platforms must
+run its checks. This is progress on the prerequisite, not S4 or M4 completion.
+Live streaming, jitter/reconnect/spend controls and the complete V1 scope remain.
+
 2026-09-06 M6 recorded reference timing: new confirmed-grid takes retain consumed
 source positions and ramp speeds. MIDI/REAPER export follows beat intervals,
 speed steps and repeated section loops while retaining original WAV timing.
