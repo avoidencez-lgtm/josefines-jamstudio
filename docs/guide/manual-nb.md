@@ -212,7 +212,7 @@ Skriv et konkret mål og trykk Ask three perspectives. Én forespørsel går til
 
 Songs er lydbiblioteket, adskilt fra låtdokumenter i Write og opptak i Sessions. Lim inn en full lokal filbane og trykk Import audio. FFmpeg og ffprobe må være tilgjengelige. Import støtter blant annet WAV, MP3, FLAC, M4A, AAC og OGG; filer kopieres inn i det lokale biblioteket med grense på 512 MB / ti minutter. Søk, velg en fil og trykk Listen in media player. Avspillingen åpnes i systemets spiller slik filen er lagret.
 
-Make a practice copy lager en ny stereo-WAV på 48 kHz. Velg Speed fra 50 til 150 % og Transpose fra -12 til +12 halvtoner, og trykk Create practice copy. Hastighetsendringer bevarer tonehøyden hvis du ikke velger transponering. Signalbehandlingen kjøres lokalt med Signalsmith Stretch; FFmpeg dekoder kilden. Ingenting lastes opp. Originalen beholdes. Den nye kopien velges når den er klar; trykk Listen in media player for å høre den. Cancel practice copy stopper klargjøringen og fjerner uferdig resultat. Ikke avslutt appen mens den klargjør. En kilde på ti minutter blir tjue minutter ved halv hastighet; velg originalen for nye innstillinger hvis kopien er lengre enn kildegrensen. Klargjøringen kan bruke rundt 660 MiB minne ved grensen og trenger diskplass til dekodet kilde og resultat. Filen lagrer referanse til kilden, hastighet og transponering. Dette er forhåndsbehandling; stem-separasjon er ennå ikke tilgjengelig. Songs tilbyr lokale akkordanslag. Den innebygde spilleren kan laste den lagrede kopien.
+Make a practice copy lager en ny stereo-WAV på 48 kHz. Velg Speed fra 50 til 150 % og Transpose fra -12 til +12 halvtoner, og trykk Create practice copy. Hastighetsendringer bevarer tonehøyden hvis du ikke velger transponering. Signalbehandlingen kjøres lokalt med Signalsmith Stretch; FFmpeg dekoder kilden. Ingenting lastes opp. Originalen beholdes. Den nye kopien velges når den er klar; trykk Listen in media player for å høre den. Cancel current operation stopper klargjøringen og fjerner uferdig resultat. Ikke avslutt appen mens den klargjør. En kilde på ti minutter blir tjue minutter ved halv hastighet; velg originalen for nye innstillinger hvis kopien er lengre enn kildegrensen. Klargjøringen kan bruke rundt 660 MiB minne ved grensen og trenger diskplass til dekodet kilde og resultat. Filen lagrer referanse til kilden, hastighet og transponering. Dette er forhåndsbehandling av originalens stereomiks; lagrede stem-nivåer og mute-valg tas ikke med. Songs tilbyr lokale akkordanslag. Den innebygde spilleren kan laste den lagrede kopien.
 
 ### Spill og ta opp med en referanse i Jamstudio
 
@@ -224,6 +224,16 @@ Trykk Record øverst under avspilling for å ta opp gitar-DI og stereoreferansen
 
 Spilleren holder én dekodet stereokilde, inntil rundt 440 MiB; ved bytte kan to ligge i minnet samtidig. Midlertidig dekoding trenger diskplass. Lokale anslag for tempo, akkorder og toneart finnes i Songs. Stem-separasjon, avspilling mot analysert beat-grid, minus-gitar og temporamper for referanser gjenstår.
 
+### Skill instrumenter og spill uten gitar
+
+Åpne Separate instruments / import stems på valgt låt. For ElevenLabs legger du inn API-nøkkelen i Settings, kontrollerer kontoprisen, fyller eventuelt inn USD per minutt og krysser av for opplasting og betaling før Upload & separate stems. Dette sender låten til leverandøren og kan ta flere minutter. Instrumentnavnene kommer fra ZIP-filen; finn gitarsporet ved å lytte. Appen antar ikke hvilket navn som betyr gitar.
+
+Import stem ZIP er lokal og gjør ingen leverandørkall. Bruk en absolutt filbane til 2–8 justerte WAV-, MP3-, FLAC-, M4A-, AAC- eller OGG-spor med lik dekodet lengde. ZIP-filen kan bare inneholde lydfiler, inntil 192 MB komprimert, 512 MB per utpakket spor og 2 GiB totalt. Kilden kan vare inntil ti minutter; stem-varigheten må ligge innenfor 100 ms av valgt kilde. Lik varighet beviser ikke musikalsk justering: eksporter alle spor fra samme startpunkt. Dekodet lyd i minnet er begrenset til 2 GiB.
+
+Etter klargjøring laster Load in Jamstudio det lagrede stem-settet på nytt. Load original mix spiller originalens stereofil og beholder stem-settet, også hvis et stem er skadet. I Songs eller Stage velger du spornivåer (0–200 %) og mute, angir Guitar track og trykker Apply & save mix eller Minus guitar. Restore guitar slår på det valgte gitarsporet igjen. Endringene høres etter den korte utgangskøen. Spilleren summerer sporene én gang; originalmiksen legges ikke til. Opptak lagrer denne stereobakgrunnen og gitar-DI; det lager ikke egne opptak av leverandørens enkeltspor. Lagre opptaket før du endrer miksen. Systemspilleren, Film og øvingskopier bruker fortsatt originalens stereofil.
+
+Originalfilen og tidligere stem-filer beholdes. Mislykket import endrer ikke det tidligere lagrede settet. Betalte ZIP-filer og kvitteringer beholdes under music-videos/stem-receipts før dekoding; feilmeldingen viser gjenopprettingsmappen. Importer dens stems.zip lokalt for å gjenopprette uten en ny betalt forespørsel. Cancel current operation stopper lokalt arbeid; leverandøren kan fortsatt behandle og ta betalt for opplastingen. Kontroller kontohistorikken før nytt forsøk. Feil ved lagring av forbruksloggen vises uten at den betalte ZIP-filen forkastes. Endret kildehash eller stem-hash blokkerer lasting; importer eller separer på nytt for riktig kilde. Leverandørkvalitet og faktisk gitarfjerning må fortsatt verifiseres på ekte låter.
+
 ### Anslå tempo, akkorder og toneart
 
 Velg en sang og trykk Analyze tempo & chords. FFmpeg dekoder lokalt, og Rust anslår en jevn puls, dur-/molltreklanger og toneart. Ingenting lastes opp, og ingen API-nøkkel trengs. Kilden må være fra 2 sekunder til 20 minutter og maksimalt 512 MB. Cancel analysis beholder forrige lagrede resultat. Lydfilen endres ikke. Analyze again erstatter bare analysefeltene og bevarer ukjente metadata. Anslag og kildens SHA-256 lagres i filmanifestet og overlever omstart. Klargjøringen bruker inntil rundt 440 MiB lydminne og midlertidig diskplass.
@@ -234,7 +244,7 @@ Etter analysen laster du referansen i Jamstudio på nytt. Songs og Stage viser N
 
 ### Bruk en miks i en film
 
-Use in Film velger filen som lydspor i gjeldende film. Save video lagrer valget. Generert lyd vises i samme bibliotek når jobben er ferdig. Generert tekst/struktur vises hvis leverandøren returnerer det. Øvingskopier kan også brukes som lydspor når de passer innenfor filmens varighetsgrense. Stem-separasjon er fortsatt utilgjengelig; lokale akkordanslag er beskrevet over.
+Use in Film velger filen som lydspor i gjeldende film. Save video lagrer valget. Generert lyd vises i samme bibliotek når jobben er ferdig. Generert tekst/struktur vises hvis leverandøren returnerer det. Øvingskopier kan også brukes som lydspor når de passer innenfor filmens varighetsgrense. Film bruker originalens stereofil, uten lagrede stem-nivåer eller mute-valg.
 
 ### Låtform fra en referanse
 

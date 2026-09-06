@@ -344,3 +344,24 @@ pause/seek/loop/end tests live in `jam-audio::song`, native stereo recording in
 `engine`, command boundaries in `ipc_rig_media`, and the shared UI invariant in
 `tests/invariants/practice-copy.test.tsx`. The opt-in FFmpeg scenario also loads
 the rendered practice copy and plays one second through the native source.
+
+### Stem ZIP adapters and mixing
+
+Add a `kind: stems` entry to `src/lib/media-catalog.json` and implement its
+protocol in `src-tauri/src/net/media.rs`; generation screens filter by audio or
+video. Keep keys/uploads out of UI and do not switch on provider IDs elsewhere.
+Record verified request/response shapes beside
+`tests/fixtures/providers/eleven-stems.json`, explicitly distinguishing recorded
+responses from documentation-derived/synthetic fixtures. ZIP entry names are
+untrusted labels, never paths or instrument-role contracts.
+
+Reuse `media/stems.rs` for bounded extraction, durable paid ZIP receipts, native
+decode, hashes and additive asset metadata. Use `ReferenceSong::with_stems` and
+`set_stem_mix` so stems share the existing output cursor and recording mix; do not
+create a separate playback service. New gain controls must preserve unknown
+manifest fields, reject stale source/set IDs and stay blocked while recording.
+The regression lives in `tests/invariants/practice-copy.test.tsx`, the shared
+cursor test in `jam-audio::song`, and the archive/native FFmpeg tests in
+`media::stems::tests`. Run the latter with `JAM_HEADLESS=1 JAM_MEDIA_TEST=1` and
+`cargo test --workspace --lib local_stem_zip -- --ignored` on a machine with
+FFmpeg. It creates synthetic WAV and MP3 ZIPs, not a paid provider capture.

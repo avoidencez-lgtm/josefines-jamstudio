@@ -110,6 +110,16 @@
     "source": "https://ai.google.dev/gemini-api/docs/music-generation"
   },
   {
+    "id": "eleven-stems",
+    "name": "ElevenLabs stem separation",
+    "provider": "elevenlabs",
+    "model": "six_stems_v1",
+    "kind": "stems",
+    "protocol": "eleven-stems",
+    "description": "Upload a song and receive separate audio tracks. Provider charges apply; identify the guitar track before using minus-guitar.",
+    "source": "https://elevenlabs.io/docs/api-reference/music/separate-stems"
+  },
+  {
     "id": "eleven",
     "name": "Eleven Music",
     "provider": "elevenlabs",

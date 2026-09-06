@@ -104,7 +104,7 @@ See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-comp
 | M1d | Live steering and the Stage screen | ✅ | #10, #28 |
 | M1e | Recorder, latency calibration, take browser | ⏳ | #12, #28 |
 | M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ⏳ | #14, #28 |
-| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native playback, offline stretch and output-clock local chord readout; stems, provider analysis and analysed-grid controls pending |
+| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native stem ZIP import/mixing and ElevenLabs upload path added; real provider/guitar-removal acceptance, provider analysis, stem stretch and analysed-grid controls pending |
 | M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ⏳ | file-generation catalog/workflows in #29; RealTime and owner acceptance pending |
 | M5 | Rig orchestration over MIDI | ⏳ | #20, #28 |
 | M6 | Sessions: take analysis, LLM review, Logic export, progress | ⏳ | #22, #28 |
@@ -301,3 +301,26 @@ Failed removal is reported, and a failed Jo provider request cannot run offline
 commands. English/Bokmål help explains recovery. Developer checks cover failed
 stores, production error mapping, provider/preflight results and browser controls;
 no live keychain or paid-provider verification is claimed. Friend checks remain V2.
+
+## Native reference stems — 2026-09-06 implementation evidence
+
+Songs can import a local stem ZIP or submit a confirmed ElevenLabs separation
+request, preserve the paid ZIP for recovery, and load the resulting tracks in the
+native player. Songs and Stage share persistent per-track gain/mute and explicit
+guitar selection with minus/restore guitar. Original stereo playback remains
+available. The output and recording queue stay shared; recordings contain the
+stereo backing mix and its stem settings in the take snapshot.
+
+Local verification: 315 Rust tests passed (five opt-in tests ignored in the
+standard run); the additional FFmpeg WAV/MP3 stem import/reload/recovery test
+passed explicitly. Frontend: 262 tests, lint/types/build, JavaScript licences,
+Rust formatting/Clippy and cargo-deny passed. Static component QA checked Songs
+and Stage at 930 px without horizontal overflow. The native desktop build and
+25-second frontend-handshake smoke passed locally. Windows/macOS CI remains
+required before merging this slice.
+
+No paid provider call was made and no real response fixture was recorded. This
+is not M3 acceptance: real-song guitar removal, Music.ai, stem-aware stretching,
+provider analysis and analysed-grid controls remain unfinished. The rest of V1,
+including realtime Lyria, retains its original scope. Friend-led physical rig
+checks remain deferred to V2, not passed.

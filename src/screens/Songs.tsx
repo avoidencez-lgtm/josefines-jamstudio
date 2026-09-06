@@ -10,6 +10,7 @@ import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { ReferencePlayer } from "../components/ReferencePlayer";
 import { SongAnalysis } from "../components/SongAnalysis";
+import { StemPreparation } from "../components/Stems";
 import { WorkspaceHeader } from "../components/Workspace";
 import { ipc, isPreview } from "../ipc/client";
 import { type MediaAsset, useMedia } from "../lib/media";
@@ -136,6 +137,8 @@ export function Songs() {
         <output className="workspace-note">{m.busy || m.message}</output>
       )}
       {(m.busy === "Preparing practice copy" ||
+        m.busy === "Separating stems" ||
+        m.busy === "Importing stems" ||
         m.busy === "Loading reference" ||
         m.busy === "Analyzing song locally") && (
         <Button
@@ -145,11 +148,7 @@ export function Songs() {
               .catch((e) => useMedia.setState({ message: String(e) }))
           }
         >
-          {m.busy === "Analyzing song locally"
-            ? "Cancel analysis"
-            : m.busy === "Loading reference"
-              ? "Cancel loading reference"
-              : "Cancel practice copy"}
+          Cancel current operation
         </Button>
       )}
       {engine.reference && (
@@ -253,6 +252,29 @@ export function Songs() {
                 >
                   Load in Jamstudio
                 </Button>
+                {Boolean(song.stemSet) && (
+                  <Button
+                    disabled={locked || isPreview || !tools.ready}
+                    onClick={() =>
+                      void m.work("Loading reference", async () => {
+                        await ipc.invoke("media_reference_load", {
+                          assetId: song.id,
+                          useStems: false,
+                        });
+                        useEngineStore.setState((s) => ({
+                          loadedOriginal: null,
+                          tempoTrainer: { ...s.tempoTrainer, enabled: false },
+                        }));
+                        useMedia.setState({
+                          message:
+                            "Original stereo mix loaded. Saved stems are kept.",
+                        });
+                      })
+                    }
+                  >
+                    Load original mix
+                  </Button>
+                )}
                 <Button
                   variant="primary"
                   disabled={locked || isPreview}
@@ -275,6 +297,12 @@ export function Songs() {
                 </Button>
               </div>
               <SongAnalysis key={song.id} value={song.songAnalysis} />
+              <StemPreparation
+                key={`stems-${song.id}`}
+                song={song}
+                locked={locked}
+                toolsReady={tools.ready}
+              />
               <details className="workspace-stack">
                 <summary className="cursor-pointer text-sm">
                   Make a practice copy
@@ -359,9 +387,10 @@ export function Songs() {
         Load in Jamstudio plays the reference through the native audio engine,
         with pause, seek and seconds loops. The system player is also available.
         Practice copies support local speed and pitch changes. Local analysis
-        estimates steady tempo, major/minor chords and key. Stem separation and
-        beat-grid reference playback are not available yet. Use Library for
-        chord charts and Stage for rehearsing them.
+        estimates steady tempo, major/minor chords and key. Prepare or import
+        stems to mix instruments in the native player. Beat-grid reference
+        playback is not available yet. Use Library for chord charts and Stage
+        for rehearsing them.
       </p>
     </div>
   );

@@ -29,6 +29,13 @@ it("offers bounded practice controls beside a real library selection and keeps p
     expect(html).toContain('value="12"');
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Create practice copy/);
     expect(html).not.toContain("<audio");
+    expect(html).toContain(
+      "I agree to upload this song and pay the provider charge.",
+    );
+    expect(html).toMatch(
+      /<button[^>]*disabled=""[^>]*>Upload &amp; separate stems/,
+    );
+    expect(html).toContain("Import stem ZIP");
   } finally {
     initial.assets = assets;
   }
@@ -127,4 +134,45 @@ it("shows native audible chord estimates and explicit stale or unknown analysis"
     "Audio has changed since analysis. Analyze it again in Songs.";
   expect(render()).toContain(song.analysis_error);
   expect(render()).not.toContain("Now:");
+});
+
+it("shows explicit guitar selection, saved mute state and safe preview stem controls", () => {
+  const song: ReferenceState = {
+    asset_id: "reference",
+    label: "Synthetic reference",
+    seconds: 4,
+    position: 0,
+    state: "stopped",
+    loop_start: 0,
+    loop_end: 4,
+    loop_enabled: false,
+    stems: [
+      {
+        id: "track-1",
+        label: "Track one",
+        gain: 1,
+        muted: false,
+        guitar: false,
+      },
+      {
+        id: "track-2",
+        label: "Track two",
+        gain: 0.5,
+        muted: false,
+        guitar: false,
+      },
+    ],
+  };
+  const render = () =>
+    renderToStaticMarkup(createElement(ReferencePlayer, { song }));
+  const html = render();
+  expect(html).toContain('aria-label="Stem mixer"');
+  expect(html).toContain("Not identified");
+  expect(html).toContain("Track two · 50%");
+  expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Minus guitar/);
+  expect(html).not.toContain("<audio");
+  if (!song.stems) throw new Error("Missing test stems");
+  song.stems[0].guitar = true;
+  song.stems[0].muted = true;
+  expect(render()).toContain("Restore guitar");
 });
