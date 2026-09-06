@@ -2,7 +2,11 @@ import type { JoToolCall } from "./persona";
 
 export function parseNaturalIntent(
   text: string,
-  reference?: { assetId: string; speed: number },
+  reference?: {
+    assetId: string;
+    speed: number;
+    sections?: Array<{ id: string; label: string }>;
+  },
 ): {
   reply: string;
   toolCalls: JoToolCall[];
@@ -11,6 +15,29 @@ export function parseNaturalIntent(
   const toolCalls: JoToolCall[] = [];
   const reply = "Got it!";
   if (reference) {
+    const loop = /^(?:loop|gjenta)\s+(.+?)[.!]?$/.exec(lower);
+    if (loop) {
+      const matches =
+        reference.sections?.filter(
+          (s) =>
+            s.label.toLowerCase() === loop[1] || s.id.toLowerCase() === loop[1],
+        ) ?? [];
+      if (matches.length !== 1)
+        return {
+          reply:
+            "Choose one unique confirmed section in the reference player. Confirm and name its bars in Songs first if needed.",
+          toolCalls: [],
+        };
+      return {
+        reply: "Looping the confirmed reference section.",
+        toolCalls: [
+          {
+            name: "loop_reference_section",
+            arguments: { assetId: reference.assetId, sectionId: matches[0].id },
+          },
+        ],
+      };
+    }
     const percent =
       /^(?:(?:set|sett) )?(?:speed|hastighet)(?: to| til)?\s+(\d{1,3})\s*(?:%|percent|prosent)?[.!]?$/.exec(
         lower,

@@ -1221,6 +1221,8 @@ pub fn configure<R: tauri::Runtime>(
             media::media_reference_seek,
             media::media_reference_loop,
             media::media_reference_processing,
+            media::grid::media_reference_grid_save,
+            media::grid::media_reference_loop_section,
             media::media_from_take,
             media::media_generate,
             media::media_refresh,

@@ -104,7 +104,7 @@ See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-comp
 | M1d | Live steering and the Stage screen | ✅ | #10, #28 |
 | M1e | Recorder, latency calibration, take browser | ⏳ | #12, #28 |
 | M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ⏳ | #14, #28 |
-| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native stem mixing, ElevenLabs upload, live per-stem speed/key and Jo controls added; real provider/guitar-removal acceptance, provider analysis and analysed-grid controls pending |
+| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native stem mixing, ElevenLabs upload, live per-stem speed/key and Jo controls added; real provider/guitar-removal acceptance, provider analysis, automatic downbeats/sections and full transport-grid integration pending; confirmed section loops added |
 | M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ⏳ | file-generation catalog/workflows in #29; RealTime and owner acceptance pending |
 | M5 | Rig orchestration over MIDI | ⏳ | #20, #28 |
 | M6 | Sessions: take analysis, LLM review, Logic export, progress | ⏳ | #22, #28 |
@@ -352,3 +352,30 @@ This advances M3, without claiming a physical-device dropout or subjective
 quality gate. No paid call or recorded provider fixture was obtained. Analysed
 sections/grids, real-song separation acceptance, Music.ai, Jo tempo ramps and
 realtime Lyria remain unfinished V1 work. Friend rig checks remain V2.
+
+## Confirmed reference sections — 2026-09-06 implementation evidence
+
+Songs can save explicit user confirmation of the first downbeat, estimated beats
+per bar and named sections. Native playback consumes that map for bar/beat/section
+readout and downbeat-to-downbeat section loops in Songs and Stage. Jo can select
+a unique confirmed section by name. Source hashes and displayed beat arrays guard
+against stale edits; unknown metadata survives, and the full map goes into take
+snapshots. No provider downbeat or section detection is inferred by this feature.
+
+Local checks: 323 Rust tests passed (six opt-in tests ignored), 267 frontend tests
+passed; the FFmpeg WAV/MP3 import/reload test passed separately with grid reload
+and stale-hash recovery. The OutputTap regression varies render lead and callback
+sizes at 44.1/48/96 kHz and 50/75/150% speed, verifies consumed source position
+within one 48 kHz frame and loop wraps within one output step plus one source
+frame. IPC checks source/section IDs, capture guards and the recorded grid.
+Initial fixture-path and manual-vocabulary test errors were corrected without
+weakening their guards. Lint/types/build, Clippy, formatting and licence gates
+passed. Static Songs/Stage QA at 930 px found no horizontal overflow.
+The native desktop build and 25-second frontend-handshake smoke passed locally;
+Windows/macOS CI on the PR head is required before merge.
+
+This is the confirmed-grid transport slice, not completion of M3. Automatic
+Music.ai/provider analysis still needs verified response fixtures and real-song
+acceptance; the public-schema ambiguity is recorded in 04-research.md. Canonical
+song-file migration, full band/MIDI/DAW tempo-map integration, practice ramps,
+realtime Lyria and the rest of V1 remain unfinished. Friend rig checks remain V2.

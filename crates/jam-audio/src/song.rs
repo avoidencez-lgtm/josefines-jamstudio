@@ -1,4 +1,5 @@
 //! Stereo reference playback, advanced only by frames rendered for the output queue.
+pub mod grid;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -91,6 +92,10 @@ pub struct ReferenceState {
     pub semitones: i32,
     #[serde(default)]
     pub processing_error: Option<String>,
+    #[serde(default)]
+    pub grid: Option<grid::State>,
+    #[serde(default)]
+    pub grid_error: Option<String>,
 }
 
 pub struct ReferenceSong {
@@ -108,6 +113,7 @@ pub struct ReferenceSong {
     previous_parameters: Vec<(u32, f64, i32)>,
     last_frame: [f32; 2],
     transition_from: Option<[f32; 2]>,
+    pub grid: Option<grid::Grid>,
 }
 
 impl ReferenceSong {
@@ -139,6 +145,8 @@ impl ReferenceSong {
                 speed: 1.0,
                 semitones: 0,
                 processing_error: None,
+                grid: None,
+                grid_error: None,
             },
             samples,
             position: 0.0,
@@ -151,6 +159,7 @@ impl ReferenceSong {
             previous_parameters: Vec::with_capacity(16),
             last_frame: [0.0; 2],
             transition_from: None,
+            grid: None,
         })
     }
 
@@ -221,6 +230,25 @@ impl ReferenceSong {
         self.fade_in = 96.0;
         self.transition_from = (self.info.state == "playing").then_some(self.last_frame);
         Ok(())
+    }
+
+    pub fn set_grid(&mut self, grid: grid::Grid) -> Result<(), String> {
+        grid.validate(self.info.seconds)?;
+        self.info.grid = Some(grid.state(-1.0, self.info.speed));
+        self.info.grid_error = None;
+        self.grid = Some(grid);
+        Ok(())
+    }
+
+    pub fn loop_section(&mut self, id: &str) -> Result<(), String> {
+        let (start, end) = self
+            .grid
+            .as_ref()
+            .ok_or("Confirm the reference beat map and sections in Songs first.")?
+            .section_bounds(id)?;
+        self.set_loop(start, end, true)?;
+        // Start at the selected downbeat, including when currently in another section.
+        self.seek(start)
     }
 
     fn invalidate_streams(&mut self) {
@@ -304,6 +332,7 @@ impl ReferenceSong {
             return state;
         }
         let (speed, semitones) = parameters.unwrap_or((self.info.speed, self.info.semitones));
+        state.grid = self.grid.as_ref().map(|g| g.state(state.position, speed));
         state.analysis = self.analysis.as_ref().map(|a| {
             let index = a.chords.partition_point(|c| c.end <= state.position);
             let chord = a

@@ -31,6 +31,7 @@ export interface MediaAsset {
   songAnalysis?: unknown;
   stemSet?: unknown;
   referencePractice?: unknown;
+  referenceGrid?: unknown;
 }
 
 export async function applyReferencePractice(

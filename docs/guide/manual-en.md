@@ -260,6 +260,16 @@ With this reference loaded, Jo can apply speed/key through the same controls. Of
 
 This changes native playback, not source files, Film, system playback or offline practice copies. A processing error pauses the reference and asks you to reload. If saved settings are invalid, choose Load original mix. Browser preview has no audio processing.
 
+### Confirm bars and loop named sections
+
+Analyze tempo & chords, then open Confirm bars & sections in Songs. Local analysis supplies estimated beat times; it does not detect the first downbeat or section names. Listen to the reference, choose the estimated beat number that starts bar 1, and set the number of detected beats per bar. Check the displayed source time. For compound meters, count the detected beats rather than assuming a time-signature denominator. Only complete bars with an ending downbeat are available; pickup audio and an incomplete ending remain playable outside the map.
+
+Add named sections in time order without overlap. Start bar is included and End before bar is excluded: start 1, end before 3 covers bars 1 and 2. Check the listening confirmation, save, then load the reference again. Changing the analysis or saved map clears confirmation. A changed source file or stale analysis is refused; analyze again and reopen the editor. Unknown saved fields are retained. Confirming a map does not improve the accuracy of the estimated beats.
+
+Songs and Stage show the current confirmed bar, fractional beat and named section from audio consumed by the output. Loop Solo starts that section at its confirmed downbeat and repeats to its exclusive end. Speed and key processing stay active. Already queued audio can finish before the change is heard. Save any recording before changing loops. The take stores the full confirmed map, but DAW tempo export and automatic practice ramps do not yet consume it.
+
+Jo can use the confirmed names: “loop Chorus” or “gjenta Refreng”. A name must identify exactly one section; duplicate or missing names require choosing one in the reference player. These are user-confirmed sections, not automatic provider detections. A stale map is reported visibly while audio remains playable through seconds controls.
+
 ## AI Music and local models
 
 ### Generate deliberately

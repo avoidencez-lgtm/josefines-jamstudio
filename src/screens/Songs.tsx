@@ -8,6 +8,7 @@ import {
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
+import { ReferenceGridEditor } from "../components/ReferenceGrid";
 import { ReferencePlayer } from "../components/ReferencePlayer";
 import { SongAnalysis } from "../components/SongAnalysis";
 import { StemPreparation } from "../components/Stems";
@@ -297,6 +298,11 @@ export function Songs() {
                 </Button>
               </div>
               <SongAnalysis key={song.id} value={song.songAnalysis} />
+              <ReferenceGridEditor
+                key={`grid-${song.id}`}
+                song={song}
+                locked={locked}
+              />
               <StemPreparation
                 key={`stems-${song.id}`}
                 song={song}
@@ -388,9 +394,9 @@ export function Songs() {
         with pause, seek and seconds loops. The system player is also available.
         Practice copies support local speed and pitch changes. Local analysis
         estimates steady tempo, major/minor chords and key. Prepare or import
-        stems to mix instruments in the native player. Beat-grid reference
-        playback is not available yet. Use Library for chord charts and Stage
-        for rehearsing them.
+        stems to mix instruments in the native player. Confirm bars and named
+        sections to use section loops; automatic section detection is pending.
+        Use Library for chord charts and Stage for rehearsing them.
       </p>
     </div>
   );

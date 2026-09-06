@@ -3,6 +3,7 @@ import { ipc } from "../../src/ipc/client";
 import { dispatchJoToolCall } from "../../src/lib/jo/dispatcher";
 import { parseNaturalIntent } from "../../src/lib/jo/intent";
 import { useEngineStore } from "../../src/store/engine";
+import grid from "../fixtures/seams/reference-grid.json";
 import fixture from "../fixtures/seams/reference-practice.json";
 
 const initial = useEngineStore.getState();
@@ -103,4 +104,64 @@ it("routes explicit English and Bokmål offline practice commands to the loaded 
   ).toBe(80);
   expect(parseNaturalIntent("speed 75% ").toolCalls).toEqual([]);
   expect(parseNaturalIntent("slower").toolCalls[0].name).toBe("set_tempo");
+});
+
+it("loops only a unique confirmed reference section and propagates native failure", async () => {
+  const state = useEngineStore.getState();
+  if (!state.telemetry.reference) throw new Error("Missing reference fixture");
+  useEngineStore.setState({
+    telemetry: {
+      ...state.telemetry,
+      reference: {
+        ...state.telemetry.reference,
+        grid: {
+          origin: "confirmed-local",
+          beats_per_bar: 4,
+          bars: 2,
+          sections: grid.sections,
+          position: null,
+        },
+      },
+    },
+  });
+  const call = {
+    name: "loop_reference_section",
+    arguments: { assetId: "fixture", sectionId: "chorus" },
+  };
+  const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(undefined);
+  expect(await dispatchJoToolCall(call)).toContain("bars 2–2");
+  expect(invoke).toHaveBeenCalledWith(
+    "media_reference_loop_section",
+    call.arguments,
+  );
+  const reference = { assetId: "fixture", speed: 1, sections: grid.sections };
+  expect(parseNaturalIntent("loop Chorus", reference).toolCalls).toEqual([
+    call,
+  ]);
+  expect(parseNaturalIntent("gjenta Chorus", reference).toolCalls).toEqual([
+    call,
+  ]);
+  expect(parseNaturalIntent("loop missing", reference).toolCalls).toEqual([]);
+  expect(
+    parseNaturalIntent("loop Chorus", {
+      ...reference,
+      sections: [...grid.sections, { ...grid.sections[1], id: "another" }],
+    }).toolCalls,
+  ).toEqual([]);
+  invoke.mockClear();
+  for (const arguments_ of [
+    { assetId: "stale", sectionId: "chorus" },
+    { assetId: "fixture", sectionId: "missing" },
+  ])
+    await expect(
+      dispatchJoToolCall({ ...call, arguments: arguments_ }),
+    ).rejects.toThrow("confirmed section");
+  useEngineStore.setState({ isRecording: true });
+  await expect(dispatchJoToolCall(call)).rejects.toThrow("Save the take");
+  useEngineStore.setState({ isRecording: false, isPreview: true });
+  await expect(dispatchJoToolCall(call)).rejects.toThrow("desktop");
+  expect(invoke).not.toHaveBeenCalled();
+  useEngineStore.setState({ isPreview: false });
+  invoke.mockRejectedValue(new Error("Native loop failed"));
+  await expect(dispatchJoToolCall(call)).rejects.toThrow("Native loop failed");
 });

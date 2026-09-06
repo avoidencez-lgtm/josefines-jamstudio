@@ -539,6 +539,29 @@ mod tests {
                 .unwrap();
             assert_eq!((prepared.info.speed, prepared.info.semitones), (0.75, 2));
             assert!(prepared.info.stems[0].muted);
+            let mut mapped = read(&manifest).unwrap();
+            mapped["referenceGrid"] = json!({"schemaVersion":1,"origin":"confirmed-local","sourceHash":hash,"beatsPerBar":4,"beats":[0.0,0.4,0.8,1.2,1.6],"sections":[{"id":"solo","label":"Solo","startBar":1,"endBar":2}]});
+            write(&manifest, &mapped).unwrap();
+            let mut gridded = super::super::reference_source(&base, "source", true)
+                .await
+                .unwrap();
+            assert_eq!(gridded.info.grid.as_ref().unwrap().bars, 1);
+            gridded.loop_section("solo").unwrap();
+            assert_eq!(gridded.info.loop_end, 1.6);
+            mapped["referenceGrid"]["sourceHash"] = json!("0".repeat(64));
+            write(&manifest, &mapped).unwrap();
+            let stale_grid = super::super::reference_source(&base, "source", true)
+                .await
+                .unwrap();
+            assert!(stale_grid.info.grid.is_none());
+            assert!(stale_grid
+                .info
+                .grid_error
+                .as_ref()
+                .unwrap()
+                .contains("changed"));
+            mapped["referenceGrid"]["sourceHash"] = json!(hash);
+            write(&manifest, &mapped).unwrap();
             let original = super::super::reference_source(&base, "source", false)
                 .await
                 .unwrap();

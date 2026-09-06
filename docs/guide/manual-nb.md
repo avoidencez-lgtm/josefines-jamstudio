@@ -260,6 +260,16 @@ Når referansen er lastet, kan Jo endre hastighet og toneart gjennom de samme ko
 
 Dette endrer avspilling i Jamstudio, ikke kildefiler, Film, systemavspilling eller ferdiglagde øvingskopier. Ved behandlingsfeil pauses referansen, og du blir bedt om å laste den på nytt. Velg Load original mix hvis lagrede innstillinger er ugyldige. Nettleservisningen behandler ingen lyd.
 
+### Bekreft takter og lag seksjonsløkker
+
+Kjør Analyze tempo & chords, og åpne Confirm bars & sections i Songs. Lokal analyse gir estimerte tidspunkter for taktslag; den oppdager ikke første taktstart eller seksjonsnavn. Lytt til referansen, velg nummeret på det estimerte slaget som starter takt 1, og angi antall oppdagede slag per takt. Kontroller det viste tidspunktet i originalen. Ved sammensatte taktarter teller du de oppdagede slagene uten å anta en bestemt taktslagsverdi. Bare hele takter med en avsluttende taktstart er tilgjengelige; opptakt og en ufullstendig avslutning kan fortsatt spilles utenfor taktkartet.
+
+Legg til navngitte seksjoner i tidsrekkefølge uten overlapp. Start bar tas med, mens End before bar ikke tas med: start 1, slutt før 3 dekker takt 1 og 2. Kryss av for at du har kontrollert ved å lytte, lagre og last referansen på nytt. Endret analyse eller lagret taktkart tømmer bekreftelsen. Endrede lydfiler eller foreldet analyse avvises; analyser igjen og åpne redigeringen på nytt. Ukjente lagrede felt beholdes. Bekreftelsen gjør ikke slagestimatene mer presise.
+
+Songs og Stage viser bekreftet takt, brøkdel av taktslag og navngitt seksjon ut fra lyden som faktisk er sendt til utgangen. Loop Solo starter seksjonen på bekreftet taktstart og gjentar frem til den eksklusive slutten. Hastighet og toneart beholdes. Lyd som allerede står i kø, kan bli spilt før endringen høres. Lagre et pågående opptak før du endrer løkker. Opptaket lagrer hele taktkartet, men tempoeksport til DAW og automatiske øvingsramper bruker det ikke ennå.
+
+Jo kan bruke de bekreftede navnene: «gjenta Refreng» eller «loop Chorus». Navnet må passe nøyaktig én seksjon; ved like eller manglende navn må du velge i referansespilleren. Dette er brukerbekreftede seksjoner, ikke automatiske leverandørfunn. Et foreldet taktkart varsles tydelig, mens lyden fortsatt kan spilles med sekundkontrollene.
+
 ## AI Music og lokale modeller
 
 ### Generer med et bevisst valg

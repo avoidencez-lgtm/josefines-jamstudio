@@ -122,3 +122,21 @@ JUCE 8 offers WebView UIs, a mature audio graph and VST3/AU hosting. Its licence
 | Black Spirit CC map against the official H&K manual PDF | M5 task and owner gate 5 |
 | Scarlett 2i2 generation on the Mac; Apple Silicon | Vegar |
 | Whether the HeadRush enumerates any USB-MIDI endpoint (believed no) | Owner gate 5 |
+
+### Music.ai format verification, 2026-09-06
+
+The public [API reference](https://music.ai/docs/api/reference/) documents signed
+upload URLs and asynchronous workflow jobs. The [Beats module](https://music.ai/modules/transcription/beats/)
+describes `beatMap` annotations with a start time and beat number, whereas the
+generic [file formats page](https://music.ai/docs/api/file-formats/) shows a beats
+example with `start`, `end` and `bpm`. The [Sections module](https://music.ai/modules/transcription/sections/)
+returns `sectionsMap` and takes a beat-map URL. These descriptions do not by
+themselves establish an exact complete beat/downbeat response schema. The
+official [Python SDK](https://github.com/weAreMusicAI/python-sdk) documents job
+submission/download, not a verified downbeat fixture for this app.
+
+No provider request or credential access was made. Recorded response fixtures,
+workflow output contracts and real-song acceptance remain open before a provider
+adapter can claim to drive the transport. The confirmed-local grid implementation
+is explicitly user-authored beat grouping/sections over existing estimates, not
+a replacement for automatic Music.ai analysis or proof of its quality.

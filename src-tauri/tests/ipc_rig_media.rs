@@ -15,6 +15,60 @@ use tauri::Manager;
 const NO_PORT: &str = "no MIDI port open (messages are only logged)";
 
 #[test]
+fn reference_sections_use_native_downbeats_and_record_the_confirmed_grid() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let state = studio.app().state::<app_lib::AppState>();
+    let grid: jam_audio::song::grid::Grid = serde_json::from_str(include_str!(
+        "../../tests/fixtures/seams/reference-grid.json"
+    ))
+    .unwrap();
+    let mut song = jam_audio::song::ReferenceSong::new(
+        "grid-fixture".into(),
+        "Fixture".into(),
+        vec![0.1; 480_000],
+    )
+    .unwrap();
+    song.set_grid(grid).unwrap();
+    state.engine.lock().load_reference(song).unwrap();
+    studio.err(
+        "media_reference_loop_section",
+        json!({"assetId":"stale","sectionId":"chorus"}),
+    );
+    studio.err(
+        "media_reference_loop_section",
+        json!({"assetId":"grid-fixture","sectionId":"missing"}),
+    );
+    studio.ok(
+        "media_reference_loop_section",
+        json!({"assetId":"grid-fixture","sectionId":"chorus"}),
+    );
+    let before = studio.ok("audio_get_telemetry", json!({}));
+    assert_eq!(before["reference"]["loop_start"], 2.2);
+    assert_eq!(before["reference"]["loop_end"], 4.6);
+    assert_eq!(before["reference"]["grid"]["bars"], 2);
+    assert_eq!(
+        before["reference"]["grid"]["position"]["section_id"],
+        "chorus"
+    );
+    state
+        .engine
+        .lock()
+        .recorder_start("grid-fixture".into())
+        .unwrap();
+    studio.err(
+        "media_reference_loop_section",
+        json!({"assetId":"grid-fixture","sectionId":"verse"}),
+    );
+    let take = state.engine.lock().recorder_stop().unwrap();
+    assert_eq!(take.snapshot["beatGrid"]["origin"], "confirmed-local");
+    assert_eq!(take.snapshot["beatGrid"]["beats"][4], 2.2);
+    assert_eq!(take.snapshot["beatGrid"]["sections"][1]["label"], "Chorus");
+    studio.ok("media_reference_unload", json!({}));
+    studio.err("media_reference_grid_save",json!({"assetId":"missing","confirmation":{"sourceHash":"stale","expectedBeats":[],"firstDownbeat":0,"beatsPerBar":4,"sections":[],"confirmed":false}}));
+}
+
+#[test]
 fn reference_processing_preserves_partial_settings_metadata_and_rejects_stale_sources() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

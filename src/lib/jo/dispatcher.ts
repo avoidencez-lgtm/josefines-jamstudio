@@ -1,3 +1,4 @@
+import { ipc } from "../../ipc/client";
 import { requireCommand, useEngineStore } from "../../store/engine";
 import { applyReferencePractice, useMedia } from "../media";
 import { PARTS, changeGroove, useWriting } from "../originals";
@@ -175,6 +176,25 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       throw new Error("Unknown transport action. Use play, pause or stop.");
     }
 
+    case "loop_reference_section": {
+      if (store.isPreview)
+        throw new Error("Open the desktop app to loop a reference section.");
+      if (store.isRecording)
+        throw new Error("Save the take before changing reference loops.");
+      const ref = store.telemetry.reference;
+      const section = ref?.grid?.sections.find(
+        (s) => s.id === call.arguments.sectionId,
+      );
+      if (!ref || ref.asset_id !== call.arguments.assetId || !section)
+        throw new Error(
+          "Choose a confirmed section of the currently loaded reference.",
+        );
+      await ipc.invoke("media_reference_loop_section", {
+        assetId: ref.asset_id,
+        sectionId: section.id,
+      });
+      return `Selected ${section.label} loop, bars ${section.startBar}–${section.endBar - 1}, from its confirmed downbeat. Press Play if the reference is paused.`;
+    }
     case "set_reference_practice": {
       if (store.isPreview)
         throw new Error("Open the desktop app to change reference playback.");

@@ -341,6 +341,19 @@ source-position, de-click, queued-analysis and processed-recording regressions.
 
 ### Native reference sources
 
+Confirmed reference maps use `jam-audio::song::grid::Grid`; validate before
+attaching with `ReferenceSong::set_grid`. Keep its original-source times and
+explicit provenance. Use `media_reference_grid_save` to preserve unknown metadata
+and reject stale analysis/source hashes. Section endpoints are exclusive bar
+boundaries, never approximate seconds rounded by JS. `loop_reference_section`
+in the Jo registry and `media_reference_loop_section` share the native path.
+The shared synthetic fixture is `tests/fixtures/seams/reference-grid.json`, with
+UI coverage in `tests/invariants/practice-copy.test.tsx`, IPC in `ipc_rig_media`
+and consumed-output timing in the engine's `confirmed_section_readout` test.
+A future provider adapter must bring verified response fixtures and explicit
+origin/confidence semantics; do not label user-confirmed local estimates as
+provider-detected downbeats or sections. Band/MIDI/DAW grid integration is separate.
+
 Prepare bounded 48 kHz stereo off the render thread, then use `AudioEngine::load_reference`.
 Reuse the shared transport and recording queue, not a new output device or timer.
 `ReferenceSong` owns the deterministic seconds cursor/loop; metadata goes through

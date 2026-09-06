@@ -99,6 +99,10 @@ const snapshotContext = (): JoContext => {
           seconds: t.reference.seconds,
           speed: t.reference.speed ?? 1,
           semitones: t.reference.semitones ?? 0,
+          sections: t.reference.grid?.sections.map(({ id, label }) => ({
+            id,
+            label,
+          })),
         }
       : undefined,
     writing: w.song
@@ -158,7 +162,11 @@ const think = async (
   return parseNaturalIntent(
     query,
     reference
-      ? { assetId: reference.asset_id, speed: reference.speed ?? 1 }
+      ? {
+          assetId: reference.asset_id,
+          speed: reference.speed ?? 1,
+          sections: reference.grid?.sections,
+        }
       : undefined,
   );
 };
