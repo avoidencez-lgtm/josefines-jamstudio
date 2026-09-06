@@ -187,6 +187,28 @@ arrangement: chorus, verse x2, chorus
     ]);
   });
 
+  it("plays an explicit repeats: 0 once, matching Chart::resolve", () => {
+    const chart: Chart = {
+      schemaVersion: 1,
+      id: "once",
+      name: "once",
+      keyTonic: 0,
+      mode: "major",
+      timeSig: [4, 4],
+      defaultBpm: 120,
+      sections: [
+        {
+          id: "a",
+          name: "A",
+          bars: [[{ chord: "C", beats: 4 }]],
+        },
+      ],
+      arrangement: [{ sectionId: "a", repeats: 0 }],
+    };
+    expect(resolveChart(chart)).toHaveLength(1);
+    expect(resolveChart(chart)[0].chords[0].chord).toBe("C");
+  });
+
   it("keeps Mix/Box/Remix names and still honours Chorus x2", () => {
     const { chart, problems } = parseChartText(`# Form
 [Mix 2]

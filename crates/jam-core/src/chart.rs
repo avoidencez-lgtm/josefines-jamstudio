@@ -75,7 +75,10 @@ impl Chart {
 
         for item in &self.arrangement {
             if let Some(sec) = self.sections.iter().find(|s| s.id == item.section_id) {
-                for _ in 0..item.repeats {
+                // Missing `repeats` defaults to 1. An explicit 0 is the same
+                // as the TypeScript `resolveChart` (`Math.max(1, repeats)`),
+                // so a hand-written chart cannot show bars the engine skips.
+                for _ in 0..item.repeats.max(1) {
                     for bar_chords in &sec.bars {
                         bars.push(ResolvedBar {
                             bar_index: current_bar_idx,
@@ -312,6 +315,36 @@ mod tests {
         assert_eq!(r.chord_at(2, 1), ("E7".into(), Some("A7".into())));
         // Wraps around the arrangement.
         assert_eq!(r.chord_at(3, 1).0, "A7");
+    }
+
+    #[test]
+    fn zero_repeats_plays_the_section_once() {
+        let chart = Chart {
+            schema_version: 1,
+            id: "once".into(),
+            name: "once".into(),
+            key_tonic: 0,
+            mode: "major".into(),
+            time_sig: (4, 4),
+            default_bpm: 120.0,
+            default_style_id: None,
+            sections: vec![ChartSection {
+                id: "a".into(),
+                name: "A".into(),
+                bars: vec![vec![BarChord {
+                    chord: "C".into(),
+                    beats: 4.0,
+                }]],
+                style_override_id: None,
+            }],
+            arrangement: vec![ArrangementItem {
+                section_id: "a".into(),
+                repeats: 0,
+            }],
+        };
+        let resolved = chart.resolve();
+        assert_eq!(resolved.bars.len(), 1);
+        assert_eq!(resolved.bars[0].chords[0].chord, "C");
     }
 
     #[test]
