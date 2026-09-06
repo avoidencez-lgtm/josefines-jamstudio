@@ -471,15 +471,37 @@ it("Save song stores it in the engine and lists it; each save bumps the revision
     b.notes = "Third pass";
   }, "notes");
   await w.action(w.save);
-  expect(writing().message).toBe("Error: Reopen the song before saving.");
+  expect(writing().message).toBe(
+    "Error: This song changed in another window. Use Save copy to keep your edits.",
+  );
   expect(writing().dirty).toBe(true);
   expect(song().revision).toBe(2);
   expect(body().notes).toBe("Third pass");
-  expect(notices()).toContain("Error: Reopen the song before saving.");
+  expect(notices()).toContain(
+    "Error: This song changed in another window. Use Save copy to keep your edits.",
+  );
   const listed = await ipc.invoke<Original[]>("originals_list");
   expect(listed.map((s) => [s.id, s.revision, s.body.notes])).toEqual([
     [id, 3, "Another window"],
   ]);
+
+  await w.action(w.saveCopy);
+  expect(writing()).toMatchObject({
+    dirty: false,
+    message: "Copy saved. Original kept.",
+  });
+  expect(body().notes).toBe("Third pass");
+  expect(song().id).not.toBe(id);
+  const afterCopy = await ipc.invoke<Original[]>("originals_list");
+  expect(afterCopy).toHaveLength(2);
+  expect(afterCopy.find((s) => s.id === id)).toMatchObject({
+    revision: 3,
+    body: { notes: "Another window" },
+  });
+  expect(afterCopy.find((s) => s.id === song().id)).toMatchObject({
+    revision: 1,
+    body: { notes: "Third pass" },
+  });
 });
 
 it("Save copy writes a second song under a new id and leaves the original in the list as it was saved", async () => {

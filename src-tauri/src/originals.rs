@@ -195,7 +195,9 @@ fn write_document(root: &Path, mut doc: Value) -> Result<Value, String> {
             jam_core::json::from_str(&fs::read_to_string(&file).map_err(|e| e.to_string())?)
                 .map_err(|e| e.to_string())?;
         if current["revision"].as_u64() != Some(revision) {
-            return Err("This song changed in another window. Reopen it before saving.".into());
+            return Err(
+                "This song changed in another window. Use Save copy to keep your edits.".into(),
+            );
         }
     } else if revision != 0 {
         return Err("The song file was moved. Save a copy to keep your edits.".into());

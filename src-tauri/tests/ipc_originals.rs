@@ -171,7 +171,7 @@ fn save_checks_the_revision_against_the_file_on_disk() {
     stale["body"]["lyrics"] = json!({ "verse": "typed in a second window" });
     assert_eq!(
         studio.err("originals_save", json!({ "document": stale })),
-        "This song changed in another window. Reopen it before saving."
+        "This song changed in another window. Use Save copy to keep your edits."
     );
     let on_disk = read_json(&song_file(&id));
     assert_eq!(on_disk["revision"], 2);
