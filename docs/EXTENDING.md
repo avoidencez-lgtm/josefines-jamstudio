@@ -326,6 +326,19 @@ When upgrading vendored DSP, review both MIT sources, update source revisions an
 hashes together, and run the frequency/length tests on Windows and macOS. Do not
 turn on a third-party FFT backend without its own licence review.
 
+For live reference processing, reuse `stretch::Stream` and
+`ReferenceSong::set_processing`, keeping each stem on the shared source cursor.
+Allocate on load, never in the callback; preserve exclusive CXX ownership.
+Use `media_reference_processing` for saved controls and resolve omitted fields
+in native state under its control lock. Jo tools use `applyReferencePractice`;
+add their definition to the existing Jo registry, not a separate audio service.
+`tests/fixtures/seams/reference-practice.json` is shared by IPC and Jo tests;
+the UI invariant is in `tests/invariants/practice-copy.test.tsx`. Preserve the
+unknown-field, stale-source, recording and preview guards when extending it.
+Run `JAM_AUDIO_PERF=1 cargo test -p jam-audio live_eight_stem -- --ignored --nocapture`
+for the optional synthetic throughput probe; ordinary CI always runs frequency,
+source-position, de-click, queued-analysis and processed-recording regressions.
+
 ### Native reference sources
 
 Prepare bounded 48 kHz stereo off the render thread, then use `AudioEngine::load_reference`.

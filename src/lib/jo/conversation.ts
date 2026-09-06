@@ -91,6 +91,16 @@ const snapshotContext = (): JoContext => {
     },
     styles: s.styles.map((x) => ({ id: x.id, name: x.name })),
     charts: s.charts.map((x) => ({ id: x.id, name: x.name })),
+    reference: t.reference
+      ? {
+          assetId: t.reference.asset_id,
+          label: t.reference.label,
+          position: t.reference.position,
+          seconds: t.reference.seconds,
+          speed: t.reference.speed ?? 1,
+          semitones: t.reference.semitones ?? 0,
+        }
+      : undefined,
     writing: w.song
       ? {
           name: w.song.body.chart.name,
@@ -144,7 +154,13 @@ const think = async (
     return out;
   }
   setLastBrain("offline");
-  return parseNaturalIntent(query);
+  const reference = engine.telemetry.reference;
+  return parseNaturalIntent(
+    query,
+    reference
+      ? { assetId: reference.asset_id, speed: reference.speed ?? 1 }
+      : undefined,
+  );
 };
 
 export const handleJoQuery = async (query: string, current = () => true) => {

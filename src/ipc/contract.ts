@@ -183,6 +183,9 @@ export interface ReferenceState {
   } | null;
   analysis_error?: string | null;
   stems?: StemMix[];
+  speed?: number;
+  semitones?: number;
+  processing_error?: string | null;
 }
 
 export interface EngineTelemetry {

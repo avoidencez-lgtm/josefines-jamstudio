@@ -533,6 +533,17 @@ mod tests {
                 .await
                 .unwrap();
             assert!(reloaded.info.stems[0].muted && reloaded.info.stems[0].guitar);
+            super::super::save_reference_processing(&base, "source", 0.75, 2).unwrap();
+            let prepared = super::super::reference_source(&base, "source", true)
+                .await
+                .unwrap();
+            assert_eq!((prepared.info.speed, prepared.info.semitones), (0.75, 2));
+            assert!(prepared.info.stems[0].muted);
+            let original = super::super::reference_source(&base, "source", false)
+                .await
+                .unwrap();
+            assert_eq!((original.info.speed, original.info.semitones), (1.0, 0));
+            assert!(original.info.stems.is_empty());
             assert_eq!(
                 asset(&base, "source").unwrap().extra["futureMetadata"]["preserve"],
                 true
@@ -541,6 +552,9 @@ mod tests {
             stale[0].id = "old-set".into();
             assert!(save_mix(&base, "source", &stale).is_err());
             song.set_stem_mix(mix).unwrap();
+            // Installing the second archive preserves saved practice settings.
+            // This original stereo assertion specifically measures the direct path.
+            song.set_processing(1.0, 0).unwrap();
             song.play();
             let mut left = vec![0.0; 4800];
             let mut right = left.clone();

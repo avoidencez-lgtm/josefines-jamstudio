@@ -21,6 +21,14 @@ export interface JoContext {
   muted: { drums: boolean; bass: boolean; comp: boolean };
   styles: Array<{ id: string; name: string }>;
   charts: Array<{ id: string; name: string }>;
+  reference?: {
+    assetId: string;
+    label: string;
+    position: number;
+    seconds: number;
+    speed: number;
+    semitones: number;
+  };
   writing?: {
     name: string;
     selected: string;

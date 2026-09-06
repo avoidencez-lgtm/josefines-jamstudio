@@ -555,15 +555,8 @@ async fn decode_audio(source: &str, decoded: &Path, seconds: &str) -> Result<(),
     run(&exe, &args, 120).await.map(|_| ())
 }
 
-async fn reference_source(
-    base: &Path,
-    asset_id: &str,
-    use_stems: bool,
-) -> Result<jam_audio::song::ReferenceSong, String> {
-    let mut source = asset(base, asset_id)?;
-    if !use_stems {
-        source.extra.remove("stemSet");
-    }
+fn reference_asset(base: &Path, asset_id: &str) -> Result<Asset, String> {
+    let source = asset(base, asset_id)?;
     if source.schema_version != 1
         || source.id != asset_id
         || source.kind != "audio"
@@ -571,6 +564,19 @@ async fn reference_source(
         || !(0.1..=1200.2).contains(&source.seconds)
     {
         return Err("Choose an audio reference up to twenty minutes.".into());
+    }
+    Ok(source)
+}
+
+async fn reference_source(
+    base: &Path,
+    asset_id: &str,
+    use_stems: bool,
+) -> Result<jam_audio::song::ReferenceSong, String> {
+    let mut source = reference_asset(base, asset_id)?;
+    if !use_stems {
+        source.extra.remove("stemSet");
+        source.extra.remove("referencePractice");
     }
     let work = base.join("work").join(id());
     fs::create_dir_all(work.parent().unwrap()).map_err(|e| e.to_string())?;
@@ -605,6 +611,13 @@ async fn reference_source(
             .map_err(|_| "Reference loading worker stopped.")??
         };
         tauri::async_runtime::spawn_blocking(move || {
+            if let Some(saved) = source.extra.get("referencePractice") {
+                let error = "Saved practice settings are invalid. Load original mix, then apply valid speed and transpose settings.";
+                if saved["schemaVersion"] != 1 { return Err(error.into()); }
+                let speed = saved["speed"].as_f64().ok_or(error)?;
+                let semitones = saved["semitones"].as_i64().and_then(|v| i32::try_from(v).ok()).ok_or(error)?;
+                song.set_processing(speed, semitones).map_err(|_| error)?;
+            }
             let after = if before.is_some() {
                 Some(source_hash(&original)?)
             } else {
@@ -768,6 +781,60 @@ pub fn media_reference_loop(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     state.engine.lock().reference_loop(start, end, enabled)
+}
+
+fn save_reference_processing(
+    base: &Path,
+    asset_id: &str,
+    speed: f64,
+    semitones: i32,
+) -> Result<(), String> {
+    jam_audio::practice::validate(speed, semitones as f64)?;
+    let mut source = reference_asset(base, asset_id)?;
+    let practice = source
+        .extra
+        .entry("referencePractice".into())
+        .or_insert(json!({"schemaVersion":1}));
+    if practice["schemaVersion"] != 1 {
+        return Err("Unsupported saved practice settings version.".into());
+    }
+    practice["speed"] = json!(speed);
+    practice["semitones"] = json!(semitones);
+    write(
+        &base.join("assets").join(format!("{asset_id}.json")),
+        &serde_json::to_value(source).map_err(|e| e.to_string())?,
+    )
+}
+
+#[tauri::command]
+pub async fn media_reference_processing(
+    asset_id: String,
+    speed: Option<f64>,
+    semitones: Option<i32>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    if speed.is_none() && semitones.is_none() {
+        return Err("Choose speed or transposition.".into());
+    }
+    let engine = state.engine.lock();
+    engine.ensure_timing_editable()?;
+    let loaded = engine
+        .get_telemetry()
+        .reference
+        .ok_or("Load the reference first.")?;
+    if loaded.asset_id != asset_id {
+        return Err("The loaded reference changed.".into());
+    }
+    let speed = speed.unwrap_or(loaded.speed);
+    let semitones = semitones.unwrap_or(loaded.semitones);
+    jam_audio::practice::validate(speed, semitones as f64)?;
+    // The control lock keeps recording/source replacement outside save + apply.
+    save_reference_processing(&root(), &asset_id, speed, semitones)?;
+    engine.reference_processing(&asset_id, speed, semitones)?;
+    Ok(json!({"speed":speed,"semitones":semitones}))
 }
 
 #[tauri::command]

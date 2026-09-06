@@ -58,6 +58,12 @@ it("offers a native reference seconds loop without suggesting an analysed chord 
   );
   expect(html).toContain('aria-label="Reference player"');
   expect(html).toContain("Seek to (seconds)");
+  expect(html).toContain('aria-label="Live reference practice"');
+  expect(html).toContain("Reference speed · 100%");
+  expect(html).toContain("Reference transpose");
+  expect(html).toMatch(
+    /<button[^>]*disabled=""[^>]*>Apply &amp; save speed\/key/,
+  );
   expect(html).toContain("Loop this range");
   expect(html).toContain("beat-grid loops are not available yet");
   expect(html).toMatch(/<button[^>]*type="button"[^>]*>Loop off/);

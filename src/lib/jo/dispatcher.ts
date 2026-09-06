@@ -1,5 +1,5 @@
 import { requireCommand, useEngineStore } from "../../store/engine";
-import { useMedia } from "../media";
+import { applyReferencePractice, useMedia } from "../media";
 import { PARTS, changeGroove, useWriting } from "../originals";
 import type { JoToolCall } from "./persona";
 import { STUDIO_TOOLS, applyStudioEdits } from "./studioTools";
@@ -175,6 +175,26 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       throw new Error("Unknown transport action. Use play, pause or stop.");
     }
 
+    case "set_reference_practice": {
+      if (store.isPreview)
+        throw new Error("Open the desktop app to change reference playback.");
+      if (store.isRecording)
+        throw new Error("Save the take before changing reference playback.");
+      const a = call.arguments;
+      if (
+        !store.telemetry.reference ||
+        store.telemetry.reference.asset_id !== a.assetId
+      )
+        throw new Error(
+          "The loaded reference changed. Use its current asset ID.",
+        );
+      const applied = await applyReferencePractice(
+        String(a.assetId),
+        typeof a.speedPercent === "number" ? a.speedPercent / 100 : undefined,
+        typeof a.semitones === "number" ? a.semitones : undefined,
+      );
+      return `Reference set to ${Math.round(applied.speed * 100)}% and ${applied.semitones > 0 ? "+" : ""}${applied.semitones} semitones. Settings saved; guitar DI unchanged.`;
+    }
     case "set_tempo": {
       if (typeof call.arguments.bpm === "number") {
         const bpm = requireCommand(
