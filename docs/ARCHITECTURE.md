@@ -946,3 +946,47 @@ and absence of silent 256-frame blocks. The raw recording retains its two-LSB
 stereo test. The opt-in eight-stem CPU probe rendered 8 seconds in 1.230 seconds
 on the local Windows PC (worst block 10.582 ms); this is throughput evidence,
 not a physical-device dropout or subjective sound-quality acceptance.
+
+### Confirmed reference bars and sections
+
+`media_reference_grid_save(assetId,confirmation)` lets the user identify the
+first downbeat in the displayed local beat estimates, group 2–12 estimated beats
+per bar and enter up to 64 named, ordered, non-overlapping sections. This is
+explicit listening confirmation, not automatic downbeat/section detection.
+`expectedBeats` and `sourceHash` must match the displayed saved analysis; the
+native worker rehashes the original file before saving. It rejects changed
+analysis, sources, unsupported versions, invalid bounds and unconfirmed input.
+Unknown asset/grid fields and unknown fields of retained section IDs survive.
+
+The additive `referenceGrid` asset object has `schemaVersion:1`,
+`origin:"confirmed-local"`, `sourceHash`, `beatsPerBar`, source-second `beats`
+and `sections` (`id`, `label`, `startBar`, exclusive `endBar`). Beats include the
+ending downbeat and cover complete bars only. Pickup audio and incomplete endings
+stay outside the map. They are still playable through the seconds transport.
+The map retains measured beat times, including unequal intervals; it neither
+quantizes them nor infers a compound-meter denominator. Reanalysis does not
+overwrite a confirmed map. The editor resets confirmation when metadata changes.
+
+Loading validates the map and source hash; a bad map leaves audio playable and
+surfaces `grid_error`. `ReferenceState.grid` carries sections and the consumed
+output's bar, fractional beat, local interval BPM scaled by speed, and section.
+It does not broadcast the entire beat array. Before/after the confirmed range or
+while waiting for the source generation, position is unknown. The same source
+stamp used for chords aligns the map with the output queue, never a JS clock.
+`media_reference_loop_section(assetId,sectionId)` selects a validated section's
+start/end downbeats and seeks to its start using the existing seconds-loop and
+DSP invalidation path. The original render/output/recording queue remains shared.
+Queued audio can finish before the change is heard; recording blocks loop edits.
+The complete map is captured in the take's `snapshot.beatGrid` for reproducibility.
+It does not yet drive band/MIDI transport, DAW tempo export or automatic ramps.
+
+Songs owns confirmation; Songs/Stage share section-loop buttons and readout.
+Jo's `loop_reference_section` takes current asset/section IDs. Offline `loop NAME`
+and `gjenta NAME` require one unique confirmed name, never an invented section.
+The synthetic fixture `tests/fixtures/seams/reference-grid.json` has unequal beat
+intervals. An OutputTap regression at 44.1/48/96 kHz and 50/75/150% speed checks
+variable render lead, every consumed source stamp within one 48 kHz frame, and
+section wraps within one output step plus one source frame. IPC verifies stale
+IDs, recording guards and the take snapshot. The real FFmpeg opt-in test verifies
+map reload and stale-hash recovery. Provider detection quality is not proved by
+these deterministic transport checks.

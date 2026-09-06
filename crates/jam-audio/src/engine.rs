@@ -491,7 +491,7 @@ impl AudioEngine {
         let _gate = self.render_gate.lock();
         self.stop_transport_under_render_gate();
         self.clips.lock().clear();
-        self.song_snapshot = serde_json::json!({"reference": song.info, "beatGrid": "unanalysed"});
+        self.song_snapshot = serde_json::json!({"reference": song.info, "beatGrid": song.grid.as_ref().map(|g| serde_json::json!(g)).unwrap_or(serde_json::json!("unanalysed"))});
         *self.reference.lock() = Some(song);
         Ok(())
     }
@@ -535,6 +535,16 @@ impl AudioEngine {
             return Err("The loaded reference changed.".into());
         }
         song.set_stem_mix(mix)
+    }
+
+    pub fn reference_loop_section(&self, asset_id: &str, section_id: &str) -> Result<(), String> {
+        self.ensure_timing_editable()?;
+        let mut reference = self.reference.lock();
+        let song = reference.as_mut().ok_or("Load the reference first.")?;
+        if song.info.asset_id != asset_id {
+            return Err("The loaded reference changed.".into());
+        }
+        song.loop_section(section_id)
     }
 
     pub fn reference_processing(
@@ -1899,6 +1909,105 @@ mod tests {
                 assert!((ctx.out_left[i] - expected).abs() < 1e-6);
                 assert_eq!(ctx.out_left[i], ctx.out_right[i]);
                 assert_eq!(ctx.band_left[i], 0.5, "recorder band remains dry");
+            }
+        }
+    }
+
+    #[test]
+    fn confirmed_section_readout_tracks_consumed_output_and_wraps_at_its_downbeat() {
+        let grid: crate::song::grid::Grid = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/seams/reference-grid.json"
+        ))
+        .unwrap();
+        for rate in [44_100, 48_000, 96_000] {
+            for speed in [0.5, 0.75, 1.5] {
+                let mut song = crate::song::ReferenceSong::new(
+                    "grid".into(),
+                    "Fixture".into(),
+                    vec![0.1; 480_000],
+                )
+                .unwrap();
+                song.set_grid(grid.clone()).unwrap();
+                song.set_processing(speed, 2).unwrap();
+                song.loop_section("chorus").unwrap();
+                song.play();
+                let (mut playback, output) = RingBuffer::new(4096);
+                let (_, input) = RingBuffer::new(1);
+                let (recorded, mut captured) = RingBuffer::new(4096);
+                let position = Arc::new(AtomicU64::new(0));
+                let mut tap = OutputTap {
+                    playback: output,
+                    input,
+                    recorded,
+                    xruns: Arc::new(AtomicU64::new(0)),
+                    lost: Arc::new(AtomicBool::new(false)),
+                    recording: false,
+                    reference_position: Arc::clone(&position),
+                };
+                let mut rendered = 0usize;
+                let mut consumed = 0usize;
+                let total = (rate as f64 * 5.0 / speed) as usize;
+                let mut previous = 2.2;
+                let mut wraps = 0;
+                while consumed < total {
+                    let ahead = 1024 + (consumed % 3) * 256;
+                    while rendered - consumed < ahead {
+                        let mut left = [0.0; 256];
+                        let mut right = left;
+                        let mut stamps = [0; 256];
+                        song.render_timed(rate, &mut left, &mut right, &mut stamps);
+                        for i in 0..256 {
+                            playback
+                                .push(OutputFrame {
+                                    output: [left[i], right[i]],
+                                    reference_position: stamps[i],
+                                    synthetic: true,
+                                    ..Default::default()
+                                })
+                                .ok()
+                                .unwrap();
+                        }
+                        rendered += 256;
+                    }
+                    let count = [63, 257, 511][consumed % 3].min(total - consumed);
+                    tap.render(&mut vec![0.0; count * 2]);
+                    for offset in 0..count {
+                        let frame = captured.pop().unwrap();
+                        let source_position = (frame.reference_position as u32) as f64 / 48_000.0;
+                        let expected =
+                            2.2 + (((consumed + offset) as f64 * speed / rate as f64) % 2.4);
+                        let error = (source_position - expected).abs();
+                        assert!(
+                            error.min((error - 2.4).abs()) <= 1.0 / 48_000.0 + 1e-8,
+                            "rate {rate} speed {speed}: source-position error {error}"
+                        );
+                        if source_position < previous - 1.0 {
+                            wraps += 1;
+                            assert!(
+                                (source_position - 2.2).abs()
+                                    <= speed / rate as f64 + 1.0 / 48_000.0
+                            );
+                        }
+                        previous = source_position;
+                    }
+                    consumed += count;
+                    let state = song.played_state(position.load(Ordering::Acquire));
+                    assert!(
+                        (state.position - previous).abs() < 1e-9,
+                        "UI uses consumed output, not render lead"
+                    );
+                    if state.position >= 2.2 {
+                        let p = state.grid.unwrap().position.unwrap();
+                        assert_eq!(p.bar, 2);
+                        assert_eq!(p.section_id.as_deref(), Some("chorus"));
+                    }
+                }
+                assert!(wraps >= 2);
+                assert_eq!(tap.xruns.load(Ordering::Relaxed), 0);
+                assert!(!tap.lost.load(Ordering::Relaxed));
+                let before = song.info.loop_start;
+                assert!(song.loop_section("missing").is_err());
+                assert_eq!(song.info.loop_start, before);
             }
         }
     }

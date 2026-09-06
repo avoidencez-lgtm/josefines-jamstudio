@@ -48,6 +48,53 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
           {song.position.toFixed(1)} / {song.seconds.toFixed(1)} source seconds
         </p>
       </div>
+      {song.grid ? (
+        <section
+          className="workspace-stack"
+          aria-label="Confirmed reference sections"
+        >
+          <h3 className="font-semibold">Bars & sections</h3>
+          <p className="workspace-note">
+            Confirmed from local estimates · {song.grid.beats_per_bar} beats per
+            bar · {song.grid.bars} complete bars
+          </p>
+          <p className="font-mono tabular-nums">
+            {song.grid.position
+              ? `Bar ${song.grid.position.bar} · beat ${song.grid.position.beat.toFixed(1)} · ${song.grid.position.bpm.toFixed(1)} BPM · ${song.grid.position.section_label ?? "Outside named sections"}`
+              : "Outside the confirmed bars, or waiting for output"}
+          </p>
+          <div className="workspace-actions">
+            {song.grid.sections.map((section) => (
+              <Button
+                key={section.id}
+                disabled={locked}
+                onClick={() =>
+                  void command("media_reference_loop_section", {
+                    assetId: song.asset_id,
+                    sectionId: section.id,
+                  })
+                }
+              >
+                Loop {section.label} · bars {section.startBar}–
+                {section.endBar - 1}
+              </Button>
+            ))}
+          </div>
+          {!song.grid.sections.length && (
+            <p className="workspace-note">
+              Name sections in Songs, then reload this reference.
+            </p>
+          )}
+          <p className="workspace-note">
+            Section loops start at their confirmed downbeat. Press Play if the
+            reference is paused. The readout follows audio consumed by the
+            output; queued audio finishes before a new loop is heard. Names and
+            beat grouping were entered by you, not detected automatically.
+          </p>
+        </section>
+      ) : song.grid_error ? (
+        <p role="alert">{song.grid_error}</p>
+      ) : null}
       {song.analysis ? (
         <section
           aria-label="Current chord estimate"
@@ -69,7 +116,8 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
             {song.analysis.beat === null
               ? "No analysed beat at this position"
               : `Beat ${song.analysis.beat} of ${song.analysis.beat_count}`}
-            . Follows audio sent to the output; no downbeat or section estimate.
+            . Follows audio sent to the output; local analysis does not detect
+            downbeats or sections.
           </p>
         </section>
       ) : (
@@ -270,9 +318,12 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
           ? `Looping ${song.loop_start.toFixed(1)}–${song.loop_end.toFixed(1)} seconds. `
           : "Loop off. "}
         Speed and key process the loaded reference and are saved for the next
-        load. Saved chord estimates follow playback; beat-grid loops are not
-        available yet. Record in the top bar to capture guitar and the reference
-        mix; save the take before seeking or changing the loop.
+        load. Saved chord estimates follow playback;{" "}
+        {song.grid
+          ? "section loops use the confirmed map."
+          : "beat-grid loops are not available yet; confirm bars and sections in Songs."}{" "}
+        Record in the top bar to capture guitar and the reference mix; save the
+        take before seeking or changing the loop.
       </p>
     </section>
   );

@@ -1,12 +1,15 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { ReferenceGridEditor } from "../../src/components/ReferenceGrid";
 import { ReferencePlayer } from "../../src/components/ReferencePlayer";
 import { TransportBar } from "../../src/components/TransportBar";
 import type { ReferenceState } from "../../src/ipc/contract";
 import { useMedia } from "../../src/lib/media";
 import { Songs } from "../../src/screens/Songs";
 import { useEngineStore } from "../../src/store/engine";
+import referenceGrid from "../fixtures/seams/reference-grid.json";
+import analysis from "../fixtures/seams/song-analysis.json";
 
 it("offers bounded practice controls beside a real library selection and keeps preview disabled", () => {
   const initial = useMedia.getInitialState();
@@ -68,6 +71,59 @@ it("offers a native reference seconds loop without suggesting an analysed chord 
   expect(html).toContain("beat-grid loops are not available yet");
   expect(html).toMatch(/<button[^>]*type="button"[^>]*>Loop off/);
   expect(html).not.toContain("<audio");
+});
+
+it("requires explicit grid confirmation and displays only the native consumed section position", () => {
+  const html = renderToStaticMarkup(
+    createElement(ReferenceGridEditor, {
+      song: {
+        id: "fixture",
+        kind: "audio",
+        label: "Fixture",
+        path: "fixture.wav",
+        seconds: 5,
+        songAnalysis: { ...analysis, seconds: 5, beats: referenceGrid.beats },
+        referenceGrid,
+      },
+      locked: false,
+    }),
+  );
+  expect(html).toContain("First downbeat");
+  expect(html).toContain("2 complete bars available");
+  expect(html).toContain("End before bar");
+  expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Save confirmed map/);
+  expect(html).toContain("not automatic detections");
+  const player = renderToStaticMarkup(
+    createElement(ReferencePlayer, {
+      song: {
+        asset_id: "fixture",
+        label: "Fixture",
+        seconds: 5,
+        position: 2.5,
+        state: "playing",
+        loop_enabled: true,
+        loop_start: 2.2,
+        loop_end: 4.6,
+        grid: {
+          origin: "confirmed-local",
+          beats_per_bar: 4,
+          bars: 2,
+          sections: referenceGrid.sections,
+          position: {
+            bar: 2,
+            beat: 1.5,
+            bpm: 75,
+            section_id: "chorus",
+            section_label: "Chorus",
+          },
+        },
+      },
+    }),
+  );
+  expect(player).toContain("Bar 2 · beat 1.5 · 75.0 BPM · Chorus");
+  expect(player).toContain("Loop Chorus");
+  expect(player).not.toContain("beat-grid loops are not available yet");
+  expect(player).not.toContain("<audio");
 });
 
 it("keeps the chart meter readout in band mode and uses seconds for references", () => {

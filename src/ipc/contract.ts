@@ -163,6 +163,13 @@ export interface StemMix {
   guitar: boolean;
 }
 
+export interface ReferenceSection {
+  id: string;
+  label: string;
+  startBar: number;
+  endBar: number;
+}
+
 export interface ReferenceState {
   asset_id: string;
   label: string;
@@ -186,6 +193,20 @@ export interface ReferenceState {
   speed?: number;
   semitones?: number;
   processing_error?: string | null;
+  grid?: {
+    origin: "confirmed-local";
+    beats_per_bar: number;
+    bars: number;
+    sections: ReferenceSection[];
+    position: {
+      bar: number;
+      beat: number;
+      bpm: number;
+      section_id: string | null;
+      section_label: string | null;
+    } | null;
+  } | null;
+  grid_error?: string | null;
 }
 
 export interface EngineTelemetry {

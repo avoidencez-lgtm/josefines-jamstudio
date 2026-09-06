@@ -137,6 +137,19 @@ export const JO_TOOLS: JoToolDeclaration[] = [
     },
   },
   {
+    name: "loop_reference_section",
+    description:
+      "Loop one user-confirmed reference section from its downbeat. Use the loaded reference assetId and a sectionId from reference context; never invent a section. Unavailable while recording or in browser preview.",
+    parameters: {
+      type: "object",
+      properties: {
+        assetId: { type: "string" },
+        sectionId: { type: "string" },
+      },
+      required: ["assetId", "sectionId"],
+    },
+  },
+  {
     name: "set_tempo",
     description:
       "Set the tempo. Give an absolute bpm, or a delta in BPM for 'faster'/'slower' (default ±5).",

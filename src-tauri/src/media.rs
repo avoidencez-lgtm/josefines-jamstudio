@@ -11,6 +11,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::State;
+pub mod grid;
 pub mod stems;
 
 const MEDIA_EXTENSIONS: &[&str] = &[
@@ -585,7 +586,7 @@ async fn reference_source(
     let result = async {
         let original = PathBuf::from(&source.path);
         let before =
-            if source.extra.contains_key("songAnalysis") || source.extra.contains_key("stemSet") {
+            if source.extra.contains_key("songAnalysis") || source.extra.contains_key("stemSet") || source.extra.contains_key("referenceGrid") {
                 let path = original.clone();
                 Some(
                     tauri::async_runtime::spawn_blocking(move || source_hash(&path))
@@ -637,6 +638,14 @@ async fn reference_source(
                     Err("Audio has changed since analysis. Analyze it again in Songs.".into())
                 };
                 song.info.analysis_error = analysis.err();
+            }
+            if let Some(value) = source.extra.get("referenceGrid") {
+                let result = if value["sourceHash"].as_str() == after.as_deref() {
+                    serde_json::from_value(value.clone()).map_err(|_| "Saved reference grid is unreadable. Confirm it again in Songs.".to_string()).and_then(|grid| song.set_grid(grid))
+                } else {
+                    Err("Audio has changed since grid confirmation. Confirm the map again in Songs.".into())
+                };
+                song.info.grid_error = result.err();
             }
             Ok(song)
         })

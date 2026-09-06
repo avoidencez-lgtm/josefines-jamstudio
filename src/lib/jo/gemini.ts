@@ -28,6 +28,7 @@ export interface JoContext {
     seconds: number;
     speed: number;
     semitones: number;
+    sections?: Array<{ id: string; label: string }>;
   };
   writing?: {
     name: string;
