@@ -47,6 +47,7 @@ struct OutputFrame {
     index: u64,
     reference_position: u64,
     reference_clock: crate::reference_timing::Clock,
+    calibration: Option<(u64, usize)>,
 }
 
 struct OutputTap {
@@ -65,6 +66,7 @@ impl OutputTap {
         let mut reference_position = None;
         for stereo in buffer.as_chunks_mut::<2>().0 {
             let input = self.input.pop().ok();
+            let missing_input = input.is_none();
             match self.playback.pop() {
                 Ok(mut frame) => {
                     reference_position = Some(frame.reference_position);
@@ -82,6 +84,10 @@ impl OutputTap {
                         frame.stems[0] = input;
                         frame.stems[3] += change;
                         frame.stems[4] += change;
+                        if missing_input && frame.calibration.is_some() {
+                            // A sentinel lets the worker refuse incomplete calibration.
+                            frame.stems[0] = f32::NAN;
+                        }
                     }
                     if self.recorded.push(frame).is_err() {
                         self.lost.store(true, Ordering::Release);
@@ -271,6 +277,8 @@ struct MixParams {
 
 pub struct AudioEngine {
     render_gate: Arc<Mutex<()>>,
+    calibration: Arc<Mutex<crate::calibration::Calibration>>,
+    input_overflows: Arc<AtomicU64>,
     // Serialises file preparation/finalisation; the render worker never takes it.
     recording_operation: Mutex<()>,
     recording_clock: Arc<RecordingClock>,
@@ -351,6 +359,8 @@ impl AudioEngine {
         Self {
             input_rate_error: None,
             render_gate: Arc::new(Mutex::new(())),
+            calibration: Arc::new(Mutex::new(Default::default())),
+            input_overflows: Arc::new(AtomicU64::new(0)),
             recording_operation: Mutex::new(()),
             recording_clock: Arc::new(RecordingClock::default()),
             capture: Arc::new(Mutex::new(Default::default())),
@@ -867,6 +877,85 @@ impl AudioEngine {
             .set_latency_compensation(offset_samples);
     }
 
+    /// Runs while the command owns the engine: other controls cannot interrupt the probe.
+    /// Rendering and capture continue on their existing threads, outside that command lock.
+    pub fn calibrate_latency(&self) -> Result<crate::calibration::LatencyMeasurement, String> {
+        let status = self.status();
+        if !status.running {
+            return Err("Start audio before calibrating.".into());
+        }
+        if self.recorder_is_recording()
+            || self.timeline.lock().state != TransportState::Stopped
+            || self.reference.lock().as_ref().is_some_and(|song| {
+                song.played_state(self.reference_position.load(Ordering::Acquire))
+                    .state
+                    != "stopped"
+            })
+        {
+            return Err("Stop playback and save the recording before calibrating.".into());
+        }
+        if self.mix.lock().input_monitor != 0.0
+            || self.tone_active.load(Ordering::Acquire)
+            || self.audition.lock().is_some()
+            || self.voice.lock().speaking()
+        {
+            return Err("Turn off input monitoring and the test tone; stop preview playback and Jo speech before calibrating.".into());
+        }
+        if status.mode != EngineMode::Hardware
+            || self
+                .input_driver
+                .as_ref()
+                .is_none_or(|input| input.is_synthetic() || !input.is_running())
+            || status.input.is_none()
+        {
+            return Ok(crate::calibration::LatencyMeasurement::estimate(
+                status.buffer_size,
+                "No hardware loopback input is available.",
+            ));
+        }
+        if status.last_error.is_some() {
+            return Err("Resolve the audio device error before calibrating.".into());
+        }
+        let xruns = self.xruns.load(Ordering::Acquire);
+        let overflows = self.input_overflows.load(Ordering::Acquire);
+        self.poll_stream_errors();
+        let errors = self.status().stream_errors;
+        {
+            let _gate = self.render_gate.lock();
+            let mut calibration = self.calibration.lock();
+            calibration.generation += 1;
+            calibration.probe = Some(crate::calibration::Probe::new(status.sample_rate));
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let probe = loop {
+            let mut calibration = self.calibration.lock();
+            if calibration
+                .probe
+                .as_ref()
+                .is_some_and(|p| p.complete() || p.failed)
+            {
+                break calibration.probe.take().unwrap();
+            }
+            if Instant::now() >= deadline || !self.running.load(Ordering::Acquire) {
+                calibration.probe = None;
+                return Err("Calibration timed out. Check the audio device and retry.".into());
+            }
+            drop(calibration);
+            thread::sleep(Duration::from_millis(5));
+        };
+        self.poll_stream_errors();
+        if self.xruns.load(Ordering::Acquire) != xruns
+            || self.input_overflows.load(Ordering::Acquire) != overflows
+            || self.status().stream_errors != errors
+        {
+            return Err(
+                "Calibration lost audio continuity. Check the device and buffer, then retry."
+                    .into(),
+            );
+        }
+        probe.measure(status.buffer_size)
+    }
+
     pub fn recorder_is_recording(&self) -> bool {
         self.recorder.lock().is_recording()
     }
@@ -1014,16 +1103,17 @@ impl AudioEngine {
         let live_input = fake_wav.is_none() && !headless_requested();
         let (mut input_prod, input_cons) = RingBuffer::<f32>::new(ring_capacity);
         let clock = Arc::clone(&self.recording_clock);
+        let input_overflows = Arc::clone(&self.input_overflows);
         let input_callback = Box::new(move |buffer: &[f32]| {
             for &sample in buffer {
                 // Dropping on overflow is the right call: the render thread bounds
                 // the backlog anyway.
                 let _ = input_prod.push(sample);
-                if live_input
-                    && recording_input.push(sample).is_err()
-                    && clock.active.load(Ordering::Acquire)
-                {
-                    clock.lost.store(true, Ordering::Release);
+                if live_input && recording_input.push(sample).is_err() {
+                    input_overflows.fetch_add(1, Ordering::Relaxed);
+                    if clock.active.load(Ordering::Acquire) {
+                        clock.lost.store(true, Ordering::Release);
+                    }
                 }
             }
         });
@@ -1144,6 +1234,7 @@ impl AudioEngine {
         let reference = Arc::clone(&self.reference);
         let telemetry = Arc::clone(&self.latest_telemetry);
         let status_arc = Arc::clone(&self.status);
+        let calibration = Arc::clone(&self.calibration);
 
         let handle = thread::Builder::new()
             .name("jam-render".into())
@@ -1165,8 +1256,17 @@ impl AudioEngine {
                     let mut reference_clocks = Vec::with_capacity(block_len);
                     let mut heard = Vec::with_capacity(block_len);
                     let mut drained = clock.drained.load(Ordering::Relaxed);
+                    let mut measuring = calibration.lock();
                     while let Ok(frame) = captured.pop() {
-                        heard.push(frame.stems);
+                        if let Some((generation, index)) = frame.calibration {
+                            if generation == measuring.generation {
+                                if let Some(probe) = measuring.probe.as_mut() {
+                                    probe.capture(index, frame.stems[0]);
+                                }
+                            }
+                        } else {
+                            heard.push(frame.stems);
+                        }
                         let keep =
                             frame.take != 0 && frame.take == clock.take.load(Ordering::Acquire);
                         while pending_notes
@@ -1184,10 +1284,11 @@ impl AudioEngine {
                             reference_clocks.push(frame.reference_clock);
                         }
                         drained = frame.index + 1;
-                        if heard.len() == block_len {
+                        if drained.is_multiple_of(block_len as u64) {
                             break;
                         }
                     }
+                    drop(measuring);
                     capture.lock().push(&heard, sample_rate);
                     {
                         let mut recorder = recorder_arc.lock();
@@ -1325,7 +1426,17 @@ impl AudioEngine {
                                 .sort_by_key(|(_, index, _)| *index);
                         }
 
+                        let mut measuring = calibration.lock();
+                        let generation = measuring.generation;
                         for (i, stems) in frames.into_iter().enumerate() {
+                            let marker = measuring.probe.as_mut().map(|probe| {
+                                let index = probe.emitted;
+                                let sample = probe.output(index);
+                                ctx.out_left[i] = sample;
+                                ctx.out_right[i] = sample;
+                                probe.emitted += 1;
+                                (generation, index)
+                            });
                             // slots() was checked above, so these cannot fail.
                             let _ = prod.push(OutputFrame {
                                 output: [ctx.out_left[i], ctx.out_right[i]],
@@ -1335,8 +1446,10 @@ impl AudioEngine {
                                 index: output_index + i as u64,
                                 reference_position: ctx.reference_positions[i],
                                 reference_clock: ctx.reference_clocks[i],
+                                calibration: marker,
                             });
                         }
+                        drop(measuring);
                         output_index += block_len as u64;
                         if take != 0 {
                             clock.end.store(output_index, Ordering::Release);
@@ -2136,6 +2249,97 @@ mod tests {
     }
 
     #[test]
+    fn loopback_callback_measurement_aligns_recorded_clicks_and_rejects_missing_input() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tests/invariants/latency-calibration.json"
+        ))
+        .unwrap();
+        let mut probe =
+            crate::calibration::Probe::new(fixture["sampleRate"].as_u64().unwrap() as u32);
+        let delay = fixture["loopbackDelayFrames"].as_u64().unwrap() as usize;
+        let (mut playback, output) = RingBuffer::new(4096);
+        let (mut input, guitar) = RingBuffer::new(4096);
+        let (recorded, mut captured) = RingBuffer::new(4096);
+        let mut tap = OutputTap {
+            playback: output,
+            input: guitar,
+            recorded,
+            xruns: Arc::new(AtomicU64::new(0)),
+            lost: Arc::new(AtomicBool::new(false)),
+            recording: false,
+            reference_position: Arc::new(AtomicU64::new(0)),
+        };
+        let mut recording = Vec::new();
+        let mut position = 0;
+        while position < probe.length {
+            let count = [1, 127, 512, 1024][position % 4].min(probe.length - position);
+            for index in position..position + count {
+                let sample = probe.output(index);
+                playback
+                    .push(OutputFrame {
+                        output: [sample; 2],
+                        calibration: Some((1, index)),
+                        index: index as u64,
+                        stems: [0.0, sample, sample, sample, sample, 0.0, 0.0, 0.0, 0.0],
+                        ..Default::default()
+                    })
+                    .unwrap();
+                input
+                    .push(
+                        index
+                            .checked_sub(delay)
+                            .map(|i| probe.output(i))
+                            .unwrap_or(0.0),
+                    )
+                    .unwrap();
+            }
+            let mut buffer = vec![0.0; count * 2];
+            tap.render(&mut buffer);
+            for stereo in buffer.as_chunks::<2>().0 {
+                let frame = captured.pop().unwrap();
+                let (_, index) = frame.calibration.unwrap();
+                assert_eq!(*stereo, [probe.output(index); 2]);
+                probe.capture(index, frame.stems[0]);
+                recording.push(frame.stems);
+            }
+            position += count;
+        }
+        let measured = probe.measure(256).unwrap();
+        assert!(!measured.estimated);
+        assert_eq!(measured.round_trip_frames, delay as u32);
+        let root =
+            std::env::temp_dir().join(format!("jam-calibrated-recording-{}", std::process::id()));
+        let mut recorder = crate::recorder::TakeRecorder::new(48_000, root.clone());
+        recorder.set_latency_compensation(measured.round_trip_frames as usize);
+        recorder
+            .start_take("loopback".into(), "test".into(), "test".into(), 120.0)
+            .unwrap();
+        recorder.push_capture(&recording).unwrap();
+        let take = recorder.stop_and_save().unwrap();
+        let input = crate::read_wav_mono(std::path::Path::new(&take.path_input))
+            .unwrap()
+            .0;
+        for (index, sample) in input.iter().enumerate() {
+            assert!(
+                (sample - probe.output(index)).abs() < 1e-6,
+                "sample {index}: calibrated WAV must align to within one sample"
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+        playback
+            .push(OutputFrame {
+                calibration: Some((2, 0)),
+                ..Default::default()
+            })
+            .unwrap();
+        tap.render(&mut [0.0; 2]);
+        let missing = captured.pop().unwrap();
+        let mut refused = crate::calibration::Probe::new(48_000);
+        refused.capture(0, missing.stems[0]);
+        assert!(refused.failed);
+    }
+
+    #[test]
     fn output_tap_aligns_all_stems_with_live_di_despite_variable_render_lead() {
         let (mut playback, output) = RingBuffer::new(16_384);
         let (mut input, guitar) = RingBuffer::new(16_384);
@@ -2161,6 +2365,7 @@ mod tests {
                     index,
                     synthetic: false,
                     reference_position: (23 << 32) | index,
+                    calibration: None,
                     reference_clock: crate::reference_timing::Clock {
                         position: index as f64 / 48_000.0,
                         speed: 0.75,

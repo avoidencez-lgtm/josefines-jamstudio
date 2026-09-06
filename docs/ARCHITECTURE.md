@@ -747,8 +747,23 @@ synthetic FileInput retains its render-synchronous sample. Completed frames pass
 through a bounded ring back to the worker. The callback does not allocate, lock,
 write files or emit IPC. The worker matches MIDI to the completed frame index and
 updates retrospective capture. Queue loss or a hardware input/output gap interrupts
-the take rather than silently compressing its timeline. Device round-trip latency
-remains a separate manual guitar offset; no physical calibration is claimed.
+the take rather than silently compressing its timeline. `audio_calibrate_latency`
+tags three quiet coded clicks on this same queue and measures their returned DI
+on the worker. Calibration samples never enter retrospective capture. The callback
+only copies the tag/input; correlation, allocation, persistence and IPC stay off it.
+Missing input, queue loss, output underruns and device errors refuse measurement.
+All three correlations must exceed 0.85 and agree within two samples, over a
+0–400 ms search. Silence, clipping or inconsistent delays return an explicit
+two-buffer estimate (nominal device latency is unavailable), without applying it.
+Headless mode returns an estimate without sounding clicks. A measured result is
+saved before applying the recorder offset. Manual overrides remain available.
+Settings `recorder.latency_profiles` key the requested configuration and negotiated
+device names/buffers/rate; unknown profile fields survive. New configurations use
+zero when no profile matches; legacy global values apply until profiles exist.
+Calibration requires stopped transport, no recording, no monitor/test tone,
+preview or speech. The command holds the engine control lock on a blocking worker,
+with a five-second capture timeout; the audio callback never takes that lock.
+Synthetic loopback tests prove recorded alignment, not physical acceptance.
 
 Files and their writer are prepared in a separate idle recorder before acquiring
 the render gate. Installing it and starting the song timeline share that gate,

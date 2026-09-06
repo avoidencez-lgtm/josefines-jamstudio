@@ -151,7 +151,7 @@ export interface EngineState {
   isRecording: boolean;
   /** Capture stopped, but the partial take still needs finalising. */
   recordingError: string | null;
-  /** Round-trip offset trimmed from the guitar stem, set by hand (no auto-calibration yet). */
+  /** Per-device guitar offset, measured by loopback or adjusted manually. */
   latencySamples: number;
   startRecording: (sessionId?: string) => Promise<CommandResult<string>>;
   stopRecording: () => Promise<CommandResult<TakeMetadata>>;
