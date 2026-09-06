@@ -2,6 +2,15 @@
 
 This folder is the **governing plan** for building Josefines Jamstudio. It was written by Claude (Fable 5.1, architect and lead planner) on 2026-09-02 for **Gemini 3.8 Flash running in Google Antigravity** on Vegar's Windows PC, which builds the product. Everything here is written to be read cold: no knowledge of earlier sessions is needed beyond this repository.
 
+## Current V1 reconciliation — 2026-09-06
+
+The [V1-00 baseline](V1-BASELINE-2026-09-06.md) reconciles main at
+`6b3a4c6fe07838a3f69dd5db4c497d0d39884584`, 42 open issues and 30 open PRs
+against 55 capability rows and 288 source units. It includes the dependency-ordered
+48-task model queue, exact PR heads and verification limits. This observation
+does not mark V1 complete or authorize merging. Independent Opus review remains
+pending; historical milestone entries below retain their original context.
+
 ## The goal, in Vegar's words
 
 > "Målet er å lage software til Windows og Mac, så han kan jamme på høyt nivå, og integrere AI i jamsessions. Målet er å lage et mye bedre oppsett for ham enn det hardware-produsentene har gjort. Dette skal være premium. Det må være enkelt å bruke og det må funke. Og det må kunne bygges på i det hinsides."
