@@ -108,6 +108,12 @@ fn native_reference_uses_shared_transport_and_refuses_unanalysed_grid_edits() {
 fn practice_copy_validates_parameters_and_source_before_running_tools() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
+    assert!(studio
+        .err("media_analyze", json!({"assetId":"../outside"}))
+        .contains("Invalid media ID"));
+    assert!(studio
+        .err("media_analyze", json!({"assetId":"missing"}))
+        .contains("Cannot read media document"));
     for (speed, semitones) in [(0.49, 0), (1.51, 0), (1.0, 13)] {
         assert!(studio
             .err(

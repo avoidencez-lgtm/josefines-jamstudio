@@ -1,5 +1,23 @@
 # Extending Josefines Jamstudio
 
+## Local reference analysis
+
+`jam-dsp::offline` owns the pure local tempo/chroma/key calculation and versioned
+`SongAnalysis` result. `media_analyze` reuses the media operation gate, decoding,
+cancellation and asset persistence; it never sends audio across IPC. Results live
+in the existing asset's `songAnalysis` field with source SHA-256. The source file
+and unknown manifest fields survive reanalysis. The UI validates the saved shape
+through `readSongAnalysis`, then groups adjacent equal estimates for display.
+
+`tests/fixtures/seams/song-analysis.json` is synthetic contract data. Its invariant
+test covers validation, grouping and honest missing estimates. The Rust synthetic
+C–F–G regression covers the numerical gate; the opt-in FFmpeg media test covers
+actual decoding, persisted reload, cancellation and source preservation. The
+[method notes](research/local-song-analysis.md) define the limits and sources.
+New algorithms must retain null for insufficient evidence, bound all computation,
+bump the analyzer identifier and add measured fixtures. This is the local fallback;
+provider orchestration and player beat-grid consumption remain M3 work.
+
 The extension rule is **every capability is a seam** (a definition, one registry, consumers), and adding to an existing seam must not require edits to core consumers. Review the PR diff for that requirement. The current `tests/invariants/seams.test.ts` checks bundled manifest fields, and `crates/jam-core/tests/seams.rs` checks bundled style, chart and control registries. Neither checks changed-file scope or automatically discovers every fixture under `tests/fixtures/seams/`. Per-extension fixture and registry coverage remains required; do not treat these two tests alone as proof that an extension recipe works.
 
 Each recipe below names the exact files to add and the test that proves it worked. When a milestone adds a seam, it adds the recipe here and a fixture there, in the same PR. Recipes are executed once by the builder as a test before they are considered true.

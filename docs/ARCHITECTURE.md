@@ -803,5 +803,28 @@ One source uses at most about 440 MiB; replacement may temporarily hold two.
 The take snapshot records the reference identity, position and loop at preparation
 and marks `beatGrid: unanalysed`. The band WAV is the clean reference backing;
 the ordinary exported tempo map is not a detected map for it. Unmute that band
-track in the DAW when using the reference backing. Separate stems, automatic
+track in the DAW when using the reference backing. Separate stems, provider
 analysis and beat/section-synchronised reference transport remain M3 work.
+
+## Current local song analysis
+
+`media_analyze(assetId)` acquires the existing media gate and refuses recording.
+It validates the library asset, hashes its bounded source, decodes to a temporary
+48 kHz stereo WAV and calls `jam-dsp::offline` on a blocking worker. The numerical
+result contains an analyzer/version, low-confidence marker, nullable BPM/key,
+ordered beat seconds and chord windows with nullable labels. No samples cross IPC.
+Sources are 2 seconds to 20 minutes and at most 512 MB; decoded audio uses at most
+about 440 MiB. Cancellation is checked during hashing, decoding and DSP. Temporary
+audio is removed on completion/failure; a canceled/failed run keeps prior metadata.
+
+The encoded source hash is checked again before saving. The existing asset
+manifest receives `songAnalysis` and its SHA-256, preserving unknown fields and
+the original audio. Reload returns that saved result. Songs validates the shape
+before display, groups adjacent equal chord estimates and limits each page to
+16 passages. No pulse/key or ambiguous harmony remains explicitly unknown. The
+source hash is evidence of the analyzed bytes, not a promise that an externally
+edited file still matches; reanalysis is required after editing the file.
+
+This fallback estimates steady tempo and major/minor triads. It does not identify
+downbeats, sections, extended harmony or guitar stems, and does not change the
+reference transport's seconds grid. See [method and validation limits](research/local-song-analysis.md).

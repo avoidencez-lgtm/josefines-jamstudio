@@ -151,9 +151,9 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
           ? `Looping ${song.loop_start.toFixed(1)}–${song.loop_end.toFixed(1)} seconds. `
           : "Loop off. "}
         Playback uses the saved speed and pitch. Make a practice copy for
-        another setting. Chord analysis and beat-grid loops are not available
-        yet. Record in the top bar to capture guitar and the reference mix; save
-        the take before seeking or changing the loop.
+        another setting. Songs offers local chord estimates; beat-grid loops are
+        not available yet. Record in the top bar to capture guitar and the
+        reference mix; save the take before seeking or changing the loop.
       </p>
     </section>
   );

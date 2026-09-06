@@ -28,6 +28,7 @@ export interface MediaAsset {
   label: string;
   path: string;
   seconds: number;
+  songAnalysis?: unknown;
 }
 export interface MediaShot {
   id: string;

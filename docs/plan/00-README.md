@@ -104,7 +104,7 @@ See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-comp
 | M1d | Live steering and the Stage screen | ✅ | #10, #28 |
 | M1e | Recorder, latency calibration, take browser | ⏳ | #12, #28 |
 | M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ⏳ | #14, #28 |
-| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | local media import/player in #29; stems, analysis and stretch pending |
+| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native playback and offline stretch; local tempo/chord/key estimates; stems, provider analysis and analysed-grid playback pending |
 | M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ⏳ | file-generation catalog/workflows in #29; RealTime and owner acceptance pending |
 | M5 | Rig orchestration over MIDI | ⏳ | #20, #28 |
 | M6 | Sessions: take analysis, LLM review, Logic export, progress | ⏳ | #22, #28 |
@@ -114,7 +114,7 @@ What remains, per open milestone:
 
 - **M1e**: takes record as 24-bit WAV stems and the take browser works. Latency compensation is a manual offset; the automatic loopback measurement is not built.
 - **M2**: typed Jo, configurable providers, offline intents and installed-agent proposals are available. Native STT/TTS and the voice bus are implemented with bounded capture, cancellation and synthetic tests. Stage presence, an explicitly enabled global hold shortcut and two-press MIDI activation now share the same conversation and voice lifecycle. Submitted STT seconds, TTS characters and configurable estimates now appear in the existing usage log. Provider-reported LLM tokens, the planned recorded 30-utterance fixture and live latency gate remain outstanding. Browser speech has been removed.
-- **M3**, **M4**: local media import/reference playback, music/video generation, ComfyUI workflows and Film rendering exist in #29. Local Signalsmith practice copies now change speed and pitch without replacing the source. Native reference playback now shares Play/Pause/Stop and recording, with seconds-based seek and loops. Automatic stems/analysis, beat-grid synchronisation and Lyria RealTime remain unbuilt. Model/GPU acceptance is pending owner.
+- **M3**, **M4**: local media import/reference playback, music/video generation, ComfyUI workflows and Film rendering exist in #29. Local Signalsmith practice copies change speed and pitch without replacing the source. Native reference playback shares Play/Pause/Stop and recording, with seconds-based seek and loops. Songs now saves low-confidence local tempo, chord and key estimates with the source hash. Stem separation, provider analysis, downbeat/section detection, beat-grid synchronisation and Lyria RealTime remain unbuilt. Model/GPU acceptance is pending owner.
 - **M5**: six rig profiles, real MIDI out, section-bound scenes and a monitor are in and tested against a memory sink. Owner gate 5 (the real HeadRush and Black Spirit) is pending owner.
 - **M6**: analysis reads the recorded DI (timing, dynamics, McLeod-based intonation) and export writes stems, a tempo map with the chart's markers and a sidecar. The LLM review of a take and the Logic Pro drift measurement (owner gate) are outstanding.
 - **M7**: CI is green on Windows and macOS; `release.yml` builds bundles on a tag. Signing, notarisation, onboarding and the `tests/invariants/` extensibility proofs are outstanding.

@@ -2,6 +2,7 @@
 
 pub mod energy;
 pub mod level;
+pub mod offline;
 pub mod pitch;
 pub mod stretch;
 

@@ -1213,6 +1213,7 @@ pub fn configure<R: tauri::Runtime>(
             media::media_import,
             media::media_stretch,
             media::media_reference_load,
+            media::media_analyze,
             media::media_reference_unload,
             media::media_reference_seek,
             media::media_reference_loop,

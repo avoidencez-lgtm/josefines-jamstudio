@@ -16,6 +16,7 @@ pub use devices::*;
 pub use engine::*;
 pub use export::*;
 pub use io::*;
+pub use jam_dsp::offline;
 pub use recorder::*;
 
 pub mod workstation;
