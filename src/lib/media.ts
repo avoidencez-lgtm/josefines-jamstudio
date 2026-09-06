@@ -97,6 +97,14 @@ export function newVideo(): VideoProject {
 }
 export const videoDuration = (shots: MediaShot[]) =>
   shots.reduce((n, s) => n + s.seconds, 0);
+
+/** Clearing the Film seconds field must not store 0 (min is 0.1). */
+export function clampShotSeconds(raw: string, fallback: number): number {
+  if (!raw.trim()) return fallback;
+  const v = Number(raw);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(120, Math.max(0.1, v));
+}
 export function fitShots(shots: MediaShot[], seconds: number): MediaShot[] {
   const total = videoDuration(shots);
   if (

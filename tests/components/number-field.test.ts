@@ -12,4 +12,9 @@ describe("committedNumber", () => {
     expect(committedNumber("9", 120, 20, 300)).toBe(20);
     expect(committedNumber("400", 120, 20, 300)).toBe(300);
   });
+
+  it("snaps to the step without a binary float leftover", () => {
+    expect(committedNumber("120.1", 100, 40, 240, 0.1)).toBe(120.1);
+    expect(String(committedNumber("120.1", 100, 40, 240, 0.1))).toBe("120.1");
+  });
 });

@@ -56,6 +56,8 @@ describe("jam time", () => {
     expect(formatJamTime(42)).toBe("42 s");
     expect(formatJamTime(15 * 60)).toBe("15 min");
     expect(formatJamTime(2 * 3600 + 5 * 60)).toBe("2 h 5 min");
+    expect(formatJamTime(3590)).toBe("1 h");
+    expect(formatJamTime(7190)).toBe("2 h");
   });
 });
 

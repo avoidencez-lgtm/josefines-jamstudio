@@ -5,6 +5,7 @@ import {
   MEDIA_MODELS,
   applyShotIdeas,
   clampGenerationSeconds,
+  clampShotSeconds,
   fitShots,
   newVideo,
   shotsFromChart,
@@ -94,6 +95,13 @@ describe("music video seam", () => {
     expect(clampGenerationSeconds("veo", Number.NaN)).toBe(8);
     expect(clampGenerationSeconds("veo", Number.POSITIVE_INFINITY)).toBe(8);
     expect(clampGenerationSeconds("omni", 2)).toBe(2);
+  });
+
+  it("refuses an empty or zero Film timeline so a clear cannot store 0", () => {
+    expect(clampShotSeconds("", 4)).toBe(4);
+    expect(clampShotSeconds("0", 4)).toBe(0.1);
+    expect(clampShotSeconds("8", 4)).toBe(8);
+    expect(clampShotSeconds("999", 4)).toBe(120);
   });
   it("director edits preserve clips and timing and reject missing or duplicated shots", () => {
     const p = newVideo();
