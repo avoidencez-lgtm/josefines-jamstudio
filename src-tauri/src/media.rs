@@ -11,6 +11,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::State;
+pub mod stems;
 
 const MEDIA_EXTENSIONS: &[&str] = &[
     "mp4", "mov", "webm", "mkv", "wav", "mp3", "flac", "m4a", "aac", "ogg",
@@ -557,8 +558,12 @@ async fn decode_audio(source: &str, decoded: &Path, seconds: &str) -> Result<(),
 async fn reference_source(
     base: &Path,
     asset_id: &str,
+    use_stems: bool,
 ) -> Result<jam_audio::song::ReferenceSong, String> {
-    let source = asset(base, asset_id)?;
+    let mut source = asset(base, asset_id)?;
+    if !use_stems {
+        source.extra.remove("stemSet");
+    }
     if source.schema_version != 1
         || source.id != asset_id
         || source.kind != "audio"
@@ -573,28 +578,43 @@ async fn reference_source(
     let decoded = work.join("decoded.wav");
     let result = async {
         let original = PathBuf::from(&source.path);
-        let before = if source.extra.contains_key("songAnalysis") {
-            let path = original.clone();
-            Some(
-                tauri::async_runtime::spawn_blocking(move || source_hash(&path))
-                    .await
-                    .map_err(|_| "Source hashing worker stopped.")??,
-            )
+        let before =
+            if source.extra.contains_key("songAnalysis") || source.extra.contains_key("stemSet") {
+                let path = original.clone();
+                Some(
+                    tauri::async_runtime::spawn_blocking(move || source_hash(&path))
+                        .await
+                        .map_err(|_| "Source hashing worker stopped.")??,
+                )
+            } else {
+                None
+            };
+        let mut song = if source.extra.contains_key("stemSet") {
+            stems::load(base, &source, before.as_deref().unwrap()).await?
         } else {
-            None
+            decode_audio(&source.path, &decoded, "1200.3").await?;
+            let path = decoded.clone();
+            let id = source.id.clone();
+            let label = source.label.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let (samples, _) =
+                    jam_audio::practice::read_stereo(&path, 48_000 * 1200 + 9600, &CANCEL)?;
+                jam_audio::song::ReferenceSong::new(id, label, samples)
+            })
+            .await
+            .map_err(|_| "Reference loading worker stopped.")??
         };
-        decode_audio(&source.path, &decoded, "1200.3").await?;
-        let path = decoded.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            let (samples, _) =
-                jam_audio::practice::read_stereo(&path, 48_000 * 1200 + 9600, &CANCEL)?;
-            let mut song = jam_audio::song::ReferenceSong::new(source.id, source.label, samples)?;
+            let after = if before.is_some() {
+                Some(source_hash(&original)?)
+            } else {
+                None
+            };
+            if before != after {
+                return Err("Audio changed while loading. Load the reference again.".into());
+            }
             if let Some(value) = source.extra.get("songAnalysis") {
-                let after = source_hash(&original)?;
-                if before.as_deref() != Some(&after) {
-                    return Err("Audio changed while loading. Load the reference again.".into());
-                }
-                let analysis = if value["sourceHash"].as_str() == Some(&after) {
+                let analysis = if value["sourceHash"].as_str() == after.as_deref() {
                     serde_json::from_value(value.clone())
                         .map_err(|_| {
                             "Saved analysis is unreadable. Analyze it again in Songs.".to_string()
@@ -715,6 +735,7 @@ pub async fn media_analyze(asset_id: String, state: State<'_, AppState>) -> Resu
 #[tauri::command]
 pub async fn media_reference_load(
     asset_id: String,
+    use_stems: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let _gate = GATE
@@ -722,7 +743,7 @@ pub async fn media_reference_load(
         .map_err(|_| "Another media operation is running")?;
     state.engine.lock().ensure_timing_editable()?;
     CANCEL.store(false, Ordering::Relaxed);
-    let song = reference_source(&root(), &asset_id).await?;
+    let song = reference_source(&root(), &asset_id, use_stems.unwrap_or(true)).await?;
     if CANCEL.load(Ordering::Relaxed) {
         return Err("Reference loading canceled.".into());
     }
@@ -1122,7 +1143,7 @@ mod tests {
         assert_eq!(rate, 48000);
         assert_eq!(audio.len(), 192000);
         assert!(audio.iter().any(|s| s.abs() > 0.05));
-        let mut reference = reference_source(&base, &copy.id).await.unwrap();
+        let mut reference = reference_source(&base, &copy.id, true).await.unwrap();
         assert_eq!(reference.info.seconds, 4.0);
         reference.play();
         let mut left = vec![0.0; 48000];
@@ -1159,7 +1180,7 @@ mod tests {
             "a continuous tone has no pulse"
         );
         assert_eq!(fs::read(&original.path).unwrap(), before);
-        let reference = reference_source(&base, &original.id).await.unwrap();
+        let reference = reference_source(&base, &original.id, true).await.unwrap();
         assert!(reference.info.analysis_error.is_none());
         let mut engine =
             jam_audio::engine::AudioEngine::new(jam_audio::devices::AudioConfig::default());
@@ -1169,7 +1190,7 @@ mod tests {
         let mut stale = serde_json::to_value(&saved).unwrap();
         stale["songAnalysis"]["sourceHash"] = json!("0".repeat(64));
         write(&manifest, &stale).unwrap();
-        let reference = reference_source(&base, &original.id).await.unwrap();
+        let reference = reference_source(&base, &original.id, true).await.unwrap();
         assert!(reference
             .info
             .analysis_error

@@ -851,3 +851,55 @@ The UI receives telemetry every 33 ms. The displayed cursor identifies audio sen
 to the device, not a measured loudspeaker arrival time: device buffering, OS/UI
 scheduling and hardware latency are additional. No physical latency acceptance,
 downbeat, bar, section or beat-loop support is claimed here.
+
+### Native stem references (M3 implementation slice)
+
+`media_separate_stems(assetId,catalogId,usdPerMinute?,confirmed)` uses the media
+registry's `stems` kind. ElevenLabs receives a multipart file with
+`six_stems_v1` and `output_format=mp3_44100_128`; the documented response is ZIP.
+The request is never retried automatically. Keys stay in `SecretStore`; requests
+and body-free cost entries stay in `net/media.rs`. Headless runs refuse upload.
+The UI requires explicit upload/charge agreement and accepts an optional account
+rate for the estimate; no current subscription price is inferred.
+
+The media gate serializes preparation and mixes. Paid ZIP bytes are synced under
+`music-videos/stem-receipts/<id>/stems.zip` before parsing, even if cost-log writing
+failed. A versioned receipt records status, source hash, provider/model and
+recovery path. Failures show that path. `media_stems_import(assetId,path)` reuses
+the same installer locally without provider calls. Files already saved remain
+available after cancellation or a failed import; old asset metadata is replaced
+only after all tracks validate. Previous stem folders are retained.
+
+The ZIP reader accepts 2–8 audio files, at most 32 entries, 192 MiB compressed,
+512 MiB per expanded file and 2 GiB total. Paths must be enclosed; symlinks,
+encryption and non-audio entries are rejected. Entry names are labels only;
+output names are generated. FFmpeg decodes each file to 48 kHz stereo float WAV.
+Tracks must have identical decoded lengths and be within 100 ms of the original
+asset duration. This catches duration mismatches, not musical misalignment:
+local imports must be exported from the same start. Native loaded tracks are
+bounded to 2 GiB, with no callback allocation, locks, IPC or new output clock.
+
+The additive asset `stemSet` has `schemaVersion:1`, an ID, source hash, provider,
+model, seconds, and stems with ID, label, path, SHA-256, gain, muted and guitar.
+No instrument meaning is guessed from a provider filename. On load, original
+and stem hashes are checked; malformed or changed stems fail visibly.
+`media_reference_load` defaults to stems when present; `useStems:false` loads
+the original without deleting metadata. Analysis is attached only when its
+source hash and decoded duration match, as for stereo references.
+
+`ReferenceState.stems` carries mix controls. `media_reference_mix(assetId,mix)`
+validates IDs/labels against the loaded source, persists only gain/mute/guitar
+fields while preserving unknown metadata, then applies the validated mix under
+the same engine control lock. Recording blocks mix changes. All stems share one
+cursor, seek/loop fade and output-position stamp. A 2 ms full-scale gain ramp
+avoids mute clicks. The original mix is never added to the stem sum. Recording
+retains this stereo backing in the band WAV and records the stem mix in the take
+snapshot; it does not create individual provider-stem take tracks. Film, the
+system player and practice-copy preparation still read the original stereo file.
+
+Evidence is synthetic: shared-cursor mixing at 44.1/48/96 kHz, native NullOutput
+recording, ZIP path/count bounds, upload guards, and an opt-in real FFmpeg
+WAV/MP3 archive/import/reload/hash-corruption scenario. The documentation-derived
+provider request fixture is not a recorded service response. Live provider
+quality, real-song residual guitar at or below -6 dB, Music.ai workflow support,
+stem-aware stretch and analysed-grid controls remain V1 acceptance/work.

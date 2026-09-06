@@ -234,6 +234,112 @@ async fn read_bounded(mut response: reqwest::Response, limit: usize) -> Result<V
     }
     Ok(bytes)
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeparateStems {
+    pub catalog_id: String,
+    pub seconds: f64,
+    pub usd_per_minute: Option<f64>,
+}
+
+/// Documented multipart request; ZIP bytes never cross IPC. No automatic retry.
+pub async fn separate_stems(
+    request: &SeparateStems,
+    file: Vec<u8>,
+    extension: &str,
+    cancel: &std::sync::atomic::AtomicBool,
+    store: &dyn SecretStore,
+    log: &CostLog,
+) -> Result<(Vec<u8>, Option<String>), String> {
+    use std::sync::atomic::Ordering;
+    let model = catalog()
+        .into_iter()
+        .find(|m| m.id == request.catalog_id && m.protocol == "eleven-stems")
+        .ok_or("Unknown stem provider")?;
+    if !request.seconds.is_finite()
+        || !(2.0..=600.0).contains(&request.seconds)
+        || request
+            .usd_per_minute
+            .is_some_and(|v| !v.is_finite() || !(0.0..=10000.0).contains(&v))
+        || file.is_empty()
+        || file.len() > 512 * 1024 * 1024
+        || !["wav", "mp3", "flac", "m4a", "aac", "ogg"].contains(&extension)
+    {
+        return Err(
+            "Choose 2 seconds to 10 minutes of audio up to 512 MB and a valid optional price."
+                .into(),
+        );
+    }
+    if cancel.load(Ordering::Relaxed) {
+        return Err("Stem separation canceled before upload.".into());
+    }
+    let provider = provider(&model.provider).ok_or("Stem provider is not registered")?;
+    let key = store.require(provider.id)?;
+    super::live_guard("stem separation")?;
+    let size = file.len() as u64;
+    let form = reqwest::multipart::Form::new()
+        .text("stem_variation_id", model.model.clone())
+        .part(
+            "file",
+            reqwest::multipart::Part::bytes(file).file_name(format!("source.{extension}")),
+        );
+    let path = "/v1/music/stem-separation";
+    let req = provider_client()
+        .timeout(Duration::from_secs(900))
+        .build()
+        .map_err(|_| "Could not initialize the stem client")?
+        .post(format!(
+            "{}{path}?output_format=mp3_44100_128",
+            provider.base_url
+        ))
+        .header("xi-api-key", key)
+        .multipart(form);
+    let started = Instant::now();
+    let mut status = 0;
+    let work = async {
+        let response = req.send().await.map_err(|_| {
+            "Stem request interrupted or timed out. Check provider usage before trying again."
+        })?;
+        status = response.status().as_u16();
+        if !response.status().is_success() {
+            return Err(format!(
+                "Stem provider returned HTTP {status}. Check model access, key and credits."
+            ));
+        }
+        read_bounded(response, 192 * 1024 * 1024).await
+    };
+    let result = tokio::select! {
+        result = work => result,
+        _ = async { loop { tokio::time::sleep(Duration::from_millis(100)).await; if cancel.load(Ordering::Relaxed) { break; } } } => Err("Stem separation canceled locally. The provider may still process and charge this request; do not retry automatically.".into()),
+    };
+    let usage_error = log
+        .append(&CostEntry {
+            at_ms: super::now_ms(),
+            provider: model.provider,
+            model: Some(model.model),
+            method: "POST".into(),
+            path: path.into(),
+            status,
+            duration_ms: started.elapsed().as_millis() as u64,
+            bytes_out: size,
+            bytes_in: result.as_ref().map_or(0, |b| b.len() as u64),
+            error: result.as_ref().err().cloned(),
+            estimated_cost_usd: request.usd_per_minute.map(|p| p * request.seconds / 60.0),
+            ..CostEntry::default()
+        })
+        .err()
+        .map(|_| "Could not save the usage log. Check provider history for charges.".to_string());
+    preserve_stem_response(result, usage_error)
+}
+
+fn preserve_stem_response(
+    result: Result<Vec<u8>, String>,
+    usage_error: Option<String>,
+) -> Result<(Vec<u8>, Option<String>), String> {
+    // Return paid bytes even when accounting storage fails; the caller preserves the ZIP.
+    result.map(|bytes| (bytes, usage_error))
+}
 pub enum Output {
     Pending(String),
     Inline(Vec<u8>, String, String),
@@ -477,12 +583,66 @@ fn comfy_output(m: &Model, r: &Generate, task: &str, v: &Value) -> Result<Output
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn stem_request_rejects_invalid_inputs_missing_keys_and_headless_uploads() {
+        let (bytes, warning) = preserve_stem_response(
+            Ok(b"paid ZIP response".to_vec()),
+            Some("Usage log is not writable".into()),
+        )
+        .unwrap();
+        assert_eq!(bytes, b"paid ZIP response");
+        assert!(warning.is_some());
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/providers/eleven-stems.json"
+        ))
+        .unwrap();
+        let request = SeparateStems {
+            catalog_id: fixture["catalogId"].as_str().unwrap().into(),
+            seconds: 2.0,
+            usd_per_minute: Some(0.5),
+        };
+        let model = catalog()
+            .into_iter()
+            .find(|m| m.id == request.catalog_id)
+            .unwrap();
+        assert_eq!(model.kind, "stems");
+        assert_eq!(model.model, fixture["multipart"]["stem_variation_id"]);
+        let store = crate::keys::MemoryStore::default();
+        let log = CostLog::new(std::env::temp_dir().join("unused-stem-cost-log.jsonl"));
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        assert!(
+            separate_stems(&request, vec![1], "txt", &cancel, &store, &log)
+                .await
+                .unwrap_err()
+                .contains("Choose")
+        );
+        assert!(
+            separate_stems(&request, vec![1], "wav", &cancel, &store, &log)
+                .await
+                .unwrap_err()
+                .contains("no API key")
+        );
+        store.set("elevenlabs", "synthetic-test-value").unwrap();
+        assert!(
+            separate_stems(&request, vec![1], "wav", &cancel, &store, &log)
+                .await
+                .unwrap_err()
+                .contains("JAM_LIVE")
+        );
+        cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(
+            separate_stems(&request, vec![1], "wav", &cancel, &store, &log)
+                .await
+                .unwrap_err()
+                .contains("before upload")
+        );
+    }
     #[test]
     fn media_contracts_and_host_boundaries() {
         let fixture: Value =
             serde_json::from_str(include_str!("../../../tests/fixtures/providers/media.json"))
                 .unwrap();
-        for m in catalog() {
+        for m in catalog().into_iter().filter(|m| m.kind != "stems") {
             let seconds = if m.kind == "audio" { 60 } else { 8 };
             let (mut model, path, body) = request(&Generate {
                 catalog_id: m.id,

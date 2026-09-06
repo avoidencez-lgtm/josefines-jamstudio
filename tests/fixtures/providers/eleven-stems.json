@@ -1,0 +1,13 @@
+{
+  "note": "Documentation-derived request contract, checked 2026-09-06. Synthetic ZIPs are built in Rust tests. No paid response or instrument-name contract has been recorded.",
+  "source": "https://elevenlabs.io/docs/api-reference/music/separate-stems",
+  "catalogId": "eleven-stems",
+  "method": "POST",
+  "path": "/v1/music/stem-separation",
+  "query": { "output_format": "mp3_44100_128" },
+  "multipart": {
+    "file": "binary song bytes",
+    "stem_variation_id": "six_stems_v1"
+  },
+  "response": "ZIP archive containing stem audio; names are treated as untrusted display labels"
+}

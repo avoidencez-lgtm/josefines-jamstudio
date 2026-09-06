@@ -155,6 +155,14 @@ export interface BandPatch {
   atNextBar?: boolean;
 }
 
+export interface StemMix {
+  id: string;
+  label: string;
+  gain: number;
+  muted: boolean;
+  guitar: boolean;
+}
+
 export interface ReferenceState {
   asset_id: string;
   label: string;
@@ -174,6 +182,7 @@ export interface ReferenceState {
     beat_count: number;
   } | null;
   analysis_error?: string | null;
+  stems?: StemMix[];
 }
 
 export interface EngineTelemetry {

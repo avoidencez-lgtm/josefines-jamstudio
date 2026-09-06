@@ -523,6 +523,20 @@ impl AudioEngine {
             .set_loop(start, end, enabled)
     }
 
+    pub fn reference_mix(
+        &self,
+        asset_id: &str,
+        mix: Vec<crate::song::StemMix>,
+    ) -> Result<(), String> {
+        self.ensure_timing_editable()?;
+        let mut reference = self.reference.lock();
+        let song = reference.as_mut().ok_or("Load the reference first.")?;
+        if song.info.asset_id != asset_id {
+            return Err("The loaded reference changed.".into());
+        }
+        song.set_stem_mix(mix)
+    }
+
     // ----- band ------------------------------------------------------------
 
     pub fn validate_style_meter(&self, style: &Style) -> Result<(), String> {
@@ -1688,8 +1702,29 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         *engine.recorder.lock() = crate::recorder::TakeRecorder::new(48_000, root.clone());
         let samples = (0..96_000).flat_map(|_| [0.25, -0.125]).collect();
-        let mut song =
-            crate::song::ReferenceSong::new("source".into(), "Reference".into(), samples).unwrap();
+        let mix = vec![
+            crate::song::StemMix {
+                id: "guitar".into(),
+                label: "Guitar".into(),
+                gain: 1.0,
+                muted: true,
+                guitar: true,
+            },
+            crate::song::StemMix {
+                id: "band".into(),
+                label: "Band".into(),
+                gain: 1.0,
+                muted: false,
+                guitar: false,
+            },
+        ];
+        let mut song = crate::song::ReferenceSong::with_stems(
+            "source".into(),
+            "Reference".into(),
+            mix.clone(),
+            vec![vec![0.6; 192_000], samples],
+        )
+        .unwrap();
         song.set_analysis(jam_dsp::offline::SongAnalysis {
             schema_version: 1,
             analyzer: "local-chroma-v1".into(),
@@ -1706,10 +1741,13 @@ mod tests {
         })
         .unwrap();
         engine.load_reference(song).unwrap();
+        assert!(engine.reference_mix("wrong", mix.clone()).is_err());
+        engine.reference_mix("source", mix.clone()).unwrap();
         assert!(engine.ensure_band_grid().is_err());
         engine.start().unwrap();
         engine.transport_play();
         engine.recorder_start("reference".into()).unwrap();
+        assert!(engine.reference_mix("source", mix).is_err());
         assert!(engine.reference_seek(0.5).is_err());
         assert!(engine.reference_loop(0.0, 1.0, true).is_err());
         assert!(engine.unload_reference().is_err());
@@ -1721,6 +1759,7 @@ mod tests {
         engine.stop().unwrap();
         assert!(take.sample_count > 1000);
         assert_eq!(take.snapshot["reference"]["asset_id"], "source");
+        assert_eq!(take.snapshot["reference"]["stems"][0]["muted"], true);
         assert_eq!(take.snapshot["beatGrid"], "unanalysed");
         assert!(take.midi.is_empty());
         let mut band = hound::WavReader::open(&take.path_band).unwrap();

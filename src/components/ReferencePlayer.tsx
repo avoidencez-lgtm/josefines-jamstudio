@@ -3,6 +3,7 @@ import { ipc, isPreview } from "../ipc/client";
 import type { ReferenceState } from "../ipc/contract";
 import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
+import { StemMixer } from "./Stems";
 
 /** Shared by Songs and Stage; all samples, timing and transport stay in Rust. */
 export function ReferencePlayer({ song }: { song: ReferenceState }) {
@@ -98,6 +99,9 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
           />
         </label>
       </div>
+      {Boolean(song.stems?.length) && (
+        <StemMixer key={song.stems?.map((s) => s.id).join(",")} song={song} />
+      )}
       <form
         className="workspace-actions"
         onSubmit={(e) => {
