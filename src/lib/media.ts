@@ -4,6 +4,7 @@ import { ipc, isPreview } from "../ipc/client";
 import type { Chart } from "../ipc/contract";
 import { askBrain } from "./jo/providers";
 import catalog from "./media-catalog.json";
+import { parseJson, parseSchema, userFacingError } from "./userError";
 
 export const MEDIA_MODELS = catalog;
 
@@ -165,8 +166,9 @@ export function applyShotIdeas(
   project: VideoProject,
   raw: string,
 ): VideoProject {
-  const ideas = shotIdeas.parse(
-    JSON.parse(
+  const ideas = parseSchema(
+    shotIdeas,
+    parseJson(
       raw
         .trim()
         .replace(/^```(?:json)?\s*/i, "")
@@ -289,7 +291,7 @@ export const useMedia = create<MediaState>((set, get) => ({
     try {
       await task();
     } catch (e) {
-      set({ message: String(e) });
+      set({ message: userFacingError(e) });
     } finally {
       set({ busy: "" });
     }

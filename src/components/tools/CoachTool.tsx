@@ -5,6 +5,7 @@ import { BRAINS, askBrain, useAi } from "../../lib/jo/providers";
 import { applyStudioEdits, songFingerprint } from "../../lib/jo/studioTools";
 import { useWriting } from "../../lib/originals";
 import { type Coach, coachBrief, coachSchema } from "../../lib/roomTools";
+import { parseJson, parseSchema } from "../../lib/userError";
 import { Button } from "../Button";
 import { Field, SongRequired, Status, currentSong, useTool } from "./shared";
 
@@ -62,7 +63,7 @@ export default function CoachTool() {
                     .replace(/^```(?:json)?\s*/, "")
                     .replace(/\s*```$/, "");
                   setResult({
-                    coach: coachSchema.parse(JSON.parse(raw)),
+                    coach: parseSchema(coachSchema, parseJson(raw)),
                     base,
                   });
                   return "Three experiments ready. Review one, then draft it in Jo or keep it in your song notes.";

@@ -10,6 +10,7 @@ import {
   useAi,
 } from "../lib/jo/providers";
 import { openExternal } from "../lib/openUrl";
+import { userFacingError } from "../lib/userError";
 import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 import { Panel } from "./Panel";
@@ -51,7 +52,7 @@ export function AiSettings() {
           ),
         });
       })
-      .catch((e) => setMessage(String(e)));
+      .catch((e) => setMessage(userFacingError(e)));
   }, []);
   const run = async (fn: () => Promise<void>) => {
     if (busy) return;
@@ -60,7 +61,7 @@ export function AiSettings() {
     try {
       await fn();
     } catch (e) {
-      setMessage(String(e));
+      setMessage(userFacingError(e));
     } finally {
       setBusy(false);
     }
