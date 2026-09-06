@@ -101,7 +101,7 @@ See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-comp
 | M1a | Transport, timeline, click, count-in | ✅ | #4, #28 |
 | M1b | Drums: sampler, style engine, cues, render-ahead worker | ✅ | #6, #28 |
 | M1c | Bass, comp, chart, six styles, chart presets, golden renders | ✅ | #8, #28 |
-| M1d | Live steering and the Stage screen | ✅ | #10, #28 |
+| M1d | Live steering and the Stage screen | ✅ | #10, #28; pedal map is `controller.json`, not `controls/default.json` |
 | M1e | Recorder, latency calibration, take browser | ⏳ | #12, #28 |
 | M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ⏳ | #14, #28 |
 | M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native playback, offline stretch and output-clock local chord readout; stems, provider analysis and analysed-grid controls pending |

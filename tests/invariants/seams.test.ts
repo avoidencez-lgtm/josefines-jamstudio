@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { PEDAL_ACTIONS } from "../../src/lib/controller";
 
 describe("Seam Manifest Invariants", () => {
   const checkDir = (dirName: string) => {
@@ -38,7 +39,21 @@ describe("Seam Manifest Invariants", () => {
     checkDir("rigs");
   });
 
-  it("validates all control manifests", () => {
+  it("keeps the unused controls/ registry fixture versioned", () => {
     checkDir("controls");
+  });
+
+  it("live pedal bindings only use PEDAL_ACTIONS", () => {
+    const raw = JSON.parse(
+      fs.readFileSync("tests/fixtures/seams/controller.json", "utf8"),
+    ) as {
+      schemaVersion: number;
+      bindings: { action: string }[];
+    };
+    expect(raw.schemaVersion).toBe(1);
+    expect(raw.bindings.length).toBeGreaterThan(0);
+    for (const binding of raw.bindings) {
+      expect(Object.hasOwn(PEDAL_ACTIONS, binding.action)).toBe(true);
+    }
   });
 });

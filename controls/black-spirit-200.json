@@ -1,5 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "black-spirit-200",
-  "name": "Black Spirit 200 CC Map"
+  "name": "Black Spirit 200 CC Map",
+  "bindings": [],
+  "note": "Registry fixture only. Live pedal maps are controller.json."
 }
