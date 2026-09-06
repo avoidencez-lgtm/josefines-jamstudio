@@ -252,6 +252,7 @@ async fn run(executable: &Path, args: &[String], seconds: u64) -> Result<Vec<u8>
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Media tool could not start: {e}"))?;
+    let pid = child.id();
     let stdout = child.stdout.take().ok_or("Missing media tool output")?;
     let stderr = child
         .stderr
@@ -282,10 +283,15 @@ async fn run(executable: &Path, args: &[String], seconds: u64) -> Result<Vec<u8>
         }
         Ok(out)
     };
-    tokio::select! {
+    let outcome = tokio::select! {
         result=tokio::time::timeout(Duration::from_secs(seconds),work)=>result.map_err(|_|"Media operation timed out".to_string())?,
         _=async {loop {tokio::time::sleep(Duration::from_millis(100)).await;if CANCEL.load(Ordering::Relaxed){break;}}}=>Err("Media operation canceled".into())
+    };
+    if let Some(pid) = pid {
+        platform::kill_tree(pid).await;
     }
+    let _ = child.kill().await;
+    outcome
 }
 async fn probe(path: &Path, kind: &str) -> Result<f64, String> {
     let exe = platform::find_agent("ffprobe", "").map_err(|_| {

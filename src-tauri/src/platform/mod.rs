@@ -85,6 +85,25 @@ pub fn command(executable: &std::path::Path) -> tokio::process::Command {
     command
 }
 
+/// Kill `pid` and, on Windows, every descendant. `TerminateProcess` on a `.cmd`
+/// shim only stops `cmd.exe`; the `node.exe` running the CLI keeps billing.
+pub async fn kill_tree(pid: u32) {
+    #[cfg(windows)]
+    {
+        let mut killer = command(std::path::Path::new(r"C:\Windows\System32\taskkill.exe"));
+        killer
+            .args(["/T", "/F", "/PID", &pid.to_string()])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), killer.status()).await;
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = pid;
+    }
+}
+
 /// Windows executables the app will start: a native `.exe`, or the `.cmd` shim npm
 /// writes for `npm install -g @openai/codex` / `@anthropic-ai/claude-code`. The shim
 /// runs through cmd.exe with the standard library's argument escaping; the prompt
@@ -110,6 +129,10 @@ pub fn find_agent(name: &str, configured: &str) -> Result<PathBuf, String> {
             return Err(
                 "Choose the native .exe or the npm .cmd shim, not another script type.".into(),
             );
+        }
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        if !stem.eq_ignore_ascii_case(name) {
+            return Err(format!("Choose the {name} executable, not {stem}."));
         }
         return Ok(path);
     }
@@ -169,6 +192,21 @@ mod url_tests {
         assert!(super::allowed_https_url("https://user:pass@ffmpeg.org/").is_err());
         assert!(super::allowed_https_url("file:///etc/passwd").is_err());
     }
+
+    #[test]
+    fn configured_path_must_use_the_agent_file_name() {
+        let dir = std::env::temp_dir().join(format!("jam-agent-stem-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let other = dir.join(if cfg!(windows) {
+            "helper.exe"
+        } else {
+            "helper"
+        });
+        std::fs::write(&other, b"x").unwrap();
+        let err = super::find_agent("codex", &other.to_string_lossy()).unwrap_err();
+        assert!(err.contains("codex"), "{err}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }
 
 #[cfg(all(test, windows))]
@@ -184,6 +222,26 @@ mod tests {
         assert!(super::find_agent("codex", &path("codex.cmd")).is_ok());
         assert!(super::find_agent("claude", &path("claude.EXE")).is_ok());
         assert!(super::find_agent("codex", &path("codex.ps1")).is_err());
+        assert!(
+            super::find_agent("codex", &path("claude.EXE")).is_err(),
+            "a Claude shim must not satisfy a Codex request"
+        );
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn kill_tree_stops_a_cmd_grandchild() {
+        let mut child = super::command(std::path::Path::new("cmd.exe"))
+            .args(["/C", "ping", "-n", "20", "127.0.0.1"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id().expect("pid");
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        super::kill_tree(pid).await;
+        let done = tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await;
+        assert!(done.is_ok(), "cmd.exe tree should exit after taskkill /T");
     }
 }

@@ -121,6 +121,28 @@ async fn read_bounded(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>, String>
     }
     Ok(bytes)
 }
+
+fn failed_cli(name: &str, stderr: &[u8]) -> String {
+    let tail: String = String::from_utf8_lossy(stderr)
+        .chars()
+        .rev()
+        .take(200)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
+    let tail = tail.trim();
+    if tail.is_empty() {
+        format!(
+            "{name} exited unsuccessfully. Check login, usage limits and CLI version; no studio actions applied."
+        )
+    } else {
+        format!(
+            "{name} exited unsuccessfully ({tail}). Check login, usage limits and CLI version; no studio actions applied."
+        )
+    }
+}
+
 pub fn parse_reply(name: &str, stdout: &[u8]) -> Result<Value, String> {
     let invalid = || {
         "Agent returned no complete structured reply. Update the CLI or try a shorter request."
@@ -235,6 +257,7 @@ impl AgentRunner {
         let mut child = command.spawn().map_err(|_| {
             format!("Could not start {name}. Install its native CLI and check the path.")
         })?;
+        let pid = child.id();
         let stdin = child.stdin.take().ok_or("Agent stdin unavailable")?;
         let stdout = child.stdout.take().ok_or("Agent stdout unavailable")?;
         let stderr = child.stderr.take().ok_or("Agent stderr unavailable")?;
@@ -255,10 +278,10 @@ impl AgentRunner {
                         .await
                         .map_err(|_| "Could not wait for agent".to_string())
                 };
-                let (_, out, _, status) =
+                let (_, out, err, status) =
                     tokio::try_join!(write, read_bounded(stdout), read_bounded(stderr), wait)?;
                 if !status.success() {
-                    return Err(format!("{name} exited unsuccessfully. Check login, usage limits and CLI version; no studio actions applied."));
+                    return Err(failed_cli(name, &err));
                 }
                 parse_reply(name, &out)
             };
@@ -276,6 +299,9 @@ impl AgentRunner {
                 _ = cancel => Err("Agent request cancelled. No studio actions applied.".into()),
             }
         };
+        if let Some(pid) = pid {
+            platform::kill_tree(pid).await;
+        }
         let _ = child.kill().await;
         let entry = CostEntry {
             at_ms: SystemTime::now()
@@ -350,6 +376,9 @@ mod tests {
                 .await
                 .installed
         );
+        let with_tail = super::failed_cli("codex", b"not logged in\n");
+        assert!(with_tail.contains("not logged in"), "{with_tail}");
+        assert!(super::failed_cli("codex", b"").contains("Check login"));
     }
 
     #[tokio::test]
