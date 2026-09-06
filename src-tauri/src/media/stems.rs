@@ -151,7 +151,7 @@ async fn install(
     let mut total = 0;
     for (i, (label, input)) in files.into_iter().enumerate() {
         let output = folder.join(format!("stem-{i}.wav"));
-        decode_audio(&input.to_string_lossy(), &output, "600.3").await?;
+        decode_audio(&input.to_string_lossy(), &output, 600.3).await?;
         let path = output.clone();
         let (count, hash) = tauri::async_runtime::spawn_blocking(move || {
             let (samples, _) =
@@ -296,8 +296,6 @@ pub async fn media_separate_stems(
         .into_iter()
         .find(|m| m.id == catalog_id && m.kind == "stems")
         .ok_or("Unknown stem model")?;
-    // Validate local decoding availability before a paid request.
-    platform::find_agent("ffmpeg", "")?;
     let hash = source_hash(Path::new(&source.path))?;
     let file = bounded_file(Path::new(&source.path), AUDIO_LIMIT)?;
     use sha2::Digest;

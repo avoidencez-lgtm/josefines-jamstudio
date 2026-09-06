@@ -158,7 +158,11 @@ pub(super) async fn store(base: &Path, mut a: Asset) -> Result<Asset, String> {
     if dir.exists() {
         return load(base, &a.id);
     }
-    if a.schema_version != 1 || a.kind != "audio" || !(0.1..=1200.2).contains(&a.seconds) {
+    if a.schema_version != 1
+        || a.kind != "audio"
+        || !a.seconds.is_finite()
+        || (a.seconds != 0.0 && !(0.1..=1200.2).contains(&a.seconds))
+    {
         return Err("Choose a supported audio asset to store as a song.".into());
     }
     for reserved in ["title", "sourcePath", "durationMs", "sourceHash"] {
@@ -193,7 +197,8 @@ pub(super) async fn store(base: &Path, mut a: Asset) -> Result<Asset, String> {
         }
         sync_file(&original_copy)?;
         let decoded = stage.join("source.wav");
-        decode_audio(&original_copy.to_string_lossy(), &decoded, "1200.3").await?;
+        let limit = if a.seconds == 0.0 { 600.1 } else { 1200.3 };
+        decode_audio(&original_copy.to_string_lossy(), &decoded, limit).await?;
         let path = decoded.clone();
         let (seconds, hash) = tauri::async_runtime::spawn_blocking(move || {
             let (samples, _) =
@@ -205,7 +210,7 @@ pub(super) async fn store(base: &Path, mut a: Asset) -> Result<Asset, String> {
         })
         .await
         .map_err(|_| "Song validation worker stopped")??;
-        if (seconds - a.seconds).abs() > 0.1 {
+        if a.seconds != 0.0 && (seconds - a.seconds).abs() > 0.1 {
             return Err(
                 "Decoded duration differs from the saved source by more than 100 ms.".into(),
             );

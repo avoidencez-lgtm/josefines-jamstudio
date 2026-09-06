@@ -5,7 +5,7 @@ import {
   UploadSimple,
   VinylRecord,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { ReferenceGridEditor } from "../components/ReferenceGrid";
@@ -31,31 +31,76 @@ export function Songs() {
   const [selected, setSelected] = useState("");
   const [speed, setSpeed] = useState(75);
   const [semitones, setSemitones] = useState(0);
-  const [tools, setTools] = useState({
-    ready: false,
-    message: "Checking local media tools…",
-  });
+  const [picking, setPicking] = useState(false);
   useEffect(() => {
     void m.refresh().catch((e) => useMedia.setState({ message: String(e) }));
-    if (isPreview)
-      setTools({
-        ready: false,
-        message:
-          "Open the desktop app to import and listen. Audio files stay in your local media library.",
-      });
-    else
-      void ipc
-        .invoke<typeof tools>("media_tools")
-        .then(setTools)
-        .catch((e) => setTools({ ready: false, message: String(e) }));
   }, [m.refresh]);
+  const importPath = useCallback(
+    (source: string) => {
+      if (
+        isPreview ||
+        useEngineStore.getState().isRecording ||
+        useMedia.getState().busy
+      ) {
+        useMedia.setState({
+          message:
+            "Finish the current operation or recording before importing audio.",
+        });
+        return;
+      }
+      void m.work("Importing song", async () => {
+        const asset = await ipc.invoke<MediaAsset>("media_import", {
+          path: source,
+          kind: "audio",
+        });
+        await m.refresh();
+        setSelected(asset.id);
+        setQuery("");
+        setPath("");
+        useMedia.setState({
+          message: "Song imported locally. Load in Jamstudio to play it.",
+        });
+      });
+    },
+    [m.work, m.refresh],
+  );
+  useEffect(() => {
+    if (isPreview) return;
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/webview")
+      .then(({ getCurrentWebview }) =>
+        getCurrentWebview().onDragDropEvent(({ payload }) => {
+          if (!active || payload.type !== "drop") return;
+          if (payload.paths.length !== 1) {
+            useMedia.setState({ message: "Drop one audio file at a time." });
+            return;
+          }
+          importPath(payload.paths[0]);
+        }),
+      )
+      .then((stop) => {
+        if (active) unlisten = stop;
+        else stop();
+      })
+      .catch((e) => {
+        if (active)
+          useMedia.setState({
+            message: `File drop unavailable: ${String(e)}. Use Choose audio file or paste its path.`,
+          });
+      });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [importPath]);
   const songs = m.assets.filter((a) => a.kind === "audio");
   const visible = songs.filter((a) =>
     a.label.toLowerCase().includes(query.toLowerCase()),
   );
   const song = visible.find((a) => a.id === selected) ?? visible[0];
   const lyrics = m.jobs.find((j) => j.assetId === song?.id)?.lyrics;
-  const locked = Boolean(m.busy) || engine.isRecording;
+  const locked = picking || Boolean(m.busy) || engine.isRecording;
   return (
     <div className="workspace-stack max-w-6xl mx-auto">
       <WorkspaceHeader
@@ -101,6 +146,26 @@ export function Songs() {
         <summary className="cursor-pointer text-sm">
           Import a finished mix or reference
         </summary>
+        <div className="workspace-actions mt-3">
+          <Button
+            disabled={locked || isPreview}
+            onClick={() => {
+              setPicking(true);
+              void ipc
+                .invoke<string | null>("song_pick_file")
+                .then((file) => {
+                  if (file) importPath(file);
+                })
+                .catch((e) => useMedia.setState({ message: String(e) }))
+                .finally(() => setPicking(false));
+            }}
+          >
+            Choose audio file
+          </Button>
+          <p className="workspace-note">
+            Or drop one audio file anywhere in Songs.
+          </p>
+        </div>
         <div className="workspace-search mt-3">
           <label>
             File path
@@ -108,30 +173,22 @@ export function Songs() {
               aria-label="Audio file path"
               value={path}
               onChange={(e) => setPath(e.target.value)}
-              placeholder="Full path to WAV, MP3, FLAC or OGG"
+              placeholder="Full path to WAV, MP3, FLAC, M4A, AIFF or OGG"
             />
           </label>
           <Button
             variant="primary"
-            disabled={locked || isPreview || !tools.ready || !path.trim()}
-            onClick={() =>
-              void m.work("Importing song", async () => {
-                const asset = await ipc.invoke<MediaAsset>("media_import", {
-                  path: path.trim(),
-                  kind: "audio",
-                });
-                await m.refresh();
-                setSelected(asset.id);
-                setPath("");
-              })
-            }
+            disabled={locked || isPreview || !path.trim()}
+            onClick={() => importPath(path.trim())}
           >
             <UploadSimple size={18} aria-hidden="true" /> Import audio
           </Button>
         </div>
         <p className="workspace-note mt-2">
-          {tools.message} Audio is copied into a song folder with a 48 kHz
-          source WAV; up to 512 MB and 10 minutes each. Your original is kept.
+          {isPreview && "Open the desktop app to import and listen. "}
+          WAV, MP3, FLAC, AAC/ALAC M4A, AIFF and Ogg Vorbis · mono or stereo ·
+          up to 512 MB and 10 minutes. Import, analysis and playback run locally
+          without FFmpeg. Your original is kept beside a 48 kHz source WAV.
         </p>
       </details>
       {(m.busy || m.message) && (
@@ -216,7 +273,6 @@ export function Songs() {
                   disabled={
                     locked ||
                     isPreview ||
-                    !tools.ready ||
                     song.seconds < 2 ||
                     song.seconds > 1200
                   }
@@ -236,7 +292,7 @@ export function Songs() {
                     : "Analyze tempo & chords"}
                 </Button>
                 <Button
-                  disabled={locked || isPreview || !tools.ready}
+                  disabled={locked || isPreview}
                   onClick={() =>
                     void m.work("Loading reference", async () => {
                       await ipc.invoke("media_reference_load", {
@@ -257,7 +313,7 @@ export function Songs() {
                 </Button>
                 {Boolean(song.stemSet || song.referencePractice) && (
                   <Button
-                    disabled={locked || isPreview || !tools.ready}
+                    disabled={locked || isPreview}
                     onClick={() =>
                       void m.work("Loading reference", async () => {
                         await ipc.invoke("media_reference_load", {
@@ -309,7 +365,6 @@ export function Songs() {
                 key={`stems-${song.id}`}
                 song={song}
                 locked={locked}
-                toolsReady={tools.ready}
               />
               <details className="workspace-stack">
                 <summary className="cursor-pointer text-sm">
@@ -351,7 +406,7 @@ export function Songs() {
                     </select>
                   </label>
                   <Button
-                    disabled={locked || isPreview || !tools.ready}
+                    disabled={locked || isPreview}
                     onClick={() =>
                       void m.work("Preparing practice copy", async () => {
                         const copy = await ipc.invoke<MediaAsset>(
@@ -372,9 +427,9 @@ export function Songs() {
                   </Button>
                 </div>
                 <p className="workspace-note">
-                  {!tools.ready && `${tools.message} `}Sources can be up to 10
-                  minutes; slowed copies can be up to 20 minutes. To try another
-                  setting on a longer copy, select the original.
+                  Sources can be up to 10 minutes; slowed copies can be up to 20
+                  minutes. To try another setting on a longer copy, select the
+                  original.
                 </p>
               </details>
               {lyrics && (
@@ -392,7 +447,7 @@ export function Songs() {
                   projects keep the same song. Reload the reference afterward.
                 </p>
                 <Button
-                  disabled={locked || isPreview || !tools.ready}
+                  disabled={locked || isPreview}
                   onClick={() =>
                     void m.work("Consolidating song files", async () => {
                       await ipc.invoke("media_store_song", {

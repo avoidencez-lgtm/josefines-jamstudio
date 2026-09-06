@@ -394,3 +394,34 @@ Music.ai orchestration, automatic analysis acceptance, full grid integration,
 practice ramps and Lyria realtime remain V1 work. This is not M3/V1 completion.
 
 Local validation: 324 Rust tests passed (seven opt-in tests ignored), 267 frontend tests passed. Real FFmpeg migration, practice/analysis, stems and Film timing checks passed separately. Formatting, Clippy, lint/types/build and licence gates passed; the native desktop build completed its 25-second frontend-handshake smoke. CI on Windows/macOS remains the merge gate.
+
+### M3 native import and file selection — 2026-09-06
+
+Songs can choose a file through the native dialog, receive one dropped file or
+import a pasted path. Bundled Symphonia/Rubato decode and normalize the planned
+WAV/MP3/FLAC/M4A/AIFF formats plus Ogg Vorbis; reference, analysis, stem and
+practice paths share that decoder. M4A priming/padding are applied before rate
+conversion. Originals remain intact beside canonical source.wav and song.json.
+Complex M4A edit sequences, protected files and raw ADTS AAC need prior WAV/FLAC
+conversion. Film and clean-take soundtrack mixing still need installed FFmpeg.
+
+The ordinary synthetic tests cover rate/delay/alias bounds, cancellation, damaged
+metadata and IPC import/storage/reload. The separately run seven-codec fixture
+test checks duration and phase. Local validation: 267 frontend tests passed; 234 Rust tests passed before
+Windows Application Control blocked ipc_originals (eight opt-in tests ignored).
+All 24 media/rig IPC tests, including import/storage/reload, passed separately,
+as did the seven-codec test. Lint/types, Clippy and licence gates passed. The
+local desktop build completed its 25-second frontend-handshake smoke. No policy
+was bypassed; full Windows/macOS CI on the PR head remains the merge gate.
+
+All five optional real-tool media regressions also passed: migration, stems,
+practice/analysis, clean take mixing and Film. Film checks each exported stereo
+channel at the original amplitude (AAC RMSE 0.000116 against the unchanged 0.015
+bound); the test avoids FFmpeg's gain-adding stereo-to-mono rematrix.
+An additional short M4A fixture passes at 10,849 frames with a millisecond
+movie clock; native metadata tests cover rounded EOF and reject larger overruns.
+
+This completes an import slice, not all of M3 or V1. Provider analysis fixtures,
+the richer analysis/tempoMap/chart contract, full band/MIDI/DAW grid integration,
+practice ramps, realtime Lyria, voice/rig acceptance and distribution remain.
+Friend-operated hardware acceptance remains deferred to V2.

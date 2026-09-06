@@ -15,6 +15,75 @@ use tauri::Manager;
 const NO_PORT: &str = "no MIDI port open (messages are only logged)";
 
 #[test]
+fn native_song_import_normalizes_preserves_and_loads_audio_without_external_tools() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    assert!(studio.err("song_pick_file", json!({})).contains("headless"));
+    let source = user_dir().join(format!("{}.wav", unique("mono-import")));
+    let mut wav = hound::WavWriter::create(
+        &source,
+        hound::WavSpec {
+            channels: 1,
+            sample_rate: 44100,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for _ in 0..44100 {
+        wav.write_sample(4096i16).unwrap();
+    }
+    wav.finalize().unwrap();
+    let before = std::fs::read(&source).unwrap();
+    let invalid_id = unique("invalid-duration");
+    let invalid = media_root()
+        .join("assets")
+        .join(format!("{invalid_id}.json"));
+    std::fs::create_dir_all(invalid.parent().unwrap()).unwrap();
+    let legacy_source = invalid.with_extension("wav");
+    std::fs::copy(&source, &legacy_source).unwrap();
+    std::fs::write(&invalid, serde_json::to_vec(&json!({"schemaVersion":1,"id":invalid_id,"kind":"audio","path":legacy_source,"seconds":0.0,"label":"Invalid duration"})).unwrap()).unwrap();
+    assert_eq!(
+        studio.err("media_store_song", json!({"assetId":invalid_id})),
+        "Choose an audio reference up to twenty minutes."
+    );
+    std::fs::remove_file(invalid).unwrap();
+    std::fs::remove_file(legacy_source).unwrap();
+    let asset = studio.ok("media_import", json!({"path":source,"kind":"audio"}));
+    assert_eq!(asset["seconds"], 1.0);
+    let saved = Path::new(asset["path"].as_str().unwrap());
+    let folder = saved.parent().unwrap();
+    assert_eq!(saved.file_name().unwrap(), "source.wav");
+    assert_eq!(std::fs::read(folder.join("original.wav")).unwrap(), before);
+    assert_eq!(std::fs::read(&source).unwrap(), before);
+    let normalized = hound::WavReader::open(saved).unwrap();
+    assert_eq!(normalized.spec().sample_rate, 48000);
+    assert_eq!(normalized.spec().channels, 2);
+    assert_eq!(normalized.duration(), 48000);
+    let doc = read_json(&folder.join("song.json"));
+    assert_eq!(doc["durationMs"], 1000.0);
+    assert_eq!(doc["sourceHash"].as_str().unwrap().len(), 64);
+    studio.ok("media_reference_load", json!({"assetId":asset["id"]}));
+    assert_eq!(
+        studio.ok("audio_get_telemetry", json!({}))["reference"]["asset_id"],
+        asset["id"]
+    );
+    let state = studio.app().state::<app_lib::AppState>();
+    state
+        .engine
+        .lock()
+        .recorder_start("import-guard".into())
+        .unwrap();
+    assert!(studio
+        .err("media_import", json!({"path":source,"kind":"audio"}))
+        .contains("Save the take"));
+    state.engine.lock().recorder_stop().unwrap();
+    studio.ok("media_reference_unload", json!({}));
+    std::fs::remove_dir_all(folder).unwrap();
+    std::fs::remove_file(source).unwrap();
+}
+
+#[test]
 fn reference_sections_use_native_downbeats_and_record_the_confirmed_grid() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
@@ -1226,7 +1295,7 @@ fn media_import_refuses_missing_files_wrong_kinds_and_unknown_extensions_without
     );
     assert_eq!(
         studio.err("media_import", json!({"path": text, "kind": "audio"})),
-        "Choose MP4/MOV/WebM/MKV video or WAV/MP3/FLAC/M4A/AAC/OGG audio."
+        "Choose MP4/MOV/WebM/MKV video or WAV/MP3/FLAC/M4A/AAC/AIFF/OGG audio."
     );
     assert_eq!(
         studio.err(

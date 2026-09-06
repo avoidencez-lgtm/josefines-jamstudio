@@ -16,7 +16,7 @@ pub mod songs;
 pub mod stems;
 
 const MEDIA_EXTENSIONS: &[&str] = &[
-    "mp4", "mov", "webm", "mkv", "wav", "mp3", "flac", "m4a", "aac", "ogg",
+    "mp4", "mov", "webm", "mkv", "wav", "mp3", "flac", "m4a", "aac", "ogg", "aiff", "aif",
 ];
 
 // ponytail: one media operation at a time for this single-user desktop studio.
@@ -364,9 +364,8 @@ async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Ass
         .unwrap_or("")
         .to_ascii_lowercase();
     if !MEDIA_EXTENSIONS.contains(&ext.as_str()) {
-        return Err("Choose MP4/MOV/WebM/MKV video or WAV/MP3/FLAC/M4A/AAC/OGG audio.".into());
+        return Err("Choose MP4/MOV/WebM/MKV video or WAV/MP3/FLAC/M4A/AAC/AIFF/OGG audio.".into());
     }
-    let seconds = probe(path, kind).await?;
     let id = id();
     if kind == "audio" {
         return songs::store(
@@ -376,13 +375,14 @@ async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Ass
                 id,
                 kind: kind.into(),
                 path: path.to_string_lossy().into_owned(),
-                seconds,
+                seconds: 0.0, // New imports derive their duration from decoded audio.
                 label: label.chars().take(160).collect(),
                 extra: BTreeMap::new(),
             },
         )
         .await;
     }
+    let seconds = probe(path, kind).await?;
     let dest = base.join("assets").join(format!("{id}.{ext}"));
     fs::create_dir_all(dest.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::copy(path, &dest).map_err(|e| e.to_string())?;
@@ -402,7 +402,14 @@ async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Ass
     Ok(a)
 }
 #[tauri::command]
-pub async fn media_import(path: String, kind: String) -> Result<Asset, String> {
+pub async fn media_import(
+    path: String,
+    kind: String,
+    state: State<'_, AppState>,
+) -> Result<Asset, String> {
+    if kind == "audio" {
+        state.engine.lock().ensure_timing_editable()?;
+    }
     let _gate = GATE
         .try_lock()
         .map_err(|_| "Another media operation is running")?;
@@ -542,7 +549,7 @@ async fn practice_copy(
     let decoded = work.join("decoded.wav");
     let output = work.join("practice.wav");
     let result = async {
-        decode_audio(&source.path, &decoded, "600.2").await?;
+        decode_audio(&source.path, &decoded, 600.2).await?;
         let input = decoded.clone();
         let target = output.clone();
         let seconds = tauri::async_runtime::spawn_blocking(move || jam_audio::practice::render(&input, &target, speed, semitones, &CANCEL))
@@ -562,40 +569,15 @@ async fn practice_copy(
     result
 }
 
-async fn decode_audio(source: &str, decoded: &Path, seconds: &str) -> Result<(), String> {
-    let exe = platform::find_agent("ffmpeg", "")
-        .map_err(|_| "Install FFmpeg and restart Jamstudio to prepare audio.")?;
-    let args = [
-        "-nostdin",
-        "-n",
-        "-v",
-        "error",
-        "-protocol_whitelist",
-        "file,pipe",
-        "-i",
-    ]
-    .map(String::from)
-    .into_iter()
-    .chain([source.into()])
-    .chain(
-        [
-            "-map",
-            "0:a:0",
-            "-vn",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
-            "-c:a",
-            "pcm_f32le",
-            "-t",
-            seconds,
-        ]
-        .map(String::from),
-    )
-    .chain([decoded.to_string_lossy().into_owned()])
-    .collect::<Vec<_>>();
-    run(&exe, &args, 120).await.map(|_| ())
+async fn decode_audio(source: &str, decoded: &Path, seconds: f64) -> Result<(), String> {
+    let input = PathBuf::from(source);
+    let output = decoded.to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        jam_audio::import::normalize(&input, &output, (seconds * 48000.0) as usize, &CANCEL)
+    })
+    .await
+    .map_err(|_| "Audio decoding worker stopped")??;
+    Ok(())
 }
 
 fn reference_asset(base: &Path, asset_id: &str) -> Result<Asset, String> {
@@ -641,7 +623,7 @@ async fn reference_source(
         let mut song = if source.extra.contains_key("stemSet") {
             stems::load(base, &source, before.as_deref().unwrap()).await?
         } else {
-            decode_audio(&source.path, &decoded, "1200.3").await?;
+            decode_audio(&source.path, &decoded, 1200.3).await?;
             let path = decoded.clone();
             let id = source.id.clone();
             let label = source.label.clone();
@@ -749,7 +731,7 @@ async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
     fs::create_dir(&work).map_err(|e| e.to_string())?;
     let decoded = work.join("decoded.wav");
     let result = async {
-        decode_audio(&source.path, &decoded, "1200.1").await?;
+        decode_audio(&source.path, &decoded, 1200.1).await?;
         let path = decoded.clone();
         let original = PathBuf::from(&source.path);
         let analysis = tauri::async_runtime::spawn_blocking(move || {
@@ -964,8 +946,10 @@ pub async fn media_generate(
     if !api::configured(&m, state.secret_store.as_ref())? {
         return Err(format!("Add a {} API key in Settings.", m.provider));
     }
-    platform::find_agent("ffprobe", "")
-        .map_err(|_| "Install FFmpeg with ffprobe before generating media.")?;
+    if m.kind == "video" {
+        platform::find_agent("ffprobe", "")
+            .map_err(|_| "Install FFmpeg with ffprobe before generating video.")?;
+    }
     m.model = request.model.clone();
     let base = root();
     let id = id();
@@ -1485,34 +1469,53 @@ mod tests {
         let file = render(&base, &doc).await.unwrap();
         assert!((probe(Path::new(&file), "video").await.unwrap() - 3.0).abs() < 0.05);
         assert!((probe(Path::new(&file), "audio").await.unwrap() - 3.0).abs() < 0.05);
-        let pcm = run(
+        let decoded = base.join("film-decoded.wav");
+        run(
             &exe,
             &[
-                "-v", "error", "-i", &file, "-vn", "-ac", "1", "-ar", "48000", "-f", "f32le",
-                "pipe:1",
+                "-nostdin",
+                "-n",
+                "-v",
+                "error",
+                "-i",
+                &file,
+                "-vn",
+                "-ac",
+                "2",
+                "-ar",
+                "48000",
+                "-c:a",
+                "pcm_f32le",
+                &decoded.to_string_lossy(),
             ]
             .map(String::from),
             30,
         )
         .await
         .unwrap();
-        let samples: Vec<f32> = pcm
-            .chunks(4)
-            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
-            .collect();
-        // AAC introduces lossy error, but must retain the original frequency, phase and amplitude.
+        let (samples, _) = jam_audio::practice::read_stereo(&decoded, 48_000 * 4, &CANCEL).unwrap();
+        // Native mono import duplicates at unity. Inspect each encoded channel:
+        // FFmpeg's default stereo-to-mono rematrix adds 3 dB for identical channels.
+        // AAC must retain the original per-channel frequency, phase and amplitude.
+        assert!(samples.len() >= 144000 * 2);
         let mse = samples
+            .as_chunks::<2>()
+            .0
             .iter()
             .take(143000)
             .enumerate()
             .skip(1000)
-            .map(|(i, s)| {
+            .map(|(i, frame)| {
                 let expected =
                     0.125 * (2.0 * std::f64::consts::PI * 440.0 * i as f64 / 48000.0).sin();
-                (*s as f64 - expected).powi(2)
+                frame
+                    .iter()
+                    .map(|s| (*s as f64 - expected).powi(2))
+                    .sum::<f64>()
             })
             .sum::<f64>()
-            / 142000.0;
+            / (142000.0 * 2.0);
+        println!("Stereo Film AAC phase/amplitude RMSE {}", mse.sqrt());
         assert!(
             mse.sqrt() < 0.015,
             "Audio RMSE {} exceeds AAC tolerance",

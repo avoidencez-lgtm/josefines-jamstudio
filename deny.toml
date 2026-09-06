@@ -13,9 +13,24 @@ allow = [
 ]
 confidence-threshold = 0.8
 # Recorded exceptions to the AGENTS.md allowlist (invariant 9). Each crate below is
-# dual-licensed or a transitive Tauri/WebView dependency; none is GPL, LGPL or AGPL.
+# dual-licensed, a Tauri/WebView dependency, or the planned Symphonia decoder; none is GPL, LGPL or AGPL.
 # Unlicense crates are all "Unlicense OR MIT" and could be taken as MIT.
 exceptions = [
+    # Unmodified native song decoding. Source/version and MPL notice: assets/LICENSES.md.
+    { allow = ["MPL-2.0"], crate = "symphonia" },
+    { allow = ["MPL-2.0"], crate = "symphonia-bundle-flac" },
+    { allow = ["MPL-2.0"], crate = "symphonia-bundle-mp3" },
+    { allow = ["MPL-2.0"], crate = "symphonia-codec-aac" },
+    { allow = ["MPL-2.0"], crate = "symphonia-codec-alac" },
+    { allow = ["MPL-2.0"], crate = "symphonia-codec-pcm" },
+    { allow = ["MPL-2.0"], crate = "symphonia-codec-vorbis" },
+    { allow = ["MPL-2.0"], crate = "symphonia-common" },
+    { allow = ["MPL-2.0"], crate = "symphonia-core" },
+    { allow = ["MPL-2.0"], crate = "symphonia-format-isomp4" },
+    { allow = ["MPL-2.0"], crate = "symphonia-format-ogg" },
+    { allow = ["MPL-2.0"], crate = "symphonia-format-riff" },
+    { allow = ["MPL-2.0"], crate = "symphonia-metadata" },
+
     { allow = ["Unlicense"], crate = "aho-corasick" },
     { allow = ["Unlicense"], crate = "byteorder" },
     { allow = ["Unlicense"], crate = "memchr" },

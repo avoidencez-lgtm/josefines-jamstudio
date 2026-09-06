@@ -25,6 +25,9 @@ it("offers bounded practice controls beside a real library selection and keeps p
   ];
   try {
     const html = renderToStaticMarkup(createElement(Songs));
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Choose audio file/);
+    expect(html).toContain("Or drop one audio file anywhere in Songs.");
+    expect(html).toContain("without FFmpeg");
     expect(html).toContain("Make a practice copy");
     expect(html).toMatch(
       /<button[^>]*disabled=""[^>]*>Keep song files together/,

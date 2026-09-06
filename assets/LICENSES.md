@@ -1,5 +1,17 @@
 # Sample Pack Licenses
 
+## Bundled native audio import
+
+Symphonia 0.6.1 (Project Symphonia Developers, MPL-2.0), Rubato 5.0.0
+(HEnquist, MIT/Apache-2.0) and Tauri Dialog 2.7.3 (Tauri Apps Contributors,
+MIT/Apache-2.0) are compiled into the desktop app. Symphonia is unmodified;
+the application-owned M4A timing reader is separate code. Per-crate MPL
+exceptions are recorded in `deny.toml`; no GPL decoder or FFmpeg binary is bundled.
+Full notices and exact source locations are in [licenses](licenses/README.txt),
+copied into the desktop bundle's `licenses/` directory. Cargo.lock pins all
+transitive versions and registry source checksums. Test codec audio is generated
+locally from synthetic tones and is never committed or bundled.
+
 ## Bundled native time-stretch code
 
 - Signalsmith Stretch 1.3.2, commit `57b93f4e9206a089a45387eaa39bdc9f310d3308`: MIT,
