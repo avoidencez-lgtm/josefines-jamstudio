@@ -2,6 +2,7 @@ import { type ReactElement, cloneElement, useId, useState } from "react";
 import { useMedia } from "../../lib/media";
 import { useWriting } from "../../lib/originals";
 import { useRoomOperation } from "../../lib/roomActions";
+import { userFacingError } from "../../lib/userError";
 import { useEngineStore } from "../../store/engine";
 
 export function useTool() {
@@ -33,7 +34,7 @@ export function useTool() {
     try {
       setMessage((await fn()) ?? "");
     } catch (e) {
-      setMessage(String(e).replace(/^Error: /, ""));
+      setMessage(userFacingError(e));
     } finally {
       useRoomOperation.setState({ busy: false, blocking: false });
     }

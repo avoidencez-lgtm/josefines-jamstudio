@@ -6,6 +6,7 @@ import {
   sectionBars,
   useWriting,
 } from "../originals";
+import { parseJson, parseSchema } from "../userError";
 import { checkWritingForm } from "../writingTools";
 import type { BrainRequest } from "./providers";
 
@@ -60,8 +61,9 @@ export function labRequest(
   };
 }
 export function readIdea(reply: string, kind: LabKind): SongIdea {
-  const idea = ideaSchema.parse(
-    JSON.parse(
+  const idea = parseSchema(
+    ideaSchema,
+    parseJson(
       reply
         .trim()
         .replace(/^```(?:json)?\s*/i, "")

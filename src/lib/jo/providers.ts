@@ -8,6 +8,7 @@ import {
   providerFetch,
   summariseError,
 } from "../net/providerFetch";
+import { parseSchema } from "../userError";
 import {
   type GeminiResponse,
   type JoContext,
@@ -322,7 +323,7 @@ export function readPreferences(raw: unknown): AiPreferences {
     ),
   };
   if (raw == null) return defaults;
-  const p = preferencesSchema.parse(raw);
+  const p = parseSchema(preferencesSchema, raw);
   if (!Object.hasOwn(BRAINS, p.selected))
     throw new Error("Unknown AI provider. Choose one in Settings.");
   return { ...p, models: { ...defaults.models, ...p.models } };

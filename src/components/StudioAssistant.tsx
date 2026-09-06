@@ -19,6 +19,7 @@ import {
 import { useMedia } from "../lib/media";
 import { useWriting } from "../lib/originals";
 import { openAiSettings } from "../lib/settingsView";
+import { parseJson, userFacingError } from "../lib/userError";
 import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 
@@ -84,7 +85,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
       );
       setQuery("");
     } catch (e) {
-      if (!cancelled.current) setMessage(String(e));
+      if (!cancelled.current) setMessage(userFacingError(e));
     } finally {
       running.current = false;
       setBusy(false);
@@ -100,7 +101,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
         throw new Error(
           "The song or video changed. Ask again before applying this proposal.",
         );
-      const calls: JoToolCall[] = JSON.parse(actions);
+      const calls: JoToolCall[] = parseJson(actions) as JoToolCall[];
       if (!Array.isArray(calls) || calls.length < 1 || calls.length > 8)
         throw new Error("Choose 1–8 actions.");
       // Shared validation runs again in every dispatcher; studio edits are atomic as a group.
@@ -132,11 +133,12 @@ export const StudioAssistant = memo(function StudioAssistant() {
       setActions("[]");
       setBase(studioFingerprint());
     } catch (e) {
-      setMessage(String(e));
+      const detail = userFacingError(e);
+      setMessage(detail);
       setHistory((h) =>
         [
           ...h,
-          { role: "user" as const, content: `Action failed: ${String(e)}` },
+          { role: "user" as const, content: `Action failed: ${detail}` },
         ].slice(-8),
       );
     } finally {
@@ -177,7 +179,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
                 disabled={busy}
                 onChange={(e) =>
                   void save({ ...preferences, selected: e.target.value }).catch(
-                    (e) => setMessage(String(e)),
+                    (e) => setMessage(userFacingError(e)),
                   )
                 }
               >
@@ -317,7 +319,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
                     if (activeLocal.current)
                       void ipc
                         .invoke("agent_cancel")
-                        .catch((e) => setMessage(String(e)));
+                        .catch((e) => setMessage(userFacingError(e)));
                   }}
                 >
                   Cancel request

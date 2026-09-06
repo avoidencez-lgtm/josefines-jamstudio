@@ -10,6 +10,7 @@ import {
   readIdea,
 } from "../lib/jo/songLab";
 import { useWriting } from "../lib/originals";
+import { userFacingError } from "../lib/userError";
 import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 
@@ -52,7 +53,7 @@ export function SongLab() {
         source: `${BRAINS[preferences.selected].name} / ${model.model}`,
       });
     } catch (e) {
-      setError(String(e));
+      setError(userFacingError(e));
     } finally {
       setBusy(false);
     }
@@ -167,7 +168,7 @@ export function SongLab() {
                   applyProposal(proposal);
                   setProposal(null);
                 } catch (e) {
-                  setError(String(e));
+                  setError(userFacingError(e));
                 }
               }}
             >
