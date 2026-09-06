@@ -55,12 +55,13 @@ impl DawExporter {
 
         // 1. Time Signature: FF 58 04 nn dd cc bb. dd is log2 of the denominator,
         // cc = 24 MIDI clocks per metronome click, bb = 8 32nd notes per quarter.
-        let (num, den) = (time_sig.0.max(1), time_sig.1.max(1));
+        let (num, den) = export_meter(time_sig);
         let den_pow = den.trailing_zeros() as u8;
         track_data.extend_from_slice(&[0x00, 0xFF, 0x58, 0x04, num, den_pow, 0x18, 0x08]);
 
         // 2. Set Tempo: delta 0, FF 51 03 [24-bit microsec/quarter]
-        let us_per_quarter = (60_000_000.0 / (tempo.max(20.0) * 4.0 / den as f64)).round() as u32;
+        let us_per_quarter =
+            (60_000_000.0 / (export_tempo(tempo) * 4.0 / den as f64)).round() as u32;
         let t_bytes = us_per_quarter.to_be_bytes();
         track_data.extend_from_slice(&[0x00, 0xFF, 0x51, 0x03, t_bytes[1], t_bytes[2], t_bytes[3]]);
 
@@ -257,8 +258,28 @@ pub fn write_reaper_import(
     Ok(path.to_string_lossy().into_owned())
 }
 
-fn write_var_len(buf: &mut Vec<u8>, mut val: u32) {
-    let mut buffer = [0u8; 4];
+fn export_tempo(tempo: f64) -> f64 {
+    if tempo.is_finite() {
+        tempo.clamp(20.0, 400.0)
+    } else {
+        20.0
+    }
+}
+
+fn export_meter(time_sig: (u8, u8)) -> (u8, u8) {
+    let num = time_sig.0.max(1);
+    let den = time_sig.1;
+    if den.is_power_of_two() && den <= 32 {
+        (num, den)
+    } else {
+        (num, 4)
+    }
+}
+
+/// SMF VLQ is at most four 7-bit groups (`0x0FFFFFFF`). Larger deltas saturate.
+fn write_var_len(buf: &mut Vec<u8>, val: u32) {
+    let mut val = val.min(0x0FFF_FFFF);
+    let mut buffer = [0u8; 5];
     let mut i = 0;
     buffer[i] = (val & 0x7F) as u8;
     while val > 0x7F {
@@ -282,7 +303,8 @@ pub fn write_performance_midi(
     let mut notes = take.midi.clone();
     notes.sort_by_key(|n| (n.frame, n.bytes[0]));
     let mut track = vec![0, 0xff, 0x51, 3];
-    let quarter_bpm = take.tempo.max(20.0) * 4.0 / time_sig.1.max(1) as f64;
+    let (_, den) = export_meter(time_sig);
+    let quarter_bpm = export_tempo(take.tempo) * 4.0 / den as f64;
     let tempo = (60_000_000.0 / quarter_bpm).round() as u32;
     track.extend_from_slice(&tempo.to_be_bytes()[1..]);
     let mut previous = 0;
@@ -549,5 +571,46 @@ mod tests {
         let err = write_clip_stem(&path, &clip, usize::MAX, 48000, 120.0).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn smf_vlq_saturates_at_the_midi_maximum() {
+        let mut max = Vec::new();
+        write_var_len(&mut max, 0x0FFF_FFFF);
+        assert_eq!(max, [0xFF, 0xFF, 0xFF, 0x7F]);
+        let mut overflow = Vec::new();
+        write_var_len(&mut overflow, u32::MAX);
+        assert_eq!(overflow, max);
+        let mut zero = Vec::new();
+        write_var_len(&mut zero, 0);
+        assert_eq!(zero, [0]);
+    }
+
+    #[test]
+    fn tempo_map_and_performance_midi_refuse_unbounded_tempo_and_odd_meters() {
+        let midi = DawExporter::build_tempo_map_midi_with_meter(1e9, (4, 6), &[("B", 2)]);
+        assert_eq!(
+            &midi[22..30],
+            &[0x00, 0xFF, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08]
+        );
+        let micros = u32::from_be_bytes([0, midi[34], midi[35], midi[36]]);
+        assert_eq!(micros, 150_000, "400 BPM in 4/4 is 150000 us/quarter");
+        let path = std::env::temp_dir().join(format!(
+            "jam-midi-bound-{}-{}.mid",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let take = crate::recorder::TakeMetadata {
+            tempo: 1e9,
+            sample_count: 48_000,
+            sample_rate: 48_000,
+            ..Default::default()
+        };
+        write_performance_midi(&path, &take, (4, 6)).unwrap();
+        assert!(path.exists());
+        let _ = std::fs::remove_file(&path);
     }
 }
