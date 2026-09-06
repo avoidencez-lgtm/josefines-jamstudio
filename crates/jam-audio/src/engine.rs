@@ -706,11 +706,17 @@ impl AudioEngine {
         if let Some(song) = self.reference.lock().as_ref() {
             let mut reference = song.info.clone();
             if from_start {
-                reference.position = 0.0;
                 reference.state = "stopped".into();
                 if let Some(ramp) = reference.ramp {
                     reference.ramp = Some(crate::song::ramp::State::new(ramp.config));
                     reference.speed = ramp.config.start_percent as f64 / 100.0;
+                    reference.position = if reference.loop_enabled {
+                        reference.loop_start
+                    } else {
+                        0.0
+                    };
+                } else {
+                    reference.position = 0.0;
                 }
             }
             recorder.snapshot["reference"] = serde_json::json!(reference);

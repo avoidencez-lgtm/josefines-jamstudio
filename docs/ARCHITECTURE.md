@@ -1017,8 +1017,9 @@ pedal and Jo's `ramp` action for this session.
 The render worker caches the next complete bar end in source frames. It counts
 the boundary before wrapping a loop, skips a partial first bar, changes all
 stem processors together and clamps to the target. Pause preserves progress;
-Stop resets to start speed. Seek, loop/grid changes or manual speed/key cancel
-the ramp. Old parameter stamps retain their ramp counters and speed for queued
+Stop resets to start speed and, when a downbeat-aligned loop is on, to that
+loop start so bars before the practice region are not counted. Seek, loop/grid
+changes or manual speed/key cancel the ramp. Old parameter stamps retain their ramp counters and speed for queued
 audio; stopped/paused telemetry exposes armed controls immediately. No callback
 work, JS timer, extra processing bus or dependency is added. The existing
 16-generation history ceiling still applies; older playing readouts are unknown.

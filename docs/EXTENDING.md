@@ -13,8 +13,8 @@ refuses recording-time edits. Settings are explicitly session-only.
 
 Use `tests/fixtures/seams/reference-ramp.json` when changing the seam. Native
 tests cover partial bars, nonuniform loop boundaries at 44.1/48/96 kHz (within
-three output samples), multi-bar steps, target clamping, pause/reset/cancel and
-old queued readouts. `record_from_start_restarts_the_reference_ramp_and_snapshots_its_reset_state`
+three output samples), multi-bar steps, target clamping, pause/reset/cancel,
+Stop on a later section loop, and old queued readouts. `record_from_start_restarts_the_reference_ramp_and_snapshots_its_reset_state`
 checks actual take metadata; the IPC grid scenario covers identity/recording
 guards. `tests/jo/reference-ramp.test.ts` exercises UI, keyboard, pedal and
 EN/NB Jo routing with native failure propagation. Keep bilingual help and the
