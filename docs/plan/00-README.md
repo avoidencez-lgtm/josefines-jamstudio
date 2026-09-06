@@ -104,7 +104,7 @@ See [coverage and excluded regression candidates](../reviews/2026-09-05-e2e-comp
 | M1d | Live steering and the Stage screen | ✅ | #10, #28; pedal map is `controller.json`, not `controls/default.json` |
 | M1e | Recorder, latency calibration, take browser | ⏳ | #12, #28 |
 | M2 | Jo v1: push-to-talk, STT, LLM tools, TTS, persona (spike S5) | ⏳ | #14, #28 |
-| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native playback and offline stretch; local tempo/chord/key estimates; stems, provider analysis and analysed-grid playback pending |
+| M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native playback, offline stretch and output-clock local chord readout; stems, provider analysis and analysed-grid controls pending |
 | M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ⏳ | file-generation catalog/workflows in #29; RealTime and owner acceptance pending |
 | M5 | Rig orchestration over MIDI | ⏳ | #20, #28 |
 | M6 | Sessions: take analysis, LLM review, Logic export, progress | ⏳ | #22, #28 |

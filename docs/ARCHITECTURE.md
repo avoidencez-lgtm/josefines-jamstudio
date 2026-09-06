@@ -788,8 +788,8 @@ the generated band bus before voice ducking, and travels with the same output fr
 and DI capture to the recorder. Generated instrument stems and MIDI stay empty.
 Source samples are fixed at 48 kHz; the existing negotiated output rate is handled
 by stereo interpolation, without changing pitch/speed. Two-millisecond fades cover
-file/loop edges. Position and edits lead audible output by the queued duration,
-as the existing render-ahead model does; no beat-alignment acceptance is claimed.
+file/loop edges. Edits enter the render queue; displayed position now follows
+frames consumed by the output callback, as described below.
 
 `media_reference_seek(seconds)`, `media_reference_loop(start,end,enabled)` and
 `media_reference_unload()` refuse edits while recording. Loops must be at least
@@ -797,7 +797,7 @@ as the existing render-ahead model does; no beat-alignment acceptance is claimed
 this unanalysed source. Loading a chart/original replaces it; returning to band
 does not restore discarded original guitar layers. The session must reload a
 reference after app restart. `reference:state` and optional telemetry `reference`
-carry only ID, label, duration, position, state and loop settings. Songs and Stage
+carry ID, label, duration, position, state, loop settings and optional analysis readout. Songs and Stage
 share one control component, and the top transport shows seconds instead of a
 fabricated musical grid. Section-bound rig changes are suppressed for references.
 
@@ -830,3 +830,26 @@ edited file still matches; reanalysis is required after editing the file.
 This fallback estimates steady tempo and major/minor triads. It does not identify
 downbeats, sections, extended harmony or guitar stems, and does not change the
 reference transport's seconds grid. See [method and validation limits](research/local-song-analysis.md).
+
+### Reference chord readout at the output clock
+
+Loading an analysed reference hashes the encoded source before and after decoding.
+A changed source during loading refuses the load; a stale hash or malformed saved
+analysis leaves audio playable with `analysis_error` and a reanalysis instruction.
+Rust validates version, analyzer, confidence, decoded duration, finite/ordered
+beat and chord bounds and supported labels before accepting the map.
+
+Each queued output frame carries one u64: decoded-source generation and its 48 kHz
+source frame. The callback publishes the last consumed word once per buffer using
+an atomic store, without allocation, locks or IPC. A source generation prevents
+an old queued tail from moving a replacement song's display. Underruns hold the
+last delivered position; stopping the device clears it. `get_telemetry` looks up
+current/next different chord estimates and the one-based beat index from this
+position, outside the callback. Songs and Stage share the resulting readout.
+
+Tests cover queue lead, callback sizes, seek/loop/replacement and interpolation at
+44.1/48/96 kHz within one 48 kHz source frame, plus a real NullOutput engine path.
+The UI receives telemetry every 33 ms. The displayed cursor identifies audio sent
+to the device, not a measured loudspeaker arrival time: device buffering, OS/UI
+scheduling and hardware latency are additional. No physical latency acceptance,
+downbeat, bar, section or beat-loop support is claimed here.

@@ -164,6 +164,16 @@ export interface ReferenceState {
   loop_start: number;
   loop_end: number;
   loop_enabled: boolean;
+  analysis?: {
+    confidence: "low";
+    bpm: number | null;
+    key: string | null;
+    chord: string | null;
+    next_chord: string | null;
+    beat: number | null;
+    beat_count: number;
+  } | null;
+  analysis_error?: string | null;
 }
 
 export interface EngineTelemetry {
