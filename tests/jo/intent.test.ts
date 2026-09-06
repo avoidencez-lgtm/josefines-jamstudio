@@ -19,6 +19,10 @@ describe("Jo Natural Intent Parser", () => {
       name: "transport_control",
       arguments: { action: "stop" },
     });
+    expect(parseNaturalIntent("can you play").toolCalls[0]).toEqual({
+      name: "transport_control",
+      arguments: { action: "play" },
+    });
   });
 
   it("parses tempo adjustments", () => {

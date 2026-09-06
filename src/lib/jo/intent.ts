@@ -269,7 +269,7 @@ export function parseNaturalIntent(
   }
 
   if (
-    /^(?:jo[, ]+)?(?:play|start)\b/.test(lower) ||
+    /^(?:jo[, ]+)?(?:can you |please )?(?:play|start)\b/.test(lower) ||
     /\blet'?s (?:jam|play)\b/.test(lower) ||
     lower === "go"
   ) {
