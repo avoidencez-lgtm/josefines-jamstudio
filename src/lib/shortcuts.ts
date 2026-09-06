@@ -250,6 +250,13 @@ export function handleShortcut(
     return true;
   }
   if (e.key === "[" || e.key === "]") {
+    if (store.telemetry.reference) {
+      store.notify(
+        "error",
+        "The chart is idle while a reference is loaded. Change the reference key in the player, or return to the band.",
+      );
+      return true;
+    }
     void store.transposeCurrentChart(e.key === "[" ? -1 : 1);
     return true;
   }
