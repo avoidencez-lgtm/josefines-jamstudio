@@ -220,6 +220,22 @@ fn reference_sections_use_native_downbeats_and_record_the_confirmed_grid() {
         before["reference"]["grid"]["position"]["section_id"],
         "chorus"
     );
+    let ramp: Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/seams/reference-ramp.json"
+    ))
+    .unwrap();
+    assert!(studio
+        .err(
+            "media_reference_ramp",
+            json!({"assetId":"stale","config":ramp})
+        )
+        .contains("changed"));
+    let armed = studio.ok(
+        "media_reference_ramp",
+        json!({"assetId":"grid-fixture","config":ramp}),
+    );
+    assert_eq!(armed["speed_percent"], 50);
+    assert_eq!(armed["completed_bars"], 0);
     state
         .engine
         .lock()
@@ -229,10 +245,24 @@ fn reference_sections_use_native_downbeats_and_record_the_confirmed_grid() {
         "media_reference_loop_section",
         json!({"assetId":"grid-fixture","sectionId":"verse"}),
     );
+    assert!(studio
+        .err(
+            "media_reference_ramp",
+            json!({"assetId":"grid-fixture","config":null})
+        )
+        .contains("Save the take"));
     let take = state.engine.lock().recorder_stop().unwrap();
     assert_eq!(take.snapshot["beatGrid"]["origin"], "confirmed-local");
     assert_eq!(take.snapshot["beatGrid"]["beats"][4], 2.2);
     assert_eq!(take.snapshot["beatGrid"]["sections"][1]["label"], "Chorus");
+    assert_eq!(take.snapshot["reference"]["ramp"]["config"], ramp);
+    assert_eq!(
+        studio.ok(
+            "media_reference_ramp",
+            json!({"assetId":"grid-fixture","config":ramp,"toggle":true})
+        ),
+        Value::Null
+    );
     studio.ok("media_reference_unload", json!({}));
     studio.err("media_reference_grid_save",json!({"assetId":"missing","confirmation":{"sourceHash":"stale","expectedBeats":[],"firstDownbeat":0,"beatsPerBar":4,"sections":[],"confirmed":false}}));
 }

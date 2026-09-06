@@ -24,7 +24,10 @@ fn validate(doc: &Value) -> Result<(), String> {
         let action = b["action"].as_str().unwrap_or("");
         let p: jam_rig::controller::PedalPress =
             serde_json::from_value(b["press"].clone()).map_err(|e| e.to_string())?;
-        if !["keep", "record", "play", "loop", "next", "version", "voice"].contains(&action)
+        if ![
+            "keep", "record", "play", "loop", "next", "version", "voice", "ramp",
+        ]
+        .contains(&action)
             || !["program", "cc", "note"].contains(&p.kind.as_str())
             || !(1..=16).contains(&p.channel)
             || p.number > 127
@@ -69,6 +72,7 @@ mod tests {
             serde_json::from_str(include_str!("../../tests/fixtures/seams/controller.json"))
                 .unwrap();
         assert!(validate(&fixture).is_ok());
+        assert!(validate(&json!({"schemaVersion":1,"bindings":[{"action":"ramp","press":{"kind":"note","channel":1,"number":60}}]})).is_ok());
         let b = json!({"action":"keep","press":{"kind":"program","channel":1,"number":12}});
         assert!(validate(&json!({"schemaVersion":1,"bindings":[b.clone()]})).is_ok());
         assert!(validate(&json!({"schemaVersion":1,"bindings":[b.clone(),b]})).is_err());

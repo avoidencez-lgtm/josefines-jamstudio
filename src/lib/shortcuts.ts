@@ -6,6 +6,7 @@
 
 import type { EngineState } from "../store/engine";
 import { useWriting } from "./originals";
+import { toggleReferenceRamp } from "./referenceRamp";
 
 export interface Shortcut {
   /** Human-readable key label for the help overlay. */
@@ -22,6 +23,14 @@ const key = (k: string) => (e: KeyboardEvent) =>
   e.key === k && !e.ctrlKey && !e.metaKey;
 
 export const SHORTCUTS: Shortcut[] = [
+  {
+    keys: "Q",
+    description:
+      "Toggle reference practice ramp using the current session settings",
+    group: "Practice",
+    matches: code("KeyQ"),
+    run: toggleReferenceRamp,
+  },
   {
     keys: "H",
     description: "Keep the recent guitar idea (capture must be armed)",

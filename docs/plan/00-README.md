@@ -65,6 +65,15 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-06 M3 practice ramps: Songs/Stage, Q, a learned Ramp pedal and Jo now
+arm native speed progression over complete confirmed bars. The render worker
+counts loop boundaries and applies each step to all reference tracks. Pause,
+Stop, manual edits, target clamping, queued readouts and recording snapshots
+have synthetic regression coverage. Ramp choices are session-only and loading
+never arms one. Full Windows/macOS CI remains the merge gate. Music.ai,
+automatic downbeats/sections, band/MIDI/DAW tempo-map integration, realtime
+generation and release work remain V1 requirements. Friend checks stay V2.
+
 2026-09-06 automatic local preparation (M3/M4): imported and generated audio
 now runs the existing low-confidence tempo/chord/key analyzer automatically.
 Versioned status survives interruption; failed/canceled estimates keep the

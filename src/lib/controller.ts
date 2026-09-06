@@ -4,6 +4,7 @@ import { useEngineStore } from "../store/engine";
 import { handleJoQuery } from "./jo/conversation";
 import { cancelVoice, toggleVoice, useVoice } from "./jo/voice";
 import { useWriting } from "./originals";
+import { toggleReferenceRamp } from "./referenceRamp";
 
 export const PEDAL_ACTIONS = {
   keep: "Keep that riff",
@@ -13,6 +14,7 @@ export const PEDAL_ACTIONS = {
   next: "Next section loop",
   version: "Keep a version",
   voice: "Talk / send to Jo",
+  ramp: "Toggle reference practice ramp",
 } as const;
 export type PedalAction = keyof typeof PEDAL_ACTIONS;
 export interface PedalPress {
@@ -142,6 +144,10 @@ export const useController = create<ControllerState>((set, get) => ({
     if (!action) return;
     if (action === "voice") {
       await toggleVoice(handleJoQuery);
+      return;
+    }
+    if (action === "ramp") {
+      await toggleReferenceRamp();
       return;
     }
     const w = useWriting.getState();

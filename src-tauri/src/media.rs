@@ -866,6 +866,22 @@ fn save_reference_processing(
 }
 
 #[tauri::command]
+pub async fn media_reference_ramp(
+    asset_id: String,
+    config: Option<jam_audio::song::ramp::Config>,
+    toggle: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<Option<jam_audio::song::ramp::State>, String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    state
+        .engine
+        .lock()
+        .reference_ramp(&asset_id, config, toggle.unwrap_or(false))
+}
+
+#[tauri::command]
 pub async fn media_reference_processing(
     asset_id: String,
     speed: Option<f64>,

@@ -4,6 +4,7 @@
  * the request and reading the reply are exported so they can be tested offline.
  */
 
+import type { ReferenceState } from "../../ipc/contract";
 import { JO_SYSTEM_PROMPT, type JoMessage, type JoToolCall } from "./persona";
 import { JO_TOOLS } from "./tools";
 
@@ -28,6 +29,8 @@ export interface JoContext {
     seconds: number;
     speed: number;
     semitones: number;
+    ramp?: ReferenceState["ramp"];
+    confirmedBars?: number;
     sections?: Array<{ id: string; label: string }>;
   };
   writing?: {

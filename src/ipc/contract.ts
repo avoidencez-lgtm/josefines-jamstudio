@@ -207,6 +207,20 @@ export interface ReferenceState {
     } | null;
   } | null;
   grid_error?: string | null;
+  ramp?: {
+    config: ReferenceRampConfig;
+    active: boolean;
+    completed_bars: number;
+    speed_percent: number;
+  } | null;
+}
+
+export interface ReferenceRampConfig {
+  schemaVersion: 1;
+  startPercent: number;
+  stepPercent: number;
+  targetPercent: number;
+  barsPerStep: number;
 }
 
 export interface EngineTelemetry {

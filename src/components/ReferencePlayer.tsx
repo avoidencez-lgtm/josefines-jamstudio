@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ipc, isPreview } from "../ipc/client";
 import type { ReferenceState } from "../ipc/contract";
 import { applyReferencePractice } from "../lib/media";
+import { applyReferenceRamp, useReferenceRamp } from "../lib/referenceRamp";
 import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 import { StemMixer } from "./Stems";
@@ -16,11 +17,12 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
   const [speed, setSpeed] = useState((song.speed ?? 1) * 100);
   const [semitones, setSemitones] = useState(song.semitones ?? 0);
   const [processing, setProcessing] = useState(false);
+  const rampDraft = useReferenceRamp();
   useEffect(() => {
     setSpeed((song.speed ?? 1) * 100);
     setSemitones(song.semitones ?? 0);
   }, [song.speed, song.semitones]);
-  const locked = recording || isPreview || processing;
+  const locked = recording || isPreview || processing || rampDraft.busy;
   const practice = async (nextSpeed: number, nextSemitones: number) => {
     if (locked) return;
     setProcessing(true);
@@ -234,6 +236,81 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
             {song.processing_error} Reload the reference before trying again.
           </p>
         )}
+      </form>
+      <form
+        className="workspace-stack"
+        aria-label="Reference practice ramp"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void applyReferenceRamp(song.asset_id, rampDraft.config).catch(
+            (error) => useEngineStore.getState().notify("error", String(error)),
+          );
+        }}
+      >
+        <h3 className="font-semibold">Build up speed</h3>
+        <p className="workspace-note">
+          Increase after complete confirmed bars, including repeated sections.
+          Choose a section loop first. This changes every reference track
+          together; guitar DI stays unchanged.
+        </p>
+        <div className="workspace-actions">
+          {(
+            [
+              ["startPercent", "Start speed (%)", 50, 149],
+              ["stepPercent", "Increase (percentage points)", 1, 50],
+              ["targetPercent", "Target speed (%)", 51, 150],
+              ["barsPerStep", "Complete bars per step", 1, 64],
+            ] as const
+          ).map(([field, label, min, max]) => (
+            <label key={field} className="room-tool-field">
+              {label}
+              <input
+                type="number"
+                min={min}
+                max={max}
+                step={1}
+                required
+                disabled={locked}
+                value={rampDraft.config[field]}
+                onChange={(e) =>
+                  useReferenceRamp.setState({
+                    config: {
+                      ...rampDraft.config,
+                      [field]: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+          ))}
+          <Button type="submit" disabled={locked || !song.grid}>
+            Start ramp
+          </Button>
+          <Button
+            type="button"
+            disabled={locked || !song.grid}
+            onClick={() =>
+              void applyReferenceRamp(song.asset_id, null).catch((error) =>
+                useEngineStore.getState().notify("error", String(error)),
+              )
+            }
+          >
+            Stop ramp · hold speed
+          </Button>
+        </div>
+        <output className="workspace-note">
+          {song.ramp
+            ? `${song.ramp.speed_percent}% ${song.state === "playing" ? "heard" : "set"} · ${song.ramp.completed_bars} complete bars · ${song.ramp.active ? "ramp armed" : "target reached"}`
+            : "Ramp off, or waiting for updated output."}
+        </output>
+        <p className="workspace-note">
+          {!song.grid && "Confirm bars in Songs, then reload this reference. "}
+          Pause preserves progress. Stop returns to the start speed; Stop ramp
+          holds the current speed. Seek, loop changes and manual speed/key
+          changes cancel the ramp. Q or a learned Ramp pedal toggles these
+          session settings. Loading a song never starts a ramp; this does not
+          change its saved speed. Arm before recording.
+        </p>
       </form>
       <form
         className="workspace-actions"

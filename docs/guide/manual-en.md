@@ -266,9 +266,15 @@ Load a reference in Jamstudio, then use Practice speed & key in Songs or Stage. 
 
 Position, seek and loops use original source seconds. Saved chord/key estimates transpose with playback; estimated BPM follows speed. These remain low-confidence estimates, without downbeat or section alignment. New settings take effect after already queued audio. Record captures the processed stereo backing and the actual settings in the take snapshot. Save the take before changing speed, key, loop or mix.
 
-With this reference loaded, Jo can apply speed/key through the same controls. Offline examples: “speed 75%”, “transpose +2”, “slower”, “faster”; Norwegian examples: “sett hastighet til 75 prosent”, “transponer til 2 halvtoner”, “saktere”, “raskere”. A speed-only command keeps the current transpose and vice versa. Changes during recording, automated ramps and analysed section loops are not available yet.
+With this reference loaded, Jo can apply speed/key through the same controls. Offline examples: “speed 75%”, “transpose +2”, “slower”, “faster”; Norwegian examples: “sett hastighet til 75 prosent”, “transponer til 2 halvtoner”, “saktere”, “raskere”. A speed-only command keeps the current transpose and vice versa. Manual changes during recording are refused. Confirmed section loops and native practice ramps are available after confirming the beat map.
 
 This changes native playback, not source files, Film, system playback or offline practice copies. A processing error pauses the reference and asks you to reload. If saved settings are invalid, choose Load original mix. Browser preview has no audio processing.
+
+Build up speed in Songs or Stage increases every reference track after complete confirmed bars. Confirm bars and reload the reference first, then choose a section loop or turn looping off. Start at 50–149%, choose a higher target up to 150%, and increase 1–50 percentage points every 1–64 bars. A partial first bar does not count. A seconds loop must start and end on confirmed downbeats. Start ramp arms the settings; it never starts playback.
+
+Pause preserves progress. Stop resets progress and start speed. Stop ramp holds the current speed; seeking, changing the loop or applying manual speed/key cancels the ramp. A finished ramp holds its target. Speed/count readouts follow output audio while playing; paused/stopped controls show the armed settings. Queued audio can finish before a new setting is heard. Arm before recording; the processed backing and ramp settings are kept in the take. These session settings do not overwrite saved song speed and never arm automatically on reload. DAW tempo export does not yet encode ramp changes.
+
+Q and the learned Toggle reference practice ramp pedal use the current session draft (default 75 to 100%, +5 points every 4 bars). Jo examples: ramp 75 to 100 by 5 every 4 bars; stop ramp. Norwegian: ramp fra 75 til 100 med 5 hver 4 takter; stopp ramp. All use the same native command, with no timer or paid request.
 
 ### Confirm bars and loop named sections
 
@@ -276,7 +282,7 @@ Analyze tempo & chords, then open Confirm bars & sections in Songs. Local analys
 
 Add named sections in time order without overlap. Start bar is included and End before bar is excluded: start 1, end before 3 covers bars 1 and 2. Check the listening confirmation, save, then load the reference again. Changing the analysis or saved map clears confirmation. A changed source file or stale analysis is refused; analyze again and reopen the editor. Unknown saved fields are retained. Confirming a map does not improve the accuracy of the estimated beats.
 
-Songs and Stage show the current confirmed bar, fractional beat and named section from audio consumed by the output. Loop Solo starts that section at its confirmed downbeat and repeats to its exclusive end. Speed and key processing stay active. Already queued audio can finish before the change is heard. Save any recording before changing loops. The take stores the full confirmed map, but DAW tempo export and automatic practice ramps do not yet consume it.
+Songs and Stage show the current confirmed bar, fractional beat and named section from audio consumed by the output. Loop Solo starts that section at its confirmed downbeat and repeats to its exclusive end. Speed and key processing stay active. Already queued audio can finish before the change is heard. Save any recording before changing loops. The take stores the full confirmed map, and practice ramps count its complete bars. DAW tempo export does not yet consume it.
 
 Jo can use the confirmed names: “loop Chorus” or “gjenta Refreng”. A name must identify exactly one section; duplicate or missing names require choosing one in the reference player. These are user-confirmed sections, not automatic provider detections. A stale map is reported visibly while audio remains playable through seconds controls.
 
@@ -472,6 +478,7 @@ The bilingual manual source is docs/guide/manual.json. Every title and text bloc
 
 ## Keyboard shortcuts
 
+- **Q**: Toggle reference practice ramp using the current session settings
 - **H**: Keep the recent guitar idea (capture must be armed)
 - **Space**: Play / pause
 - **Enter**: Stop and return to the top

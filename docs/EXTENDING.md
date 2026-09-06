@@ -1,5 +1,26 @@
 # Extending Josefines Jamstudio
 
+## Reference practice ramp
+
+`crates/jam-audio/src/song/ramp.rs` defines the versioned configuration and
+complete-bar boundary selection. `ReferenceSong` advances it from rendered
+source frames and reuses existing per-stem processing and stamped telemetry.
+Never drive it from a JS timer or band BPM. `src/lib/referenceRamp.ts` validates
+the UI boundary, owns the session draft and implements the Jo action; one
+`JO_ACTIONS` registry entry exposes it. UI, Q and the learned `ramp` pedal route
+to the same native command, which validates the currently loaded source and
+refuses recording-time edits. Settings are explicitly session-only.
+
+Use `tests/fixtures/seams/reference-ramp.json` when changing the seam. Native
+tests cover partial bars, nonuniform loop boundaries at 44.1/48/96 kHz (within
+three output samples), multi-bar steps, target clamping, pause/reset/cancel and
+old queued readouts. `record_from_start_restarts_the_reference_ramp_and_snapshots_its_reset_state`
+checks actual take metadata; the IPC grid scenario covers identity/recording
+guards. `tests/jo/reference-ramp.test.ts` exercises UI, keyboard, pedal and
+EN/NB Jo routing with native failure propagation. Keep bilingual help and the
+shortcut registry aligned. Full tempo-map export and provider analysis remain
+separate work; these tests do not prove physical-device timing or live quality.
+
 ## Local reference analysis
 
 `jam-dsp::offline` owns the pure local tempo/chroma/key calculation and versioned
