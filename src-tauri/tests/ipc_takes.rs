@@ -826,8 +826,13 @@ fn media_from_take_mixes_the_clean_stems_into_an_audio_asset() {
     );
     let path = PathBuf::from(asset["path"].as_str().unwrap());
     assert_eq!(path.extension().unwrap(), "wav");
-    let assets = user_dir().join("music-videos").join("assets");
-    assert_eq!(path.parent(), Some(assets.as_path()));
+    let song_folder = user_dir()
+        .join("songs")
+        .join(asset["id"].as_str().unwrap())
+        .canonicalize()
+        .unwrap();
+    assert_eq!(path.parent(), Some(song_folder.as_path()));
+    assert_eq!(path.file_name().unwrap(), "source.wav");
     let (mix, rate) = jam_audio::recorder::read_wav_mono(&path).unwrap();
     assert_eq!(rate, RATE);
     assert!(
@@ -843,9 +848,25 @@ fn media_from_take_mixes_the_clean_stems_into_an_audio_asset() {
         "expected 0.4 * sqrt(1/2) = 0.283, got {peak}"
     );
     let sidecar: Value =
-        serde_json::from_slice(&std::fs::read(path.with_extension("json")).unwrap()).unwrap();
+        serde_json::from_slice(&std::fs::read(song_folder.join("song.json")).unwrap()).unwrap();
     assert_eq!(sidecar["id"], asset["id"]);
-    assert_eq!(sidecar["path"], asset["path"]);
+    assert_eq!(sidecar["sourcePath"], "source.wav");
+    assert_eq!(sidecar["title"], asset["label"]);
+    use sha2::Digest;
+    assert_eq!(
+        sidecar["sourceHash"],
+        format!("{:x}", sha2::Sha256::digest(std::fs::read(&path).unwrap()))
+    );
+    studio.ok("media_reference_load", json!({"assetId":asset["id"]}));
+    studio.ok(
+        "media_reference_processing",
+        json!({"assetId":asset["id"],"speed":0.75,"semitones":2}),
+    );
+    let saved: Value =
+        serde_json::from_slice(&std::fs::read(song_folder.join("song.json")).unwrap()).unwrap();
+    assert_eq!(saved["referencePractice"]["speed"], 0.75);
+    assert!(song_folder.join("song.bak").exists());
+    studio.ok("media_reference_unload", json!({}));
 }
 
 #[test]

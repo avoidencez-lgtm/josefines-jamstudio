@@ -314,6 +314,46 @@ One step per `AnalysisKind`; each step picks the enabled provider (Music.ai for 
 
 ## 7. Data model and files on disk
 
+### Implemented song storage (2026-09-06)
+
+New audio imports (including generated media and clean take mixes) and rendered
+practice copies now publish `songs/<id>/song.json`, `source.wav` (48 kHz stereo
+float PCM) and an unchanged `original.<ext>`. IDs remain stable across migration,
+so Film projects keep their `audioId`. `media_store_song(assetId)` copies a legacy
+audio entry and its hash-verified stems into that layout; Songs exposes it under
+Local file. Legacy files are retained. Repeating the operation is idempotent.
+
+The runtime schema is version 1 with `id`, `title`, relative `sourcePath`,
+`sourceHash` (SHA-256 of normalized source bytes), and `durationMs`. Existing
+`songAnalysis`, `referenceGrid`, `stemSet` and `referencePractice` documents are
+preserved as concrete extension fields, along with unknown metadata. This is the
+implemented storage schema; the richer provider `analysis[]`, `tempoMap` and
+resolved `chart` shape below still requires the remaining M3 integration.
+
+`media::asset` and `save_asset` route all readers and metadata writers to the
+canonical song file when its folder exists. `media_list` merges songs and legacy
+media with one entry per ID. A broken/future canonical document hides its stale
+legacy counterpart and reports a warning. No SQLite record or mirror manifest
+can override it. Source and stem paths are relative on disk and resolved at the
+native boundary; missing stems still permit loading the original mix. Video
+assembly and the external player use the same resolved asset view.
+
+Imports stage a private folder, validate bounded PCM/duration and source/stem
+hashes, sync files, then publish by directory rename. Cancellation or failure
+removes the private staging folder, keeping original/legacy/paid output files.
+Migration rebinds only schema-1 analysis/grid/stem hashes matching the old source;
+stale metadata remains stale. Unknown fields survive and reserved-field collisions
+are refused before copying. Rewrites use the existing temp-file/sync/backup
+helper (`song.bak`). No decoder dependency was added: user-installed FFmpeg is
+still used, and native symphonia import/file-dialog work remains pending.
+
+`song_files_are_authoritative_portable_and_preserve_unknown_metadata` covers
+canonical precedence, version/path refusals and rewrite preservation in ordinary
+CI. The opt-in `legacy_song_migration_preserves_audio_metadata_stems_and_video_identity`
+uses real FFmpeg and checks PCM within `1e-7`, source/metadata preservation,
+relative stems, reload, idempotency and library relocation. Existing real-tool
+practice, stem and Film timing tests cover the migrated persistence route.
+
 Files are truth; SQLite is a cache ([ADR 0005](adr/0005-files-are-truth-sqlite-is-cache.md)). Every manifest has `schemaVersion`; unknown fields are preserved on rewrite; each bump has one migration function in `jam-core::schema`.
 
 ```

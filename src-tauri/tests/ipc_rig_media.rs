@@ -1203,6 +1203,10 @@ fn media_import_refuses_missing_files_wrong_kinds_and_unknown_extensions_without
     let studio = Studio::boot();
     let assets = media_root().join("assets");
     let before = json_files(&assets);
+    assert_eq!(
+        studio.err("media_store_song", json!({"assetId":"../escape"})),
+        "Invalid media ID"
+    );
     let local = "Choose a local audio/video file up to 512 MB.";
 
     let missing = user_dir().join(format!("{}.wav", unique("missing")));

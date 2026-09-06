@@ -130,8 +130,8 @@ export function Songs() {
           </Button>
         </div>
         <p className="workspace-note mt-2">
-          {tools.message} Files are copied into the library; up to 512 MB and 10
-          minutes each.
+          {tools.message} Audio is copied into a song folder with a 48 kHz
+          source WAV; up to 512 MB and 10 minutes each. Your original is kept.
         </p>
       </details>
       {(m.busy || m.message) && (
@@ -141,7 +141,9 @@ export function Songs() {
         m.busy === "Separating stems" ||
         m.busy === "Importing stems" ||
         m.busy === "Loading reference" ||
-        m.busy === "Analyzing song locally") && (
+        m.busy === "Analyzing song locally" ||
+        m.busy === "Consolidating song files" ||
+        m.busy === "Importing song") && (
         <Button
           onClick={() =>
             void ipc
@@ -384,6 +386,28 @@ export function Songs() {
               <details>
                 <summary className="cursor-pointer text-sm">Local file</summary>
                 <p className="workspace-note break-all mt-2">{song.path}</p>
+                <p className="workspace-note mt-2">
+                  Keep the source, stems and saved settings in one portable song
+                  folder. Older media files are copied and kept; existing Film
+                  projects keep the same song. Reload the reference afterward.
+                </p>
+                <Button
+                  disabled={locked || isPreview || !tools.ready}
+                  onClick={() =>
+                    void m.work("Consolidating song files", async () => {
+                      await ipc.invoke("media_store_song", {
+                        assetId: song.id,
+                      });
+                      await m.refresh();
+                      useMedia.setState({
+                        message:
+                          "Song files are together. Load the reference again to use the saved folder.",
+                      });
+                    })
+                  }
+                >
+                  Keep song files together
+                </Button>
               </details>
             </section>
           )}

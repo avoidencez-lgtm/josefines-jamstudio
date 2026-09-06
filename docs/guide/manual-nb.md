@@ -270,6 +270,14 @@ Songs og Stage viser bekreftet takt, brøkdel av taktslag og navngitt seksjon ut
 
 Jo kan bruke de bekreftede navnene: «gjenta Refreng» eller «loop Chorus». Navnet må passe nøyaktig én seksjon; ved like eller manglende navn må du velge i referansespilleren. Dette er brukerbekreftede seksjoner, ikke automatiske leverandørfunn. Et foreldet taktkart varsles tydelig, mens lyden fortsatt kan spilles med sekundkontrollene.
 
+### Samle sangfilene
+
+Nye lydimporter, genererte spor og øvingskopier lagres i songs/<id>/ med song.json, en stereo source.wav på 48 kHz og den opprinnelige filen. Analyse, bekreftede takter, stem-miks og øvingsinnstillinger lagres i samme song.json. Videoprosjekter fortsetter å vise til sangens ID.
+
+For eldre lyd: åpne Local file i Songs og velg Keep song files together. Appen kopierer kilden og kontrollerte stems til én mappe, bevarer metadata og ID, og beholder de gamle filene. Last referansen på nytt etterpå. Operasjonen er lokal, kan avbrytes og er utilgjengelig under opptak. Ingen leverandør kontaktes. Sikkerhetskopier hele sangmappen; kilde- og stem-stier i song.json er relative. Ved omskriving beholdes forrige versjon som song.bak.
+
+En skadet eller ukjent versjon av song.json vises som en advarsel i biblioteket; appen bruker ikke en eldre mediekopi med samme ID i stillhet. Gjenopprett en kjent god sikkerhetskopi eller rett filen som er navngitt. Manglende stems kan omgås med Load original mix. Endret kildelyd må importeres som en ny sang. FFmpeg kreves fortsatt for import og dekoding; automatisk leverandøranalyse er et separat arbeid.
+
 ## AI Music og lokale modeller
 
 ### Generer med et bevisst valg

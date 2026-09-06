@@ -270,6 +270,14 @@ Songs and Stage show the current confirmed bar, fractional beat and named sectio
 
 Jo can use the confirmed names: “loop Chorus” or “gjenta Refreng”. A name must identify exactly one section; duplicate or missing names require choosing one in the reference player. These are user-confirmed sections, not automatic provider detections. A stale map is reported visibly while audio remains playable through seconds controls.
 
+### Keep song files together
+
+New audio imports, generated tracks and practice copies are saved in songs/<id>/ with song.json, a 48 kHz stereo source.wav and a preserved original file. Analysis, confirmed bars, stem mixes and practice settings are saved in that same song.json. Video projects keep referring to the song by its ID.
+
+For an older audio entry, open Local file in Songs and choose Keep song files together. The app copies its source and verified stems into one folder, preserves metadata and the existing ID, and keeps the old files. Reload the reference afterward. This operation stays local, can be canceled, and is unavailable during recording. It does not call a provider. Back up the whole song folder; source and stem paths inside song.json are relative. Rewrites keep the preceding song.bak.
+
+A damaged or unsupported song.json is shown as a library warning; the app does not silently use an older media copy with the same ID. Restore a known-good backup or correct the named file. Missing stems can be bypassed with Load original mix. Changed source audio must be imported as a new song. FFmpeg is still required for import and decoding; automatic provider analysis remains separate.
+
 ## AI Music and local models
 
 ### Generate deliberately

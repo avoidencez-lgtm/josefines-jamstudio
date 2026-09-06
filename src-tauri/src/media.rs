@@ -12,6 +12,7 @@ use std::{
 };
 use tauri::State;
 pub mod grid;
+pub mod songs;
 pub mod stems;
 
 const MEDIA_EXTENSIONS: &[&str] = &[
@@ -231,20 +232,46 @@ fn list_media(base: &Path) -> Result<Value, String> {
             }
         }
     }
+    songs::append_list(base, &mut result)?;
     Ok(result)
 }
 
 fn asset(base: &Path, id: &str) -> Result<Asset, String> {
     valid_id(id)?;
+    if songs::folder(base, id)?.exists() {
+        return songs::load(base, id);
+    }
     let a: Asset = serde_json::from_value(read(&base.join("assets").join(format!("{id}.json")))?)
         .map_err(|e| e.to_string())?;
-    let path = fs::canonicalize(&a.path).map_err(|_| "Media file moved or missing")?;
-    let allowed = fs::canonicalize(base.join("assets")).map_err(|e| e.to_string())?;
-    if !path.starts_with(allowed) || !path.is_file() {
-        return Err("Asset is outside the media library".into());
-    }
+    library_audio_path(base, Path::new(&a.path))?;
     Ok(a)
 }
+fn library_audio_path(base: &Path, path: &Path) -> Result<PathBuf, String> {
+    let file = path
+        .canonicalize()
+        .map_err(|_| "Media file moved or missing")?;
+    let roots = [base.join("assets"), songs::library(base)?];
+    if !file.is_file()
+        || !roots
+            .iter()
+            .any(|root| root.canonicalize().is_ok_and(|root| file.starts_with(root)))
+    {
+        return Err("Asset is outside the media library".into());
+    }
+    Ok(file)
+}
+fn save_asset(base: &Path, a: &Asset) -> Result<(), String> {
+    valid_id(&a.id)?;
+    if songs::folder(base, &a.id)?.exists() {
+        songs::save(base, a)
+    } else {
+        write(
+            &base.join("assets").join(format!("{}.json", a.id)),
+            &serde_json::to_value(a).map_err(|e| e.to_string())?,
+        )
+    }
+}
+
 async fn run(executable: &Path, args: &[String], seconds: u64) -> Result<Vec<u8>, String> {
     use tokio::io::AsyncReadExt;
     let mut child = platform::command(executable)
@@ -341,6 +368,21 @@ async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Ass
     }
     let seconds = probe(path, kind).await?;
     let id = id();
+    if kind == "audio" {
+        return songs::store(
+            base,
+            Asset {
+                schema_version: 1,
+                id,
+                kind: kind.into(),
+                path: path.to_string_lossy().into_owned(),
+                seconds,
+                label: label.chars().take(160).collect(),
+                extra: BTreeMap::new(),
+            },
+        )
+        .await;
+    }
     let dest = base.join("assets").join(format!("{id}.{ext}"));
     fs::create_dir_all(dest.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::copy(path, &dest).map_err(|e| e.to_string())?;
@@ -498,7 +540,7 @@ async fn practice_copy(
     fs::create_dir_all(work.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::create_dir(&work).map_err(|e| e.to_string())?;
     let decoded = work.join("decoded.wav");
-    let output = base.join("assets").join(format!("{new_id}.wav"));
+    let output = work.join("practice.wav");
     let result = async {
         decode_audio(&source.path, &decoded, "600.2").await?;
         let input = decoded.clone();
@@ -511,9 +553,9 @@ async fn practice_copy(
             extra: BTreeMap::from([("practice".into(), json!({"sourceAssetId": source.id, "speed": speed, "semitones": semitones, "processor": "signalsmith-stretch-1.3.2"}))]),
         };
         let saved = if CANCEL.load(Ordering::Relaxed) { Err("Practice copy canceled.".into()) }
-            else { write(&base.join("assets").join(format!("{new_id}.json")), &serde_json::to_value(&prepared).map_err(|e| e.to_string())?) };
-        if let Err(error) = saved { let _ = fs::remove_file(&output); return Err(error); }
-        Ok(prepared)
+            else { songs::store(base, prepared).await };
+        let _ = fs::remove_file(&output);
+        saved
     }.await;
     let _ = fs::remove_file(&decoded);
     let _ = fs::remove_dir(&work);
@@ -586,7 +628,7 @@ async fn reference_source(
     let result = async {
         let original = PathBuf::from(&source.path);
         let before =
-            if source.extra.contains_key("songAnalysis") || source.extra.contains_key("stemSet") || source.extra.contains_key("referenceGrid") {
+            if source.extra.contains_key("songAnalysis") || source.extra.contains_key("stemSet") || source.extra.contains_key("referenceGrid") || source.extra.contains_key("sourceHash") {
                 let path = original.clone();
                 Some(
                     tauri::async_runtime::spawn_blocking(move || source_hash(&path))
@@ -624,6 +666,9 @@ async fn reference_source(
             } else {
                 None
             };
+            if let Some(expected) = source.extra.get("sourceHash") {
+                if expected.as_str() != after.as_deref() { return Err("Stored song audio changed. Import the source again as a new song.".into()); }
+            }
             if before != after {
                 return Err("Audio changed while loading. Load the reference again.".into());
             }
@@ -732,10 +777,7 @@ async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
         }
         source = current;
         source.extra.insert("songAnalysis".into(), analysis);
-        write(
-            &base.join("assets").join(format!("{source_id}.json")),
-            &serde_json::to_value(&source).map_err(|e| e.to_string())?,
-        )?;
+        save_asset(base, &source)?;
         Ok(source)
     }
     .await;
@@ -809,10 +851,7 @@ fn save_reference_processing(
     }
     practice["speed"] = json!(speed);
     practice["semitones"] = json!(semitones);
-    write(
-        &base.join("assets").join(format!("{asset_id}.json")),
-        &serde_json::to_value(source).map_err(|e| e.to_string())?,
-    )
+    save_asset(base, &source)
 }
 
 #[tauri::command]
@@ -1116,7 +1155,11 @@ pub fn media_cancel() {
 }
 fn playable_file(base: &Path, path: &Path) -> Result<PathBuf, String> {
     let file = fs::canonicalize(path).map_err(|e| e.to_string())?;
-    if !file.starts_with(fs::canonicalize(base).map_err(|e| e.to_string())?)
+    let song_root = songs::library(base)?;
+    let allowed = [base.to_path_buf(), song_root]
+        .iter()
+        .any(|root| root.canonicalize().is_ok_and(|root| file.starts_with(root)));
+    if !allowed
         || !file.is_file()
         || !MEDIA_EXTENSIONS.contains(&file.extension().and_then(|s| s.to_str()).unwrap_or(""))
     {
@@ -1179,7 +1222,8 @@ mod tests {
         assert_eq!(std::env::var("JAM_MEDIA_TEST").as_deref(), Ok("1"));
         let _gate = GATE.lock().await;
         CANCEL.store(false, Ordering::Relaxed);
-        let base = std::env::temp_dir().join(format!("jam-practice-media-{}", id()));
+        let home = std::env::temp_dir().join(format!("jam-practice-media-{}", id()));
+        let base = home.join("music-videos");
         fs::create_dir_all(&base).unwrap();
         let exe = platform::find_agent("ffmpeg", "").unwrap();
         let input = base.join("source.wav");
@@ -1239,8 +1283,10 @@ mod tests {
         original
             .extra
             .insert("futureField".into(), json!({"kept": true}));
-        let manifest = base.join("assets").join(format!("{}.json", original.id));
-        write(&manifest, &serde_json::to_value(&original).unwrap()).unwrap();
+        let manifest = songs::folder(&base, &original.id)
+            .unwrap()
+            .join("song.json");
+        save_asset(&base, &original).unwrap();
         let before = fs::read(&original.path).unwrap();
         let analyzed = analyze_source(&base, &original.id).await.unwrap();
         let saved = asset(&base, &original.id).unwrap();
@@ -1263,7 +1309,7 @@ mod tests {
         engine.load_reference(reference).unwrap();
         assert!(engine.get_telemetry().reference.unwrap().analysis.is_some());
         // Wrong source identity never produces apparently synchronized chords.
-        let mut stale = serde_json::to_value(&saved).unwrap();
+        let mut stale = read(&manifest).unwrap();
         stale["songAnalysis"]["sourceHash"] = json!("0".repeat(64));
         write(&manifest, &stale).unwrap();
         let reference = reference_source(&base, &original.id, true).await.unwrap();
@@ -1272,7 +1318,7 @@ mod tests {
             .analysis_error
             .unwrap()
             .contains("changed since analysis"));
-        write(&manifest, &serde_json::to_value(&saved).unwrap()).unwrap();
+        save_asset(&base, &saved).unwrap();
         let previous = fs::read(&manifest).unwrap();
         CANCEL.store(true, Ordering::Relaxed);
         assert!(analyze_source(&base, &original.id)
@@ -1283,7 +1329,7 @@ mod tests {
         CANCEL.store(false, Ordering::Relaxed);
         assert_eq!(fs::read(&manifest).unwrap(), previous);
         assert!(fs::read_dir(base.join("work")).unwrap().next().is_none());
-        fs::remove_dir_all(base).unwrap();
+        fs::remove_dir_all(home).unwrap();
     }
     #[test]
     fn player_accepts_import_formats_but_not_outside_files_or_programs() {
@@ -1410,7 +1456,8 @@ mod tests {
     #[ignore = "requires user-installed FFmpeg and ffprobe; run with JAM_MEDIA_TEST=1"]
     async fn local_video_render_keeps_song_timing() {
         assert_eq!(std::env::var("JAM_MEDIA_TEST").as_deref(), Ok("1"));
-        let base = std::env::temp_dir().join(format!("jam-video-{}", id()));
+        let home = std::env::temp_dir().join(format!("jam-video-{}", id()));
+        let base = home.join("music-videos");
         fs::create_dir_all(&base).unwrap();
         let exe = platform::find_agent("ffmpeg", "").unwrap();
         CANCEL.store(false, Ordering::Relaxed);
@@ -1471,6 +1518,6 @@ mod tests {
             "Audio RMSE {} exceeds AAC tolerance",
             mse.sqrt()
         );
-        fs::remove_dir_all(base).unwrap();
+        fs::remove_dir_all(home).unwrap();
     }
 }

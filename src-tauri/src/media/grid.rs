@@ -95,10 +95,7 @@ async fn save(base: &Path, asset_id: &str, request: Confirmation) -> Result<Asse
     if CANCEL.load(Ordering::Relaxed) {
         return Err("Reference map confirmation canceled.".into());
     }
-    write(
-        &base.join("assets").join(format!("{asset_id}.json")),
-        &serde_json::to_value(&current).map_err(|e| e.to_string())?,
-    )?;
+    save_asset(base, &current)?;
     Ok(current)
 }
 
