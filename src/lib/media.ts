@@ -253,6 +253,9 @@ export function applyShotIdeas(
     })),
   };
 }
+/** Edits with the same coalesce key closer than this share one Undo entry. */
+export const COALESCE_MS = 1500;
+
 interface MediaState extends MediaLibrary {
   undo: VideoProject[];
   undoEdit: () => void;
@@ -263,7 +266,9 @@ interface MediaState extends MediaLibrary {
   renderPath: string;
   proposal: string;
   proposalBase: string;
-  edit: (patch: Partial<VideoProject>) => void;
+  /** The last coalescing edit, so a run of typing is one Undo step. */
+  lastEdit: { key: string; at: number } | null;
+  edit: (patch: Partial<VideoProject>, coalesce?: string) => void;
   open: (project: VideoProject) => void;
   refresh: () => Promise<void>;
   save: () => Promise<void>;
@@ -279,7 +284,13 @@ export const useMedia = create<MediaState>((set, get) => ({
       ...s.undo[s.undo.length - 1],
       revision: s.project.revision,
     };
-    set({ project, undo: s.undo.slice(0, -1), dirty: true, renderPath: "" });
+    set({
+      project,
+      undo: s.undo.slice(0, -1),
+      dirty: true,
+      renderPath: "",
+      lastEdit: null,
+    });
   },
   projects: [],
   assets: [],
@@ -291,18 +302,30 @@ export const useMedia = create<MediaState>((set, get) => ({
   renderPath: "",
   proposal: "",
   proposalBase: "",
-  edit: (patch) =>
-    set((s) => ({
+  lastEdit: null,
+  edit: (patch, coalesce) => {
+    const s = get();
+    const now = Date.now();
+    const last = s.lastEdit;
+    const grouped =
+      coalesce !== undefined &&
+      last?.key === coalesce &&
+      now - last.at < COALESCE_MS &&
+      s.undo.length > 0;
+    set({
       project: { ...s.project, lastRender: null, ...patch },
       dirty: true,
-      undo: [...s.undo, s.project].slice(-50),
+      undo: grouped ? s.undo : [...s.undo, s.project].slice(-50),
+      lastEdit: coalesce === undefined ? null : { key: coalesce, at: now },
       renderPath: "",
-    })),
+    });
+  },
   open: (project) =>
     set({
       project: structuredClone(project),
       dirty: false,
       undo: [],
+      lastEdit: null,
       renderPath:
         typeof project.lastRender === "string" ? project.lastRender : "",
       proposal: "",

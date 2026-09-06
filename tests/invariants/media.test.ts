@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Chart } from "../../src/ipc/contract";
 import { dispatchJoToolCall } from "../../src/lib/jo/dispatcher";
 import {
+  COALESCE_MS,
   MEDIA_MODELS,
   applyShotIdeas,
   clampGenerationSeconds,
@@ -111,5 +112,48 @@ describe("music video seam", () => {
     expect(() =>
       applyShotIdeas(p, JSON.stringify([{ ...idea, id: "other" }])),
     ).toThrow();
+  });
+
+  it("groups a run of typing into one Undo step so a prompt cannot evict Add shot", () => {
+    const project = newVideo();
+    useMedia.getState().open(project);
+    useMedia.getState().edit({
+      shots: [...project.shots, { ...project.shots[0], id: "second" }],
+    });
+    expect(useMedia.getState().undo).toHaveLength(1);
+    const shotId = useMedia.getState().project.shots[0].id;
+    for (const prompt of ["a", "ab", "abc"])
+      useMedia.getState().edit(
+        {
+          shots: useMedia
+            .getState()
+            .project.shots.map((s) => (s.id === shotId ? { ...s, prompt } : s)),
+        },
+        `shot-prompt:${shotId}`,
+      );
+    expect(useMedia.getState().undo).toHaveLength(2);
+    expect(useMedia.getState().project.shots[0].prompt).toBe("abc");
+    useMedia.getState().undoEdit();
+    expect(useMedia.getState().project.shots[0].prompt).toBe(
+      project.shots[0].prompt,
+    );
+    expect(useMedia.getState().project.shots).toHaveLength(2);
+    useMedia.setState({
+      lastEdit: {
+        key: `shot-prompt:${shotId}`,
+        at: Date.now() - COALESCE_MS - 1,
+      },
+    });
+    useMedia.getState().edit(
+      {
+        shots: useMedia
+          .getState()
+          .project.shots.map((s) =>
+            s.id === shotId ? { ...s, prompt: "later" } : s,
+          ),
+      },
+      `shot-prompt:${shotId}`,
+    );
+    expect(useMedia.getState().undo).toHaveLength(2);
   });
 });

@@ -119,22 +119,26 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
     instrumental?: boolean;
   };
   const audioDraft = project.audioGeneration as AudioDraft | undefined;
-  const updateAudio = (patch: AudioDraft) =>
-    m.edit({
-      audioGeneration: {
-        ...(useMedia.getState().project.audioGeneration as
-          | AudioDraft
-          | undefined),
-        ...patch,
+  const updateAudio = (patch: AudioDraft, coalesce?: string) =>
+    m.edit(
+      {
+        audioGeneration: {
+          ...(useMedia.getState().project.audioGeneration as
+            | AudioDraft
+            | undefined),
+          ...patch,
+        },
       },
-    });
+      coalesce,
+    );
   const audioModel = audioDraft?.catalogId ?? "lyria";
   const audioModelId = audioDraft?.model ?? "lyria-3.5";
   const setAudioModelId = (model: string) => updateAudio({ model });
   const audioPrompt =
     audioDraft?.prompt ??
     "A soulful original guitar song. Intimate verse, soaring chorus, a short instrumental bridge. Warm live-room sound.";
-  const setAudioPrompt = (prompt: string) => updateAudio({ prompt });
+  const setAudioPrompt = (prompt: string, coalesce?: string) =>
+    updateAudio({ prompt }, coalesce);
   const audioSeconds = audioDraft?.seconds ?? 120;
   const setAudioSeconds = (seconds: number) => updateAudio({ seconds });
   const instrumental = audioDraft?.instrumental ?? false;
@@ -161,8 +165,10 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
         outputNode?: string;
       }
     | undefined;
-  const editLocal = (patch: Partial<NonNullable<typeof local>>) =>
-    m.edit({ local: { ...local, ...patch } });
+  const editLocal = (
+    patch: Partial<NonNullable<typeof local>>,
+    coalesce?: string,
+  ) => m.edit({ local: { ...local, ...patch } }, coalesce);
   const brain = BRAINS[ai.preferences.selected];
   useEffect(() => {
     void m.refresh().catch((e) => useMedia.setState({ message: String(e) }));
@@ -180,12 +186,15 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
         .catch((e) => setTools({ ready: false, message: String(e) }));
   }, [m.refresh, engine.loadTakes]);
 
-  const editShot = (patch: Partial<MediaShot>) =>
-    m.edit({
-      shots: project.shots.map((s) =>
-        s.id === shot?.id ? { ...s, ...patch } : s,
-      ),
-    });
+  const editShot = (patch: Partial<MediaShot>, coalesce?: string) =>
+    m.edit(
+      {
+        shots: project.shots.map((s) =>
+          s.id === shot?.id ? { ...s, ...patch } : s,
+        ),
+      },
+      coalesce,
+    );
   const work = (label: string, task: () => Promise<void>) =>
     void m.work(label, task);
   const attach = async (a: MediaAsset) => {
@@ -354,7 +363,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               disabled={locked}
               maxLength={100}
               value={project.title}
-              onChange={(e) => m.edit({ title: e.target.value })}
+              onChange={(e) => m.edit({ title: e.target.value }, "title")}
             />
           </label>
           <label hidden={audioOnly}>
@@ -524,7 +533,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               maxLength={4000}
               disabled={locked}
               value={audioPrompt}
-              onChange={(e) => setAudioPrompt(e.target.value)}
+              onChange={(e) => setAudioPrompt(e.target.value, "audio-prompt")}
             />
           </label>
           <div className="video-actions">
@@ -583,7 +592,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               <input
                 disabled={locked}
                 value={local?.promptNode ?? ""}
-                onChange={(e) => editLocal({ promptNode: e.target.value })}
+                onChange={(e) =>
+                  editLocal({ promptNode: e.target.value }, "local-prompt-node")
+                }
               />
             </label>
             <label>
@@ -591,7 +602,12 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               <input
                 disabled={locked}
                 value={local?.promptInput ?? "text"}
-                onChange={(e) => editLocal({ promptInput: e.target.value })}
+                onChange={(e) =>
+                  editLocal(
+                    { promptInput: e.target.value },
+                    "local-prompt-input",
+                  )
+                }
               />
             </label>
             <label>
@@ -599,7 +615,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               <input
                 disabled={locked}
                 value={local?.outputNode ?? ""}
-                onChange={(e) => editLocal({ outputNode: e.target.value })}
+                onChange={(e) =>
+                  editLocal({ outputNode: e.target.value }, "local-output-node")
+                }
               />
             </label>
           </div>
@@ -609,7 +627,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               rows={6}
               disabled={locked}
               value={local?.workflow ?? ""}
-              onChange={(e) => editLocal({ workflow: e.target.value })}
+              onChange={(e) =>
+                editLocal({ workflow: e.target.value }, "local-workflow")
+              }
             />
           </label>
           <p className="video-note">
@@ -746,7 +766,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                 maxLength={2000}
                 disabled={locked}
                 value={project.direction}
-                onChange={(e) => m.edit({ direction: e.target.value })}
+                onChange={(e) =>
+                  m.edit({ direction: e.target.value }, "direction")
+                }
               />
             </label>
             <div className="video-actions">
@@ -921,7 +943,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   disabled={locked}
                   maxLength={100}
                   value={shot.title}
-                  onChange={(e) => editShot({ title: e.target.value })}
+                  onChange={(e) =>
+                    editShot({ title: e.target.value }, `shot-title:${shot.id}`)
+                  }
                 />
               </label>
               <div className="video-shot-fields">
@@ -961,7 +985,12 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   maxLength={3000}
                   disabled={locked}
                   value={shot.prompt}
-                  onChange={(e) => editShot({ prompt: e.target.value })}
+                  onChange={(e) =>
+                    editShot(
+                      { prompt: e.target.value },
+                      `shot-prompt:${shot.id}`,
+                    )
+                  }
                 />
               </label>
               <div className="video-shot-fields">
