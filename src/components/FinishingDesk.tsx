@@ -18,7 +18,16 @@ import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 
 export function FinishingDesk() {
-  const w = useWriting();
+  const w = useWriting(
+    useShallow((s) => ({
+      song: s.song,
+      busy: s.busy,
+      action: s.action,
+      loopRange: s.loopRange,
+      edit: s.edit,
+      version: s.version,
+    })),
+  );
   const { takes, isRecording, transportStop } = useEngineStore(
     useShallow((s) => ({
       takes: s.takes,
@@ -38,13 +47,14 @@ export function FinishingDesk() {
     sectionId: string;
   } | null>(null);
   const song = w.song;
-  const ranges = song ? arrangementRanges(song.body.chart) : [];
+  const body = song?.body;
+  const ranges = body ? arrangementRanges(body.chart) : [];
   const selectedIndex = Math.min(index, Math.max(0, ranges.length - 1));
   // The review and every take's comp are only recomputed when their inputs change,
   // not on every slider frame (issue #52).
   const issues = useMemo(
-    () => (song ? finishingReview(song.body, takes, vocal) : []),
-    [song, takes, vocal],
+    () => (body ? finishingReview(body, takes, vocal) : []),
+    [body, takes, vocal],
   );
   const choices = useMemo(
     () =>
@@ -67,10 +77,14 @@ export function FinishingDesk() {
         : [],
     [song, takes, selectedIndex],
   );
+  const songId = song?.id;
+  const fingerprint = useMemo(
+    () => (songId && body ? JSON.stringify([songId, body]) : ""),
+    [songId, body],
+  );
   if (!song) return null;
   const range = ranges[selectedIndex];
   const loop = transitionRange(song.body.chart, selectedIndex, context);
-  const fingerprint = JSON.stringify([song.id, song.body]);
   const choice =
     choices.find((c) => c.take.id === takeId && c.body) ??
     choices.find((c) => c.body);

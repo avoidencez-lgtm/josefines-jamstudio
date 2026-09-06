@@ -6,6 +6,7 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { keyName } from "../lib/chart/notes";
 import {
   arrangementRanges,
@@ -27,7 +28,15 @@ import { Button } from "./Button";
 import { ChordShapes } from "./ChordShapes";
 
 export function ArrangementDesk() {
-  const w = useWriting();
+  const w = useWriting(
+    useShallow((s) => ({
+      song: s.song,
+      selected: s.selected,
+      edit: s.edit,
+      select: s.select,
+      version: s.version,
+    })),
+  );
   const song = w.song;
   if (!song) return null;
   const chart = song.body.chart;
@@ -238,7 +247,13 @@ export function ArrangementDesk() {
 }
 
 export function HarmonyDesk() {
-  const w = useWriting();
+  const w = useWriting(
+    useShallow((s) => ({
+      song: s.song,
+      selected: s.selected,
+      edit: s.edit,
+    })),
+  );
   const song = w.song;
   const [position, setPosition] = useState({ bar: 0, chord: 0 });
   const [family, setFamily] = useState<"key" | "borrowed" | "dominant">("key");
@@ -471,7 +486,13 @@ export function HarmonyDesk() {
 }
 
 export function EnergyDesk() {
-  const w = useWriting();
+  const w = useWriting(
+    useShallow((s) => ({
+      song: s.song,
+      selected: s.selected,
+      edit: s.edit,
+    })),
+  );
   const song = w.song;
   if (!song) return null;
   const section =
@@ -512,7 +533,13 @@ export function EnergyDesk() {
 }
 
 export function LyricsDesk() {
-  const w = useWriting();
+  const w = useWriting(
+    useShallow((s) => ({
+      song: s.song,
+      selected: s.selected,
+      edit: s.edit,
+    })),
+  );
   const song = w.song;
   if (!song) return null;
   const section =

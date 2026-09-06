@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { FinishingDesk } from "../components/FinishingDesk";
@@ -19,7 +19,38 @@ import { useEngineStore } from "../store/engine";
 import "./originals.css";
 
 export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
-  const w = useWriting();
+  const w = useWriting(
+    useShallow((s) => ({
+      song: s.song,
+      saved: s.saved,
+      selected: s.selected,
+      past: s.past,
+      future: s.future,
+      dirty: s.dirty,
+      busy: s.busy,
+      message: s.message,
+      captureSeconds: s.captureSeconds,
+      view: s.view,
+      select: s.select,
+      action: s.action,
+      refresh: s.refresh,
+      edit: s.edit,
+      openSong: s.openSong,
+      createSong: s.createSong,
+      saveCopy: s.saveCopy,
+      undo: s.undo,
+      redo: s.redo,
+      save: s.save,
+      play: s.play,
+      rehearse: s.rehearse,
+      record: s.record,
+      arm: s.arm,
+      keep: s.keep,
+      version: s.version,
+      restore: s.restore,
+      attach: s.attach,
+    })),
+  );
   const {
     styles,
     takes,
@@ -53,10 +84,20 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
   const [captureLength, setCaptureLength] = useState(30);
   const [fitBars, setFitBars] = useState(4);
   const song = w.song;
-  const draftLoaded =
-    song &&
-    loadedOriginal?.id === song.id &&
-    JSON.stringify(loadedOriginal.body) === JSON.stringify(song.body);
+  const body = song?.body;
+  const songId = song?.id;
+  const loadedId = loadedOriginal?.id;
+  const loadedBody = loadedOriginal?.body;
+  const draftLoaded = useMemo(
+    () =>
+      Boolean(
+        songId &&
+          loadedId === songId &&
+          loadedBody &&
+          JSON.stringify(loadedBody) === JSON.stringify(body),
+      ),
+    [songId, body, loadedId, loadedBody],
+  );
   const section =
     song?.body.chart.sections.find((s) => s.id === w.selected) ??
     song?.body.chart.sections[0];

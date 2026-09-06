@@ -17,6 +17,14 @@ it("no React hook subscribes to the whole engine store", () => {
   expect(hits).toEqual([]);
 });
 
+it("no React hook subscribes to the whole writing store", () => {
+  const files = walk("src").filter((p) => /\.(ts|tsx)$/.test(p));
+  const hits = files.flatMap((path) =>
+    readFileSync(path, "utf8").includes("useWriting()") ? [path] : [],
+  );
+  expect(hits).toEqual([]);
+});
+
 it("only live surfaces subscribe to the whole telemetry object", () => {
   const allowed = new Set([
     "src/screens/Stage.tsx",
