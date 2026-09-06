@@ -705,7 +705,9 @@ export function createPreviewEngine(
         throw new Error("Song version list must be an array.");
       const idx = originals.findIndex((s) => s.id === doc.id);
       if (idx >= 0 && originals[idx].revision !== doc.revision)
-        throw new Error("Reopen the song before saving.");
+        throw new Error(
+          "This song changed in another window. Use Save copy to keep your edits.",
+        );
       doc.revision++;
       if (idx >= 0) originals[idx] = doc;
       else originals.push(doc);

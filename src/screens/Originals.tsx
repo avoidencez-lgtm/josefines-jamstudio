@@ -148,7 +148,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
             </span>
             <Button
               disabled={w.busy || isRecording}
-              hidden={w.view !== "versions"}
+              title="Write this draft as a new song so a conflicting save does not overwrite the other version"
               onClick={() => run(w.saveCopy)}
             >
               Save copy
