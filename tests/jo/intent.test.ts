@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseNaturalIntent } from "../../src/lib/jo/intent";
 
@@ -13,6 +14,14 @@ describe("Jo Natural Intent Parser", () => {
     expect(stopRes.toolCalls[0]).toEqual({
       name: "transport_control",
       arguments: { action: "stop" },
+    });
+    expect(parseNaturalIntent("can you stop").toolCalls[0]).toEqual({
+      name: "transport_control",
+      arguments: { action: "stop" },
+    });
+    expect(parseNaturalIntent("can you play").toolCalls[0]).toEqual({
+      name: "transport_control",
+      arguments: { action: "play" },
     });
   });
 
@@ -70,6 +79,30 @@ describe("Jo Natural Intent Parser", () => {
       name: "set_parts",
       arguments: { muteBass: false },
     });
+  });
+
+  it("does not treat a question as a transport command", () => {
+    const miss = parseNaturalIntent("why did playback stop on that fill?");
+    expect(miss.toolCalls).toEqual([]);
+    expect(miss.reply).toMatch(/didn't catch that/i);
+  });
+
+  it("picks a style from the catalog instead of a hard-coded id table", () => {
+    const ska = parseNaturalIntent("give me ska", [
+      {
+        id: "ska-upstroke",
+        name: "Ska Upstroke",
+        genre: "Ska",
+        feel: { swing: 0, timeSig: [4, 4], bpmRange: [90, 140] },
+      },
+    ]);
+    expect(ska.toolCalls[0]).toEqual({
+      name: "set_style",
+      arguments: { styleId: "ska-upstroke" },
+    });
+    expect(readFileSync("src/lib/jo/intent.ts", "utf8")).not.toMatch(
+      /blues-shuffle|funk-16|jazz-swing|metal-gallop|ballad-68|rock-straight/,
+    );
   });
 
   it("parses recording takes", () => {

@@ -37,6 +37,8 @@ export const StudioAssistant = memo(function StudioAssistant() {
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
   const cancelled = useRef(false);
+  const turnId = useRef(0);
+  const asking = useRef(false);
   const activeLocal = useRef(false);
   const [message, setMessage] = useState("");
   const { preferences, save, loaded } = useAi();
@@ -56,7 +58,9 @@ export const StudioAssistant = memo(function StudioAssistant() {
   const send = async () => {
     if (!ready || engine.isRecording || !query.trim() || running.current)
       return;
+    const turn = ++turnId.current;
     running.current = true;
+    asking.current = true;
     activeLocal.current = Boolean(brain.local);
     cancelled.current = false;
     setBusy(true);
@@ -72,7 +76,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
     };
     try {
       const result = await askBrain(input, preferences);
-      if (cancelled.current) return;
+      if (cancelled.current || turn !== turnId.current) return;
       setAnswer(result);
       setActions(JSON.stringify(result.toolCalls, null, 2));
       setBase(snapshot);
@@ -84,10 +88,13 @@ export const StudioAssistant = memo(function StudioAssistant() {
       );
       setQuery("");
     } catch (e) {
-      if (!cancelled.current) setMessage(String(e));
+      if (turn === turnId.current && !cancelled.current) setMessage(String(e));
     } finally {
-      running.current = false;
-      setBusy(false);
+      if (turn === turnId.current) {
+        asking.current = false;
+        running.current = false;
+        setBusy(false);
+      }
     }
   };
   const apply = async () => {
@@ -314,6 +321,12 @@ export const StudioAssistant = memo(function StudioAssistant() {
                     setMessage(
                       "Request dismissed. Any provider usage already incurred still counts.",
                     );
+                    if (asking.current) {
+                      turnId.current += 1;
+                      asking.current = false;
+                      running.current = false;
+                      setBusy(false);
+                    }
                     if (activeLocal.current)
                       void ipc
                         .invoke("agent_cancel")
