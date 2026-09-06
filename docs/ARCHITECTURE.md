@@ -1137,3 +1137,11 @@ Format authority: [MIDI Association Standard MIDI Files](https://midi.org/standa
 RP-001 v1.0, verified 2026-09-06. The regression covers VLQ boundary bytes,
 overflow, invalid meters/tempos/notes, compound-meter note timing, and IPC
 preservation of the previous bundle.
+
+### Reference state after playback commands
+
+Reference telemetry uses consumed output stamps only while playing. While paused
+or stopped, the commanded cursor and prepared speed/key/ramp drive position,
+chord and grid readouts. A late queued buffer cannot undo Stop or a paused seek.
+The deterministic `queued_positions_cannot_override_stop_or_paused_edits` test
+covers both commanded edits and unchanged consumed-frame behavior during Play.
