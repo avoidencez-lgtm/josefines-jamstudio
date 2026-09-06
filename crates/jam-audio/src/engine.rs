@@ -10,7 +10,8 @@
 
 use crate::devices::AudioConfig;
 use crate::io::{
-    AudioInput, AudioOutput, CpalInput, CpalOutput, FileInput, NullOutput, StreamInfo,
+    input_channel_fallback_problem, AudioInput, AudioOutput, CpalInput, CpalOutput, FileInput,
+    NullOutput, StreamInfo,
 };
 use jam_band::sequencer::{BandSequencer, Cue};
 use jam_core::chart::ResolvedChart;
@@ -1059,6 +1060,15 @@ impl AudioEngine {
             }
         };
         status.input = input_driver.info().filter(|_| input_driver.is_running());
+        if live_input {
+            if let Some(info) = &status.input {
+                if let Some(msg) =
+                    input_channel_fallback_problem(self.config.input_channel, info.channels)
+                {
+                    problems.push(msg);
+                }
+            }
+        }
         self.input_rate_error = status
             .input
             .as_ref()

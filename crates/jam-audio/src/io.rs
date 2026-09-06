@@ -396,12 +396,30 @@ impl StreamWorker {
     where
         F: FnOnce() -> Result<(cpal::Stream, StreamInfo), String> + Send + 'static,
     {
+        self.spawn_with_timeout(Duration::from_secs(8), open)
+    }
+
+    fn spawn_with_timeout<F>(&mut self, timeout: Duration, open: F) -> Result<(), String>
+    where
+        F: FnOnce() -> Result<(cpal::Stream, StreamInfo), String> + Send + 'static,
+    {
         if self.running.load(Ordering::SeqCst) {
             return Ok(());
         }
-        self.running.store(true, Ordering::SeqCst);
+        // A previous open that timed out still owns the device thread. Joining
+        // it here would freeze the engine mutex for as long as cpal is stuck.
+        if let Some(handle) = self.thread_handle.take() {
+            if !handle.is_finished() {
+                self.thread_handle = Some(handle);
+                return Err("previous audio device open is still finishing".into());
+            }
+            let _ = handle.join();
+        }
+        // Fresh flag per attempt so a timed-out thread cannot keep a late
+        // stream alive after a later spawn sets `running` true again.
+        let running = Arc::new(AtomicBool::new(true));
+        self.running = Arc::clone(&running);
         self.errors.store(0, Ordering::SeqCst);
-        let running = Arc::clone(&self.running);
         let (tx, rx) = mpsc::channel::<Result<StreamInfo, String>>();
 
         let handle = thread::spawn(move || match open() {
@@ -421,7 +439,7 @@ impl StreamWorker {
             }
         });
 
-        match rx.recv_timeout(Duration::from_secs(8)) {
+        match rx.recv_timeout(timeout) {
             Ok(Ok(info)) => {
                 self.info = Some(info);
                 self.thread_handle = Some(handle);
@@ -434,8 +452,11 @@ impl StreamWorker {
             }
             Err(_) => {
                 self.running.store(false, Ordering::SeqCst);
-                let _ = handle.join();
-                Err("timed out opening audio device (8 s)".into())
+                self.thread_handle = Some(handle);
+                Err(
+                    "timed out opening audio device (8 s). The device is still opening; pick another in Settings → Devices or try again"
+                        .into(),
+                )
             }
         }
     }
@@ -443,10 +464,25 @@ impl StreamWorker {
     fn stop(&mut self) {
         self.running.store(false, Ordering::SeqCst);
         if let Some(handle) = self.thread_handle.take() {
-            let _ = handle.join();
+            if handle.is_finished() {
+                let _ = handle.join();
+            }
         }
         self.info = None;
     }
+}
+
+/// When the requested DI channel is past the last channel the device opened,
+/// the input callback clamps to that last channel. Say so — otherwise a stereo
+/// interface silently records the wet right instead of the HeadRush dry DI.
+pub fn input_channel_fallback_problem(requested: u16, device_channels: u16) -> Option<String> {
+    if device_channels == 0 || requested < device_channels {
+        return None;
+    }
+    let wanted = requested + 1;
+    Some(format!(
+        "guitar input is set to channel {wanted}, but this device only has {device_channels}; using channel {device_channels}. Pick the dry DI in Settings → Devices"
+    ))
 }
 
 /// Real output through the OS audio stack. The engine callback always produces
@@ -794,6 +830,46 @@ mod tests {
             fixed_buffer_within(&SupportedBufferSize::Unknown, 256),
             BufferSize::Default
         );
+    }
+
+    #[test]
+    fn device_open_timeout_detaches_instead_of_joining() {
+        let mut worker = StreamWorker::new();
+        let started = Instant::now();
+        let err = worker
+            .spawn_with_timeout(Duration::from_millis(40), || {
+                thread::sleep(Duration::from_secs(2));
+                Err("late".into())
+            })
+            .unwrap_err();
+        assert!(err.contains("timed out"), "{err}");
+        assert!(
+            started.elapsed() < Duration::from_millis(400),
+            "join of a hung open would block well past the recv timeout"
+        );
+
+        let again = worker
+            .spawn_with_timeout(Duration::from_millis(40), || Err("nope".into()))
+            .unwrap_err();
+        assert!(again.contains("still finishing"), "{again}");
+
+        let stop_at = Instant::now();
+        worker.stop();
+        assert!(
+            stop_at.elapsed() < Duration::from_millis(200),
+            "stop must detach a hung open"
+        );
+    }
+
+    #[test]
+    fn input_channel_fallback_is_loud_when_the_di_is_missing() {
+        assert_eq!(input_channel_fallback_problem(0, 2), None);
+        assert_eq!(input_channel_fallback_problem(1, 2), None);
+        let msg = input_channel_fallback_problem(2, 2).unwrap();
+        assert!(msg.contains("channel 3"), "{msg}");
+        assert!(msg.contains("only has 2"), "{msg}");
+        assert!(msg.contains("Settings"), "{msg}");
+        assert_eq!(input_channel_fallback_problem(2, 0), None);
     }
 }
 
