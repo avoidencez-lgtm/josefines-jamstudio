@@ -76,6 +76,17 @@ jobs:
         run: cargo test --workspace
         env:
           JAM_HEADLESS: "1"
+      - name: Format S4 protocol probe
+        run: cargo fmt --manifest-path scripts/spikes/lyria-ws/Cargo.toml -- --check
+      - name: Clippy S4 protocol probe
+        run: cargo clippy --manifest-path scripts/spikes/lyria-ws/Cargo.toml --locked --bin jam-lyria-probe -- -D warnings
+      - name: Test S4 loopback (no provider access)
+        run: cargo test --manifest-path scripts/spikes/lyria-ws/Cargo.toml --locked -- --nocapture
+        env:
+          JAM_HEADLESS: "1"
+          JAM_LIVE: "0"
+      - name: Audit S4 probe dependencies
+        run: cargo deny --manifest-path scripts/spikes/lyria-ws/Cargo.toml --config deny.toml check
       - uses: actions/setup-node@v4
         with:
           node-version: 22
