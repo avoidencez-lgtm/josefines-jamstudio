@@ -4,6 +4,7 @@ import {
   handleJoQuery,
   useJoConversation,
 } from "../../src/lib/jo/conversation";
+import * as providers from "../../src/lib/jo/providers";
 import { useEngineStore } from "../../src/store/engine";
 
 afterEach(() => vi.restoreAllMocks());
@@ -27,6 +28,24 @@ it("shares real command outcomes across rooms without erasing another draft", as
     "An unfinished song idea",
   );
   expect(useJoConversation.getState().messages.at(-1)?.text).toMatch(/stop/i);
+});
+
+it("does not run offline keywords after a provider failure", async () => {
+  const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+  vi.spyOn(providers, "askBrain").mockRejectedValue(
+    new Error("401 unauthorized"),
+  );
+  useEngineStore.setState({
+    isPreview: false,
+    keysPresent: { gemini: true },
+    keyErrors: {},
+  });
+  providers.useAi.setState({ loaded: true });
+  useJoConversation.setState({ busy: false, messages: [], pending: null });
+  await handleJoQuery("stop the fill and play");
+  expect(providers.askBrain).toHaveBeenCalled();
+  expect(invoke).not.toHaveBeenCalled();
+  expect(useJoConversation.getState().busy).toBe(false);
 });
 
 it("keeps song edits behind review and ignores a cancelled request before dispatch", async () => {

@@ -144,7 +144,7 @@ const think = async (
     return out;
   }
   setLastBrain("offline");
-  return parseNaturalIntent(query);
+  return parseNaturalIntent(query, useEngineStore.getState().styles);
 };
 
 export const handleJoQuery = async (query: string, current = () => true) => {
