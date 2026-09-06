@@ -146,8 +146,11 @@ impl Timeline {
     }
 
     pub fn set_loop(&mut self, start_bar: u32, end_bar: u32, enabled: bool) {
-        self.loop_start_bar = start_bar.max(1);
-        self.loop_end_bar = end_bar.max(self.loop_start_bar + 1);
+        // start + 1 must stay in u32: startBar = u32::MAX from IPC used to
+        // overflow (debug panic, release wraps and disables the loop).
+        let start = start_bar.clamp(1, u32::MAX - 1);
+        self.loop_start_bar = start;
+        self.loop_end_bar = end_bar.max(start.saturating_add(1));
         self.loop_enabled = enabled;
     }
 
@@ -800,5 +803,17 @@ mod tests {
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].start_beats, 0.0);
         assert_eq!(tl.current_sample, 256);
+    }
+
+    #[test]
+    fn set_loop_clamps_a_max_start_bar_instead_of_overflowing() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_loop(u32::MAX, u32::MAX, true);
+        assert_eq!(tl.loop_start_bar, u32::MAX - 1);
+        assert_eq!(tl.loop_end_bar, u32::MAX);
+        assert!(tl.loop_enabled);
+        tl.set_loop(5, 3, true);
+        assert_eq!(tl.loop_start_bar, 5);
+        assert_eq!(tl.loop_end_bar, 6);
     }
 }
