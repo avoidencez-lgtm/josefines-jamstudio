@@ -23,6 +23,9 @@ describe("chord family classification", () => {
     expect(classify("dim7")).toBe("dim");
     expect(classify("sus4")).toBe("sus");
     expect(classify("7sus4")).toBe("sus");
+    expect(classify("M")).toBe("maj");
+    expect(classify("sus2")).toBe("sus2");
+    expect(classify("7sus2")).toBe("sus2");
     expect(classify("5")).toBe("power");
     expect(classify("mMaj7")).toBe("minmaj7");
   });
@@ -51,6 +54,20 @@ describe("soloing suggestions", () => {
     const hd = suggestForChord("Bm7b5");
     expect(hd?.scales[0].name).toBe("B locrian");
     expect(hd?.chordTones).toEqual(["B", "D", "F", "A"]);
+  });
+
+  it("reads CM as major and sus2 by the 2nd and 5th", () => {
+    const maj = suggestForChord("CM");
+    expect(maj?.scales[0].name).toBe("C major pentatonic");
+    expect(maj?.guideTones).toEqual(["E", "G"]);
+    expect(maj?.scales.some((x) => x.name === "C minor pentatonic")).toBe(
+      false,
+    );
+
+    const sus2 = suggestForChord("Csus2");
+    expect(sus2?.guideTones).toEqual(["D", "G"]);
+    expect(sus2?.scales[0].why).toMatch(/2nd and 5th/);
+    expect(sus2?.scales[0].why).not.toMatch(/4th/);
   });
 
   it("handles slash chords by the chord above the slash", () => {

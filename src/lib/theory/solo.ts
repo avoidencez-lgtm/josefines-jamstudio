@@ -43,21 +43,24 @@ export type Family =
   | "halfdim"
   | "dim"
   | "sus"
+  | "sus2"
   | "power"
   | "aug"
   | "unknown";
 
 export function classify(quality: string): Family {
-  // "M7" means major seventh while "m7" means minor seventh, so fold case carefully.
+  // "M7" means major seventh while "m7" means minor seventh. A bare "M"
+  // (as in "CM") must become major before toLowerCase or it reads as minor.
   const q = quality
     .replace(/\s+/g, "")
-    .replace(/^M(?=\d)/, "maj")
+    .replace(/^M(?=\d|$)/, "maj")
     .replace(/Δ/g, "maj")
     .toLowerCase();
   if (q === "" || /^(maj|6|add9|add2|69|6\/9)$/.test(q)) return "maj";
   if (/^(maj|ma)(7|9|11|13)/.test(q)) return "maj7";
   if (/^ø|^(m|min|-)7b5|^h7/.test(q)) return "halfdim";
   if (/^(dim|°|o)/.test(q)) return "dim";
+  if (/^(7|9)?sus2/.test(q)) return "sus2";
   if (/^(7|9)?sus/.test(q)) return "sus";
   if (q === "5") return "power";
   if (/^(aug|\+)/.test(q)) return "aug";
@@ -209,6 +212,16 @@ const RECIPES: Record<Family, Recipe[]> = {
       why: "Open-sounding and safe (a 4th down: e.g. D major pent over Asus4).",
     },
   ],
+  sus2: [
+    {
+      scale: "major pentatonic",
+      why: "Sus2 is the root, 2nd and 5th; lean on those, leave the 3rd out.",
+    },
+    {
+      scale: "major",
+      why: "Full major; treat the 3rd as a passing note over sus2.",
+    },
+  ],
   power: [
     {
       scale: "minor pentatonic",
@@ -258,6 +271,8 @@ function guideToneIntervals(family: Family): string[] {
       return ["3m", "5d"];
     case "sus":
       return ["4P", "7m"];
+    case "sus2":
+      return ["2M", "5P"];
     case "power":
       return ["5P"];
     case "aug":
@@ -278,6 +293,7 @@ function avoidIntervals(family: Family): string[] {
     case "min":
       return ["6m", "7M"];
     case "sus":
+    case "sus2":
       return ["3M"];
     default:
       return [];
