@@ -1,4 +1,5 @@
 import type { JoToolCall } from "./persona";
+import { songQuery } from "./songQuery";
 
 export function parseNaturalIntent(
   text: string,
@@ -18,7 +19,18 @@ export function parseNaturalIntent(
     text.trim(),
   );
   if (load) {
-    const query = load[1].replace(/^["“](.*)["”]$/, "$1").trim();
+    const query = songQuery(
+      load[1].replace(
+        /(?:^|\s+)(?:and play(?: it)?|og spill(?: det)?)\s*[.!?]*$/i,
+        "",
+      ),
+    );
+    if (!query)
+      return {
+        reply:
+          "Use load song followed by its title, or last inn sangen followed by its title.",
+        toolCalls: [],
+      };
     return {
       reply: "Looking for the song in your local library.",
       toolCalls: [{ name: "load_song", arguments: { query } }],

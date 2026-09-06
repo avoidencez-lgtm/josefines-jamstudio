@@ -1,6 +1,7 @@
 import { ipc } from "../../ipc/client";
 import { useEngineStore } from "../../store/engine";
 import { type MediaAsset, loadReference, useMedia } from "../media";
+import { songQuery } from "./songQuery";
 import type { JoAction } from "./tools";
 
 const normalized = (text: string) => text.trim().normalize("NFC").toLowerCase();
@@ -22,7 +23,7 @@ export const loadSong: JoAction = {
     },
   },
   run: async (args) => {
-    const query = String(args.query).trim();
+    const query = songQuery(String(args.query));
     if (!query || query.length > 200)
       throw new Error("Choose a song title or ID of 1–200 characters.");
     const engine = useEngineStore.getState();
