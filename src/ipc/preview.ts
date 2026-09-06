@@ -775,6 +775,13 @@ export function createPreviewEngine(
       return previewLatency;
     },
     recorder_get_latency: () => previewLatency,
+    audio_calibrate_latency: () => ({
+      roundTripFrames: 512,
+      confidence: 0,
+      estimated: true,
+      reason:
+        "Browser preview cannot measure hardware. This two-buffer estimate is not applied automatically.",
+    }),
     takes_list: () => takes,
     takes_delete: (a) => {
       takes = takes.filter((t) => t.id !== a.takeId);

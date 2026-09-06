@@ -399,6 +399,16 @@ it("round-trips the guitar offset through the engine, clamps it to 0..48000 samp
   expect(await engine.invoke("recorder_get_latency", {})).toBe(960);
 });
 
+it("preview calibration reports an estimate without replacing the guitar offset", async () => {
+  await store().setLatencySamples(1234);
+  expect(await ipc.invoke("audio_calibrate_latency")).toMatchObject({
+    estimated: true,
+    confidence: 0,
+    roundTripFrames: 512,
+  });
+  expect(await ipc.invoke("recorder_get_latency")).toBe(1234);
+});
+
 it("Film in the preview: refreshing keeps the library empty without asking the engine, and saving is refused with the desktop message", async () => {
   const invoke = vi.spyOn(ipc, "invoke");
   const m = useMedia.getState();

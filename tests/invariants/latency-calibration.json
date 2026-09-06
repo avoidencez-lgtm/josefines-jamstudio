@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sampleRate": 48000,
+  "bufferFrames": 256,
+  "loopbackDelayFrames": 713,
+  "alignmentToleranceFrames": 1,
+  "maxClickDisagreementFrames": 2,
+  "synthetic": true
+}

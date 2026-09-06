@@ -65,6 +65,15 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-06 M1e loopback calibration: Sessions can request three quiet native
+clicks, correlate the returned recording input, and persist a stable offset per
+device pair/channel/rate/buffer. Estimates do not replace saved offsets. Audio
+continuity failures and active playback/recording/monitoring refuse measurement.
+Synthetic checks cover inverted/noisy signals at 44.1/48/96 kHz, callback-to-WAV
+alignment, profile restoration and the honest headless fallback. Physical cable
+measurements and developer acceptance remain unverified; full Windows/macOS CI
+and rendered UI checks are merge gates. This does not close all M1e or V1 work.
+Friend-operated rig checks remain V2.
 2026-09-06 S4 protocol probe: a standalone Rust WebSocket helper verifies setup
 ordering, controls, two connections and 28,800,000 synthetic stereo frames with
 zero mismatches. The old unmeasured S4 claims are replaced by

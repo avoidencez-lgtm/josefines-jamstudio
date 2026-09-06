@@ -36,6 +36,54 @@ pub struct RecorderSettings {
     /// Round-trip offset trimmed from the guitar stem, in samples at the engine rate.
     #[serde(default)]
     pub latency_samples: u32,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub latency_profiles: HashMap<String, serde_json::Value>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+impl RecorderSettings {
+    /// Actual negotiated names keep a changed default device from inheriting another offset.
+    pub fn latency_key(engine: &jam_audio::AudioEngine) -> String {
+        let status = engine.status();
+        serde_json::to_string(&(
+            engine.config(),
+            status.input.map(|s| (s.device_name, s.buffer_frames)),
+            status.output.map(|s| (s.device_name, s.buffer_frames)),
+            status.sample_rate,
+            status.buffer_size,
+        ))
+        .expect("device tuple is serializable")
+    }
+
+    pub fn latency_for(&self, engine: &jam_audio::AudioEngine) -> u32 {
+        if self.latency_profiles.is_empty() {
+            return self.latency_samples.min(48_000);
+        }
+        self.latency_profiles
+            .get(&Self::latency_key(engine))
+            .and_then(|v| v["roundTripFrames"].as_u64())
+            .filter(|n| *n <= 48_000)
+            .unwrap_or(0) as u32
+    }
+
+    pub fn remember_latency(
+        &mut self,
+        engine: &jam_audio::AudioEngine,
+        result: &jam_audio::calibration::LatencyMeasurement,
+    ) {
+        let entry = self
+            .latency_profiles
+            .entry(Self::latency_key(engine))
+            .or_insert_with(|| serde_json::json!({}));
+        if !entry.is_object() {
+            *entry = serde_json::json!({});
+        }
+        for (key, value) in serde_json::to_value(result).unwrap().as_object().unwrap() {
+            entry[key] = value.clone();
+        }
+        self.latency_samples = result.round_trip_frames;
+    }
 }
 
 /// What the Rig screen remembers between launches.

@@ -201,6 +201,7 @@ async fn audio_set_config(
     settings.set_audio_config(&config);
     let mut eng = state.engine.lock();
     eng.apply_config(config)?;
+    eng.recorder_set_latency_compensation(settings.recorder.latency_for(&eng) as usize);
     let status = eng.status();
     if status.last_error.is_none() {
         save_settings(&settings)?;
@@ -224,6 +225,7 @@ async fn engine_restart(state: State<'_, AppState>) -> Result<EngineStatus, Stri
     let mut eng = state.engine.lock();
     let cfg = eng.config().clone();
     let result = eng.apply_config(cfg);
+    eng.recorder_set_latency_compensation(load_settings()?.recorder.latency_for(&eng) as usize);
     let status = eng.status();
     result.map(|_| status)
 }
@@ -449,24 +451,54 @@ fn recorder_stop(state: State<'_, AppState>) -> Result<jam_audio::recorder::Take
 }
 
 /// Sets the round-trip offset (in samples) trimmed from the start of the guitar stem so
-/// it lines up with the band. Automatic loopback measurement is not built yet, so this
-/// is the honest manual knob; the value is remembered in settings.
+/// it lines up with the band. Keep the manual adjustment alongside loopback measurement.
 #[tauri::command]
 fn recorder_set_latency(samples: u32, state: State<'_, AppState>) -> Result<u32, String> {
     let samples = samples.min(48_000);
-    state
-        .engine
-        .lock()
-        .recorder_set_latency_compensation(samples as usize);
+    let eng = state.engine.lock();
+    if eng.recorder_is_recording() {
+        return Err("Save the recording before changing its offset.".into());
+    }
     let mut settings = load_settings()?;
-    settings.recorder.latency_samples = samples;
+    settings.recorder.remember_latency(
+        &eng,
+        &jam_audio::calibration::LatencyMeasurement {
+            round_trip_frames: samples,
+            confidence: 0.0,
+            estimated: true,
+            reason: "Manual offset.".into(),
+        },
+    );
     save_settings(&settings)?;
+    eng.recorder_set_latency_compensation(samples as usize);
     Ok(samples)
 }
 
 #[tauri::command]
-fn recorder_get_latency() -> Result<u32, String> {
-    Ok(load_settings()?.recorder.latency_samples)
+fn recorder_get_latency(state: State<'_, AppState>) -> Result<u32, String> {
+    Ok(load_settings()?.recorder.latency_for(&state.engine.lock()))
+}
+
+#[tauri::command]
+async fn audio_calibrate_latency(
+    state: State<'_, AppState>,
+) -> Result<jam_audio::calibration::LatencyMeasurement, String> {
+    let engine = Arc::clone(&state.engine);
+    tauri::async_runtime::spawn_blocking(move || {
+        let eng = engine.lock();
+        // Check persistence before emitting sound. An estimate never replaces a saved offset.
+        load_settings()?;
+        let result = eng.calibrate_latency()?;
+        if !result.estimated {
+            let mut settings = load_settings()?;
+            settings.recorder.remember_latency(&eng, &result);
+            save_settings(&settings)?;
+            eng.recorder_set_latency_compensation(result.round_trip_frames as usize);
+        }
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1117,7 +1149,7 @@ pub fn build_state() -> AppState {
         // offers a retry. The UI stays usable for chart editing and settings.
         tracing::error!("audio engine started degraded: {e}");
     }
-    engine.recorder_set_latency_compensation(settings.recorder.latency_samples as usize);
+    engine.recorder_set_latency_compensation(settings.recorder.latency_for(&engine) as usize);
     let engine_arc = Arc::new(Mutex::new(engine));
 
     let library = Library::load();
@@ -1343,6 +1375,7 @@ pub fn configure<R: tauri::Runtime>(
             recorder_stop,
             recorder_set_latency,
             recorder_get_latency,
+            audio_calibrate_latency,
             takes_list,
             takes_delete,
             rig_list_profiles,

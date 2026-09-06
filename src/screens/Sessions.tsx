@@ -62,6 +62,14 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
   const [favourites, setFavourites] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [latencyDraft, setLatencyDraft] = useState<string>("");
+  const [calibrating, setCalibrating] = useState(false);
+  const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [calibration, setCalibration] = useState<{
+    roundTripFrames: number;
+    confidence: number;
+    estimated: boolean;
+    reason: string;
+  } | null>(null);
 
   useEffect(() => {
     loadTakes();
@@ -101,6 +109,25 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
       return;
     }
     void setLatencySamples(n);
+  };
+
+  const measureLatency = async () => {
+    setCalibrating(true);
+    setCalibration(null);
+    setCalibrationError(null);
+    try {
+      const result = await ipc.invoke<NonNullable<typeof calibration>>(
+        "audio_calibrate_latency",
+      );
+      setCalibration(result);
+      if (!result.estimated) {
+        useEngineStore.setState({ latencySamples: result.roundTripFrames });
+      }
+    } catch (error) {
+      setCalibrationError(String(error));
+    } finally {
+      setCalibrating(false);
+    }
   };
 
   return (
@@ -149,12 +176,13 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
         <div className="flex flex-wrap items-center gap-3">
           <label
             className="flex items-center gap-2 text-xs font-mono text-[var(--fg-2)]"
-            title="Samples trimmed from the start of the guitar stem so it lines up with the band. Automatic loopback measurement is not built yet; measure once in your DAW and type it here."
+            title="Samples trimmed from the start of the guitar stem. Measure with a cable loopback below, or enter a DAW-measured offset. Saved for this device configuration."
           >
             <span>Guitar offset</span>
             <input
               className="w-20 bg-[var(--bg-2)] border border-[var(--line)] rounded px-2 py-1 text-[var(--fg-0)] text-right"
               inputMode="numeric"
+              disabled={isRecording || calibrating}
               value={latencyDraft}
               onChange={(e) => setLatencyDraft(e.target.value)}
               onBlur={commitLatency}
@@ -175,6 +203,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
             <Button
               size="sm"
               variant="primary"
+              disabled={calibrating}
               onClick={() => startRecording()}
             >
               Record New Take
@@ -182,6 +211,98 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
           )}
         </div>
       </div>
+
+      <details className="text-sm text-[var(--fg-1)]">
+        <summary className="cursor-pointer py-2 text-[var(--fg-0)]">
+          Measure guitar offset
+        </summary>
+        <div className="flex flex-col gap-3 py-3 max-w-2xl">
+          <p>
+            Stop playback. Connect an interface line output to the selected
+            input with a suitable cable. Bypass effects and disable direct
+            monitoring on that input to prevent feedback. Use a low output
+            level. Never connect a speaker output.
+          </p>
+          <p>
+            Play three quiet clicks measures the recording delay in about two
+            seconds. A stable measurement is saved for this device pair, input
+            channel, sample rate and buffer. An estimate leaves your saved
+            offset unchanged.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              disabled={isRecording || calibrating}
+              onClick={() => void measureLatency()}
+            >
+              {calibrating ? "Measuring loopback…" : "Play three quiet clicks"}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => onHelp("sessions.alignment-and-stems")}
+            >
+              Calibration help
+            </Button>
+          </div>
+          {isRecording && <p>Save the recording before calibrating.</p>}
+          {isPreview && (
+            <p>
+              Browser preview returns an estimate only. Open the desktop app to
+              measure a cable loopback.
+            </p>
+          )}
+          <div aria-live="polite">
+            {calibrating && (
+              <p>
+                Listening for three matching clicks. Leave the cable connected
+                until the result appears.
+              </p>
+            )}
+            {calibration && (
+              <>
+                <p className="text-[var(--fg-0)]">
+                  {calibration.estimated
+                    ? "Estimate, not applied"
+                    : "Measured and saved"}
+                  : {calibration.roundTripFrames} samples (
+                  {((calibration.roundTripFrames * 1000) / sampleRate).toFixed(
+                    1,
+                  )}{" "}
+                  ms)
+                  {!calibration.estimated &&
+                    ` · ${(calibration.confidence * 100).toFixed(0)}% correlation`}
+                </p>
+                <p>{calibration.reason}</p>
+                <p>
+                  Disconnect the loopback cable and restore your normal guitar
+                  connection before playing.
+                </p>
+              </>
+            )}
+          </div>
+          {calibrationError && (
+            <p role="alert" className="text-[var(--record)]">
+              {calibrationError}
+            </p>
+          )}
+          {calibration?.estimated && (
+            <Button
+              className="self-start"
+              disabled={isRecording || calibrating}
+              onClick={async () => {
+                const applied = await setLatencySamples(
+                  calibration.roundTripFrames,
+                );
+                if (applied === calibration.roundTripFrames) {
+                  setCalibration(null);
+                  setCalibrationError(null);
+                }
+              }}
+            >
+              Use this estimate as manual offset
+            </Button>
+          )}
+        </div>
+      </details>
 
       {exportMessage && (
         <div className="p-3 bg-emerald-950/40 border border-emerald-500/50 rounded-[var(--radius-m)] text-xs font-mono text-emerald-300">

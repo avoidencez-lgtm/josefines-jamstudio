@@ -493,3 +493,16 @@ same Songs import callback and `media_import` validation. Do not add JS file
 reads, audio playback or dialog/filesystem permissions to implement an import
 button. The existing `tests/invariants/practice-copy.test.tsx` fixture covers the
 Songs controls; `src-tauri/tests/ipc_rig_media.rs` covers persistence and reload.
+
+## Extend latency calibration
+
+Reuse `jam_audio::calibration::Probe` and the engine output tap for calibration
+signals or detection changes. The recorder and probe must observe the same
+consumed input/output pair, including the input queue delay. Never measure from
+render-ahead time or put correlation/locks/allocations in an audio callback.
+`tests/invariants/latency-calibration.json` supplies the synthetic loopback contract;
+`loopback_callback_measurement_aligns_recorded_clicks_and_rejects_missing_input`
+checks the callback and compensated WAV, and `calibration::tests` covers polarity,
+noise, clipping, drift and rates. Add signal cases there with an explicit tolerance.
+`ipc_settings` protects estimate refusal, device-keyed persistence and recording
+exclusion. Maintain Sessions instructions and both manual translations together.

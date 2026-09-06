@@ -102,6 +102,71 @@ fn transport_bpm(studio: &Studio) -> f64 {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn loopback_estimate_preserves_offsets_and_device_profiles_restore_after_switching() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok("recorder_set_latency", json!({"samples": 1234}));
+    let before = fs::read(settings_path()).unwrap();
+    let result = studio.ok("audio_calibrate_latency", json!({}));
+    assert_eq!(result["estimated"], true);
+    assert_eq!(result["confidence"].as_f64(), Some(0.0));
+    assert_eq!(result["roundTripFrames"], 512);
+    assert!(result["reason"].as_str().unwrap().contains("No hardware"));
+    assert_eq!(fs::read(settings_path()).unwrap(), before);
+    assert_eq!(studio.ok("recorder_get_latency", json!({})), 1234);
+
+    let mut config = default_config();
+    config["buffer_size"] = json!(512);
+    studio.ok("audio_set_config", json!({"config": config}));
+    assert_eq!(studio.ok("recorder_get_latency", json!({})), 0);
+    studio.ok("recorder_set_latency", json!({"samples": 2000}));
+    studio.ok("audio_set_config", json!({"config": default_config()}));
+    assert_eq!(studio.ok("recorder_get_latency", json!({})), 1234);
+    studio.ok("engine_restart", json!({}));
+    assert_eq!(studio.ok("recorder_get_latency", json!({})), 1234);
+    let mut saved = studio.ok("settings_get", json!({}));
+    saved["recorder"]["future"] = json!(true);
+    let profiles = saved["recorder"]["latency_profiles"]
+        .as_object_mut()
+        .unwrap();
+    assert_eq!(profiles.len(), 2);
+    for profile in profiles.values_mut() {
+        profile["futureMeasurement"] = json!("kept");
+    }
+    studio.ok("settings_set", json!({"settings": saved}));
+    studio.ok("recorder_set_latency", json!({"samples": 900}));
+    let saved = studio.ok("settings_get", json!({}));
+    assert_eq!(saved["recorder"]["future"], true);
+    assert!(saved["recorder"]["latency_profiles"]
+        .as_object()
+        .unwrap()
+        .values()
+        .all(|p| p["futureMeasurement"] == "kept"));
+    studio.ok("transport_play", json!({}));
+    assert!(studio
+        .err("audio_calibrate_latency", json!({}))
+        .contains("Stop playback"));
+    studio.ok("transport_stop", json!({}));
+    studio.ok(
+        "recorder_start",
+        json!({"sessionId": unique("calibration-refusal")}),
+    );
+    assert!(studio
+        .err("audio_calibrate_latency", json!({}))
+        .contains("save the recording"));
+    assert!(studio
+        .err("recorder_set_latency", json!({"samples": 2}))
+        .contains("Save the recording"));
+    studio.ok("recorder_stop", json!({}));
+    assert_eq!(studio.ok("recorder_get_latency", json!({})), 900);
+    studio.ok("audio_set_input_monitor", json!({"gain": 0.5}));
+    assert!(studio
+        .err("audio_calibrate_latency", json!({}))
+        .contains("Turn off input monitoring"));
+    studio.ok("audio_set_input_monitor", json!({"gain": 0.0}));
+}
+
+#[test]
 fn a_clean_install_reports_default_settings_and_no_recovery_notice() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
