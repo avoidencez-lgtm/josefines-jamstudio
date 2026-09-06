@@ -306,6 +306,7 @@ export const useMedia = create<MediaState>((set, get) => ({
       set({
         project: saved,
         dirty: false,
+        undo: [],
         message: "Copy saved. Original kept.",
       });
     } else {
