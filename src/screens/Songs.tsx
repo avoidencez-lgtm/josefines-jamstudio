@@ -14,7 +14,7 @@ import { SongAnalysis } from "../components/SongAnalysis";
 import { StemPreparation } from "../components/Stems";
 import { WorkspaceHeader } from "../components/Workspace";
 import { ipc, isPreview } from "../ipc/client";
-import { type MediaAsset, useMedia } from "../lib/media";
+import { type MediaAsset, loadReference, useMedia } from "../lib/media";
 import { useEngineStore } from "../store/engine";
 
 export function Songs() {
@@ -295,13 +295,7 @@ export function Songs() {
                   disabled={locked || isPreview}
                   onClick={() =>
                     void m.work("Loading reference", async () => {
-                      await ipc.invoke("media_reference_load", {
-                        assetId: song.id,
-                      });
-                      useEngineStore.setState((s) => ({
-                        loadedOriginal: null,
-                        tempoTrainer: { ...s.tempoTrainer, enabled: false },
-                      }));
+                      await loadReference(song.id);
                       useMedia.setState({
                         message:
                           "Reference loaded. Use Play reference or the top transport to start.",
@@ -316,14 +310,7 @@ export function Songs() {
                     disabled={locked || isPreview}
                     onClick={() =>
                       void m.work("Loading reference", async () => {
-                        await ipc.invoke("media_reference_load", {
-                          assetId: song.id,
-                          useStems: false,
-                        });
-                        useEngineStore.setState((s) => ({
-                          loadedOriginal: null,
-                          tempoTrainer: { ...s.tempoTrainer, enabled: false },
-                        }));
+                        await loadReference(song.id, false);
                         useMedia.setState({
                           message:
                             "Original stereo mix loaded at 100% in its original key. Saved stems and practice settings are kept.",

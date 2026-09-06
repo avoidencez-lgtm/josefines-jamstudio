@@ -4,7 +4,7 @@ import { applyReferencePractice, useMedia } from "../media";
 import { PARTS, changeGroove, useWriting } from "../originals";
 import type { JoToolCall } from "./persona";
 import { STUDIO_TOOLS, applyStudioEdits } from "./studioTools";
-import { validateToolCall } from "./tools";
+import { JO_ACTIONS, validateToolCall } from "./tools";
 
 function editResult(changed: boolean, success: string): string {
   if (changed) return success;
@@ -15,6 +15,8 @@ function editResult(changed: boolean, success: string): string {
 
 export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
   validateToolCall(call);
+  if (Object.hasOwn(JO_ACTIONS, call.name))
+    return JO_ACTIONS[call.name].run(call.arguments);
   if (Object.hasOwn(STUDIO_TOOLS, call.name)) return applyStudioEdits([call]);
   const store = useEngineStore.getState();
   if (call.name === "edit_video_shot") {

@@ -3,6 +3,7 @@
  * function declarations, and the offline intent parser emits the same names.
  */
 
+import { loadSong } from "./loadSong";
 import { STUDIO_TOOLS } from "./studioTools";
 export interface JoToolDeclaration {
   name: string;
@@ -20,6 +21,14 @@ export interface JoToolDeclaration {
     required?: string[];
   };
 }
+
+export interface JoAction {
+  declaration: JoToolDeclaration;
+  run: (args: Record<string, unknown>) => Promise<string>;
+}
+
+/** Immediate actions declare and execute through one registry. */
+export const JO_ACTIONS: Record<string, JoAction> = { load_song: loadSong };
 
 /** Validate at the shared execution boundary, including offline and cloud callers. */
 export function validateToolCall(call: {
@@ -52,6 +61,7 @@ export function validateToolCall(call: {
 }
 
 export const JO_TOOLS: JoToolDeclaration[] = [
+  ...Object.values(JO_ACTIONS).map((t) => t.declaration),
   {
     name: "edit_video_shot",
     description:

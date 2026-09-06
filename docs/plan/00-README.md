@@ -65,6 +65,18 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-06 M3 Jo song loading: `load_song(query)` searches fresh native library
+metadata and loads an exact title/ID or unique title fragment through the
+existing reference player. English `load song …` and Bokmål `last inn sangen …`
+work offline; configured speech uses the same dispatcher. Ambiguous matches,
+recording, busy media work and native failures are explicit. Stage opens paused
+with saved stems/practice settings. Songs shares the accepted-load UI reset.
+Jo command sequences stop at a failed action, preserving the previous source
+instead of playing it after a failed load. Synthetic invariant tests cover the
+flow; cross-platform CI remains required before merge. This is one M3 slice;
+provider analysis, automatic sections, reference ramps, realtime generation,
+developer hardware/voice acceptance and distribution still remain V1 work.
+
 2026-09-05 build integration: PRs #200 (chart duration precision), #204 (count-in
 destination) and #207 (native logging) are merged. PR #192 replaces estimated
 render-lead delays with output-callback frame pairing and drains the queued take

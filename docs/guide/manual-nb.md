@@ -226,6 +226,12 @@ Trykk Record øverst under avspilling for å ta opp gitar-DI og stereoreferansen
 
 Spilleren holder én dekodet stereokilde, inntil rundt 440 MiB; ved bytte kan to ligge i minnet samtidig. Midlertidig dekoding trenger diskplass. Lokale anslag for tempo, akkorder og toneart finnes i Songs. Stem-separasjon, avspilling mot analysert beat-grid, minus-gitar og temporamper for referanser gjenstår.
 
+### Be Jo laste en sang
+
+Skriv load song Blå natt eller last inn sangen Blå natt i Jo eller kommandofeltet på Stage. Anførselstegn rundt tittelen er valgfrie. Disse uttrykkelige kommandoene fungerer uten tekstleverandør; konfigurert tale bruker samme handling etter transkripsjon. Jo søker i det gjeldende lokale Songs-biblioteket selv om du ikke har åpnet Songs. En nøyaktig ID kommer først, deretter full tittel uten hensyn til store og små bokstaver, så en entydig del av tittelen. Hvis flere filer passer, bruk full tittel eller den nøyaktige ID-en Jo viser. En manglende sang må først importeres i Songs.
+
+Vellykket lasting åpner Stage på pause med lagrede stems, hastighet, toneart og bekreftede seksjoner. Trykk Play når du er klar. Be om hastighet, transponering eller seksjonsendringer i neste melding etter at referansen vises. Selve lastingen sender ingen lyd eller betalt genereringsforespørsel; konfigurerte tale- og teksttjenester beholder sine vanlige kostnader. Opptak eller en annen medieoperasjon blokkerer lasting. Mislykket lasting beholder forrige kilde og stopper resten av kommandoene i meldingen, slik at en etterfølgende Play ikke starter feil sang.
+
 ### Skill instrumenter og spill uten gitar
 
 Åpne Separate instruments / import stems på valgt låt. For ElevenLabs legger du inn API-nøkkelen i Settings, kontrollerer kontoprisen, fyller eventuelt inn USD per minutt og krysser av for opplasting og betaling før Upload & separate stems. Dette sender låten til leverandøren og kan ta flere minutter. Instrumentnavnene kommer fra ZIP-filen; finn gitarsporet ved å lytte. Appen antar ikke hvilket navn som betyr gitar.
