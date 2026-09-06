@@ -15,6 +15,105 @@ use tauri::Manager;
 const NO_PORT: &str = "no MIDI port open (messages are only logged)";
 
 #[test]
+fn generated_audio_refresh_analyzes_saved_output_and_recovers_without_network_or_duplicate_assets()
+{
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let job_id = unique("generated-analysis");
+    let raw = media_root().join("assets").join(format!("{job_id}.wav"));
+    std::fs::create_dir_all(raw.parent().unwrap()).unwrap();
+    let mut wav = hound::WavWriter::create(
+        &raw,
+        hound::WavSpec {
+            channels: 1,
+            sample_rate: 48000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for i in 0..144000 {
+        wav.write_sample(
+            (4000.0 * (i as f64 * std::f64::consts::TAU * 440.0 / 48000.0).sin()) as i16,
+        )
+        .unwrap();
+    }
+    wav.finalize().unwrap();
+    let receipt = json!({"schemaVersion":1,"id":job_id,"status":"download","rawPath":raw,"future":{"keep":true},"request":{
+        "catalogId":"minimax-music","model":"music-3.0","prompt":"Synthetic fixture, never sent","seconds":3,"ratio":"16:9","instrumental":true
+    }});
+    let file = media_root().join("jobs").join(format!("{job_id}.json"));
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, serde_json::to_vec(&receipt).unwrap()).unwrap();
+    let ready = studio.ok("media_refresh", json!({"jobId":job_id}));
+    assert_eq!(ready["status"], "ready");
+    assert_eq!(ready["message"], "");
+    assert!(ready.get("targetAssetId").is_none());
+    let asset_id = ready["assetId"].as_str().unwrap();
+    let folder = user_dir().join("songs").join(asset_id);
+    let manifest = folder.join("song.json");
+    let saved = read_json(&manifest);
+    assert_eq!(saved["analysisStatus"]["state"], "ready");
+    assert_eq!(saved["songAnalysis"]["sourceHash"], saved["sourceHash"]);
+    let source = folder.join("source.wav");
+    let bytes = std::fs::read(&source).unwrap();
+    assert_eq!(
+        std::fs::read(folder.join("original.wav")).unwrap(),
+        std::fs::read(&raw).unwrap()
+    );
+    // Restore an unfinished receipt and remove the raw duplicate: use the existing song.
+    let mut resumed = read_json(&file);
+    resumed["status"] = json!("analysis");
+    std::fs::write(&file, serde_json::to_vec(&resumed).unwrap()).unwrap();
+    std::fs::remove_file(&raw).unwrap();
+    let mut damaged = bytes.clone();
+    damaged[..4].copy_from_slice(b"BAD!");
+    std::fs::write(&source, &damaged).unwrap();
+    let failed = studio.ok("media_refresh", json!({"jobId":job_id}));
+    assert_eq!(failed["status"], "analysis");
+    assert!(failed["message"]
+        .as_str()
+        .unwrap()
+        .contains("analysis did not finish"));
+    let failed_song = read_json(&manifest);
+    assert_eq!(failed_song["analysisStatus"]["state"], "failed");
+    assert_eq!(failed_song["songAnalysis"], saved["songAnalysis"]);
+    std::fs::write(&source, &bytes).unwrap();
+    let retried = studio.ok("media_refresh", json!({"jobId":job_id}));
+    assert_eq!(retried["status"], "ready");
+    assert_eq!(retried["assetId"], asset_id);
+    assert_eq!(read_json(&file)["future"], json!({"keep":true}));
+    assert_eq!(std::fs::read(&source).unwrap(), bytes);
+    let library = studio.ok("media_list", json!({}));
+    assert_eq!(
+        library["assets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|a| a["id"] == asset_id)
+            .count(),
+        1
+    );
+    studio.ok("media_reference_load", json!({"assetId":asset_id}));
+    let reference = studio.ok("audio_get_telemetry", json!({}))["reference"].clone();
+    assert!(reference["analysis"].is_object());
+    assert_eq!(reference["state"], "stopped");
+    assert_eq!(reference["position"], 0.0);
+    studio.ok("media_reference_unload", json!({}));
+    // A future receipt is never rewritten by retry.
+    let mut future = read_json(&file);
+    future["schemaVersion"] = json!(2);
+    std::fs::write(&file, serde_json::to_vec(&future).unwrap()).unwrap();
+    let before = std::fs::read(&file).unwrap();
+    assert!(studio
+        .err("media_refresh", json!({"jobId":job_id}))
+        .contains("Unsupported"));
+    assert_eq!(std::fs::read(&file).unwrap(), before);
+    std::fs::remove_file(file).unwrap();
+    std::fs::remove_dir_all(folder).unwrap();
+}
+
+#[test]
 fn native_song_import_normalizes_preserves_and_loads_audio_without_external_tools() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
@@ -63,6 +162,7 @@ fn native_song_import_normalizes_preserves_and_loads_audio_without_external_tool
     let doc = read_json(&folder.join("song.json"));
     assert_eq!(doc["durationMs"], 1000.0);
     assert_eq!(doc["sourceHash"].as_str().unwrap().len(), 64);
+    assert_eq!(doc["analysisStatus"]["state"], "unavailable");
     studio.ok("media_reference_load", json!({"assetId":asset["id"]}));
     assert_eq!(
         studio.ok("audio_get_telemetry", json!({}))["reference"]["asset_id"],

@@ -1,5 +1,24 @@
 import { z } from "zod";
 
+const statusSchema = z.object({
+  schemaVersion: z.literal(1),
+  analyzer: z.literal("local-chroma-v1"),
+  state: z.enum([
+    "pending",
+    "running",
+    "ready",
+    "unavailable",
+    "failed",
+    "canceled",
+  ]),
+  message: z.string(),
+});
+
+export function readAnalysisStatus(value: unknown) {
+  const parsed = statusSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 const time = z.number().finite().min(0).max(1200);
 const schema = z.object({
   schemaVersion: z.literal(1),

@@ -9,6 +9,29 @@ in the existing asset's `songAnalysis` field with source SHA-256. The source fil
 and unknown manifest fields survive reanalysis. The UI validates the saved shape
 through `readSongAnalysis`, then groups adjacent equal estimates for display.
 
+New audio imports and generated outputs automatically call the same local
+analyzer through `media/analysis.rs`. `analysisStatus` is an optional version-1
+document with `analyzer`, `state` and `message`: pending/running, ready,
+unavailable (under two seconds), failed or canceled. Write pending with the
+published song and running before computation; keep previous measurements on
+failure. Unknown fields survive and future status versions are refused.
+Manual `media_analyze` still returns an error on failure after saving its status.
+Changed canonical source hashes cannot be recertified by reanalysis.
+
+`finish_import` records a private `targetAssetId` in the existing job receipt
+before import. Recovery uses the same song even if the raw duplicate is gone;
+only published outputs acquire a public `assetId`. Failed preparation leaves
+the job retryable and never repeats generation. `public_job` withholds the
+private target ID and download URL. Ready legacy jobs stay unchanged. No new
+provider protocol, dependency, background queue or analysis algorithm is added.
+
+The `analysis-status.json` seam fixture and invariant test cover status display
+beside old estimates; generated-audio UI tests cover native-only eligibility
+and the shared generate/recover-to-Stage action. Native tests exercise real
+synthetic-WAV import, receipt recovery, corrupt-source failure and retry,
+cancellation, unknown versions and byte-for-byte audio preservation. This does
+not prove provider quality or the remaining Music.ai/downbeat/section pipeline.
+
 `tests/fixtures/seams/song-analysis.json` is synthetic contract data. Its invariant
 test covers validation, grouping and honest missing estimates. The Rust synthetic
 C–F–G regression covers the numerical gate; the opt-in FFmpeg media test covers

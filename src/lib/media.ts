@@ -30,6 +30,7 @@ export interface MediaAsset {
   path: string;
   seconds: number;
   songAnalysis?: unknown;
+  analysisStatus?: unknown;
   stemSet?: unknown;
   referencePractice?: unknown;
   referenceGrid?: unknown;
@@ -108,6 +109,22 @@ export interface MediaJob {
   rawPath?: string;
   lyrics?: string;
   request: { catalogId: string; model: string; prompt: string };
+}
+
+/** Immediate generation and recovered jobs load the player without starting playback. */
+export async function completeGeneratedAudio(
+  job: Pick<MediaJob, "status" | "assetId">,
+) {
+  if (job.status !== "ready") return;
+  const song = useMedia
+    .getState()
+    .assets.find((a) => a.id === job.assetId && a.kind === "audio");
+  if (!song)
+    throw new Error(
+      "Generated audio is saved but not in the current library. Refresh Songs to open it.",
+    );
+  await loadReference(song.id);
+  useEngineStore.getState().setScreen("stage");
 }
 interface MediaLibrary {
   projects: VideoProject[];

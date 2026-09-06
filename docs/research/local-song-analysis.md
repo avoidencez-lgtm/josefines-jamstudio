@@ -1,7 +1,7 @@
 # Local reference analysis
 
 The M3 fallback is implemented in `jam-dsp::offline` and runs on the existing
-media worker after local FFmpeg decoding. It does not replace provider analysis
+media worker after bundled native decoding. It does not replace provider analysis
 or claim real-song acceptance. All results are explicitly low confidence.
 
 The implementation uses positive RMS differences at 20 ms intervals and normalized
@@ -37,3 +37,9 @@ quality gate. Dense mixes, inversions and extended chords require stronger analy
 The opt-in FFmpeg integration check verifies decode, persistence, source integrity,
 unknown-field preservation, reload and cancellation against actual local files.
 Network providers, stems, cloud fixtures and subjective audio quality are separate.
+
+Automatic import/generation preparation now runs this same fallback and saves
+its status alongside the measurements. Ordinary IPC tests use a generated WAV
+without FFmpeg to prove persisted analysis, changed-source failure, receipt
+recovery without duplicate assets and native playback loading. No provider
+response or real-song acceptance is inferred from this local lifecycle test.

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "analyzer": "local-chroma-v1",
+  "state": "canceled",
+  "message": "Audio kept; analysis did not finish. Retry in Songs.",
+  "futureField": "preserve"
+}
