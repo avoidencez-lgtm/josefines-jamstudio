@@ -327,30 +327,47 @@ export const useEngineStore = create<EngineState>((set, get) => {
       set((s) => ({ notices: s.notices.filter((n) => n.id !== id) })),
 
     setTone: async (on, hz) => {
-      const finalHz = hz ?? get().toneHz;
+      const prevOn = get().toneOn;
+      const prevHz = get().toneHz;
+      const finalHz = hz ?? prevHz;
       set({ toneOn: on, toneHz: finalHz });
-      await run("Tone", () => ipc.invoke("tone_set", { on, hz: finalHz }));
+      if (
+        !(await runOk("Tone", () =>
+          ipc.invoke("tone_set", { on, hz: finalHz }),
+        ))
+      )
+        set({ toneOn: prevOn, toneHz: prevHz });
     },
 
     setTuner: async (on) => {
+      const prev = get().tunerOn;
       set({ tunerOn: on });
-      await run("Tuner", () => ipc.invoke("tuner_set", { on }));
+      if (!(await runOk("Tuner", () => ipc.invoke("tuner_set", { on }))))
+        set({ tunerOn: prev });
     },
 
     setClickVolume: async (volume) => {
+      const prev = get().clickVolume;
       const clamped = Math.max(0, Math.min(1, volume));
       set({ clickVolume: clamped });
-      await run("Click volume", () =>
-        ipc.invoke("transport_set_click_volume", { volume: clamped }),
-      );
+      if (
+        !(await runOk("Click volume", () =>
+          ipc.invoke("transport_set_click_volume", { volume: clamped }),
+        ))
+      )
+        set({ clickVolume: prev });
     },
 
     setBandVolume: async (volume) => {
+      const prev = get().bandVolume;
       const clamped = Math.max(0, Math.min(1, volume));
       set({ bandVolume: clamped });
-      await run("Band volume", () =>
-        ipc.invoke("audio_set_band_volume", { volume: clamped }),
-      );
+      if (
+        !(await runOk("Band volume", () =>
+          ipc.invoke("audio_set_band_volume", { volume: clamped }),
+        ))
+      )
+        set({ bandVolume: prev });
     },
 
     transportPlay: async () => {
