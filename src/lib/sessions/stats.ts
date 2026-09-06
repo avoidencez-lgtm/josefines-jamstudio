@@ -34,9 +34,15 @@ export function practiceStreakDays(
 
 export function formatJamTime(totalSecs: number): string {
   if (totalSecs < 60) return `${Math.round(totalSecs)} s`;
-  const h = Math.floor(totalSecs / 3600);
-  const m = Math.round((totalSecs % 3600) / 60);
-  return h > 0 ? `${h} h ${m} min` : `${m} min`;
+  let h = Math.floor(totalSecs / 3600);
+  let m = Math.round((totalSecs % 3600) / 60);
+  if (m === 60) {
+    h += 1;
+    m = 0;
+  }
+  if (h > 0 && m === 0) return `${h} h`;
+  if (h > 0) return `${h} h ${m} min`;
+  return `${m} min`;
 }
 
 export function takeMeasurements(a: TakeAnalysis): [string, string][] {

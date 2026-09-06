@@ -13,6 +13,7 @@ import {
   type MediaShot,
   applyShotIdeas,
   clampGenerationSeconds,
+  clampShotSeconds,
   fitShots,
   newShot,
   newVideo,
@@ -925,7 +926,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                     disabled={locked}
                     value={Number(shot.seconds.toFixed(3))}
                     onChange={(e) =>
-                      editShot({ seconds: Number(e.target.value) })
+                      editShot({
+                        seconds: clampShotSeconds(e.target.value, shot.seconds),
+                      })
                     }
                   />
                 </label>
