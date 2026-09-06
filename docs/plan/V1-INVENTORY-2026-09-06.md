@@ -95,7 +95,7 @@ Observed 2026-09-06T17:26:55.645616+00:00; main `6b3a4c6fe07838a3f69dd5db4c497d0
 
 No submitted formal review is present on these 30 PRs in the fetched review endpoint. Substantive review/self-review discussion is on PR comments and was inspected; this is not independent approval. CodeRabbit skip notices (repository threshold) are not review passes. Source-only findings below require the stated integrated check; five exact-source JavaScript reproductions are documented in the baseline. No old PR full suite was rerun.
 
-**CI scope:** all five observed head checks passed except #235 (both Rust jobs failed) and #243 (TS failed). Green checks on an old PR do not certify its integration with this main. “dirty” below is GitHub mergeability conflict status, not a dirty author worktree. All target main; exact base SHAs remain per PR.
+**CI scope:** all five observed head checks passed except #235 (both Rust jobs failed), #243 (TS Vitest assertions failed), and #260/#269 (TS Biome formatting failed). Green checks on an old PR do not certify its integration with this main. “dirty” below is GitHub mergeability conflict status, not a dirty author worktree. All target main; exact base SHAs remain per PR.
 
 <a id="pr-223"></a>
 
@@ -425,7 +425,7 @@ Changed paths: [crates/jam-audio/src/engine.rs](https://github.com/avoidencez-lg
 
 [260](https://github.com/avoidencez-lgtm/josefines-jamstudio/pull/260) · head `f71e302df2a95b402541129776d3a465afb72ae2` · base `e91896f59a9c0ab0fb7de3510dd75e941b20f4ef` (`main`) · mergeability `unstable`.
 
-Requirements: [R23](V1-REQUIREMENTS-2026-09-06.md#r23), [R18](V1-REQUIREMENTS-2026-09-06.md#r18). **Disposition: Candidate for review.**
+Requirements: [R23](V1-REQUIREMENTS-2026-09-06.md#r23), [R18](V1-REQUIREMENTS-2026-09-06.md#r18). **Disposition: Candidate for review.** Red at head: the TS job fails Biome formatting in `tests/jo/reference-practice.test.ts`; repair formatting before review.
 
 Zero matches in confirmed reference sections now allow songwriting interpretation. Unique/ambiguous reference matches remain distinct; native action/source switching needs integration test with latest parser and #278.
 
@@ -453,7 +453,7 @@ Changed paths: [src/lib/jo/intent.ts](https://github.com/avoidencez-lgtm/josefin
 
 [269](https://github.com/avoidencez-lgtm/josefines-jamstudio/pull/269) · head `643dfe6d743b8363a6bb61c61f066185fb64e402` · base `1cb8f93d811b9edc6a68f326337ea870bf78107a` (`main`) · mergeability `unstable`.
 
-Requirements: [R30](V1-REQUIREMENTS-2026-09-06.md#r30). **Disposition: Candidate for review.**
+Requirements: [R30](V1-REQUIREMENTS-2026-09-06.md#r30). **Disposition: Candidate for review.** Red at head: the TS job fails Biome formatting in `src/components/ReferencePlayer.tsx`; repair formatting before review.
 
 Stop resets active ramp loop to loopstart and fromstart recorder snapshot agrees. Focused late-section test; reconcile old manual DAW-tempo warning with now-implemented main export. No independent physical listening.
 

@@ -1143,7 +1143,7 @@ Open-PR evidence: None; do not infer completion from absent PRs.
 
 | <a id="u014"></a> U014 | [docs/plan/03-build-plan.md:45–45](https://github.com/avoidencez-lgtm/josefines-jamstudio/blob/6b3a4c6fe07838a3f69dd5db4c497d0d39884584/docs/plan/03-build-plan.md#L45-L45) (requirement) | [R01](V1-REQUIREMENTS-2026-09-06.md#r01), [R49](V1-REQUIREMENTS-2026-09-06.md#r49); V1 |
 
-| <a id="u015"></a> U015 | [docs/plan/03-build-plan.md:48–58](https://github.com/avoidencez-lgtm/josefines-jamstudio/blob/6b3a4c6fe07838a3f69dd5db4c497d0d39884584/docs/plan/03-build-plan.md#L48-L58) (CI specification) | [R01](V1-REQUIREMENTS-2026-09-06.md#r01), [R48](V1-REQUIREMENTS-2026-09-06.md#r48), [R49](V1-REQUIREMENTS-2026-09-06.md#r49); V1 |
+| <a id="u015"></a> U015 | [docs/plan/03-build-plan.md:48–59](https://github.com/avoidencez-lgtm/josefines-jamstudio/blob/6b3a4c6fe07838a3f69dd5db4c497d0d39884584/docs/plan/03-build-plan.md#L48-L59) (CI specification) | [R01](V1-REQUIREMENTS-2026-09-06.md#r01), [R48](V1-REQUIREMENTS-2026-09-06.md#r48), [R49](V1-REQUIREMENTS-2026-09-06.md#r49); V1 |
 
 | <a id="u016"></a> U016 | [docs/plan/03-build-plan.md:62–62](https://github.com/avoidencez-lgtm/josefines-jamstudio/blob/6b3a4c6fe07838a3f69dd5db4c497d0d39884584/docs/plan/03-build-plan.md#L62-L62) (requirement) | [R02](V1-REQUIREMENTS-2026-09-06.md#r02), [R03](V1-REQUIREMENTS-2026-09-06.md#r03), [R04](V1-REQUIREMENTS-2026-09-06.md#r04), [R05](V1-REQUIREMENTS-2026-09-06.md#r05); V1 |
 

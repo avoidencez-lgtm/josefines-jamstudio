@@ -1906,8 +1906,8 @@
       "id": "U015",
       "source": "docs/plan/03-build-plan.md",
       "start": 48,
-      "end": 58,
-      "sha256": "96417af90fcd183c8fa2fb2286e8a4eb012fd56bc1295246ce5d412f60a12582",
+      "end": 59,
+      "sha256": "c8225758efc2cef77342289378ca7cc8419fad7e4fadde385ea988839fba1213",
       "requirements": ["R01", "R48", "R49"],
       "kind": "CI specification",
       "scope": "V1"
