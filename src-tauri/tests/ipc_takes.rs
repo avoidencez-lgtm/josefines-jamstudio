@@ -938,3 +938,59 @@ fn invalid_midi_export_keeps_the_previous_bundle_and_take_unchanged() {
     studio.ok("takes_export_daw", json!({"takeId": take.id}));
     assert!(midi.parent().unwrap().join("band-notes.mid").is_file());
 }
+
+#[test]
+fn daw_export_uses_recorded_reference_speed_steps_and_preserves_source_audio() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = synthetic_take(12.0, "1800000000.004");
+    let mut saved = manifest(&take.dir);
+    saved["styleId"] = json!("reference");
+    saved["chartId"] = json!("fixture-source");
+    saved["snapshot"]["reference"] = json!({"asset_id":"fixture-source"});
+    saved["referenceTiming"] =
+        serde_json::from_str(include_str!("../../tests/invariants/reference-timing.json")).unwrap();
+    let original = serde_json::to_vec_pretty(&saved).unwrap();
+    std::fs::write(take.dir.join("take.json"), &original).unwrap();
+    let report = studio.ok("takes_export_daw", json!({"takeId":take.id}));
+    let dir = PathBuf::from(report["dir"].as_str().unwrap());
+    let info_path = dir.join(format!("{}-info.json", take.id));
+    let info: Value = serde_json::from_slice(&std::fs::read(&info_path).unwrap()).unwrap();
+    assert_eq!(info["tempoSource"], "recorded-reference");
+    assert_eq!(info["referenceTiming"], saved["referenceTiming"]);
+    assert_eq!(
+        info["recordedTempoMap"]["tempos"][1],
+        json!({"frame":230400,"bpm":75.0})
+    );
+    let script = std::fs::read_to_string(report["reaperScript"].as_str().unwrap()).unwrap();
+    assert!(script.contains("{time=4.8, bpm=75}"));
+    assert!(script.contains(r#"name="band", length=12, muted=false"#));
+    assert_eq!(
+        std::fs::read(dir.join(format!("{}-band.wav", take.id))).unwrap(),
+        std::fs::read(&take.band).unwrap()
+    );
+    assert_eq!(std::fs::read(take.dir.join("take.json")).unwrap(), original);
+    let midi_path = PathBuf::from(report["midiFile"].as_str().unwrap());
+    let midi = std::fs::read(&midi_path).unwrap();
+    assert_eq!(u16::from_be_bytes([midi[12], midi[13]]), 9600);
+    saved["referenceTiming"]["schemaVersion"] = json!(2);
+    std::fs::write(
+        take.dir.join("take.json"),
+        serde_json::to_vec(&saved).unwrap(),
+    )
+    .unwrap();
+    assert!(studio
+        .err("takes_export_daw", json!({"takeId":take.id}))
+        .contains("timing"));
+    assert_eq!(std::fs::read(&midi_path).unwrap(), midi);
+    saved.as_object_mut().unwrap().remove("referenceTiming");
+    std::fs::write(
+        take.dir.join("take.json"),
+        serde_json::to_vec(&saved).unwrap(),
+    )
+    .unwrap();
+    studio.ok("takes_export_daw", json!({"takeId":take.id}));
+    let info: Value = serde_json::from_slice(&std::fs::read(info_path).unwrap()).unwrap();
+    assert_eq!(info["tempoSource"], "constant-take-tempo");
+    assert!(info["recordedTempoMap"].is_null());
+}

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "assetId": "fixture-source",
+  "sourceSeconds": 5.0,
+  "grid": {
+    "schemaVersion": 1,
+    "fixtureNote": "Synthetic user-confirmed grid with an irregular second bar; not a recorded provider result.",
+    "origin": "confirmed-local",
+    "beatsPerBar": 4,
+    "beats": [0.2, 0.7, 1.2, 1.7, 2.2, 2.8, 3.4, 4.0, 4.6],
+    "sections": [
+      {
+        "id": "verse",
+        "label": "Verse",
+        "startBar": 1,
+        "endBar": 2
+      },
+      {
+        "id": "chorus",
+        "label": "Chorus",
+        "startBar": 2,
+        "endBar": 3
+      }
+    ]
+  },
+  "segments": [
+    {
+      "frame": 0,
+      "position": 2.2,
+      "speed": 0.5
+    },
+    {
+      "frame": 230400,
+      "position": 2.2,
+      "speed": 0.75
+    },
+    {
+      "frame": 384000,
+      "position": 2.2,
+      "speed": 1.0
+    },
+    {
+      "frame": 499200,
+      "position": 2.2,
+      "speed": 1.25
+    }
+  ],
+  "error": null,
+  "fixtureNote": "Synthetic 48 kHz consumed output: Chorus loops at 50, 75, 100 and 125 percent."
+}

@@ -50,6 +50,7 @@ pub struct TakeRecorder {
     pub snapshot: serde_json::Value,
     pub midi: Vec<crate::workstation::MidiNote>,
     pub frames_written: u64,
+    pub(crate) reference_timing: Option<crate::reference_timing::ReferenceTiming>,
 }
 impl TakeRecorder {
     pub fn new(sample_rate: u32, base_dir: PathBuf) -> Self {
@@ -63,6 +64,7 @@ impl TakeRecorder {
             snapshot: serde_json::Value::Null,
             midi: Vec::new(),
             frames_written: 0,
+            reference_timing: None,
         }
     }
     pub fn set_latency_compensation(&mut self, samples: usize) {
@@ -229,7 +231,12 @@ impl TakeRecorder {
         self.frames_written = 0;
         Ok(id)
     }
-    pub fn push_frames(&mut self, frames: Vec<Frame>, notes: Vec<crate::workstation::MidiNote>) {
+    pub(crate) fn push_frames(
+        &mut self,
+        frames: Vec<Frame>,
+        notes: Vec<crate::workstation::MidiNote>,
+        clocks: &[crate::reference_timing::Clock],
+    ) {
         if let Some(tx) = &self.sender {
             let count = frames.len() as u64;
             if let Err(e) = tx.try_send(frames) {
@@ -244,6 +251,17 @@ impl TakeRecorder {
                     n
                 }));
                 self.frames_written += count;
+                if let Some(timing) = &mut self.reference_timing {
+                    let result = if clocks.len() as u64 != count {
+                        timing.error = Some("Missing reference frame clocks.".into());
+                        Err(timing.error.clone().unwrap())
+                    } else {
+                        timing.capture(base, clocks, self.sample_rate)
+                    };
+                    if let Err(error) = result {
+                        self.interrupt(&error);
+                    }
+                }
             }
         }
     }
@@ -265,6 +283,12 @@ impl TakeRecorder {
             .join()
             .map_err(|_| "Recording writer failed; partial WAVs kept")??;
         meta.midi = std::mem::take(&mut self.midi);
+        if let Some(timing) = self.reference_timing.take() {
+            meta.extra.insert(
+                "referenceTiming".into(),
+                serde_json::to_value(timing).map_err(|e| e.to_string())?,
+            );
+        }
         if let Some(e) = self.failure.take() {
             meta.notes = e;
             save_manifest(&meta)?;
@@ -392,16 +416,27 @@ mod tests {
         let (tx, _rx) = mpsc::sync_channel(1);
         r.sender = Some(tx);
         r.writer = Some(thread::spawn(|| Ok(TakeMetadata::default())));
+        r.reference_timing = Some(
+            serde_json::from_str(include_str!(
+                "../../../tests/invariants/reference-timing.json"
+            ))
+            .unwrap(),
+        );
+        r.reference_timing.as_mut().unwrap().segments.clear();
+        let clocks = [crate::reference_timing::Clock {
+            position: 0.0,
+            speed: 0.0,
+        }; 4];
         let note = crate::workstation::MidiNote {
             frame: 1,
             bytes: [0x90, 60, 100],
         };
-        r.push_frames(vec![[0.1; 9]; 4], vec![note.clone()]);
+        r.push_frames(vec![[0.1; 9]; 4], vec![note.clone()], &clocks);
         assert_eq!(r.frames_written, 4);
         assert_eq!(r.midi.len(), 1);
         assert_eq!(r.midi[0].frame, 1);
         for _ in 0..3 {
-            r.push_frames(vec![[0.1; 9]; 4], vec![note.clone()]);
+            r.push_frames(vec![[0.1; 9]; 4], vec![note.clone()], &clocks);
             assert!(r.error().unwrap().contains("interrupted"));
             assert!(
                 r.is_recording(),
@@ -410,6 +445,7 @@ mod tests {
             assert!(r.sender.is_none(), "capture stopped");
             assert_eq!(r.frames_written, 4, "rejected frames are not recorded");
             assert_eq!(r.midi.len(), 1, "no MIDI from rejected or later blocks");
+            assert_eq!(r.reference_timing.as_ref().unwrap().segments.len(), 1);
         }
         r.writer.take().unwrap().join().unwrap().unwrap();
         assert!(r.error().is_none());
