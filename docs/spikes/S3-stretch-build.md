@@ -31,8 +31,20 @@ existing user-installed FFmpeg path, calls `jam-audio::practice::render` and
 asset receipt. The source stays untouched. Speed is 50–150%; transpose is ±12
 semitones. This is offline preparation, with one source/result in memory (about
 660 MiB at the maximum source length). Existing library playback uses the system
-player. Native multi-stem playback, automatic analysis and transport integration
-remain M3 work; this does not claim they are finished.
+player. Subsequent native reference work shares the desktop output/recording
+queue, per-stem mixing and local low-confidence analysis; see ARCHITECTURE.
+
+## Live implementation follow-up (2026-09-06)
+
+The same vendored bridge now supplies bounded 256-frame render-worker streams,
+one per loaded stem. Native controls apply 50–150% speed and ±12 whole semitones,
+save settings for reload, and preserve source-second loops and dry guitar DI.
+No new DSP dependency or vendor source modification was needed. Jo uses the same
+partial-update IPC. Synthetic rate/pitch/cursor tests and a half-speed/+2 native
+recording test complement the original offline checks. Eight stems produced
+8 seconds in 1.230 seconds locally; worst block was 10.582 ms. This does not
+establish physical-device dropout or subjective quality acceptance. Analysed
+sections, tempo ramps and broader provider work remain unfinished.
 
 ## Verification
 

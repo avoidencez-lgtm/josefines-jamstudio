@@ -12,6 +12,10 @@ template<class T> struct Stereo {
 };
 Stretch::Stretch(double speed, double semitones) : speed(speed) {
     dsp.presetDefault(2, 48000);
+    set_parameters(speed, semitones);
+}
+void Stretch::set_parameters(double next_speed, double semitones) noexcept {
+    speed = next_speed;
     dsp.setTransposeSemitones(static_cast<float>(semitones));
 }
 std::size_t Stretch::seek_length() const { return dsp.outputSeekLength(speed); }

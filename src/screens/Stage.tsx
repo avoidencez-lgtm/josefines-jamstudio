@@ -102,7 +102,7 @@ export const Stage: React.FC = () => {
         <WorkspaceHeader
           screen="stage"
           title="Play alongside your song."
-          description="A reference track through your studio output. Its saved pitch and speed stay intact."
+          description="Rehearse through your studio output with the reference speed, key and mix you choose."
         />
         <JoStage />
         <ReferencePlayer

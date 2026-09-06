@@ -1,4 +1,4 @@
-//! Offline 48 kHz stereo stretch. C++ state stays on the calling worker thread.
+//! 48 kHz stereo stretch, offline or in bounded blocks on the native render worker.
 use std::sync::atomic::{AtomicBool, Ordering};
 pub const MAX_FRAMES: usize = 48_000 * 600 + 4_800;
 
@@ -8,9 +8,131 @@ mod ffi {
         include!("stretch.h");
         type Stretch;
         fn new_stretch(speed: f64, semitones: f64) -> Result<UniquePtr<Stretch>>;
+        fn set_parameters(self: Pin<&mut Stretch>, speed: f64, semitones: f64);
         fn seek_length(&self) -> usize;
         fn seek(self: Pin<&mut Stretch>, input: &[f32]) -> Result<()>;
         fn process(self: Pin<&mut Stretch>, input: &[f32], output: &mut [f32]) -> Result<()>;
+    }
+}
+
+// SAFETY: Stretch owns its vectors, FFT and seeded random engine, with no thread-local
+// state or external pointers. UniquePtr transfers exclusive ownership; mutable calls
+// require Pin<&mut Stretch>. This permits transfer, not concurrent access (no Sync).
+unsafe impl Send for ffi::Stretch {}
+
+const BLOCK: usize = 256;
+
+/// Prepared off the render thread; one instance per stem, no callback access.
+pub struct Stream {
+    dsp: cxx::UniquePtr<ffi::Stretch>,
+    input: Vec<f32>,
+    output: [f32; (BLOCK + 1) * 2],
+    primed: bool,
+    origin: usize,
+    lead: usize,
+    produced: usize,
+    phase: f64,
+    speed: f64,
+}
+
+impl Stream {
+    pub fn new() -> Result<Self, String> {
+        // Allocate for the largest supported seek, then restore unity parameters.
+        let mut dsp = ffi::new_stretch(1.5, 0.0).map_err(|e| e.to_string())?;
+        let capacity = dsp.seek_length().max(BLOCK * 2);
+        dsp.pin_mut().set_parameters(1.0, 0.0);
+        Ok(Self {
+            dsp,
+            input: vec![0.0; capacity * 2],
+            output: [0.0; (BLOCK + 1) * 2],
+            primed: false,
+            origin: 0,
+            lead: 0,
+            produced: 0,
+            phase: 0.0,
+            speed: 1.0,
+        })
+    }
+
+    pub fn set_parameters(&mut self, speed: f64, semitones: f64) -> Result<(), String> {
+        validate(speed, semitones)?;
+        self.dsp.pin_mut().set_parameters(speed, semitones);
+        self.speed = speed;
+        self.invalidate();
+        Ok(())
+    }
+
+    pub fn invalidate(&mut self) {
+        self.primed = false;
+    }
+
+    fn copy_input(&mut self, samples: &[f32], start: usize, frames: usize) -> Result<(), String> {
+        let block = self
+            .input
+            .get_mut(..frames * 2)
+            .ok_or("Stretch input block exceeded its prepared capacity.")?;
+        block.fill(0.0);
+        if start < samples.len() / 2 {
+            let available = (samples.len() - start * 2).min(block.len());
+            block[..available].copy_from_slice(&samples[start * 2..start * 2 + available]);
+        }
+        if block.iter().any(|s| !s.is_finite()) {
+            return Err("Stretch source contains invalid audio.".into());
+        }
+        Ok(())
+    }
+
+    fn refill(&mut self, samples: &[f32]) -> Result<(), String> {
+        let consumed = (self.produced as f64 * self.speed).round() as usize;
+        let next = ((self.produced + BLOCK) as f64 * self.speed).round() as usize;
+        let count = next - consumed;
+        self.copy_input(samples, self.origin + self.lead + consumed, count)?;
+        self.output[0] = self.output[BLOCK * 2];
+        self.output[1] = self.output[BLOCK * 2 + 1];
+        self.dsp
+            .pin_mut()
+            .process(&self.input[..count * 2], &mut self.output[2..])
+            .map_err(|e| e.to_string())?;
+        if self.output.iter().any(|v| !v.is_finite()) {
+            return Err("Stretch produced invalid audio.".into());
+        }
+        self.produced += BLOCK;
+        Ok(())
+    }
+
+    /// `samples` ends at the active loop/file boundary. Lookahead is zero-padded.
+    /// `position` is in original 48 kHz frames and is read only after invalidation.
+    pub fn frame(&mut self, samples: &[f32], position: f64, rate: u32) -> Result<[f32; 2], String> {
+        if rate == 0 || !position.is_finite() || position < 0.0 || !samples.len().is_multiple_of(2)
+        {
+            return Err("Invalid stretch source position or output rate.".into());
+        }
+        if !self.primed {
+            self.origin = position.floor() as usize;
+            self.lead = self.dsp.seek_length();
+            self.copy_input(samples, self.origin, self.lead)?;
+            self.dsp
+                .pin_mut()
+                .seek(&self.input[..self.lead * 2])
+                .map_err(|e| e.to_string())?;
+            self.produced = 0;
+            self.output.fill(0.0);
+            self.refill(samples)?;
+            self.phase = 1.0 + position.fract() / self.speed;
+            self.primed = true;
+        }
+        while self.phase >= BLOCK as f64 {
+            self.refill(samples)?;
+            self.phase -= BLOCK as f64;
+        }
+        let a = self.phase.floor() as usize;
+        let fraction = self.phase.fract() as f32;
+        let output = [0, 1].map(|c| {
+            self.output[a * 2 + c]
+                + (self.output[(a + 1) * 2 + c] - self.output[a * 2 + c]) * fraction
+        });
+        self.phase += 48_000.0 / rate as f64;
+        Ok(output)
     }
 }
 

@@ -250,6 +250,16 @@ Use in Film sets the selected asset as the current film soundtrack. Save video t
 
 Name a reference or select an imported audio asset, then choose a source section from your original. Map the reference by ear with one line per section: Name | bars | energy 0–100. Preview new form shows the result before applying it. The tool repeats or trims your own chord phrase to the requested section lengths and adjusts unlocked, unmuted parts. It keeps old sections and their lyrics as ideas; it does not copy reference audio, transcribe chords or move lyrics automatically. Limits are 16 blueprint entries and 256 arranged bars, within the original’s existing section ceiling. Guitar layers block a timeline replacement: work from a version without layers. Apply preserves a version and Undo; Save in Write persists the form and reference provenance.
 
+### Change playback speed and key
+
+Load a reference in Jamstudio, then use Practice speed & key in Songs or Stage. Choose 50–150% speed and -12 to +12 semitones, then Apply & save speed/key. Processing runs locally on each loaded track, keeping stem levels and minus-guitar selection. Your live guitar DI is unchanged. The settings return when you load this asset again. 100% · original key resets processing; Load original mix bypasses saved stems and processing without deleting their settings.
+
+Position, seek and loops use original source seconds. Saved chord/key estimates transpose with playback; estimated BPM follows speed. These remain low-confidence estimates, without downbeat or section alignment. New settings take effect after already queued audio. Record captures the processed stereo backing and the actual settings in the take snapshot. Save the take before changing speed, key, loop or mix.
+
+With this reference loaded, Jo can apply speed/key through the same controls. Offline examples: “speed 75%”, “transpose +2”, “slower”, “faster”; Norwegian examples: “sett hastighet til 75 prosent”, “transponer til 2 halvtoner”, “saktere”, “raskere”. A speed-only command keeps the current transpose and vice versa. Changes during recording, automated ramps and analysed section loops are not available yet.
+
+This changes native playback, not source files, Film, system playback or offline practice copies. A processing error pauses the reference and asks you to reload. If saved settings are invalid, choose Load original mix. Browser preview has no audio processing.
+
 ## AI Music and local models
 
 ### Generate deliberately

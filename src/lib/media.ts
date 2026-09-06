@@ -30,6 +30,35 @@ export interface MediaAsset {
   seconds: number;
   songAnalysis?: unknown;
   stemSet?: unknown;
+  referencePractice?: unknown;
+}
+
+export async function applyReferencePractice(
+  assetId: string,
+  speed?: number,
+  semitones?: number,
+) {
+  if (
+    (speed === undefined && semitones === undefined) ||
+    (speed !== undefined &&
+      (!Number.isFinite(speed) || speed < 0.5 || speed > 1.5)) ||
+    (semitones !== undefined &&
+      (!Number.isInteger(semitones) || Math.abs(semitones) > 12))
+  )
+    throw new Error("Choose 50–150% speed and -12 to +12 whole semitones.");
+  const applied = await ipc.invoke<{ speed: number; semitones: number }>(
+    "media_reference_processing",
+    { assetId, speed, semitones },
+  );
+  await useMedia
+    .getState()
+    .refresh()
+    .catch((e) =>
+      useMedia.setState({
+        message: `Practice settings applied; library refresh failed: ${String(e)}`,
+      }),
+    );
+  return applied;
 }
 export interface MediaShot {
   id: string;
