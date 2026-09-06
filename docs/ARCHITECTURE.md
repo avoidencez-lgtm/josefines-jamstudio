@@ -1140,8 +1140,9 @@ preservation of the previous bundle.
 
 ### Reference state after playback commands
 
-Reference telemetry uses consumed output stamps only while playing. While paused
-or stopped, the commanded cursor and prepared speed/key/ramp drive position,
-chord and grid readouts. A late queued buffer cannot undo Stop or a paused seek.
+Reference telemetry uses consumed output stamps only while playing, including
+the published `speed` and `semitones` fields (not only grid BPM and ramp
+counters). While paused or stopped, the commanded cursor and prepared
+speed/key/ramp drive position, chord and grid readouts. A late queued buffer cannot undo Stop or a paused seek.
 The deterministic `queued_positions_cannot_override_stop_or_paused_edits` test
 covers both commanded edits and unchanged consumed-frame behavior during Play.

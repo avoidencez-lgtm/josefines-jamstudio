@@ -401,6 +401,8 @@ impl ReferenceSong {
         if playing {
             state.position = (stamp as u32) as f64 / 48_000.0;
         }
+        state.speed = speed;
+        state.semitones = semitones;
         state.ramp = ramp;
         state.grid = self.grid.as_ref().map(|g| g.state(state.position, speed));
         state.analysis = self.analysis.as_ref().map(|a| {
@@ -652,6 +654,8 @@ mod tests {
         song.set_processing(0.75, 2).unwrap();
         let paused = song.played_state(before_edit);
         assert_eq!(paused.position, 3.1);
+        assert_eq!(paused.speed, 0.75);
+        assert_eq!(paused.semitones, 2);
         assert!((paused.grid.unwrap().position.unwrap().bpm - 75.0).abs() < 1e-9);
         song.play();
         let playing = song.played_state(before_edit);
@@ -659,6 +663,11 @@ mod tests {
             playing.position, 2.5,
             "playing still follows the consumed queue"
         );
+        assert_eq!(
+            playing.speed, 1.0,
+            "heard speed must not jump to the prepared edit"
+        );
+        assert_eq!(playing.semitones, 0);
         assert!((playing.grid.unwrap().position.unwrap().bpm - 100.0).abs() < 1e-9);
     }
 
