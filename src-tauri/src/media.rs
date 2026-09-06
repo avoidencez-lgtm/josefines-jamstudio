@@ -586,6 +586,102 @@ async fn reference_source(
     result
 }
 
+fn source_hash(path: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+    if file.metadata().map_err(|e| e.to_string())?.len() > 512 * 1024 * 1024 {
+        return Err("Analysis source exceeds 512 MB.".into());
+    }
+    let mut hash = Sha256::new();
+    let mut buffer = [0u8; 65536];
+    let mut bytes = 0usize;
+    loop {
+        if CANCEL.load(Ordering::Relaxed) {
+            return Err("Song analysis canceled.".into());
+        }
+        let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        bytes += n;
+        if bytes > 512 * 1024 * 1024 {
+            return Err("Analysis source exceeds 512 MB.".into());
+        }
+        hash.update(&buffer[..n]);
+    }
+    Ok(format!("{:x}", hash.finalize()))
+}
+
+async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
+    let mut source = asset(base, source_id)?;
+    if source.schema_version != 1
+        || source.id != source_id
+        || source.kind != "audio"
+        || !source.seconds.is_finite()
+        || !(2.0..=1200.0).contains(&source.seconds)
+    {
+        return Err("Choose an audio source between 2 seconds and 20 minutes.".into());
+    }
+    let path = PathBuf::from(&source.path);
+    let source_hash = tauri::async_runtime::spawn_blocking(move || source_hash(&path))
+        .await
+        .map_err(|_| "Source hashing worker stopped.")??;
+    let work = base.join("work").join(id());
+    fs::create_dir_all(work.parent().unwrap()).map_err(|e| e.to_string())?;
+    fs::create_dir(&work).map_err(|e| e.to_string())?;
+    let decoded = work.join("decoded.wav");
+    let result = async {
+        decode_audio(&source.path, &decoded, "1200.1").await?;
+        let path = decoded.clone();
+        let original = PathBuf::from(&source.path);
+        let analysis = tauri::async_runtime::spawn_blocking(move || {
+            let (samples, _) = jam_audio::practice::read_stereo(&path, 48_000 * 1200, &CANCEL)?;
+            let result = jam_audio::offline::analyze(&samples, &CANCEL)?;
+            if self::source_hash(&original)? != source_hash {
+                return Err("Audio changed during analysis. Analyze it again.".into());
+            }
+            let mut value = serde_json::to_value(result).map_err(|e| e.to_string())?;
+            value["sourceHash"] = json!(source_hash);
+            Ok::<_, String>(value)
+        })
+        .await
+        .map_err(|_| "Song analysis worker stopped.")??;
+        if CANCEL.load(Ordering::Relaxed) {
+            return Err("Song analysis canceled.".into());
+        }
+        // Reload metadata so unknown fields survive a successful reanalysis.
+        let current = asset(base, source_id)?;
+        if current.schema_version != source.schema_version
+            || current.id != source.id
+            || current.path != source.path
+        {
+            return Err("Audio asset changed during analysis. Analyze it again.".into());
+        }
+        source = current;
+        source.extra.insert("songAnalysis".into(), analysis);
+        write(
+            &base.join("assets").join(format!("{source_id}.json")),
+            &serde_json::to_value(&source).map_err(|e| e.to_string())?,
+        )?;
+        Ok(source)
+    }
+    .await;
+    let _ = fs::remove_file(&decoded);
+    let _ = fs::remove_dir(&work);
+    result
+}
+
+#[tauri::command]
+pub async fn media_analyze(asset_id: String, state: State<'_, AppState>) -> Result<Asset, String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    state.engine.lock().ensure_timing_editable()?;
+    CANCEL.store(false, Ordering::Relaxed);
+    analyze_source(&root(), &asset_id).await
+}
+
 #[tauri::command]
 pub async fn media_reference_load(
     asset_id: String,
@@ -936,6 +1032,21 @@ mod tests {
 
     use super::*;
     #[tokio::test]
+    async fn analysis_refuses_unknown_asset_versions_without_rewriting_metadata() {
+        let base = std::env::temp_dir().join(format!("jam-analysis-version-{}", id()));
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let path = base.join("assets/source.wav");
+        fs::write(&path, []).unwrap();
+        let manifest = base.join("assets/source.json");
+        write(&manifest, &json!({"schemaVersion":2,"id":"source","kind":"audio","path":path,"seconds":4,"label":"Future","songAnalysis":{"keep":true}})).unwrap();
+        let before = fs::read(&manifest).unwrap();
+        assert!(analyze_source(&base, "source").await.is_err());
+        assert_eq!(fs::read(&manifest).unwrap(), before);
+        assert!(!base.join("work").exists());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[tokio::test]
     #[ignore = "requires user-installed FFmpeg and ffprobe; run with JAM_MEDIA_TEST=1"]
     async fn local_practice_copy_decodes_stretches_and_persists_without_touching_source() {
         assert_eq!(std::env::var("JAM_MEDIA_TEST").as_deref(), Ok("1"));
@@ -996,6 +1107,37 @@ mod tests {
                 .len(),
             2
         );
+        assert!(fs::read_dir(base.join("work")).unwrap().next().is_none());
+        let mut original = asset(&base, &original.id).unwrap();
+        original
+            .extra
+            .insert("futureField".into(), json!({"kept": true}));
+        let manifest = base.join("assets").join(format!("{}.json", original.id));
+        write(&manifest, &serde_json::to_value(&original).unwrap()).unwrap();
+        let before = fs::read(&original.path).unwrap();
+        let analyzed = analyze_source(&base, &original.id).await.unwrap();
+        let saved = asset(&base, &original.id).unwrap();
+        assert_eq!(saved.extra["songAnalysis"], analyzed.extra["songAnalysis"]);
+        assert_eq!(saved.extra["futureField"], json!({"kept": true}));
+        assert_eq!(
+            saved.extra["songAnalysis"]["sourceHash"],
+            source_hash(Path::new(&original.path)).unwrap()
+        );
+        assert_eq!(
+            saved.extra["songAnalysis"]["bpm"],
+            Value::Null,
+            "a continuous tone has no pulse"
+        );
+        assert_eq!(fs::read(&original.path).unwrap(), before);
+        let previous = fs::read(&manifest).unwrap();
+        CANCEL.store(true, Ordering::Relaxed);
+        assert!(analyze_source(&base, &original.id)
+            .await
+            .err()
+            .unwrap()
+            .contains("canceled"));
+        CANCEL.store(false, Ordering::Relaxed);
+        assert_eq!(fs::read(&manifest).unwrap(), previous);
         assert!(fs::read_dir(base.join("work")).unwrap().next().is_none());
         fs::remove_dir_all(base).unwrap();
     }

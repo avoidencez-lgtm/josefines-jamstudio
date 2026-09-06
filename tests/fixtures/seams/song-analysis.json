@@ -1,0 +1,19 @@
+{
+  "_fixture": "Synthetic metadata for contract tests, not a recorded provider response or file hash.",
+  "schemaVersion": 1,
+  "analyzer": "local-chroma-v1",
+  "confidence": "low",
+  "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "seconds": 4,
+  "bpm": 90,
+  "key": "C major",
+  "beats": [0, 0.6666666667, 1.3333333333, 2, 2.6666666667, 3.3333333333],
+  "chords": [
+    { "start": 0, "end": 0.6666666667, "chord": "C" },
+    { "start": 0.6666666667, "end": 1.3333333333, "chord": "C" },
+    { "start": 1.3333333333, "end": 2, "chord": "F" },
+    { "start": 2, "end": 2.6666666667, "chord": "F" },
+    { "start": 2.6666666667, "end": 3.3333333333, "chord": "G" },
+    { "start": 3.3333333333, "end": 4, "chord": null }
+  ]
+}

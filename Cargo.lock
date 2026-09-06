@@ -2010,6 +2010,8 @@ dependencies = [
  "cxx",
  "cxx-build",
  "pitch-estimate",
+ "realfft",
+ "serde",
 ]
 
 [[package]]
@@ -4012,6 +4014,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-global-shortcut",

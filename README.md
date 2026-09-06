@@ -6,7 +6,7 @@ the app owns the arrangement, accompaniment, recording and DAW handoff.
 
 > **Stabilised preview, with owner acceptance still pending.** Write, Stage,
 > Library, typed Jo, recording/export and file-based media workflows are implemented.
-> Native Jo voice is implemented; live voice acceptance, automatic stem analysis/stretch and Lyria RealTime remain pending.
+> Native Jo voice, offline practice stretch and local song estimates are implemented; live voice acceptance, stem separation, analysed-grid playback and Lyria RealTime remain pending.
 > See the [build closeout](docs/reviews/build-closeout.md) and
 > [milestone board](docs/plan/00-README.md) for tested scope and remaining gates.
 
