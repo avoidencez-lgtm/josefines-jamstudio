@@ -949,6 +949,29 @@ async fn takes_export_daw(
 
     // Old take manifests may need the rate recovered from the WAV.
     take.sample_rate = sample_rate;
+    let reference = take.snapshot["reference"].is_object();
+    let recorded_tempo_map = take
+        .extra
+        .get("referenceTiming")
+        .map(|raw| {
+            let timing: jam_audio::reference_timing::ReferenceTiming =
+                serde_json::from_value(raw.clone())
+                    .map_err(|e| format!("Invalid reference timing: {e}"))?;
+            let asset_id = take.snapshot["reference"]["asset_id"]
+                .as_str()
+                .ok_or("Reference timing has no recorded source identity.")?;
+            if asset_id != take.chart_id {
+                return Err("Reference timing source identity does not match the take.".into());
+            }
+            timing.tempo_map(asset_id, sample_rate, take.sample_count as u64)
+        })
+        .transpose()?;
+    if recorded_tempo_map.is_some() && !take.midi.is_empty() {
+        return Err("Reference timing cannot be combined with virtual-band MIDI. Repair the take metadata before exporting.".into());
+    }
+    let time_sig = recorded_tempo_map
+        .as_ref()
+        .map_or(time_sig, |map| map.time_sig);
     let performance_midi = if take.midi.is_empty() {
         None
     } else {
@@ -971,10 +994,14 @@ async fn takes_export_daw(
         .collect();
     let job = jam_audio::export::ExportJob {
         take_id: &take.id,
-        tempo: take.tempo,
+        reference,
+        recorded_tempo_map: recorded_tempo_map.as_ref(),
+        tempo: recorded_tempo_map
+            .as_ref()
+            .map_or(take.tempo, |map| map.tempos[0].bpm),
         time_sig,
         sample_rate,
-        sections: &sections,
+        sections: if reference { &[] } else { &sections },
         stems: &stems,
     };
     let mut report = jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
@@ -1020,10 +1047,22 @@ async fn takes_export_daw(
         serde_json::from_slice(&std::fs::read(&info_path).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
     info["schemaVersion"] = serde_json::json!(1);
+    info["tempoSource"] = serde_json::json!(if recorded_tempo_map.is_some() {
+        "recorded-reference"
+    } else {
+        "constant-take-tempo"
+    });
+    info["recordedTempoMap"] = serde_json::json!(recorded_tempo_map);
+    if let Some(raw) = take.extra.get("referenceTiming") {
+        info["referenceTiming"] = raw.clone();
+    }
     info["stems"] = serde_json::json!(report.copied_stems);
     info["missingStems"] = serde_json::json!(report.missing_stems);
     info["reaperScript"] = serde_json::json!(report.reaper_script);
     info["howTo"] = serde_json::json!("Import the tempo map first. Put the individual guitar, drums, bass, comp and guitar-layer stems at bar 1. Band and master are reference mixes: mute them while mixing the individual stems. Import band-notes.mid on separate instrument tracks if wanted.");
+    if reference {
+        info["howTo"] = serde_json::json!("Import the tempo map first. Place Guitar DI and Band at time zero with original speed, and mute Master, Drums, Bass and Comp. All WAVs retain recorded timing. Sections follow source playback, including loops; partial bars and lead-ins mean DAW bar numbers can differ from source bars. Edge tempo outside the confirmed grid is extrapolated, not analysed.");
+    }
     std::fs::write(
         info_path,
         serde_json::to_vec_pretty(&info).map_err(|e| e.to_string())?,

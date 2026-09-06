@@ -17,6 +17,7 @@ local data = [[local session = {
 local function run(options)
   local tracks, markers, destroyed, messages = {}, {}, {}, {}
   local began, ended, tempo = false, false, nil
+  local tempos = {}
   local r = {}
   r.CountTracks = function() return options.occupied and 1 or #tracks end
   r.CountProjectMarkers = function() return 0 end
@@ -49,8 +50,9 @@ local function run(options)
   r.SetMediaItemInfo_Value = function(item, key, value) item[key] = value end
   r.SetMediaItemTakeInfo_Value = function(take, key, value) take[key] = value end
   r.SetTempoTimeSigMarker = function(_, index, time, measure, beat, bpm, num, den, linear)
-    assert(index == -1 and time == 0 and measure == -1 and beat == -1 and not linear)
-    tempo = {bpm, num, den}
+    assert(index == -1 and measure == -1 and beat == -1 and not linear)
+    table.insert(tempos, {time, bpm, num, den})
+    if #tempos == 1 then tempo = {bpm, num, den}; assert(time == 0) end
     return true
   end
   r.AddProjectMarker = function(_, region, time, _, name)
@@ -76,7 +78,8 @@ local function run(options)
   r.UpdateArrange = function() end
   setmetatable(r, {__index=function(_, key) error("Unexpected REAPER API: " .. key) end})
   local environment = setmetatable({reaper=r}, {__index=_G})
-  assert(load(data .. template, "Jamstudio import", "t", environment))()
+  local timing = options.variable and "session.tempos={{time=0,bpm=100},{time=0.75,bpm=125},{time=1.25,bpm=150}}\n" or ""
+  assert(load(data .. timing .. template, "Jamstudio import", "t", environment))()
   if options.occupied then
     assert(#tracks == 0 and not began and #destroyed == 0)
     assert(messages[1]:find("empty project", 1, true))
@@ -89,6 +92,11 @@ local function run(options)
   else
     assert(began and ended and #tracks == 5 and #destroyed == 0)
     assert(tempo[1] == 100 and tempo[2] == 3 and tempo[3] == 4)
+    if options.variable then
+      assert(#tempos == 3 and tempos[2][1] == 0.75 and tempos[2][2] == 125)
+      assert(tempos[3][1] == 1.25 and tempos[3][2] == 150)
+      assert(tempos[2][3] == 0 and tempos[2][4] == 0, "tempo changes retain meter")
+    else assert(#tempos == 1) end
     assert(markers[2][2] == 1.8)
     assert(tracks[1].B_MUTE == 0 and tracks[2].B_MUTE == 1)
     local item = tracks[1].item
@@ -105,6 +113,7 @@ local function run(options)
   end
 end
 run({})
+run({variable=true})
 run({occupied=true})
 run({missing=true})
 run({attach_failure=true})

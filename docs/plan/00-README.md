@@ -65,6 +65,17 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-06 M6 recorded reference timing: new confirmed-grid takes retain consumed
+source positions and ramp speeds. MIDI/REAPER export follows beat intervals,
+speed steps and repeated section loops while retaining original WAV timing.
+Legacy takes explicitly keep constant tempo; malformed/future traces fail before
+replacing exports. Native tests cover queue lead, accepted recording frames,
+44.1/48/96 kHz ramps and <1 ms SMF drift over five minutes. Lua tests cover tempo
+points without stretching audio. Full Windows/macOS CI remains the merge gate;
+actual DAW import and physical drift are not claimed. Full band/MIDI/rig reference
+synchronisation, Music.ai, realtime generation and release work remain V1 work.
+Friend-operated rig checks remain V2.
+
 2026-09-06 M6 export validation: oversized MIDI deltas, malformed meters/tempos,
 misordered section markers and invalid note frames/bytes now fail before bundle
 writes. Existing exports and source recordings survive validation failures;

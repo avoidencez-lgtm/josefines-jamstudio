@@ -46,6 +46,7 @@ struct OutputFrame {
     take: u64,
     index: u64,
     reference_position: u64,
+    reference_clock: crate::reference_timing::Clock,
 }
 
 struct OutputTap {
@@ -714,6 +715,13 @@ impl AudioEngine {
                 }
             }
             recorder.snapshot["reference"] = serde_json::json!(reference);
+            recorder.reference_timing = song.grid.clone().map(|grid| {
+                crate::reference_timing::ReferenceTiming::new(
+                    song.info.asset_id.clone(),
+                    song.info.seconds,
+                    grid,
+                )
+            });
         }
         let id = recorder.start_take(session_id, style_id, chart_id, tempo)?;
         Ok((recorder, id))
@@ -1154,6 +1162,7 @@ impl AudioEngine {
                     let _gate = gate.lock();
                     let mut frames = Vec::with_capacity(block_len);
                     let mut notes = Vec::new();
+                    let mut reference_clocks = Vec::with_capacity(block_len);
                     let mut heard = Vec::with_capacity(block_len);
                     let mut drained = clock.drained.load(Ordering::Relaxed);
                     while let Ok(frame) = captured.pop() {
@@ -1172,6 +1181,7 @@ impl AudioEngine {
                         }
                         if keep {
                             frames.push(frame.stems);
+                            reference_clocks.push(frame.reference_clock);
                         }
                         drained = frame.index + 1;
                         if heard.len() == block_len {
@@ -1186,7 +1196,7 @@ impl AudioEngine {
                                 .interrupt("Audio input, output or the capture queue lost frames.");
                         }
                         if !frames.is_empty() {
-                            recorder.push_frames(frames, notes);
+                            recorder.push_frames(frames, notes, &reference_clocks);
                         }
                     }
                     clock.drained.store(drained, Ordering::Release);
@@ -1236,6 +1246,8 @@ impl AudioEngine {
                         );
                         let reference_loaded = {
                             ctx.reference_positions.fill(0);
+                            ctx.reference_clocks
+                                .fill(crate::reference_timing::Clock::default());
                             let mut reference = reference.lock();
                             if let Some(song) = reference.as_mut() {
                                 ctx.render_reference(song);
@@ -1322,6 +1334,7 @@ impl AudioEngine {
                                 take,
                                 index: output_index + i as u64,
                                 reference_position: ctx.reference_positions[i],
+                                reference_clock: ctx.reference_clocks[i],
                             });
                         }
                         output_index += block_len as u64;
@@ -1417,6 +1430,7 @@ impl Drop for AudioEngine {
 struct RenderContext {
     sample_rate: u32,
     reference_positions: Vec<u64>,
+    reference_clocks: Vec<crate::reference_timing::Clock>,
     band_volume: f32,
     voice_audio: Vec<f32>,
     voice_duck: Vec<f32>,
@@ -1457,6 +1471,7 @@ impl RenderContext {
             &mut self.band_left,
             &mut self.band_right,
             &mut self.reference_positions,
+            &mut self.reference_clocks,
         );
         for i in 0..self.out_left.len() {
             self.out_left[i] += self.band_left[i] * self.band_volume;
@@ -1482,6 +1497,7 @@ impl RenderContext {
         Self {
             sample_rate,
             reference_positions: vec![0; RENDER_BLOCK],
+            reference_clocks: vec![crate::reference_timing::Clock::default(); RENDER_BLOCK],
             band_volume: 0.0,
             voice_audio: vec![0.0; RENDER_BLOCK],
             voice_duck: vec![1.0; RENDER_BLOCK],
@@ -1886,8 +1902,34 @@ mod tests {
             assert_eq!(song.info.ramp.unwrap().completed_bars, 1);
         }
         engine.record_song("ramp".into()).unwrap();
-        thread::sleep(Duration::from_millis(50));
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while engine.recorder.lock().frames_written < 24_000 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "headless recording stalled"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
         let take = engine.recorder_stop().unwrap();
+        let timing: crate::reference_timing::ReferenceTiming =
+            serde_json::from_value(take.extra["referenceTiming"].clone()).unwrap();
+        let map = timing
+            .tempo_map("ramp", take.sample_rate, take.sample_count as u64)
+            .unwrap();
+        assert_eq!(map.tempos[0].bpm, 600.0);
+        assert_eq!(map.tempos[1].bpm, 660.0);
+        assert!(map.tempos[1].frame.abs_diff(19_200) <= 1);
+        let saved: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(
+                std::path::Path::new(&take.path_input)
+                    .parent()
+                    .unwrap()
+                    .join("take.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(saved["referenceTiming"], take.extra["referenceTiming"]);
         assert_eq!(take.snapshot["reference"]["ramp"]["completed_bars"], 0);
         assert_eq!(take.snapshot["reference"]["ramp"]["active"], true);
         assert_eq!(
@@ -2036,7 +2078,7 @@ mod tests {
                         let mut left = [0.0; 256];
                         let mut right = left;
                         let mut stamps = [0; 256];
-                        song.render_timed(rate, &mut left, &mut right, &mut stamps);
+                        song.render_timed(rate, &mut left, &mut right, &mut stamps, &mut []);
                         for i in 0..256 {
                             playback
                                 .push(OutputFrame {
@@ -2119,6 +2161,10 @@ mod tests {
                     index,
                     synthetic: false,
                     reference_position: (23 << 32) | index,
+                    reference_clock: crate::reference_timing::Clock {
+                        position: index as f64 / 48_000.0,
+                        speed: 0.75,
+                    },
                 })
                 .unwrap();
         }
@@ -2141,6 +2187,11 @@ mod tests {
                 let expected = if (position + i) % 997 == 0 { 0.25 } else { 0.0 };
                 assert_eq!(frame.index, (position + i) as u64);
                 assert_eq!(frame.take, 7);
+                assert_eq!(
+                    frame.reference_clock.position,
+                    (position + i) as f64 / 48_000.0
+                );
+                assert_eq!(frame.reference_clock.speed, 0.75);
                 assert_eq!(
                     frame.stems,
                     [

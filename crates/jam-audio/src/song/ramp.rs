@@ -133,6 +133,8 @@ mod tests {
             assert_eq!(song.info.state, "stopped", "arming never starts playback");
             assert_eq!(song.played_state(0).ramp.unwrap().config, config);
             song.play();
+            let mut timing =
+                crate::reference_timing::ReferenceTiming::new("ramp".into(), 5.0, grid.clone());
             let mut heard_steps = Vec::new();
             let mut frames = 0;
             let mut last_count = 0;
@@ -141,7 +143,9 @@ mod tests {
                 let mut left = [0.0; 257];
                 let mut right = left;
                 let mut stamps = [0; 257];
-                song.render_timed(rate, &mut left, &mut right, &mut stamps);
+                let mut clocks = [crate::reference_timing::Clock::default(); 257];
+                song.render_timed(rate, &mut left, &mut right, &mut stamps, &mut clocks);
+                timing.capture(frames as u64, &clocks, rate).unwrap();
                 assert!(left.iter().all(|v| v.is_finite()));
                 for stamp in stamps {
                     let heard = song.played_state(stamp).ramp.unwrap();
@@ -164,6 +168,18 @@ mod tests {
                     .map(|(_, speed)| *speed)
                     .collect::<Vec<_>>(),
                 [75, 100, 125]
+            );
+            let map = timing.tempo_map("ramp", rate, frames as u64).unwrap();
+            assert_eq!(
+                map.tempos.iter().map(|t| t.bpm).collect::<Vec<_>>(),
+                [50.0, 75.0, 100.0, 125.0]
+            );
+            for (tempo, seconds) in map.tempos.iter().skip(1).zip([4.8, 8.0, 10.4]) {
+                assert!((tempo.frame as f64 / rate as f64 - seconds).abs() <= 3.0 / rate as f64);
+            }
+            assert!(
+                timing.segments.len() <= 7,
+                "sparse trace, not one segment per frame"
             );
             let expected = [4.8, 8.0, 10.4];
             for ((frame, _), seconds) in heard_steps.iter().zip(expected) {

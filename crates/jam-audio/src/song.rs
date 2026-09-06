@@ -500,7 +500,7 @@ impl ReferenceSong {
 
     /// All processing stays at 48 kHz, interpolated for the negotiated output rate.
     pub fn render(&mut self, rate: u32, left: &mut [f32], right: &mut [f32]) {
-        self.render_timed(rate, left, right, &mut []);
+        self.render_timed(rate, left, right, &mut [], &mut []);
     }
 
     pub(crate) fn render_timed(
@@ -509,10 +509,15 @@ impl ReferenceSong {
         left: &mut [f32],
         right: &mut [f32],
         positions: &mut [u64],
+        clocks: &mut [crate::reference_timing::Clock],
     ) {
         left.fill(0.0);
         right.fill(0.0);
         positions.fill(self.stamp());
+        clocks.fill(crate::reference_timing::Clock {
+            position: self.position / 48_000.0,
+            speed: 0.0,
+        });
         if rate == 0 || self.info.state != "playing" {
             return;
         }
@@ -521,6 +526,12 @@ impl ReferenceSong {
         let loop_end = self.info.loop_end * 48_000.0;
         for (i, (l, r)) in left.iter_mut().zip(right).enumerate() {
             if let Err(error) = self.advance_ramp() {
+                if let Some(tail) = clocks.get_mut(i..) {
+                    tail.fill(crate::reference_timing::Clock {
+                        position: self.position / 48_000.0,
+                        speed: 0.0,
+                    });
+                }
                 self.info.processing_error = Some(error);
                 self.info.state = "paused".into();
                 break;
@@ -539,6 +550,12 @@ impl ReferenceSong {
             if self.position >= length as f64 {
                 self.position = length as f64;
                 self.info.state = "stopped".into();
+                if let Some(tail) = clocks.get_mut(i..) {
+                    tail.fill(crate::reference_timing::Clock {
+                        position: self.info.seconds,
+                        speed: 0.0,
+                    });
+                }
                 if let Some(tail) = positions.get_mut(i..) {
                     tail.fill(self.stamp());
                 }
@@ -607,6 +624,12 @@ impl ReferenceSong {
                 }
             }
             if self.info.processing_error.is_some() {
+                if let Some(tail) = clocks.get_mut(i..) {
+                    tail.fill(crate::reference_timing::Clock {
+                        position: self.position / 48_000.0,
+                        speed: 0.0,
+                    });
+                }
                 break;
             }
             // De-click a processor restart from the last emitted level over 2 ms.
@@ -618,6 +641,12 @@ impl ReferenceSong {
                 if self.fade_in == 0.0 {
                     self.transition_from = None;
                 }
+            }
+            if let Some(clock) = clocks.get_mut(i) {
+                *clock = crate::reference_timing::Clock {
+                    position: self.position / 48_000.0,
+                    speed: self.info.speed,
+                };
             }
             self.last_frame = [*l, *r];
             self.position += self.info.speed * 48_000.0 / rate as f64;
@@ -680,14 +709,14 @@ mod tests {
         let mut left = vec![0.0; 4096];
         let mut right = left.clone();
         let mut stamps = vec![0; left.len()];
-        song.render_timed(48_000, &mut left, &mut right, &mut stamps);
+        song.render_timed(48_000, &mut left, &mut right, &mut stamps, &mut []);
         let previous = *left.last().unwrap();
         let old_stamp = *stamps.last().unwrap();
         song.set_processing(0.75, 2).unwrap();
         let old = song.played_state(old_stamp).analysis.unwrap();
         assert_eq!(old.chord.as_deref(), Some("C"));
         assert_eq!(old.bpm, Some(90.0));
-        song.render_timed(48_000, &mut left, &mut right, &mut stamps);
+        song.render_timed(48_000, &mut left, &mut right, &mut stamps, &mut []);
         assert!((left[0] - previous).abs() < 0.03);
         assert!(left[..200].windows(2).all(|p| (p[1] - p[0]).abs() < 0.04));
         let new = song.played_state(stamps[0]).analysis.unwrap();
@@ -762,7 +791,7 @@ mod tests {
                     let mut left = vec![0.0; count];
                     let mut right = left.clone();
                     let mut stamps = vec![0; count];
-                    song.render_timed(rate, &mut left, &mut right, &mut stamps);
+                    song.render_timed(rate, &mut left, &mut right, &mut stamps, &mut []);
                     if rendered + count < frames {
                         let heard = song.played_state(*stamps.last().unwrap());
                         let expected = (rendered + count - 1) as f64 * speed / rate as f64;
@@ -946,7 +975,7 @@ mod tests {
             let mut left = vec![0.0; rate as usize / 4];
             let mut right = left.clone();
             let mut positions = vec![0; left.len()];
-            song.render_timed(rate, &mut left, &mut right, &mut positions);
+            song.render_timed(rate, &mut left, &mut right, &mut positions, &mut []);
             let before = song.played_state(positions[0]);
             assert_eq!(before.analysis.unwrap().chord.as_deref(), Some("C"));
             let after = song.played_state(*positions.last().unwrap());
@@ -954,7 +983,7 @@ mod tests {
             assert!((after.position - (1.15 - 1.0 / rate as f64)).abs() < 1.0 / 48_000.0);
             song.set_loop(1.0, 2.0, true).unwrap();
             song.seek(1.9).unwrap();
-            song.render_timed(rate, &mut left, &mut right, &mut positions);
+            song.render_timed(rate, &mut left, &mut right, &mut positions, &mut []);
             assert!((song.played_state(*positions.last().unwrap()).position - 1.15).abs() < 0.001);
             song.set_loop(0.0, 4.0, false).unwrap();
         }

@@ -1026,7 +1026,7 @@ work, JS timer, extra processing bus or dependency is added. The existing
 Ramps armed before recording continue natively. Takes retain the initial ramp
 configuration/counters and processed stereo backing; record-from-start snapshots
 the reset ramp before creating the take. Manual changes during recording are
-refused. This does not yet encode the speed trajectory in DAW/MIDI tempo export.
+refused. The consumed-frame trace below now carries the trajectory into DAW export.
 
 `jam-dsp::stretch::Stream` reuses the vendored Signalsmith bridge in 256-frame
 48 kHz blocks on the render worker. Each source/stem owns preallocated DSP and
@@ -1101,7 +1101,8 @@ start/end downbeats and seeks to its start using the existing seconds-loop and
 DSP invalidation path. The original render/output/recording queue remains shared.
 Queued audio can finish before the change is heard; recording blocks loop edits.
 The complete map is captured in the take's `snapshot.beatGrid` for reproducibility.
-It does not yet drive band/MIDI transport, DAW tempo export or automatic ramps.
+It drives native practice ramps and recorded DAW tempo export. Band/MIDI transport
+and rig synchronisation remain separate work.
 
 Songs owns confirmation; Songs/Stage share section-loop buttons and readout.
 Jo's `loop_reference_section` takes current asset/section IDs. Offline `loop NAME`
@@ -1131,12 +1132,50 @@ absent legacy meters retain the chart/default fallback. A legacy missing sample
 rate is recovered from the recorded WAV before both MIDI encoders run. Validation
 failure preserves an existing export and the original take. This is not a disk
 transaction: later I/O errors still surface and may leave partial output.
-Reference-grid/ramp trajectories remain pending; the existing map is constant.
+Legacy takes without a recorded reference trace retain the constant map.
 
 Format authority: [MIDI Association Standard MIDI Files](https://midi.org/standard-midi-files),
 RP-001 v1.0, verified 2026-09-06. The regression covers VLQ boundary bytes,
 overflow, invalid meters/tempos/notes, compound-meter note timing, and IPC
 preservation of the previous bundle.
+
+### Recorded reference tempo export (2026-09-06)
+
+Each output frame carries a Copy source clock (source seconds and actual speed,
+zero while not playing). The callback only copies it. The render worker forwards
+consumed clocks alongside audio to the existing recorder. After disk-queue
+acceptance, clocks compress into `{frame,position,speed}` segments with a
+quarter-source-sample position tolerance; rejected audio adds no timing. The
+schema-1 `referenceTiming` manifest extra includes asset ID, source duration and
+the confirmed grid captured before recording. Capacity is 100,000 segments;
+capacity/clock failures interrupt recording and mark the trace incomplete.
+
+Export validates version, identity, grid and segment bounds before writing.
+Loop discontinuities start new segments. Source beat intervals and speed yield
+quarter-note BPM, bounded by SMF representation rather than the band's 20–400
+BPM control. Tempo points and repeated section markers use recorded frames.
+Lead-ins/partial starts preserve audio at time zero; DAW bar numbers can differ
+from source bars. Nonplaying spans are labelled and retain preceding tempo;
+before any playback the edge tempo is conventional. Outside confirmed beats,
+explicit edge-tempo markers distinguish extrapolation from confirmed timing.
+Event generation is bounded.
+
+SMF uses 9600 PPQ and corrects each rounded delta against encoded elapsed time,
+carrying sub-tick error forward across tempo changes. Synthetic five-minute reparsing
+checks every marker/tempo event and the ending time within 1 ms. REAPER uses
+`SetTempoTimeSigMarker` at recorded seconds (subsequent 0/0 meter retains the
+initial signature); WAV items retain time anchoring and speed 1. Reference takes
+use Guitar DI plus Band, with silent generated parts and Master muted. Standard
+band exports retain their previous track selection. No source WAV is rewritten.
+Info JSON carries `tempoSource`, derived `recordedTempoMap` and the untouched raw
+trace. Missing legacy traces use `constant-take-tempo`; malformed/future traces
+are errors, never that fallback. Reference traces mixed with virtual-band MIDI
+are refused as inconsistent metadata. This does not prove an actual Logic or
+REAPER import, physical-device drift, analysis quality or full V1 completion.
+
+REAPER authority: [ReaScript API](https://www.reaper.fm/sdk/reascript/reascripthelp.html#SetTempoTimeSigMarker),
+verified 2026-09-06. `tests/reaper-import.lua` checks multiple tempo points,
+retained meter, original audio speed and the existing failure cleanup.
 
 ### Reference state after playback commands
 

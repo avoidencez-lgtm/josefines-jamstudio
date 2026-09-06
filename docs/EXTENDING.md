@@ -1,5 +1,20 @@
 # Extending Josefines Jamstudio
 
+## Recorded reference timing
+
+`jam-audio::reference_timing` owns the schema-1 source trace and MIDI/REAPER
+conversion. Add timing to `OutputFrame`, never poll render state at recording
+time. Only consumed frames accepted by the recorder enter the trace. A take
+keeps its own confirmed grid and source identity; exporters never reload an
+edited grid. `TakeMetadata.extra.referenceTiming` preserves unknown fields.
+Use `tests/invariants/reference-timing.json` for this seam. Native tests cover
+recorded ramps at three output rates, queue lead, disk backpressure, partial
+starts, silence, malformed/future traces and five-minute SMF timing. The IPC
+test checks validation before bundle writes and unchanged source WAVs. Info JSON
+includes the raw trace plus derived `recordedTempoMap`. Legacy takes retain
+explicitly labelled constant tempo. Extend `tests/reaper-import.lua` for new
+events; audio stays anchored to seconds.
+
 ## Reference practice ramp
 
 `crates/jam-audio/src/song/ramp.rs` defines the versioned configuration and
@@ -18,8 +33,8 @@ old queued readouts. `record_from_start_restarts_the_reference_ramp_and_snapshot
 checks actual take metadata; the IPC grid scenario covers identity/recording
 guards. `tests/jo/reference-ramp.test.ts` exercises UI, keyboard, pedal and
 EN/NB Jo routing with native failure propagation. Keep bilingual help and the
-shortcut registry aligned. Full tempo-map export and provider analysis remain
-separate work; these tests do not prove physical-device timing or live quality.
+shortcut registry aligned. Recorded tempo export uses the trace above. Provider
+analysis remains separate; these tests do not prove physical-device timing or live quality.
 
 ## Local reference analysis
 
