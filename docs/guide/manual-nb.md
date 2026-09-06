@@ -266,9 +266,15 @@ Last en referanse inn i Jamstudio, og bruk Practice speed & key i Songs eller St
 
 Posisjon, søk og løkker bruker sekunder fra originalen. Lagrede akkord- og toneartestimater transponeres med lyden, og estimert BPM følger hastigheten. Estimatene har fortsatt lav sikkerhet og ingen justering mot taktstart eller seksjoner. Nye innstillinger høres etter lyden som allerede står i kø. Record tar opp det behandlede stereokompet og lagrer de faktiske innstillingene med opptaket. Lagre opptaket før du endrer hastighet, toneart, løkke eller miks.
 
-Når referansen er lastet, kan Jo endre hastighet og toneart gjennom de samme kontrollene. Eksempler uten språkmodell: «sett hastighet til 75 prosent», «transponer til 2 halvtoner», «saktere», «raskere». Engelske eksempler: «speed 75%», «transpose +2», «slower», «faster». En kommando som bare endrer hastighet, beholder transponeringen, og omvendt. Endringer under opptak, automatiske tempoøkninger og analyserte seksjonsløkker er ikke tilgjengelige ennå.
+Når referansen er lastet, kan Jo endre hastighet og toneart gjennom de samme kontrollene. Eksempler uten språkmodell: «sett hastighet til 75 prosent», «transponer til 2 halvtoner», «saktere», «raskere». Engelske eksempler: «speed 75%», «transpose +2», «slower», «faster». En kommando som bare endrer hastighet, beholder transponeringen, og omvendt. Manuelle endringer under opptak avvises. Bekreftede seksjonsløkker og native øvingsramper er tilgjengelige etter at taktkartet er bekreftet.
 
 Dette endrer avspilling i Jamstudio, ikke kildefiler, Film, systemavspilling eller ferdiglagde øvingskopier. Ved behandlingsfeil pauses referansen, og du blir bedt om å laste den på nytt. Velg Load original mix hvis lagrede innstillinger er ugyldige. Nettleservisningen behandler ingen lyd.
+
+Build up speed i Songs eller Stage øker hastigheten på alle referansespor etter hele, bekreftede takter. Bekreft taktene og last referansen på nytt først. Velg deretter en seksjonsløkke eller slå løkker av. Start på 50–149 %, velg et høyere mål opptil 150 %, og øk 1–50 prosentpoeng hver 1–64 takter. En delvis første takt telles ikke. En løkke angitt i sekunder må starte og slutte på bekreftet taktstart. Start ramp klargjør innstillingene uten å starte avspilling.
+
+Pause beholder fremdriften. Stop nullstiller fremdrift og starthastighet. Stop ramp beholder gjeldende hastighet; søk, endret løkke eller manuell hastighet/toneart avslutter rampen. En ferdig rampe holder målhastigheten. Under avspilling følger hastighet/taktteller lyden på utgangen; ved pause/stopp vises de klargjorte innstillingene. Lyd i kø kan fullføres før en ny innstilling høres. Klargjør før opptak; behandlet komp og rampeinnstillinger følger opptaket. Øktinnstillingene overskriver ikke lagret sanghastighet og aktiveres aldri automatisk ved ny lasting. Tempoeksport til DAW beskriver ikke rampeendringene ennå.
+
+Q og den innlærte Toggle reference practice ramp-pedalen bruker øktens innstillinger (standard 75 til 100 %, +5 prosentpoeng hver 4 takter). Eksempler til Jo: ramp fra 75 til 100 med 5 hver 4 takter; stopp ramp. Engelsk: ramp 75 to 100 by 5 every 4 bars; stop ramp. Alle bruker samme native kommando uten tidtaker eller betalt forespørsel.
 
 ### Bekreft takter og lag seksjonsløkker
 
@@ -276,7 +282,7 @@ Kjør Analyze tempo & chords, og åpne Confirm bars & sections i Songs. Lokal an
 
 Legg til navngitte seksjoner i tidsrekkefølge uten overlapp. Start bar tas med, mens End before bar ikke tas med: start 1, slutt før 3 dekker takt 1 og 2. Kryss av for at du har kontrollert ved å lytte, lagre og last referansen på nytt. Endret analyse eller lagret taktkart tømmer bekreftelsen. Endrede lydfiler eller foreldet analyse avvises; analyser igjen og åpne redigeringen på nytt. Ukjente lagrede felt beholdes. Bekreftelsen gjør ikke slagestimatene mer presise.
 
-Songs og Stage viser bekreftet takt, brøkdel av taktslag og navngitt seksjon ut fra lyden som faktisk er sendt til utgangen. Loop Solo starter seksjonen på bekreftet taktstart og gjentar frem til den eksklusive slutten. Hastighet og toneart beholdes. Lyd som allerede står i kø, kan bli spilt før endringen høres. Lagre et pågående opptak før du endrer løkker. Opptaket lagrer hele taktkartet, men tempoeksport til DAW og automatiske øvingsramper bruker det ikke ennå.
+Songs og Stage viser bekreftet takt, brøkdel av taktslag og navngitt seksjon ut fra lyden som faktisk er sendt til utgangen. Loop Solo starter seksjonen på bekreftet taktstart og gjentar frem til den eksklusive slutten. Hastighet og toneart beholdes. Lyd som allerede står i kø, kan bli spilt før endringen høres. Lagre et pågående opptak før du endrer løkker. Opptaket lagrer hele taktkartet, og øvingsramper teller de hele taktene. Tempoeksport til DAW bruker det ikke ennå.
 
 Jo kan bruke de bekreftede navnene: «gjenta Refreng» eller «loop Chorus». Navnet må passe nøyaktig én seksjon; ved like eller manglende navn må du velge i referansespilleren. Dette er brukerbekreftede seksjoner, ikke automatiske leverandørfunn. Et foreldet taktkart varsles tydelig, mens lyden fortsatt kan spilles med sekundkontrollene.
 
@@ -488,3 +494,4 @@ Den tospråklige håndbokkilden er docs/guide/manual.json. Hver tittel og tekstb
 - **[ / ]**: Transponer skjemaet ned / opp en halvtone
 - **U**: Vis / skjul stemmeapparatet
 - **?**: Åpne hjelp og veiledninger
+- **Q**: Slå referansens øvingsrampe av/på med øktens innstillinger

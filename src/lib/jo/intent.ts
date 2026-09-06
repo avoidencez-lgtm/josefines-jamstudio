@@ -31,6 +31,36 @@ export function parseNaturalIntent(
         "Use load song followed by its title, or last inn sangen followed by its title.",
       toolCalls: [],
     };
+  if (/\bramp\b/.test(lower)) {
+    const ramp =
+      /^ramp (?:fra )?(\d{2,3}) (?:to|til) (\d{2,3}) (?:by|med) (\d{1,2}) (?:every|hver) (\d{1,2}) (?:bars?|takt(?:er)?)[.!]?$/.exec(
+        lower,
+      );
+    const stop = /^(?:stop|stopp) ramp[.!]?$/.test(lower);
+    return reference && (ramp || stop)
+      ? {
+          reply: "Updating the reference practice ramp.",
+          toolCalls: [
+            {
+              name: "ramp",
+              arguments: stop
+                ? { assetId: reference.assetId, stop: true }
+                : {
+                    assetId: reference.assetId,
+                    startPercent: Number(ramp?.[1]),
+                    targetPercent: Number(ramp?.[2]),
+                    stepPercent: Number(ramp?.[3]),
+                    barsPerStep: Number(ramp?.[4]),
+                  },
+            },
+          ],
+        }
+      : {
+          reply:
+            "Load a reference and confirm its bars, then use ramp 75 to 100 by 5 every 4 bars, or stop ramp.",
+          toolCalls: [],
+        };
+  }
   if (reference) {
     const loop = /^(?:loop|gjenta)\s+(.+?)[.!]?$/.exec(lower);
     if (loop) {

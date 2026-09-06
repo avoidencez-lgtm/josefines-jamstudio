@@ -562,6 +562,27 @@ impl AudioEngine {
         song.set_processing(speed, semitones)
     }
 
+    pub fn reference_ramp(
+        &self,
+        asset_id: &str,
+        config: Option<crate::song::ramp::Config>,
+        toggle: bool,
+    ) -> Result<Option<crate::song::ramp::State>, String> {
+        self.ensure_timing_editable()?;
+        let mut reference = self.reference.lock();
+        let song = reference.as_mut().ok_or("Load the reference first.")?;
+        if song.info.asset_id != asset_id {
+            return Err("The loaded reference changed.".into());
+        }
+        let config = if toggle && song.info.ramp.is_some_and(|r| r.active) {
+            None
+        } else {
+            config
+        };
+        song.configure_ramp(config)?;
+        Ok(song.info.ramp)
+    }
+
     // ----- band ------------------------------------------------------------
 
     pub fn validate_style_meter(&self, style: &Style) -> Result<(), String> {
@@ -683,7 +704,16 @@ impl AudioEngine {
         }
         recorder.snapshot["timeSignature"] = serde_json::json!(meter);
         if let Some(song) = self.reference.lock().as_ref() {
-            recorder.snapshot["reference"] = serde_json::json!(song.info);
+            let mut reference = song.info.clone();
+            if from_start {
+                reference.position = 0.0;
+                reference.state = "stopped".into();
+                if let Some(ramp) = reference.ramp {
+                    reference.ramp = Some(crate::song::ramp::State::new(ramp.config));
+                    reference.speed = ramp.config.start_percent as f64 / 100.0;
+                }
+            }
+            recorder.snapshot["reference"] = serde_json::json!(reference);
         }
         let id = recorder.start_take(session_id, style_id, chart_id, tempo)?;
         Ok((recorder, id))
@@ -1816,6 +1846,57 @@ mod tests {
         assert!(engine.ensure_band_grid().is_ok());
         assert!(engine.get_telemetry().reference.is_none());
         drop(band);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn record_from_start_restarts_the_reference_ramp_and_snapshots_its_reset_state() {
+        let mut engine = headless_engine();
+        let root = std::env::temp_dir().join(format!("jam-ramp-record-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        *engine.recorder.lock() = crate::recorder::TakeRecorder::new(48_000, root.clone());
+        let mut song =
+            crate::song::ReferenceSong::new("ramp".into(), "Fixture".into(), vec![0.0; 96_000])
+                .unwrap();
+        song.set_grid(crate::song::grid::Grid {
+            schema_version: 1,
+            origin: "confirmed-local".into(),
+            beats_per_bar: 4,
+            beats: vec![0.0, 0.1, 0.2, 0.3, 0.4],
+            sections: vec![],
+        })
+        .unwrap();
+        song.set_loop(0.0, 0.4, true).unwrap();
+        let config = crate::song::ramp::Config {
+            schema_version: 1,
+            start_percent: 100,
+            step_percent: 10,
+            target_percent: 130,
+            bars_per_step: 1,
+        };
+        song.configure_ramp(Some(config)).unwrap();
+        engine.load_reference(song).unwrap();
+        engine.start().unwrap();
+        {
+            let mut reference = engine.reference.lock();
+            let song = reference.as_mut().unwrap();
+            song.play();
+            song.render(48_000, &mut vec![0.0; 19_201], &mut vec![0.0; 19_201]);
+            song.pause();
+            assert_eq!(song.info.ramp.unwrap().completed_bars, 1);
+        }
+        engine.record_song("ramp".into()).unwrap();
+        thread::sleep(Duration::from_millis(50));
+        let take = engine.recorder_stop().unwrap();
+        assert_eq!(take.snapshot["reference"]["ramp"]["completed_bars"], 0);
+        assert_eq!(take.snapshot["reference"]["ramp"]["active"], true);
+        assert_eq!(
+            take.snapshot["reference"]["ramp"]["config"],
+            serde_json::json!(config)
+        );
+        assert_eq!(take.snapshot["reference"]["speed"], 1.0);
+        engine.stop().unwrap();
+        engine.unload_reference().unwrap();
         std::fs::remove_dir_all(root).unwrap();
     }
 

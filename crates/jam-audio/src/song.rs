@@ -1,5 +1,6 @@
 //! Stereo reference playback, advanced only by frames rendered for the output queue.
 pub mod grid;
+pub mod ramp;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -96,6 +97,8 @@ pub struct ReferenceState {
     pub grid: Option<grid::State>,
     #[serde(default)]
     pub grid_error: Option<String>,
+    #[serde(default)]
+    pub ramp: Option<ramp::State>,
 }
 
 pub struct ReferenceSong {
@@ -110,7 +113,8 @@ pub struct ReferenceSong {
     stem_gains: Vec<f32>,
     streams: Vec<jam_dsp::stretch::Stream>,
     // ponytail: retain 16 queued parameter generations; older readouts become unknown.
-    previous_parameters: Vec<(u32, f64, i32)>,
+    previous_parameters: Vec<(u32, f64, i32, Option<ramp::State>)>,
+    ramp_end: Option<usize>,
     last_frame: [f32; 2],
     transition_from: Option<[f32; 2]>,
     pub grid: Option<grid::Grid>,
@@ -147,6 +151,7 @@ impl ReferenceSong {
                 processing_error: None,
                 grid: None,
                 grid_error: None,
+                ramp: None,
             },
             samples,
             position: 0.0,
@@ -157,6 +162,7 @@ impl ReferenceSong {
             stem_gains: Vec::new(),
             streams: vec![jam_dsp::stretch::Stream::new()?],
             previous_parameters: Vec::with_capacity(16),
+            ramp_end: None,
             last_frame: [0.0; 2],
             transition_from: None,
             grid: None,
@@ -212,18 +218,31 @@ impl ReferenceSong {
 
     pub fn set_processing(&mut self, speed: f64, semitones: i32) -> Result<(), String> {
         jam_dsp::stretch::validate(speed, semitones as f64)?;
+        self.remember_parameters();
+        self.info.ramp = None;
+        self.apply_processing(speed, semitones)
+    }
+
+    fn remember_parameters(&mut self) {
+        if self.previous_parameters.len() == 16 {
+            self.previous_parameters.remove(0);
+        }
+        self.previous_parameters.push((
+            self.serial,
+            self.info.speed,
+            self.info.semitones,
+            self.info.ramp,
+        ));
+        self.serial = SOURCE_SERIAL.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn apply_processing(&mut self, speed: f64, semitones: i32) -> Result<(), String> {
         if self.info.speed == speed && self.info.semitones == semitones {
             return Ok(());
         }
         for stream in &mut self.streams {
             stream.set_parameters(speed, semitones as f64)?;
         }
-        if self.previous_parameters.len() == 16 {
-            self.previous_parameters.remove(0);
-        }
-        self.previous_parameters
-            .push((self.serial, self.info.speed, self.info.semitones));
-        self.serial = SOURCE_SERIAL.fetch_add(1, Ordering::Relaxed);
         self.info.speed = speed;
         self.info.semitones = semitones;
         self.info.processing_error = None;
@@ -232,8 +251,56 @@ impl ReferenceSong {
         Ok(())
     }
 
+    pub fn configure_ramp(&mut self, config: Option<ramp::Config>) -> Result<(), String> {
+        let next = if let Some(config) = config {
+            config.validate()?;
+            let grid = self
+                .grid
+                .as_ref()
+                .ok_or("Confirm bars in Songs and reload the reference before starting a ramp.")?;
+            if self.info.loop_enabled
+                && (!ramp::aligned(grid, self.info.loop_start)
+                    || !ramp::aligned(grid, self.info.loop_end))
+            {
+                return Err("Use a loop bounded by confirmed downbeats, or turn the loop off before starting a ramp.".into());
+            }
+            Some(ramp::next_end(grid, self.position).ok_or("Seek before a complete confirmed bar, or select a section loop before starting the ramp.")?)
+        } else {
+            None
+        };
+        self.remember_parameters();
+        self.ramp_end = next;
+        self.info.ramp = config.map(ramp::State::new);
+        if let Some(config) = config {
+            self.apply_processing(config.start_percent as f64 / 100.0, self.info.semitones)?;
+        }
+        Ok(())
+    }
+
+    fn advance_ramp(&mut self) -> Result<(), String> {
+        let (Some(mut ramp), Some(end), Some(grid)) =
+            (self.info.ramp, self.ramp_end, self.grid.as_ref())
+        else {
+            return Ok(());
+        };
+        if !ramp.active || self.position < grid.beats[end] * 48_000.0 - 1e-6 {
+            return Ok(());
+        }
+        self.ramp_end =
+            (end + grid.beats_per_bar < grid.beats.len()).then_some(end + grid.beats_per_bar);
+        self.remember_parameters();
+        ramp.completed_bars += 1;
+        let steps = ramp.completed_bars / ramp.config.bars_per_step;
+        ramp.speed_percent = (ramp.config.start_percent + steps * ramp.config.step_percent)
+            .min(ramp.config.target_percent);
+        ramp.active = ramp.speed_percent < ramp.config.target_percent;
+        self.info.ramp = Some(ramp);
+        self.apply_processing(ramp.speed_percent as f64 / 100.0, self.info.semitones)
+    }
+
     pub fn set_grid(&mut self, grid: grid::Grid) -> Result<(), String> {
         grid.validate(self.info.seconds)?;
+        self.configure_ramp(None)?;
         self.info.grid = Some(grid.state(-1.0, self.info.speed));
         self.info.grid_error = None;
         self.grid = Some(grid);
@@ -313,12 +380,12 @@ impl ReferenceSong {
         let mut state = self.info.clone();
         let serial = (stamp >> 32) as u32;
         let parameters = if serial == self.serial {
-            Some((self.info.speed, self.info.semitones))
+            Some((self.info.speed, self.info.semitones, self.info.ramp))
         } else {
             self.previous_parameters
                 .iter()
-                .find(|(id, _, _)| *id == serial)
-                .map(|(_, speed, semitones)| (*speed, *semitones))
+                .find(|(id, _, _, _)| *id == serial)
+                .map(|(_, speed, semitones, ramp)| (*speed, *semitones, *ramp))
         };
         if parameters.is_some() {
             state.position = (stamp as u32) as f64 / 48_000.0;
@@ -326,12 +393,20 @@ impl ReferenceSong {
             state.position = 0.0;
         }
         if parameters.is_none() && state.state == "playing" {
+            state.ramp = None;
             if self.analysis.is_some() {
                 state.analysis_error = Some("Waiting for updated reference output.".into());
             }
             return state;
         }
-        let (speed, semitones) = parameters.unwrap_or((self.info.speed, self.info.semitones));
+        let (speed, semitones, ramp) =
+            parameters.unwrap_or((self.info.speed, self.info.semitones, self.info.ramp));
+        // While stopped/paused, expose newly armed controls without requiring new audio.
+        state.ramp = if state.state == "playing" {
+            ramp
+        } else {
+            self.info.ramp
+        };
         state.grid = self.grid.as_ref().map(|g| g.state(state.position, speed));
         state.analysis = self.analysis.as_ref().map(|a| {
             let index = a.chords.partition_point(|c| c.end <= state.position);
@@ -369,7 +444,7 @@ impl ReferenceSong {
 
     pub fn play(&mut self) {
         if self.position >= self.samples.len() as f64 / 2.0 {
-            self.seek(0.0).unwrap();
+            self.stop();
         }
         if self.info.state != "playing" {
             self.fade_in = 96.0;
@@ -388,11 +463,15 @@ impl ReferenceSong {
         self.fade_in = 96.0;
         self.info.position = 0.0;
         self.info.state = "stopped".into();
+        if let Err(error) = self.configure_ramp(self.info.ramp.map(|r| r.config)) {
+            self.info.processing_error = Some(error);
+        }
     }
     pub fn seek(&mut self, seconds: f64) -> Result<(), String> {
         if !seconds.is_finite() || !(0.0..=self.info.seconds).contains(&seconds) {
             return Err("Choose a position inside the reference song.".into());
         }
+        self.configure_ramp(None)?;
         self.position = seconds * 48_000.0;
         self.invalidate_streams();
         self.transition_from = (self.info.state == "playing").then_some(self.last_frame);
@@ -413,6 +492,7 @@ impl ReferenceSong {
             );
         }
         self.info.loop_start = start;
+        self.configure_ramp(None)?;
         self.info.loop_end = end;
         self.info.loop_enabled = enabled;
         self.invalidate_streams();
@@ -445,12 +525,21 @@ impl ReferenceSong {
         let loop_start = self.info.loop_start * 48_000.0;
         let loop_end = self.info.loop_end * 48_000.0;
         for (i, (l, r)) in left.iter_mut().zip(right).enumerate() {
+            if let Err(error) = self.advance_ramp() {
+                self.info.processing_error = Some(error);
+                self.info.state = "paused".into();
+                break;
+            }
             if self.info.loop_enabled && self.position >= loop_end {
                 self.position =
                     loop_start + (self.position - loop_end).rem_euclid(loop_end - loop_start);
                 self.fade_in = 96.0;
                 self.invalidate_streams();
                 self.transition_from = None;
+                self.ramp_end = self
+                    .grid
+                    .as_ref()
+                    .and_then(|g| ramp::next_end(g, loop_start));
             }
             if self.position >= length as f64 {
                 self.position = length as f64;

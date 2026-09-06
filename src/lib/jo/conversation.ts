@@ -99,6 +99,8 @@ const snapshotContext = (): JoContext => {
           seconds: t.reference.seconds,
           speed: t.reference.speed ?? 1,
           semitones: t.reference.semitones ?? 0,
+          ramp: t.reference.ramp,
+          confirmedBars: t.reference.grid?.bars ?? 0,
           sections: t.reference.grid?.sections.map(({ id, label }) => ({
             id,
             label,

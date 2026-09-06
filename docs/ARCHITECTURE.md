@@ -1006,6 +1006,28 @@ analysed-grid controls remain V1 acceptance/work.
 
 ### Live reference speed and transposition
 
+Reference practice ramps use `song::ramp::Config` (version 1, whole percentage
+points) and `media_reference_ramp(assetId, config?, toggle?)`. A null config
+cancels; native toggle stops an active ramp or arms the supplied draft, avoiding
+decisions from delayed UI telemetry. Arming requires complete confirmed bars
+and, when looping, downbeat-aligned bounds. It never starts playback or changes
+saved song settings. Drafts are shared by Songs, Stage, Q, the learned Ramp
+pedal and Jo's `ramp` action for this session.
+
+The render worker caches the next complete bar end in source frames. It counts
+the boundary before wrapping a loop, skips a partial first bar, changes all
+stem processors together and clamps to the target. Pause preserves progress;
+Stop resets to start speed. Seek, loop/grid changes or manual speed/key cancel
+the ramp. Old parameter stamps retain their ramp counters and speed for queued
+audio; stopped/paused telemetry exposes armed controls immediately. No callback
+work, JS timer, extra processing bus or dependency is added. The existing
+16-generation history ceiling still applies; older playing readouts are unknown.
+
+Ramps armed before recording continue natively. Takes retain the initial ramp
+configuration/counters and processed stereo backing; record-from-start snapshots
+the reset ramp before creating the take. Manual changes during recording are
+refused. This does not yet encode the speed trajectory in DAW/MIDI tempo export.
+
 `jam-dsp::stretch::Stream` reuses the vendored Signalsmith bridge in 256-frame
 48 kHz blocks on the render worker. Each source/stem owns preallocated DSP and
 seek buffers, prepared before loading. Exclusive CXX ownership permits `Send`,
@@ -1037,7 +1059,8 @@ same IPC, including partial updates. Recording contains processed backing and
 the actual source/mix/processing snapshot, while DI remains untouched. Runtime
 DSP errors pause the reference and surface `processing_error`. Film, system
 playback and offline practice-copy generation continue reading original files.
-Automated ramps and parameter changes during recording remain separate work.
+Manual parameter changes during recording remain refused; pre-armed ramps run
+on confirmed bars as described above.
 
 Synthetic checks cover 44.1/48/96 kHz, variable blocks, speed/pitch extremes,
 pitch within 5 cents, cursor within one source frame, de-click bounds and queued
