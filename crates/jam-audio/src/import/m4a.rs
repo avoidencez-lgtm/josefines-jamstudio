@@ -126,12 +126,18 @@ fn timing(moov: &[u8], track_id: u32, rate: u32, total: u64) -> Result<Window, S
             }
         }
     }
-    if window.frames == 0
-        || window
-            .start
-            .checked_add(window.frames)
-            .is_none_or(|end| end > total)
-    {
+    let remaining = total.checked_sub(window.start).ok_or(ERROR)?;
+    if window.frames > remaining {
+        // Movie ticks can be coarser than audio frames. One tick, rounded up to
+        // whole audio frames, cannot supply samples beyond declared media EOF.
+        if movie_scale == 0
+            || window.frames - remaining > (rate as u64).div_ceil(movie_scale as u64)
+        {
+            return Err(ERROR.into());
+        }
+        window.frames = remaining;
+    }
+    if window.frames == 0 {
         return Err(ERROR.into());
     }
     Ok(window)
@@ -215,6 +221,10 @@ mod tests {
     #[test]
     fn edit_lists_preserve_priming_and_leading_silence_and_refuse_ambiguous_timing() {
         for version in [0, 1] {
+            let rounded = fixture(version, &[(227, 1024, 65536)]);
+            let window = timing(&rounded, 7, 44100, 11024).unwrap();
+            assert_eq!((window.start, window.frames), (1024, 10000));
+            assert!(timing(&fixture(version, &[(228, 1024, 65536)]), 7, 44100, 11024).is_err());
             let plain = fixture(version, &[(1000, 2112, 65536)]);
             let window = timing(&plain, 7, 44100, 46212).unwrap();
             assert_eq!(

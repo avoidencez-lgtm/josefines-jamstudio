@@ -16,9 +16,11 @@ try {
         & ffmpeg -nostdin -y -v error -i (Join-Path $fixtureRoot 'input.wav') -c:a $formats[$file] (Join-Path $fixtureRoot $file)
         if ($LASTEXITCODE -ne 0) { throw "Fixture encoding failed: $file" }
     }
+    & ffmpeg -nostdin -y -v error -i (Join-Path $fixtureRoot 'input.wav') -af 'atrim=end_sample=10000' -c:a aac -movie_timescale 1000 (Join-Path $fixtureRoot 'input-aac-movie-ms.m4a')
+    if ($LASTEXITCODE -ne 0) { throw 'M4A movie-clock fixture encoding failed' }
     Get-ChildItem -LiteralPath $fixtureRoot -File | Get-FileHash -Algorithm SHA256
     $env:JAM_IMPORT_FIXTURES = $fixtureRoot
-    & cargo test -p jam-audio native_decoders_preserve -- --ignored --nocapture
+    & cargo test -p jam-audio --lib native_decoders_preserve -- --ignored --nocapture
     if ($LASTEXITCODE -ne 0) { throw 'Native codec regression failed' }
 } finally {
     $env:JAM_IMPORT_FIXTURES = $previous

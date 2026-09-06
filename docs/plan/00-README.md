@@ -418,6 +418,8 @@ All five optional real-tool media regressions also passed: migration, stems,
 practice/analysis, clean take mixing and Film. Film checks each exported stereo
 channel at the original amplitude (AAC RMSE 0.000116 against the unchanged 0.015
 bound); the test avoids FFmpeg's gain-adding stereo-to-mono rematrix.
+An additional short M4A fixture passes at 10,849 frames with a millisecond
+movie clock; native metadata tests cover rounded EOF and reject larger overruns.
 
 This completes an import slice, not all of M3 or V1. Provider analysis fixtures,
 the richer analysis/tempoMap/chart contract, full band/MIDI/DAW grid integration,

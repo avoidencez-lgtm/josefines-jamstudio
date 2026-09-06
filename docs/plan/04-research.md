@@ -161,6 +161,14 @@ generated codecs now produce 48,000 frames from one second at 44.1 kHz;
 worst phase/amplitude RMSE is 0.00707 (MP3), below the 0.015 acceptance bound.
 These are synthetic accuracy checks, not listening tests with real songs.
 
+A further M4A boundary test uses a 1,000 Hz movie clock over 44.1 kHz audio.
+FFmpeg's local `ipod` muxer help documents `movie_timescale`; a 10,000-frame
+source produces a 226 ms edit (9,967 source frames, 10,849 normalized frames).
+Synthetic version-0/1 metadata also reproduces an edit rounded just beyond
+declared media EOF. The decoder accepts at most one quantized movie tick there,
+clamps to the media's frame count, and still verifies the decoded packet count.
+An edit beyond that bound remains an error.
+
 [Tauri Dialog](https://v2.tauri.app/plugin/dialog/) provides a callback-based
 native picker; [WebView drag/drop](https://v2.tauri.app/reference/javascript/api/namespacewebview/)
 provides local paths and a listener cleanup function. The Rust dialog is called

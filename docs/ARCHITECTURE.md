@@ -339,8 +339,12 @@ reader handles version-0/1 static trims, optionally preceded by silence, using
 the selected track ID and movie/media time scales. Priming and final padding are
 removed before resampling. Multiple content edits, non-unit rates, mismatched
 time scales, fragmented/unknown-duration tracks and metadata over 8 MB are
-refused with a WAV/FLAC export instruction. Raw ADTS AAC and protected formats
-also need conversion. No invented fixed AAC delay or silent timing fallback.
+refused with a WAV/FLAC export instruction. A static edit ending past declared
+media EOF by at most one movie tick (rounded up to audio frames) is clamped to
+that EOF; larger overruns are refused. Decoded packet length must still match
+the declared media duration, so this does not mask truncated audio. Raw ADTS AAC
+and protected formats also need conversion. No invented fixed AAC delay or
+silent timing fallback.
 
 `decode_audio` shares this path with reference loading, analysis, stems and
 practice copies. FFmpeg remains separate for Film probe/encoding and clean-take
@@ -351,6 +355,8 @@ covers the native IPC/storage/player path; the UI fixture checks native-only
 controls stay disabled in browser preview. `scripts/check-native-import.ps1`
 generates seven original codec fixtures with FFmpeg, then tests native decode:
 one-second duration within one frame and phase/amplitude RMS error below 0.015.
+An eighth fixture checks a short M4A using a millisecond movie clock; unit
+metadata checks cover rounded EOF and rejection beyond one tick.
 This optional codec test is distinct from ordinary CI and makes no provider call.
 
 ### Implemented song storage (2026-09-06)

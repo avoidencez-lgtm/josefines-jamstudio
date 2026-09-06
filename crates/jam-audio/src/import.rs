@@ -304,24 +304,27 @@ mod tests {
     #[ignore = "uses locally generated synthetic codec fixtures in JAM_IMPORT_FIXTURES"]
     fn native_decoders_preserve_synthetic_codec_timing_and_channels() {
         let root = std::path::PathBuf::from(std::env::var("JAM_IMPORT_FIXTURES").unwrap());
-        for name in [
-            "input.wav",
-            "input.flac",
-            "input.aiff",
-            "input.mp3",
-            "input-vorbis.ogg",
-            "input-aac.m4a",
-            "input-alac.m4a",
+        for (name, frames) in [
+            ("input.wav", 48000),
+            ("input.flac", 48000),
+            ("input.aiff", 48000),
+            ("input.mp3", 48000),
+            ("input-vorbis.ogg", 48000),
+            ("input-aac.m4a", 48000),
+            ("input-alac.m4a", 48000),
+            // 226 movie milliseconds at 44.1 kHz = 9967 edited source frames.
+            ("input-aac-movie-ms.m4a", 10849),
         ] {
             let samples = decode(&root.join(name), 96000, &AtomicBool::new(false))
                 .unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(
-                (samples.len() as i64 - 96000).abs() <= 2,
+                (samples.len() as i64 - frames * 2).abs() <= 2,
                 "{name}: {} frames",
                 samples.len() / 2
             );
             let mut error = 0.0;
-            for i in 2000..46000 {
+            let end = samples.len() / 2 - 2000;
+            for i in 2000..end {
                 let expected = 0.2 * (std::f64::consts::TAU * 997.0 * i as f64 / 48000.0).sin();
                 error += (samples[i * 2] as f64 - expected).powi(2);
                 assert!(
@@ -329,7 +332,7 @@ mod tests {
                     "{name}: channels"
                 );
             }
-            let rmse = (error / 44000.0).sqrt();
+            let rmse = (error / (end - 2000) as f64).sqrt();
             assert!(rmse < 0.015, "{name}: phase/amplitude RMSE {rmse}");
             println!("{name}: {} frames, RMSE {rmse}", samples.len() / 2);
         }
