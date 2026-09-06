@@ -414,6 +414,11 @@ as did the seven-codec test. Lint/types, Clippy and licence gates passed. The
 local desktop build completed its 25-second frontend-handshake smoke. No policy
 was bypassed; full Windows/macOS CI on the PR head remains the merge gate.
 
+All five optional real-tool media regressions also passed: migration, stems,
+practice/analysis, clean take mixing and Film. Film checks each exported stereo
+channel at the original amplitude (AAC RMSE 0.000116 against the unchanged 0.015
+bound); the test avoids FFmpeg's gain-adding stereo-to-mono rematrix.
+
 This completes an import slice, not all of M3 or V1. Provider analysis fixtures,
 the richer analysis/tempoMap/chart contract, full band/MIDI/DAW grid integration,
 practice ramps, realtime Lyria, voice/rig acceptance and distribution remain.

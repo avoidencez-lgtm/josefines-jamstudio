@@ -1469,34 +1469,53 @@ mod tests {
         let file = render(&base, &doc).await.unwrap();
         assert!((probe(Path::new(&file), "video").await.unwrap() - 3.0).abs() < 0.05);
         assert!((probe(Path::new(&file), "audio").await.unwrap() - 3.0).abs() < 0.05);
-        let pcm = run(
+        let decoded = base.join("film-decoded.wav");
+        run(
             &exe,
             &[
-                "-v", "error", "-i", &file, "-vn", "-ac", "1", "-ar", "48000", "-f", "f32le",
-                "pipe:1",
+                "-nostdin",
+                "-n",
+                "-v",
+                "error",
+                "-i",
+                &file,
+                "-vn",
+                "-ac",
+                "2",
+                "-ar",
+                "48000",
+                "-c:a",
+                "pcm_f32le",
+                &decoded.to_string_lossy(),
             ]
             .map(String::from),
             30,
         )
         .await
         .unwrap();
-        let samples: Vec<f32> = pcm
-            .chunks(4)
-            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
-            .collect();
-        // AAC introduces lossy error, but must retain the original frequency, phase and amplitude.
+        let (samples, _) = jam_audio::practice::read_stereo(&decoded, 48_000 * 4, &CANCEL).unwrap();
+        // Native mono import duplicates at unity. Inspect each encoded channel:
+        // FFmpeg's default stereo-to-mono rematrix adds 3 dB for identical channels.
+        // AAC must retain the original per-channel frequency, phase and amplitude.
+        assert!(samples.len() >= 144000 * 2);
         let mse = samples
+            .as_chunks::<2>()
+            .0
             .iter()
             .take(143000)
             .enumerate()
             .skip(1000)
-            .map(|(i, s)| {
+            .map(|(i, frame)| {
                 let expected =
                     0.125 * (2.0 * std::f64::consts::PI * 440.0 * i as f64 / 48000.0).sin();
-                (*s as f64 - expected).powi(2)
+                frame
+                    .iter()
+                    .map(|s| (*s as f64 - expected).powi(2))
+                    .sum::<f64>()
             })
             .sum::<f64>()
-            / 142000.0;
+            / (142000.0 * 2.0);
+        println!("Stereo Film AAC phase/amplitude RMSE {}", mse.sqrt());
         assert!(
             mse.sqrt() < 0.015,
             "Audio RMSE {} exceeds AAC tolerance",
