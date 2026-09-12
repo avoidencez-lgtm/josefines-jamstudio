@@ -60,7 +60,12 @@ impl DawExporter {
         // cc = 24 MIDI clocks per metronome click, bb = 8 32nd notes per quarter.
         let (num, den) = time_sig;
         let den_pow = den.trailing_zeros() as u8;
-        track_data.extend_from_slice(&[0x00, 0xFF, 0x58, 0x04, num, den_pow, 0x18, 0x08]);
+        let clocks = match den {
+            8 => 0x24, // dotted quarter in compound meters
+            2 => 0x30, // half-note click in cut time
+            _ => 0x18, // quarter-note click
+        };
+        track_data.extend_from_slice(&[0x00, 0xFF, 0x58, 0x04, num, den_pow, clocks, 0x08]);
 
         // 2. Set Tempo: delta 0, FF 51 03 [24-bit microsec/quarter]
         let t_bytes = micros.to_be_bytes();
@@ -467,6 +472,19 @@ pub fn write_clip_stem(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn time_signature_metronome_click_follows_the_beat_unit() {
+        for (meter, clocks) in [((4, 4), 0x18), ((6, 8), 0x24), ((2, 2), 0x30)] {
+            let midi =
+                DawExporter::build_tempo_map_midi_with_meter(120.0, meter, &[("A", 1)]).unwrap();
+            let i = midi
+                .windows(4)
+                .position(|w| w == [0xFF, 0x58, 0x04, meter.0])
+                .unwrap();
+            assert_eq!(midi[i + 5], clocks, "{}/{} click", meter.0, meter.1);
+        }
+    }
 
     #[test]
     fn reaper_bundle_is_portable_preserves_timing_and_mutes_only_reference_mixes() {
