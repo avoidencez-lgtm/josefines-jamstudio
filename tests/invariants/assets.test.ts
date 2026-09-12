@@ -1,7 +1,23 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import manifest from "../../assets/manifest.json";
+import { ipc } from "../../src/ipc/client";
 import { type PreviewEngine, createPreviewEngine } from "../../src/ipc/preview";
+import { useEngineStore } from "../../src/store/engine";
 import seam from "../fixtures/seams/assets.json";
+
+const PACK_LICENCES = new Set([
+  "CC0-1.0",
+  "CC-BY-3.0",
+  "CC-BY-4.0",
+  "Apache-2.0",
+  "MIT",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "0BSD",
+  "Zlib",
+]);
 
 describe("sample pack seam", () => {
   let engine: PreviewEngine | undefined;
@@ -28,5 +44,60 @@ describe("sample pack seam", () => {
     await expect(engine.invoke("assets_ensure", {})).rejects.toThrow(
       /JAM_LIVE=1/,
     );
+  });
+
+  it("requires each pack id to have a LICENSES.md heading and an allowlisted licence", () => {
+    const licenses = readFileSync("assets/LICENSES.md", "utf8");
+    expect(manifest.packs.length).toBeGreaterThan(0);
+    for (const pack of manifest.packs) {
+      expect(pack.licence, pack.id).toBeTruthy();
+      expect(
+        PACK_LICENCES.has(pack.licence),
+        `${pack.id} licence ${pack.licence}`,
+      ).toBe(true);
+      expect(licenses).toMatch(new RegExp(`^## ${pack.id}\\s*$`, "m"));
+    }
+  });
+
+  it("subscribes to assets.state so pack progress updates the store", async () => {
+    const previous = useEngineStore.getState();
+    const load = vi.fn().mockResolvedValue(undefined);
+    let onPacks: ((payload: unknown) => void) | undefined;
+    const listen = vi
+      .spyOn(ipc, "listen")
+      .mockImplementation(async (event, handler) => {
+        if (event === "assets.state") onPacks = handler as typeof onPacks;
+        return () => {};
+      });
+    useEngineStore.setState({
+      reloadLibrary: load,
+      loadSettings: load,
+      refreshEngineStatus: load,
+    });
+    try {
+      const cleanup = await useEngineStore.getState().initListeners();
+      expect(onPacks).toBeTypeOf("function");
+      onPacks?.([
+        {
+          id: "standard-rock-kit",
+          name: "Standard Rock Kit",
+          state: "downloading",
+          live: false,
+          message: "Downloading this sample pack.",
+          percent: 40,
+        },
+      ]);
+      expect(useEngineStore.getState().assetPacks).toEqual([
+        expect.objectContaining({
+          id: "standard-rock-kit",
+          state: "downloading",
+          percent: 40,
+        }),
+      ]);
+      cleanup();
+    } finally {
+      listen.mockRestore();
+      useEngineStore.setState(previous, true);
+    }
   });
 });
