@@ -203,6 +203,7 @@ impl BandSequencer {
     pub fn set_style(&mut self, style: Style) {
         let kit_changed = style.kit_id != self.style.kit_id;
         self.style = style;
+        self.applied_pattern_range = None;
         if kit_changed {
             self.reload_kit();
         }
@@ -1656,6 +1657,51 @@ mod tests {
         });
         assert_eq!(seq.current_pattern.drums.hits[0].instrument, "snare");
         assert_eq!(seq.pending_intensity, None);
+    }
+
+    #[test]
+    fn style_changes_replace_patterns_even_when_the_intensity_ranges_match() {
+        let _lock = crate::kit::lock_test_env();
+        let old = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
+        let mut changed = old.clone();
+        changed.patterns[0].drums.hits[0].instrument = "snare".into();
+        let mut seq = BandSequencer::new(old.clone(), 48_000, 1);
+        let heard = |seq: &mut BandSequencer| {
+            seq.begin_block();
+            seq.render_span(
+                &Span {
+                    offset: 0,
+                    frames: 256,
+                    start_beats: 0.0,
+                },
+                24_000.0,
+                4.0,
+                &mut [0.0; 256],
+                &mut [0.0; 256],
+            );
+            seq.note_events
+                .iter()
+                .filter(|n| n.bytes[0] == 0x99)
+                .map(|n| n.bytes[1])
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(heard(&mut seq), vec![36]);
+        seq.set_style(changed);
+        assert_eq!(
+            heard(&mut seq),
+            vec![38],
+            "same ID and range can contain a new pattern"
+        );
+        seq.queue_style_at_next_bar(old);
+        seq.handle_timeline_event(&TimelineEvent::Bar {
+            bar: 2,
+            is_count_in: false,
+        });
+        assert_eq!(
+            heard(&mut seq),
+            vec![36],
+            "queued style must update the played groove too"
+        );
     }
 
     #[test]

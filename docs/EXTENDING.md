@@ -173,6 +173,8 @@ Each recipe below names the exact files to add and the test that proves it worke
 5. Play it on the Stage. No code change is needed; the registry picks it up at startup.
 
 Ask Jo to author one: the `create_style` tool (backlog) writes the same JSON.
+Selecting a style replaces the sequencer's cached pattern even if its ID and
+intensity ranges match the previous style. This also applies to queued style changes.
 
 ## Add a chart preset
 
