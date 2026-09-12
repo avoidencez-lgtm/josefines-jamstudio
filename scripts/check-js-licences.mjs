@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import satisfies from "spdx-satisfies";
 
 /** Base policy from AGENTS.md invariant 9; JS package exceptions are below. */
@@ -122,20 +122,48 @@ if (hasBanned) {
 
 console.log(`JS licence check PASSED: ${count} packages adhere to allowlist.`);
 
+function vendorFiles(dirUrl, prefix = "") {
+  const names = [];
+  for (const entry of readdirSync(dirUrl, { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      names.push(...vendorFiles(new URL(`${entry.name}/`, dirUrl), rel));
+    } else {
+      names.push(rel.replaceAll("\\", "/"));
+    }
+  }
+  return names;
+}
+
+/** Hash listed files, reject an empty table, and fail on paths not in it. */
+export function checkNativeVendor(vendor, sources) {
+  if (!Array.isArray(sources) || sources.length === 0) {
+    throw new Error("Native vendor sources table is empty.");
+  }
+  const listed = new Set();
+  for (const source of sources) {
+    if (!checkLicense(source.license, source.name))
+      throw new Error(`Unapproved native vendor licence: ${source.name}`);
+    for (const [file, expected] of Object.entries(source.files)) {
+      listed.add(file.replaceAll("\\", "/"));
+      const actual = createHash("sha256")
+        .update(readFileSync(new URL(file, vendor)))
+        .digest("hex");
+      if (actual !== expected)
+        throw new Error(`Native vendor hash mismatch: ${file}`);
+    }
+  }
+  for (const file of vendorFiles(vendor)) {
+    if (file === "sources.json") continue;
+    if (!listed.has(file))
+      throw new Error(`Native vendor file is not in sources.json: ${file}`);
+  }
+}
+
 // Vendored C++ is outside Cargo's inventory; verify the reviewed files as well.
 const vendor = new URL("../crates/jam-dsp/cxx/vendor/", import.meta.url);
 const sources = JSON.parse(
   readFileSync(new URL("sources.json", vendor), "utf8"),
 );
-for (const source of sources) {
-  if (!checkLicense(source.license, source.name))
-    throw new Error(`Unapproved native vendor licence: ${source.name}`);
-  for (const [file, expected] of Object.entries(source.files)) {
-    const actual = createHash("sha256")
-      .update(readFileSync(new URL(file, vendor)))
-      .digest("hex");
-    if (actual !== expected)
-      throw new Error(`Native vendor hash mismatch: ${file}`);
-  }
-}
+checkNativeVendor(vendor, sources);
 console.log("Native vendor licence and SHA-256 checks PASSED.");
