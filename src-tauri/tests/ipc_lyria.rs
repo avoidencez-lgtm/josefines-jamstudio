@@ -1,7 +1,7 @@
 //! Lyria stays not configured without a recorded session and never drives the clock.
 mod common;
 use common::Studio;
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[test]
 fn lyria_start_is_not_configured_without_a_recorded_session() {
@@ -62,6 +62,27 @@ fn recorded_protocol_fixture_is_exclusive_and_does_not_drive_the_clock() {
     let again = studio.ok("lyria_start", json!({}));
     assert_eq!(again["phase"], "playing");
     studio.ok("lyria_stop", json!({}));
+    assert_eq!(studio.ok("lyria_status", json!({}))["phase"], "idle");
+    std::env::remove_var("JAM_LYRIA_FIXTURE");
+}
+
+#[test]
+fn originals_load_and_record_stop_lyria() {
+    let _scenario = common::scenario();
+    std::env::set_var("JAM_LYRIA_FIXTURE", "1");
+    let studio = Studio::boot();
+    assert_eq!(studio.ok("lyria_start", json!({}))["phase"], "playing");
+    let mut doc: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/seams/original.json"))
+            .expect("fixture parses");
+    doc["id"] = json!(common::unique("song"));
+    studio.ok("originals_load", json!({ "document": doc }));
+    assert_eq!(studio.ok("lyria_status", json!({}))["phase"], "idle");
+    assert_eq!(studio.ok("lyria_start", json!({}))["phase"], "playing");
+    studio.ok(
+        "originals_record",
+        json!({ "sessionId": common::unique("session") }),
+    );
     assert_eq!(studio.ok("lyria_status", json!({}))["phase"], "idle");
     std::env::remove_var("JAM_LYRIA_FIXTURE");
 }

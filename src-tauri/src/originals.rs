@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
-use tauri::{Emitter, State};
+use tauri::{AppHandle, Emitter, Runtime, State};
 
 static SAVE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -356,11 +356,13 @@ pub fn read_clip(spec: ClipSpec, state: &AppState, takes: &[TakeMetadata]) -> Re
 }
 
 #[tauri::command]
-pub async fn originals_load(
+pub async fn originals_load<R: Runtime>(
     document: Value,
     keep_playback: Option<bool>,
+    app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    crate::lyria::stop_and_emit(&app, &state);
     let song = body(&document)?;
     let tones = {
         let rig = state.rig.lock();
@@ -466,7 +468,12 @@ fn song_tones(
 }
 
 #[tauri::command]
-pub fn originals_record(session_id: String, state: State<'_, AppState>) -> Result<String, String> {
+pub fn originals_record<R: Runtime>(
+    session_id: String,
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    crate::lyria::stop_and_emit(&app, &state);
     state.engine.lock().record_song(session_id)
 }
 
