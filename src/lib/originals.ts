@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { ipc } from "../ipc/client";
 import type { Chart, TakeMetadata } from "../ipc/contract";
 import { requireCommand, useEngineStore } from "../store/engine";
 import { parseChartText } from "./chart/text";
@@ -71,12 +70,7 @@ export interface Original {
 
 /** Retain the exact draft accepted by the engine, even if a later play step fails. */
 async function loadOriginal(song: Original) {
-  const snapshot = structuredClone(song);
-  await ipc.invoke("originals_load", { document: snapshot });
-  useEngineStore.setState({
-    currentChart: snapshot.body.chart,
-    loadedOriginal: { id: snapshot.id, body: snapshot.body },
-  });
+  requireCommand(await useEngineStore.getState().loadOriginal(song));
 }
 
 export function defaultSection(): SectionSettings {
@@ -328,15 +322,16 @@ export const useWriting = create<WritingState>((set, get) => ({
     return false;
   },
   refresh: async () => {
-    const saved = await ipc.invoke<Original[]>("originals_list");
-    set({ saved });
+    set({
+      saved: requireCommand(await useEngineStore.getState().listOriginals()),
+    });
   },
   save: async () => {
     const song = get().song;
     if (!song) return;
-    const saved = await ipc.invoke<Original>("originals_save", {
-      document: song,
-    });
+    const saved = requireCommand(
+      await useEngineStore.getState().saveOriginal(song),
+    );
     set((current) => {
       if (
         current.song?.id !== song.id ||
@@ -362,9 +357,9 @@ export const useWriting = create<WritingState>((set, get) => ({
     copy.revision = 0;
     copy.body.chart.id = copy.id;
     copy.body.chart.name += " (copy)";
-    const saved = await ipc.invoke<Original>("originals_save", {
-      document: copy,
-    });
+    const saved = requireCommand(
+      await useEngineStore.getState().saveOriginal(copy),
+    );
     if (get().song === song) {
       set({ song: saved, dirty: false, message: "Copy saved. Original kept." });
     } else {
@@ -377,9 +372,14 @@ export const useWriting = create<WritingState>((set, get) => ({
   play: async () => {
     const song = get().song;
     if (!song) return;
+    if (useEngineStore.getState().telemetry.reference)
+      throw new Error(
+        "Band charts do not change reference audio. Choose play on the loaded song instead.",
+      );
     await loadOriginal(song);
-    await ipc.invoke("transport_set_count_in", { bars: 0 });
-    await ipc.invoke("transport_play");
+    const engine = useEngineStore.getState();
+    requireCommand(await engine.transportSetCountIn(0));
+    requireCommand(await engine.transportPlay());
   },
   rehearse: async (next = false) => {
     const { song, selected, rehearsalIndex } = get();
@@ -404,8 +404,13 @@ export const useWriting = create<WritingState>((set, get) => ({
   loopRange: async (startBar, endBar) => {
     const song = get().song;
     if (!song) throw new Error("Create or open a song first.");
-    if (useEngineStore.getState().isRecording)
+    const engine = useEngineStore.getState();
+    if (engine.isRecording)
       throw new Error("Save the take before changing its timeline.");
+    if (engine.telemetry.reference)
+      throw new Error(
+        "Band charts do not change reference audio. Choose play on the loaded song instead.",
+      );
     const ranges = arrangementRanges(song.body.chart);
     if (
       !Number.isInteger(startBar) ||
@@ -416,33 +421,33 @@ export const useWriting = create<WritingState>((set, get) => ({
     )
       throw new Error("Choose a loop inside the song form.");
     await loadOriginal(song);
-    await ipc.invoke("transport_set_count_in", { bars: 0 });
-    await ipc.invoke("transport_set_loop", { startBar, endBar, enabled: true });
-    await ipc.invoke("transport_seek_bar", { bar: startBar });
-    await ipc.invoke("transport_play");
+    requireCommand(await engine.transportSetCountIn(0));
+    requireCommand(await engine.transportSetLoop(startBar, endBar, true));
+    requireCommand(await engine.transportSeekBar(startBar));
+    requireCommand(await engine.transportPlay());
   },
   record: async () => {
     const engine = useEngineStore.getState();
     if (engine.isRecording) {
       requireCommand(await engine.stopRecording());
-      await ipc.invoke("transport_stop");
+      requireCommand(await engine.transportStop());
       return;
     }
     const song = get().song;
     if (!song) return;
+    if (engine.telemetry.reference)
+      throw new Error(
+        "Band charts do not change reference audio. Choose play on the loaded song instead.",
+      );
     await get().save();
     const saved = get().song;
     if (!saved || saved.id !== song.id)
       throw new Error("The open song changed while saving. Record again.");
     await loadOriginal(saved);
-    await ipc.invoke("originals_record", { sessionId: saved.id });
-    useEngineStore.setState({
-      isRecording: true,
-      recordingError: null,
-    });
+    requireCommand(await engine.recordOriginal(saved.id));
   },
   arm: async (seconds) => {
-    await ipc.invoke("capture_arm", { seconds });
+    requireCommand(await useEngineStore.getState().armCapture(seconds));
     set({
       captureSeconds: seconds,
       message: seconds
@@ -452,9 +457,9 @@ export const useWriting = create<WritingState>((set, get) => ({
   },
   keep: async () => {
     const song = get().song;
-    await ipc.invoke<TakeMetadata>("capture_keep", {
-      sessionId: song?.id ?? "ideas",
-    });
+    requireCommand(
+      await useEngineStore.getState().keepCapture(song?.id ?? "ideas"),
+    );
     await useEngineStore.getState().loadTakes();
     set({
       message: "This idea is saved. Add it below, then trim the part you want.",

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { create } from "zustand";
 import { ipc } from "../../ipc/client";
-import type { AppSettings, ProviderInfo } from "../../ipc/contract";
-import { useEngineStore } from "../../store/engine";
+import type { ProviderInfo } from "../../ipc/contract";
+import { requireCommand, useEngineStore } from "../../store/engine";
 import {
   ProviderError,
   providerFetch,
@@ -336,7 +336,9 @@ export const useAi = create<{
   preferences: readPreferences(null),
   loaded: false,
   load: async () => {
-    const settings = await ipc.invoke<AppSettings>("settings_get");
+    const settings = requireCommand(
+      await useEngineStore.getState().getSettings(),
+    );
     const providers = await ipc.invoke<ProviderInfo[]>("providers_list");
     useEngineStore.setState({
       keysPresent: Object.fromEntries(providers.map((p) => [p.id, p.hasKey])),
@@ -346,10 +348,9 @@ export const useAi = create<{
   },
   save: async (p) => {
     const preferences = readPreferences(p);
-    const settings = await ipc.invoke<AppSettings>("settings_get");
-    await ipc.invoke("settings_set", {
-      settings: { ...settings, ai: preferences },
-    });
+    const e = useEngineStore.getState();
+    const settings = requireCommand(await e.getSettings());
+    requireCommand(await e.saveSettings({ ...settings, ai: preferences }));
     set({ preferences, loaded: true });
   },
 }));

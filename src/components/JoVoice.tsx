@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { ipc, isPreview } from "../ipc/client";
-import type { AppSettings, AudioDevices } from "../ipc/contract";
+import type { AudioDevices } from "../ipc/contract";
 import { handleJoQuery, useJoConversation } from "../lib/jo/conversation";
 import {
   cancelVoice,
@@ -13,7 +13,7 @@ import {
 import { withNextStep } from "../lib/loudError";
 import { openExternal } from "../lib/openUrl";
 import { openAiSettings } from "../lib/settingsView";
-import { useEngineStore } from "../store/engine";
+import { requireCommand, useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 
 const configSchema = z
@@ -26,7 +26,18 @@ const configSchema = z
     ttsUsdPer1k: z.number().min(0).max(10_000).nullable().default(null),
   })
   .passthrough();
-type VoiceConfig = z.infer<typeof configSchema>;
+export type VoiceConfig = z.infer<typeof configSchema>;
+
+export async function readVoiceConfig() {
+  const settings = requireCommand(await useEngineStore.getState().getSettings());
+  return configSchema.parse(settings.voice ?? {});
+}
+
+export async function writeVoiceConfig(voice: VoiceConfig) {
+  const e = useEngineStore.getState();
+  const settings = requireCommand(await e.getSettings());
+  requireCommand(await e.saveSettings({ ...settings, voice }));
+}
 const priceFields = [
   ["sttUsdPerHour", "Scribe v2 is priced in USD per hour."],
   ["ttsUsdPer1k", "Flash v2.5 is priced in USD per 1,000 characters."],
@@ -57,12 +68,11 @@ export function JoVoice() {
   useEffect(() => {
     let mounted = true;
     void Promise.all([
-      ipc.invoke<AppSettings>("settings_get"),
+      readVoiceConfig(),
       ipc.invoke<AudioDevices>("audio_list_devices"),
     ])
-      .then(([settings, devices]) => {
+      .then(([voice, devices]) => {
         if (!mounted) return;
-        const voice = configSchema.parse(settings.voice ?? {});
         setDraft(voice);
         setSaved(voice);
         setPrices({
@@ -200,7 +210,6 @@ export function JoVoice() {
               void run(async () => {
                 if (!/^[\w-]{1,100}$/.test(draft.voiceId))
                   throw new Error("Enter a valid ElevenLabs voice ID.");
-                const settings = await ipc.invoke<AppSettings>("settings_get");
                 const voice = configSchema.parse({
                   ...draft,
                   ...Object.fromEntries(
@@ -210,9 +219,7 @@ export function JoVoice() {
                     ]),
                   ),
                 });
-                await ipc.invoke("settings_set", {
-                  settings: { ...settings, voice },
-                });
+                await writeVoiceConfig(voice);
                 setSaved(voice);
                 setMessage("These voice settings are saved.");
               })

@@ -473,11 +473,15 @@ it("Save song stores it in the engine and lists it; each save bumps the revision
     b.notes = "Third pass";
   }, "notes");
   await w.action(w.save);
-  expect(writing().message).toBe("Error: Reopen the song before saving.");
+  expect(writing().message).toBe(
+    "Error: The save song failed. Reopen the song before saving.",
+  );
   expect(writing().dirty).toBe(true);
   expect(song().revision).toBe(2);
   expect(body().notes).toBe("Third pass");
-  expect(notices()).toContain("Error: Reopen the song before saving.");
+  expect(notices()).toContain(
+    "Error: The save song failed. Reopen the song before saving.",
+  );
   const listed = await ipc.invoke<Original[]>("originals_list");
   expect(listed.map((s) => [s.id, s.revision, s.body.notes])).toEqual([
     [id, 3, "Another window"],
@@ -536,8 +540,12 @@ it("a saved song reopens from the list; Play needs the desktop engine, and the s
   expect(writing()).toMatchObject({ selected: "verse", past: [], future: [] });
 
   await w.action(w.play);
-  expect(writing().message).toBe("Error: Playback requires the desktop app.");
-  expect(notices()).toContain("Error: Playback requires the desktop app.");
+  expect(writing().message).toBe(
+    "Error: The load chart failed. Playback requires the desktop app.",
+  );
+  expect(notices()).toContain(
+    "Error: The load chart failed. Playback requires the desktop app.",
+  );
   expect(telemetry().transport.state).toBe("stopped");
 
   // The chart itself drives the preview band (what Library's Play this does).
@@ -612,7 +620,9 @@ it("Loop section checks the range and the section against the form before any en
 
     w.select("chorus");
     await w.action(() => w.rehearse());
-    expect(writing().message).toBe("Error: Playback requires the desktop app.");
+    expect(writing().message).toBe(
+      "Error: The load chart failed. Playback requires the desktop app.",
+    );
   } finally {
     invoke.mockRestore();
   }
@@ -897,4 +907,64 @@ it("Cue refuses a missing chart, a groove in another meter, an invalid entry and
   expect(telemetry().transport).toMatchObject({ state: "playing", bpm: 132 });
   expect(telemetry().band.style_id).toBe("funk-16");
   await e.transportStop();
+});
+
+it("routes setlist cue apply through the store", async () => {
+  const commands: string[] = [];
+  const invoke = vi.spyOn(ipc, "invoke");
+  const charts = useEngineStore.getState().charts;
+  try {
+    useEngineStore.setState({
+      transportStop: async () => {
+        commands.push("store.transportStop");
+        return { ok: true as const, value: undefined };
+      },
+      bandLoadChart: async (chartId, followChart) => {
+        commands.push(`store.bandLoadChart:${chartId}:${followChart}`);
+        return {
+          ok: true as const,
+          value: charts.find((c) => c.id === chartId)!,
+        };
+      },
+      bandSetStyle: async (styleId) => {
+        commands.push(`store.bandSetStyle:${styleId}`);
+        return { ok: true as const, value: undefined };
+      },
+      transportSetTempo: async (bpm) => {
+        commands.push(`store.transportSetTempo:${bpm}`);
+        return { ok: true as const, value: bpm };
+      },
+      transportSetLoop: async (startBar, endBar, enabled) => {
+        commands.push(`store.transportSetLoop:${startBar}:${endBar}:${enabled}`);
+        return { ok: true as const, value: undefined };
+      },
+      transportSetCountIn: async (bars) => {
+        commands.push(`store.transportSetCountIn:${bars}`);
+        return { ok: true as const, value: undefined };
+      },
+      transportSeekBar: async (bar) => {
+        commands.push(`store.transportSeekBar:${bar}`);
+        return { ok: true as const, value: undefined };
+      },
+    });
+    await cueSetlistItem({
+      id: "opener",
+      chartId: "rock-song-form",
+      styleId: "funk-16",
+      bpm: 132,
+      countIn: 2,
+    });
+    expect(commands).toEqual([
+      "store.transportStop",
+      "store.bandLoadChart:rock-song-form:true",
+      "store.bandSetStyle:funk-16",
+      "store.transportSetTempo:132",
+      "store.transportSetLoop:1:2:false",
+      "store.transportSetCountIn:2",
+      "store.transportSeekBar:1",
+    ]);
+    expect(invoke).not.toHaveBeenCalled();
+  } finally {
+    invoke.mockRestore();
+  }
 });

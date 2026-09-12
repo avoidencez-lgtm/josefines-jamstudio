@@ -1208,20 +1208,41 @@ impl AudioEngine {
         }
         tel.transport = transport_telemetry(&self.timeline.lock());
         tel.band = band_telemetry(&self.sequencer.lock());
-        tel.reference = self
-            .reference
-            .lock()
-            .as_ref()
-            .map(|song| song.played_state(self.reference_position.load(Ordering::Acquire)));
+        let mut loop_bars = None;
+        tel.reference = self.reference.lock().as_ref().map(|song| {
+            if song.info.loop_enabled {
+                if let Some(grid) = &song.grid {
+                    loop_bars = grid.sections.iter().find_map(|section| {
+                        let Ok((start, end)) = grid.section_bounds(&section.id) else {
+                            return None;
+                        };
+                        ((start - song.info.loop_start).abs() < 1e-9
+                            && (end - song.info.loop_end).abs() < 1e-9)
+                            .then_some((section.start_bar as u32, section.end_bar as u32))
+                    });
+                }
+            }
+            song.played_state(self.reference_position.load(Ordering::Acquire))
+        });
         if let Some(reference) = &tel.reference {
             tel.transport.state = reference.state.clone();
-            if let Some(pos) = reference
-                .grid
-                .as_ref()
-                .and_then(|grid| grid.position.as_ref())
-            {
-                tel.transport.bar = pos.bar as u32;
-                tel.transport.bpm = pos.bpm;
+            if let Some(grid) = &reference.grid {
+                if let Some(pos) = &grid.position {
+                    let bpb = grid.beats_per_bar.max(1);
+                    tel.transport.bar = pos.bar as u32;
+                    tel.transport.bpm = pos.bpm;
+                    tel.transport.beat = pos.beat.floor() as u32;
+                    tel.transport.bar_progress =
+                        ((pos.beat - 1.0) / bpb as f64).clamp(0.0, 1.0) as f32;
+                    tel.transport.position_beats =
+                        (pos.bar.saturating_sub(1) * bpb) as f64 + (pos.beat - 1.0);
+                    tel.transport.time_signature = (bpb as u8, 4);
+                }
+            }
+            if let Some((start, end)) = loop_bars {
+                tel.transport.loop_enabled = true;
+                tel.transport.loop_start_bar = start;
+                tel.transport.loop_end_bar = end;
             }
             tel.band.current_chord.clear();
             tel.band.next_chord = None;
@@ -2846,7 +2867,14 @@ mod tests {
             .and_then(|g| g.position.as_ref())
             .is_none());
         assert_eq!(before.transport.bar, 1);
+        assert_eq!(before.transport.beat, 1);
         assert!((before.transport.bpm - 120.0).abs() < 1e-9);
+        assert_eq!(before.transport.bar_progress, 0.0);
+        assert!((before.transport.position_beats - 0.0).abs() < 1e-9);
+        assert_eq!(before.transport.time_signature, (4, 4));
+        assert!(!before.transport.loop_enabled);
+        assert_eq!(before.transport.loop_start_bar, 1);
+        assert_eq!(before.transport.loop_end_bar, 5);
         engine.reference_seek(3.0).unwrap();
         let tel = engine.get_telemetry();
         let pos = tel
@@ -2857,8 +2885,41 @@ mod tests {
             .expect("seeked playhead has a grid position");
         assert_eq!(pos.bar, 2);
         assert!((pos.bpm - 100.0).abs() < 1e-9);
+        assert!((pos.beat - (2.0 + 0.2 / 0.6)).abs() < 1e-9);
         assert_eq!(tel.transport.bar, 2);
+        assert_eq!(tel.transport.beat, 2);
         assert!((tel.transport.bpm - 100.0).abs() < 1e-9);
+        assert!((f64::from(tel.transport.bar_progress) - (pos.beat - 1.0) / 4.0).abs() < 1e-6);
+        assert!((tel.transport.position_beats - (4.0 + pos.beat - 1.0)).abs() < 1e-9);
+        assert_eq!(tel.transport.time_signature, (4, 4));
+        engine
+            .reference_loop_section("grid-clock", "chorus")
+            .unwrap();
+        let looped = engine.get_telemetry();
+        assert!(looped.transport.loop_enabled);
+        assert_eq!(looped.transport.loop_start_bar, 2);
+        assert_eq!(looped.transport.loop_end_bar, 3);
+        engine.unload_reference().unwrap();
+        let mut triple = crate::song::ReferenceSong::new(
+            "grid-triple".into(),
+            "Fixture".into(),
+            vec![0.05; 576_000],
+        )
+        .unwrap();
+        triple
+            .set_grid(crate::song::grid::Grid {
+                schema_version: 1,
+                origin: "confirmed-local".into(),
+                beats_per_bar: 3,
+                beats: vec![0.2, 0.7, 1.2, 1.7, 2.2, 2.7, 3.2],
+                sections: vec![],
+            })
+            .unwrap();
+        engine.load_reference(triple).unwrap();
+        engine.reference_seek(1.0).unwrap();
+        let triple_tel = engine.get_telemetry();
+        assert_eq!(triple_tel.transport.time_signature, (3, 4));
+        assert!((triple_tel.transport.position_beats - 1.6).abs() < 1e-9);
         engine.stop().unwrap();
     }
 

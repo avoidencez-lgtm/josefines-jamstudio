@@ -2881,8 +2881,11 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'run("Count-in"',
   );
-  expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
+  expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'run("The count-in"',
+  );
+  expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
+    'command("The count-in"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'run("Time signature"',
@@ -2981,6 +2984,18 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     'run("The save chart"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
+    'command("Save song"',
+  );
+  expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
+    'command("The save song"',
+  );
+  expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
+    'command("Song list"',
+  );
+  expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
+    'command("The song list"',
+  );
+  expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'command("Delete chart"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
@@ -3004,14 +3019,23 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'runOk("Transpose song"',
   );
-  expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
+  expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'runOk("The transpose song"',
+  );
+  expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
+    "get().loadOriginal(document, true)",
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'command("Record"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
     'command("The record"',
+  );
+  expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
+    'command("Capture"',
+  );
+  expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
+    'command("The capture"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'command("Stop recording"',
@@ -3204,6 +3228,9 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
     'run("The settings"',
+  );
+  expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
+    'command("The settings"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'command("Settings recovery"',

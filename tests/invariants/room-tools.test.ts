@@ -290,6 +290,35 @@ it("validates setlists and audio profiles without capturing secrets, and rejects
   expect(saved?.audioProfiles).toEqual([{ name: "Home", config }]);
 });
 
+it("routes room preference save through the store", async () => {
+  const previous = useEngineStore.getState();
+  const commands: string[] = [];
+  const ipcCalls: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(cmd: string) => {
+      ipcCalls.push(cmd);
+      return undefined as T;
+    },
+  });
+  try {
+    useEngineStore.setState({
+      getSettings: async () => {
+        commands.push("store.getSettings");
+        return { ok: true as const, value: { schemaVersion: 1 } };
+      },
+      saveSettings: async (settings) => {
+        commands.push(`store.saveSettings:${settings.helpLanguage}`);
+        return { ok: true as const, value: undefined };
+      },
+    });
+    await saveRoomPreference("helpLanguage", "nb");
+    expect(commands).toEqual(["store.getSettings", "store.saveSettings:nb"]);
+    expect(ipcCalls).toEqual([]);
+  } finally {
+    useEngineStore.setState(previous, true);
+  }
+});
+
 it("cues a setlist entry's own groove only when it plays the chart's meter (#64)", () => {
   const chart = newOriginal().body.chart;
   const styles = [

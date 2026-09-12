@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { ipc, isPreview } from "../ipc/client";
-import { useEngineStore } from "../store/engine";
+import { requireCommand, useEngineStore } from "../store/engine";
 import { handleJoQuery } from "./jo/conversation";
 import { cancelVoice, toggleVoice, useVoice } from "./jo/voice";
 import { useWriting } from "./originals";
@@ -161,7 +161,7 @@ export const useController = create<ControllerState>((set, get) => ({
         const engine = useEngineStore.getState();
         if (engine.isRecording) await w.record();
         else if (engine.telemetry.transport.state === "playing")
-          await ipc.invoke("transport_stop");
+          requireCommand(await engine.transportStop());
         else await w.play();
       } else if (action === "loop" || action === "next")
         await w.rehearse(action === "next");

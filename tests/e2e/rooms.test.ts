@@ -716,10 +716,12 @@ describe("rooms, end to end through the preview engine", () => {
     await useController.getState().receive(pc3);
     expect(useController.getState().message).toBe("PROGRAM 3 is on channel 1.");
     expect(useWriting.getState().message).toBe(
-      "Error: Playback requires the desktop app.",
+      "Error: The load chart failed. Playback requires the desktop app.",
     );
     expect(useWriting.getState().busy).toBe(false);
-    expect(lastNotice()).toBe("Error: Playback requires the desktop app.");
+    expect(lastNotice()).toBe(
+      "Error: The load chart failed. Playback requires the desktop app.",
+    );
     expect(useEngineStore.getState().telemetry.transport.state).toBe("stopped");
   });
 

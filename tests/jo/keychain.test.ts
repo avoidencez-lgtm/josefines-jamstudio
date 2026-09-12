@@ -36,6 +36,32 @@ it("keeps a failed credential distinct from missing keys through provider loadin
   expect(invoke).toHaveBeenCalledTimes(2);
 });
 
+it("routes Jo provider settings through the store", async () => {
+  const commands: string[] = [];
+  vi.spyOn(ipc, "invoke").mockImplementation(async (command) => {
+    if (command === "providers_list") return [];
+    throw new Error(`Unexpected command: ${command}`);
+  });
+  useEngineStore.setState({
+    getSettings: async () => {
+      commands.push("store.getSettings");
+      return { ok: true as const, value: { schemaVersion: 1 } };
+    },
+    saveSettings: async (settings) => {
+      commands.push(`store.saveSettings:${settings.ai?.selected ?? ""}`);
+      return { ok: true as const, value: undefined };
+    },
+  });
+  await useAi.getState().load();
+  await useAi.getState().save(useAi.getState().preferences);
+  expect(commands).toEqual([
+    "store.getSettings",
+    "store.getSettings",
+    "store.saveSettings:gemini",
+  ]);
+  expect(useAi.getState().preferences.selected).toBe("gemini");
+});
+
 it("rethrows failed presence checks and preserves saved status until a successful retry", async () => {
   useEngineStore.setState({ keysPresent: { gemini: true } });
   const invoke = vi

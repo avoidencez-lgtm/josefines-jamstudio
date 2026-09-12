@@ -12,6 +12,277 @@ afterEach(() => {
   useEngineStore.setState(originalEngine, true);
 });
 
+it("refuses Write play and loop when a reference is loaded", async () => {
+  const song = newOriginal();
+  useWriting.getState().openSong(song);
+  const commands: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      return undefined as T;
+    },
+  });
+  useEngineStore.setState({
+    telemetry: {
+      ...useEngineStore.getState().telemetry,
+      reference: {
+        asset_id: "fixture",
+        label: "Synthetic reference",
+        seconds: 5,
+        position: 2.5,
+        state: "playing",
+        loop_start: 0,
+        loop_end: 5,
+        loop_enabled: false,
+      },
+    },
+  });
+  await expect(useWriting.getState().play()).rejects.toThrow(
+    "Band charts do not change reference audio.",
+  );
+  await expect(useWriting.getState().loopRange(1, 3)).rejects.toThrow(
+    "Band charts do not change reference audio.",
+  );
+  expect(commands).toEqual([]);
+  expect(useEngineStore.getState().loadedOriginal).toBeNull();
+});
+
+it("refuses Write record when a reference is loaded", async () => {
+  const song = newOriginal();
+  useWriting.getState().openSong(song);
+  const commands: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      return undefined as T;
+    },
+  });
+  useEngineStore.setState({
+    isRecording: false,
+    telemetry: {
+      ...useEngineStore.getState().telemetry,
+      reference: {
+        asset_id: "fixture",
+        label: "Synthetic reference",
+        seconds: 5,
+        position: 2.5,
+        state: "playing",
+        loop_start: 0,
+        loop_end: 5,
+        loop_enabled: false,
+      },
+    },
+  });
+  await expect(useWriting.getState().record()).rejects.toThrow(
+    "Band charts do not change reference audio.",
+  );
+  expect(commands).toEqual([]);
+  expect(useEngineStore.getState().loadedOriginal).toBeNull();
+  expect(useEngineStore.getState().isRecording).toBe(false);
+});
+
+it("routes Write record-start through the store", async () => {
+  const song = newOriginal();
+  useWriting.getState().openSong(song);
+  const commands: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      if (command === "originals_save") return song as T;
+      if (command === "originals_list") return [song] as T;
+      return undefined as T;
+    },
+  });
+  useEngineStore.setState({
+    isRecording: false,
+    recordOriginal: async (sessionId) => {
+      commands.push(`store.recordOriginal:${sessionId}`);
+      return { ok: true as const, value: "take-1" };
+    },
+  });
+  await useWriting.getState().record();
+  expect(commands).toEqual([
+    "originals_save",
+    "originals_list",
+    "originals_load",
+    `store.recordOriginal:${song.id}`,
+  ]);
+  expect(useEngineStore.getState().isRecording).toBe(false);
+});
+
+it("routes Write capture through the store", async () => {
+  const song = newOriginal();
+  useWriting.getState().openSong(song);
+  const commands: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      return undefined as T;
+    },
+  });
+  useEngineStore.setState({
+    armCapture: async (seconds) => {
+      commands.push(`store.armCapture:${seconds}`);
+      return { ok: true as const, value: undefined };
+    },
+    keepCapture: async (sessionId) => {
+      commands.push(`store.keepCapture:${sessionId}`);
+      return { ok: true as const, value: undefined };
+    },
+    loadTakes: async () => {
+      commands.push("store.loadTakes");
+    },
+  });
+  await useWriting.getState().arm(8);
+  await useWriting.getState().keep();
+  expect(commands).toEqual([
+    "store.armCapture:8",
+    `store.keepCapture:${song.id}`,
+    "store.loadTakes",
+  ]);
+  expect(useWriting.getState().captureSeconds).toBe(8);
+});
+
+it("routes Write save through the store", async () => {
+  const song = newOriginal();
+  useWriting.getState().openSong(song);
+  const commands: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      return undefined as T;
+    },
+  });
+  useEngineStore.setState({
+    saveOriginal: async (document) => {
+      commands.push(`store.saveOriginal:${document.id}`);
+      return { ok: true as const, value: document };
+    },
+    listOriginals: async () => {
+      commands.push("store.listOriginals");
+      return { ok: true as const, value: [song] };
+    },
+  });
+  await useWriting.getState().save();
+  expect(commands).toEqual([
+    `store.saveOriginal:${song.id}`,
+    "store.listOriginals",
+  ]);
+});
+
+it("routes Write original load through the store", async () => {
+  const song = newOriginal();
+  useWriting.getState().openSong(song);
+  const commands: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      return undefined as T;
+    },
+  });
+  useEngineStore.setState({
+    loadOriginal: async (document) => {
+      commands.push(`store.loadOriginal:${document.id}`);
+      return { ok: true as const, value: undefined };
+    },
+    transportSetCountIn: async () => ({ ok: true as const, value: undefined }),
+    transportPlay: async () => ({ ok: true as const, value: undefined }),
+  });
+  await useWriting.getState().play();
+  expect(commands).toEqual([`store.loadOriginal:${song.id}`]);
+});
+
+it("routes Write play through the store", async () => {
+  const song = newOriginal();
+  useWriting.getState().openSong(song);
+  const commands: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      return undefined as T;
+    },
+  });
+  useEngineStore.setState({
+    transportSetCountIn: async (bars) => {
+      commands.push(`store.transportSetCountIn:${bars}`);
+      return { ok: true as const, value: undefined };
+    },
+    transportPlay: async () => {
+      commands.push("store.transportPlay");
+      return { ok: true as const, value: undefined };
+    },
+  });
+  await useWriting.getState().play();
+  expect(commands).toEqual([
+    "originals_load",
+    "store.transportSetCountIn:0",
+    "store.transportPlay",
+  ]);
+});
+
+it("routes Write loop through the store", async () => {
+  const song = newOriginal();
+  useWriting.getState().openSong(song);
+  const commands: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      return undefined as T;
+    },
+  });
+  useEngineStore.setState({
+    transportSetCountIn: async (bars) => {
+      commands.push(`store.transportSetCountIn:${bars}`);
+      return { ok: true as const, value: undefined };
+    },
+    transportSetLoop: async (startBar, endBar, enabled) => {
+      commands.push(`store.transportSetLoop:${startBar}:${endBar}:${enabled}`);
+      return { ok: true as const, value: undefined };
+    },
+    transportSeekBar: async (bar) => {
+      commands.push(`store.transportSeekBar:${bar}`);
+      return { ok: true as const, value: undefined };
+    },
+    transportPlay: async () => {
+      commands.push("store.transportPlay");
+      return { ok: true as const, value: undefined };
+    },
+  });
+  await useWriting.getState().loopRange(1, 3);
+  expect(commands).toEqual([
+    "originals_load",
+    "store.transportSetCountIn:0",
+    "store.transportSetLoop:1:3:true",
+    "store.transportSeekBar:1",
+    "store.transportPlay",
+  ]);
+});
+
+it("routes Write record-stop through the store", async () => {
+  const song = newOriginal();
+  useWriting.getState().openSong(song);
+  const commands: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      return undefined as T;
+    },
+  });
+  useEngineStore.setState({
+    isRecording: true,
+    stopRecording: async () => {
+      commands.push("store.stopRecording");
+      return { ok: true as const, value: null };
+    },
+    transportStop: async () => {
+      commands.push("store.transportStop");
+      return { ok: true as const, value: undefined };
+    },
+  });
+  await useWriting.getState().record();
+  expect(commands).toEqual(["store.stopRecording", "store.transportStop"]);
+});
+
 it("keeps the accepted draft through edits and later transport failures, but not chart replacement", async () => {
   const song = newOriginal();
   useWriting.getState().openSong(song);
@@ -89,6 +360,32 @@ it("Stage transpose reloads a loaded original instead of inlining the chart", as
   );
   expect(lastLoad?.document?.body.sections).toEqual(song.body.sections);
   expect(lastLoad?.keepPlayback).toBe(true);
+});
+
+it("routes Stage transpose of a loaded original through loadOriginal", async () => {
+  const song = newOriginal();
+  const commands: { id: string; keepPlayback?: boolean; tonic: number }[] = [];
+  useEngineStore.setState({
+    currentChart: song.body.chart,
+    loadedOriginal: { id: song.id, body: song.body },
+    loadOriginal: async (document, keepPlayback) => {
+      commands.push({
+        id: document.id,
+        keepPlayback,
+        tonic: document.body.chart.keyTonic,
+      });
+      return { ok: true as const, value: undefined };
+    },
+  });
+  const result = await useEngineStore.getState().transposeCurrentChart(1);
+  expect(result).toEqual({ ok: true, value: undefined });
+  expect(commands).toEqual([
+    {
+      id: song.id,
+      keepPlayback: true,
+      tonic: (song.body.chart.keyTonic + 1) % 12,
+    },
+  ]);
 });
 
 it("Stage transpose still inlines a jam chart when no original is loaded", async () => {

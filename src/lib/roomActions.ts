@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { ipc, isPreview } from "../ipc/client";
-import type { AppSettings, Chart, RigState } from "../ipc/contract";
-import { useEngineStore } from "../store/engine";
+import type { RigState } from "../ipc/contract";
+import { requireCommand, useEngineStore } from "../store/engine";
 import { helpLanguageSchema } from "./help";
 import { songFingerprint } from "./jo/studioTools";
 import { type SongBody, useWriting } from "./originals";
@@ -56,36 +56,31 @@ export async function saveRoomPreference(
 ) {
   PREFERENCE_SCHEMAS[key].parse(value);
   // Merge into a fresh settings document; credentials are never part of these presets.
-  const current = await ipc.invoke<AppSettings>("settings_get");
+  const e = useEngineStore.getState();
+  const current = requireCommand(await e.getSettings());
   const next = { ...current, [key]: value };
-  await ipc.invoke("settings_set", { settings: next });
-  useEngineStore.setState({ settings: next });
+  requireCommand(await e.saveSettings(next));
 }
 
 export async function cueSetlistItem(item: Setlist[number]) {
+  const e = useEngineStore.getState();
+  if (e.telemetry.reference)
+    throw new Error(
+      "Band charts do not change reference audio. Choose play on the loaded song instead.",
+    );
   if (isPreview)
     throw new Error("Setlist playback needs the desktop audio engine.");
-  const e = useEngineStore.getState();
   if (e.isRecording)
     throw new Error("Save the recording before changing the setlist song.");
   const cue = setlistCue(item, e.charts, e.styles);
-  await ipc.invoke("transport_stop");
-  const chart = await ipc.invoke<Chart>("band_load_chart", {
-    chartId: cue.chart.id,
-    followChart: true,
-  });
-  // Reflect the successful load even if a later setup command fails.
-  useEngineStore.setState({ currentChart: chart, loadedOriginal: null });
+  requireCommand(await e.transportStop());
+  requireCommand(await e.bandLoadChart(cue.chart.id, true));
   // followChart restored the chart's default groove; the entry's own groove wins.
-  if (cue.styleId) await ipc.invoke("band_set_style", { styleId: cue.styleId });
-  await ipc.invoke("transport_set_tempo", { bpm: cue.bpm });
-  await ipc.invoke("transport_set_loop", {
-    startBar: 1,
-    endBar: 2,
-    enabled: false,
-  });
-  await ipc.invoke("transport_set_count_in", { bars: cue.countIn });
-  await ipc.invoke("transport_seek_bar", { bar: 1 });
+  if (cue.styleId) requireCommand(await e.bandSetStyle(cue.styleId));
+  requireCommand(await e.transportSetTempo(cue.bpm));
+  requireCommand(await e.transportSetLoop(1, 2, false));
+  requireCommand(await e.transportSetCountIn(cue.countIn));
+  requireCommand(await e.transportSeekBar(1));
   e.setTempoTrainer({ enabled: false });
 }
 

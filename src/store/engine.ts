@@ -104,18 +104,18 @@ export interface EngineState {
   transportPlay: () => Promise<CommandResult>;
   transportPause: () => Promise<CommandResult>;
   transportStop: () => Promise<CommandResult>;
-  transportSeekBar: (bar: number) => Promise<void>;
+  transportSeekBar: (bar: number) => Promise<CommandResult>;
   transportSetLoop: (
     startBar: number,
     endBar: number,
     enabled: boolean,
   ) => Promise<CommandResult>;
-  transportSetCountIn: (bars: number) => Promise<void>;
+  transportSetCountIn: (bars: number) => Promise<CommandResult>;
   transportSetTempo: (bpm: number) => Promise<CommandResult<number>>;
   transportSetTimeSignature: (
     numerator: number,
     denominator: number,
-  ) => Promise<void>;
+  ) => Promise<CommandResult>;
   /** Tap tempo: call on each tap; the tempo follows the average interval. */
   tapTempo: () => Promise<number | null>;
   tapTimes: number[];
@@ -151,7 +151,13 @@ export interface EngineState {
   deleteUserChart: (chartId: string) => Promise<void>;
   /** Load a chart object straight into the band without saving (editor preview). */
   playChartInline: (chart: Chart) => Promise<boolean>;
-  transposeCurrentChart: (semitones: number) => Promise<void>;
+  loadOriginal: (
+    document: Original,
+    keepPlayback?: boolean,
+  ) => Promise<CommandResult>;
+  listOriginals: () => Promise<CommandResult<Original[]>>;
+  saveOriginal: (document: Original) => Promise<CommandResult<Original>>;
+  transposeCurrentChart: (semitones: number) => Promise<CommandResult>;
 
   // Recorder & Takes
   takes: TakeMetadata[];
@@ -164,7 +170,10 @@ export interface EngineState {
   latencyConfidence: number;
   calibrating: boolean;
   startRecording: (sessionId?: string) => Promise<CommandResult<string>>;
+  recordOriginal: (sessionId: string) => Promise<CommandResult<string>>;
   stopRecording: () => Promise<CommandResult<TakeMetadata>>;
+  armCapture: (seconds: number) => Promise<CommandResult>;
+  keepCapture: (sessionId: string) => Promise<CommandResult<TakeMetadata>>;
   setLatencySamples: (samples: number) => Promise<number>;
   calibrateLatency: () => Promise<CommandResult<LatencyCalibration>>;
   loadTakes: () => Promise<void>;
@@ -201,6 +210,8 @@ export interface EngineState {
   // Devices, settings, keys
   refreshDevices: () => Promise<void>;
   loadSettings: () => Promise<void>;
+  getSettings: () => Promise<CommandResult<AppSettings>>;
+  saveSettings: (settings: AppSettings) => Promise<CommandResult>;
   applyAudioConfig: (config: AudioConfig) => Promise<EngineStatus | null>;
   refreshEngineStatus: () => Promise<void>;
   restartEngine: () => Promise<void>;
@@ -376,6 +387,14 @@ export const useEngineStore = create<EngineState>((set, get) => {
     },
 
     setClickVolume: async (volume) => {
+      if (get().telemetry.reference) {
+        await run("The click volume", async () => {
+          throw new Error(
+            "Band click does not change reference audio. Choose play on the loaded song instead.",
+          );
+        });
+        return;
+      }
       const clamped = Math.max(0, Math.min(1, volume));
       set({ clickVolume: clamped });
       await run("The click volume", () =>
@@ -407,19 +426,45 @@ export const useEngineStore = create<EngineState>((set, get) => {
       return command("Stop", () => ipc.invoke<void>("transport_stop"));
     },
     transportSeekBar: async (bar) => {
-      await run("Seek", () => ipc.invoke("transport_seek_bar", { bar }));
+      if (get().telemetry.reference) {
+        return command("Seek", async () => {
+          throw new Error("Choose a position inside the reference song.");
+        });
+      }
+      return command("Seek", () => ipc.invoke("transport_seek_bar", { bar }));
     },
     transportSetLoop: async (startBar, endBar, enabled) => {
+      if (get().telemetry.reference) {
+        return command("The loop", async () => {
+          throw new Error(
+            "Choose a confirmed section of the currently loaded reference.",
+          );
+        });
+      }
       return command("The loop", () =>
         ipc.invoke<void>("transport_set_loop", { startBar, endBar, enabled }),
       );
     },
     transportSetCountIn: async (bars) => {
-      await run("The count-in", () =>
+      if (get().telemetry.reference) {
+        return command("The count-in", async () => {
+          throw new Error(
+            "Band count-in does not change reference audio. Choose play on the loaded song instead.",
+          );
+        });
+      }
+      return command("The count-in", () =>
         ipc.invoke("transport_set_count_in", { bars }),
       );
     },
     transportSetTempo: async (bpm) => {
+      if (get().telemetry.reference) {
+        return command("Tempo", async () => {
+          throw new Error(
+            "Band tempo and Write transposition do not change reference audio. Choose a practice speed as a percent of the original.",
+          );
+        });
+      }
       const clamped = Math.max(20, Math.min(300, Math.round(bpm * 10) / 10));
       return command("Tempo", async () => {
         await ipc.invoke("transport_set_tempo", { bpm: clamped });
@@ -427,7 +472,14 @@ export const useEngineStore = create<EngineState>((set, get) => {
       });
     },
     transportSetTimeSignature: async (numerator, denominator) => {
-      await run("The time signature", () =>
+      if (get().telemetry.reference) {
+        return command("The time signature", async () => {
+          throw new Error(
+            "Band time signature does not change reference audio. Choose confirmed beats per bar in Songs.",
+          );
+        });
+      }
+      return command("The time signature", () =>
         ipc.invoke("transport_set_time_signature", { numerator, denominator }),
       );
     },
@@ -454,11 +506,25 @@ export const useEngineStore = create<EngineState>((set, get) => {
       set((s) => ({ tempoTrainer: { ...s.tempoTrainer, ...patch } })),
 
     bandSetStyle: async (styleId) => {
+      if (get().telemetry.reference) {
+        return command("The style", async () => {
+          throw new Error(
+            "Band grooves do not change reference audio. Choose play on the loaded song instead.",
+          );
+        });
+      }
       return command("The style", () =>
         ipc.invoke<void>("band_set_style", { styleId }),
       );
     },
     bandSetIntensity: async (intensity) => {
+      if (get().telemetry.reference) {
+        return command("The intensity", async () => {
+          throw new Error(
+            "Band intensity does not change reference audio. Choose play on the loaded song instead.",
+          );
+        });
+      }
       const clamped = Math.max(0, Math.min(1, intensity));
       return command("The intensity", async () => {
         await ipc.invoke("band_set_intensity", { intensity: clamped });
@@ -466,9 +532,23 @@ export const useEngineStore = create<EngineState>((set, get) => {
       });
     },
     bandCue: async (cue) => {
+      if (get().telemetry.reference) {
+        return command("The cue", async () => {
+          throw new Error(
+            "Band cues do not change reference audio. Choose play on the loaded song instead.",
+          );
+        });
+      }
       return command("The cue", () => ipc.invoke<void>("band_cue", { cue }));
     },
     bandLoadChart: async (chartId, followChart = true) => {
+      if (get().telemetry.reference) {
+        return command("The load chart", async () => {
+          throw new Error(
+            "Band charts do not change reference audio. Choose play on the loaded song instead.",
+          );
+        });
+      }
       const result = await command("The load chart", () =>
         ipc.invoke<Chart>("band_load_chart", { chartId, followChart }),
       );
@@ -476,6 +556,13 @@ export const useEngineStore = create<EngineState>((set, get) => {
       return result;
     },
     bandSet: async (patch) => {
+      if (get().telemetry.reference) {
+        return command("The band", async () => {
+          throw new Error(
+            "Band mutes do not change reference audio. Choose play on the loaded song instead.",
+          );
+        });
+      }
       return command("The band", () =>
         ipc.invoke<void>("band_set", { args: patch }),
       );
@@ -558,15 +645,64 @@ export const useEngineStore = create<EngineState>((set, get) => {
         await get().reloadLibrary();
     },
     playChartInline: async (chart) => {
+      if (get().telemetry.reference) {
+        await command("The play chart", async () => {
+          throw new Error(
+            "Band charts do not change reference audio. Choose play on the loaded song instead.",
+          );
+        });
+        return false;
+      }
       const ok = await runOk("The play chart", () =>
         ipc.invoke("band_load_chart_inline", { chart }),
       );
       if (ok) set({ currentChart: chart, loadedOriginal: null });
       return ok;
     },
+    loadOriginal: async (document, keepPlayback = false) => {
+      if (get().telemetry.reference) {
+        return command("The load chart", async () => {
+          throw new Error(
+            "Band charts do not change reference audio. Choose play on the loaded song instead.",
+          );
+        });
+      }
+      const snapshot = structuredClone(document);
+      const result = await command("The load chart", () =>
+        ipc.invoke(
+          "originals_load",
+          keepPlayback
+            ? { document: snapshot, keepPlayback: true }
+            : { document: snapshot },
+        ),
+      );
+      if (result.ok)
+        set({
+          currentChart: snapshot.body.chart,
+          loadedOriginal: { id: snapshot.id, body: snapshot.body },
+        });
+      return result;
+    },
+    listOriginals: async () => {
+      return command("The song list", () =>
+        ipc.invoke<Original[]>("originals_list"),
+      );
+    },
+    saveOriginal: async (document) => {
+      return command("The save song", () =>
+        ipc.invoke<Original>("originals_save", { document }),
+      );
+    },
     transposeCurrentChart: async (semitones) => {
+      if (get().telemetry.reference) {
+        return command("The transpose", async () => {
+          throw new Error(
+            "Band tempo and Write transposition do not change reference audio. Choose set_reference_practice for its playback speed and key, with the current reference assetId.",
+          );
+        });
+      }
       const current = get().currentChart;
-      if (!current) return;
+      if (!current) return { ok: true, value: undefined };
       const moved = transposeChart(current, semitones);
       const loaded = get().loadedOriginal;
       if (loaded) {
@@ -577,19 +713,10 @@ export const useEngineStore = create<EngineState>((set, get) => {
           versions: [],
           body: { ...loaded.body, chart: moved },
         };
-        if (
-          await runOk("The transpose song", () =>
-            ipc.invoke("originals_load", { document, keepPlayback: true }),
-          )
-        ) {
-          set({
-            currentChart: moved,
-            loadedOriginal: { id: loaded.id, body: document.body },
-          });
-        }
-        return;
+        return get().loadOriginal(document, true);
       }
       await get().playChartInline(moved);
+      return { ok: true, value: undefined };
     },
 
     startRecording: async (sessionId = "default-session") => {
@@ -598,6 +725,23 @@ export const useEngineStore = create<EngineState>((set, get) => {
       );
       if (result.ok) set({ isRecording: true, recordingError: null });
       return result;
+    },
+    recordOriginal: async (sessionId) => {
+      const result = await command("The record", () =>
+        ipc.invoke<string>("originals_record", { sessionId }),
+      );
+      if (result.ok) set({ isRecording: true, recordingError: null });
+      return result;
+    },
+    armCapture: async (seconds) => {
+      return command("The capture", () =>
+        ipc.invoke("capture_arm", { seconds }),
+      );
+    },
+    keepCapture: async (sessionId) => {
+      return command("The capture", () =>
+        ipc.invoke<TakeMetadata>("capture_keep", { sessionId }),
+      );
     },
     stopRecording: async () => {
       const result = await command("The stop recording", () =>
@@ -814,6 +958,18 @@ export const useEngineStore = create<EngineState>((set, get) => {
         ipc.invoke<string | null>("settings_recovery_notice"),
       );
       if (recovered) get().notify("error", recovered);
+    },
+    getSettings: async () => {
+      return command("The settings", () =>
+        ipc.invoke<AppSettings>("settings_get"),
+      );
+    },
+    saveSettings: async (settings) => {
+      const result = await command("The settings", () =>
+        ipc.invoke("settings_set", { settings }),
+      );
+      if (result.ok) set({ settings });
+      return result;
     },
     applyAudioConfig: async (config) => {
       const status = await run("The audio devices", () =>

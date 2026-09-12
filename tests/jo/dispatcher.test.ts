@@ -71,6 +71,249 @@ describe("Jo reports accepted actions", () => {
     expect(result).not.toContain("500");
   });
 
+  it("refuses band tempo when a reference is loaded", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    useEngineStore.setState({
+      telemetry: {
+        ...initial.telemetry,
+        reference: {
+          asset_id: "fixture",
+          label: "Test",
+          seconds: 2,
+          position: 0,
+          state: "paused",
+          loop_start: 0,
+          loop_end: 2,
+          loop_enabled: false,
+          speed: 1,
+          semitones: 0,
+        },
+      },
+    });
+    await expect(
+      dispatchJoToolCall({ name: "set_tempo", arguments: { bpm: 100 } }),
+    ).rejects.toThrow("Band tempo and Write transposition do not change");
+    await expect(
+      dispatchJoToolCall({ name: "set_tempo", arguments: { delta: 5 } }),
+    ).rejects.toThrow("set_reference_practice");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("does not claim a bar jump when the store refuses song-mode seek", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    useEngineStore.setState({
+      telemetry: {
+        ...initial.telemetry,
+        reference: {
+          asset_id: "fixture",
+          label: "Test",
+          seconds: 2,
+          position: 0,
+          state: "paused",
+          loop_start: 0,
+          loop_end: 2,
+          loop_enabled: false,
+          speed: 1,
+          semitones: 0,
+        },
+      },
+    });
+    await expect(
+      dispatchJoToolCall({ name: "seek_bar", arguments: { bar: 2 } }),
+    ).rejects.toThrow("Choose a position inside the reference song.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("does not claim a count-in change when the store refuses song mode", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    useEngineStore.setState({
+      telemetry: {
+        ...initial.telemetry,
+        reference: {
+          asset_id: "fixture",
+          label: "Test",
+          seconds: 2,
+          position: 0,
+          state: "paused",
+          loop_start: 0,
+          loop_end: 2,
+          loop_enabled: false,
+          speed: 1,
+          semitones: 0,
+        },
+      },
+    });
+    await expect(
+      dispatchJoToolCall({ name: "set_count_in", arguments: { bars: 1 } }),
+    ).rejects.toThrow("Band count-in does not change reference audio.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("does not queue a band cue when a reference is loaded", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    useEngineStore.setState({
+      telemetry: {
+        ...initial.telemetry,
+        reference: {
+          asset_id: "fixture",
+          label: "Test",
+          seconds: 2,
+          position: 0,
+          state: "paused",
+          loop_start: 0,
+          loop_end: 2,
+          loop_enabled: false,
+          speed: 1,
+          semitones: 0,
+        },
+      },
+    });
+    await expect(
+      dispatchJoToolCall({ name: "trigger_cue", arguments: { cue: "fill" } }),
+    ).rejects.toThrow("Band cues do not change reference audio.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("does not change the band groove when a reference is loaded", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    useEngineStore.setState({
+      telemetry: {
+        ...initial.telemetry,
+        reference: {
+          asset_id: "fixture",
+          label: "Test",
+          seconds: 2,
+          position: 0,
+          state: "paused",
+          loop_start: 0,
+          loop_end: 2,
+          loop_enabled: false,
+          speed: 1,
+          semitones: 0,
+        },
+      },
+    });
+    await expect(
+      dispatchJoToolCall({
+        name: "set_style",
+        arguments: { styleId: "ballad-68" },
+      }),
+    ).rejects.toThrow("Band grooves do not change reference audio.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("does not change band intensity when a reference is loaded", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    useEngineStore.setState({
+      telemetry: {
+        ...initial.telemetry,
+        reference: {
+          asset_id: "fixture",
+          label: "Test",
+          seconds: 2,
+          position: 0,
+          state: "paused",
+          loop_start: 0,
+          loop_end: 2,
+          loop_enabled: false,
+          speed: 1,
+          semitones: 0,
+        },
+      },
+    });
+    await expect(
+      dispatchJoToolCall({
+        name: "set_intensity",
+        arguments: { intensity: 0.8 },
+      }),
+    ).rejects.toThrow("Band intensity does not change reference audio.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("does not mute band parts when a reference is loaded", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    useEngineStore.setState({
+      telemetry: {
+        ...initial.telemetry,
+        reference: {
+          asset_id: "fixture",
+          label: "Test",
+          seconds: 2,
+          position: 0,
+          state: "paused",
+          loop_start: 0,
+          loop_end: 2,
+          loop_enabled: false,
+          speed: 1,
+          semitones: 0,
+        },
+      },
+    });
+    await expect(
+      dispatchJoToolCall({
+        name: "set_parts",
+        arguments: { muteBass: true },
+      }),
+    ).rejects.toThrow("Band mutes do not change reference audio.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("does not load a band chart when a reference is loaded", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    useEngineStore.setState({
+      telemetry: {
+        ...initial.telemetry,
+        reference: {
+          asset_id: "fixture",
+          label: "Test",
+          seconds: 2,
+          position: 0,
+          state: "paused",
+          loop_start: 0,
+          loop_end: 2,
+          loop_enabled: false,
+          speed: 1,
+          semitones: 0,
+        },
+      },
+    });
+    await expect(
+      dispatchJoToolCall({
+        name: "load_chart",
+        arguments: { chartId: "12-bar-blues" },
+      }),
+    ).rejects.toThrow("Band charts do not change reference audio.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("does not transpose the band chart when a reference is loaded", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    useEngineStore.setState({
+      telemetry: {
+        ...initial.telemetry,
+        reference: {
+          asset_id: "fixture",
+          label: "Test",
+          seconds: 2,
+          position: 0,
+          state: "paused",
+          loop_start: 0,
+          loop_end: 2,
+          loop_enabled: false,
+          speed: 1,
+          semitones: 0,
+        },
+      },
+    });
+    await expect(
+      dispatchJoToolCall({
+        name: "transpose_chart",
+        arguments: { semitones: 1 },
+      }),
+    ).rejects.toThrow("Write transposition do not change reference audio.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it("does not play after the trainer's starting tempo is refused", async () => {
     useEngineStore.setState({
       tempoTrainer: { ...initial.tempoTrainer, enabled: true },

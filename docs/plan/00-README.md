@@ -65,6 +65,242 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-12 M3 Jo voice settings use store
+(working tree, uncommitted): JoVoice load and save route settings
+through getSettings and saveSettings. Voice button chrome was not
+edited. Live Music.ai, guitar-removal −6 dB and M3 stay
+unfinished. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo provider settings use store
+(working tree, uncommitted): Jo AI load and save route settings
+through getSettings and saveSettings. Keys stay out of settings.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 room preferences use store
+(working tree, uncommitted): saveRoomPreference routes settings
+get and set through the store instead of raw settings IPC.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 Write save uses store
+(working tree, uncommitted): Write save, saveCopy and refresh
+route through saveOriginal and listOriginals instead of raw
+originals_save / originals_list IPC. Leave-listed chrome was not
+edited. Live Music.ai, guitar-removal −6 dB and M3 stay
+unfinished. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Write capture uses store
+(working tree, uncommitted): Write arm and keep route through
+armCapture and keepCapture instead of raw capture IPC. Leave-listed
+chrome was not edited. Live Music.ai, guitar-removal −6 dB and M3
+stay unfinished. DESIGN full copy-audit stays ☐. Goal stays
+incomplete.
+
+2026-09-12 M3 Stage transpose uses loadOriginal
+(working tree, uncommitted): transposeCurrentChart reloads a
+Write original through loadOriginal with keepPlayback instead of
+raw originals_load IPC. Leave-listed chrome was not edited. Live
+Music.ai, guitar-removal −6 dB and M3 stay unfinished. DESIGN
+full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Write original load uses store
+(working tree, uncommitted): loadOriginal routes through the store
+instead of raw originals_load IPC. Leave-listed chrome was not
+edited. Live Music.ai, guitar-removal −6 dB and M3 stay
+unfinished. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Write record-start uses store
+(working tree, uncommitted): Write record-start routes through
+recordOriginal instead of raw originals_record IPC. Leave-listed
+chrome was not edited. Live Music.ai, guitar-removal −6 dB and M3
+stay unfinished. DESIGN full copy-audit stays ☐. Goal stays
+incomplete.
+
+2026-09-12 M3 setlist cue uses store
+(working tree, uncommitted): cueSetlistItem routes stop, chart,
+groove, tempo, loop, count-in and seek through the store instead
+of raw IPC. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Write loop uses store
+(working tree, uncommitted): Write loopRange routes count-in,
+loop, seek and play through the store instead of raw transport
+IPC. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Write play uses store
+(working tree, uncommitted): Write play routes count-in and play
+through the store instead of raw transport IPC. Leave-listed
+chrome was not edited. Live Music.ai, guitar-removal −6 dB and M3
+stay unfinished. DESIGN full copy-audit stays ☐. Goal stays
+incomplete.
+
+2026-09-12 M3 Write record-stop uses store
+(working tree, uncommitted): Write record-stop routes through
+transportStop instead of raw transport_stop IPC. Leave-listed
+chrome was not edited. Live Music.ai, guitar-removal −6 dB and M3
+stay unfinished. DESIGN full copy-audit stays ☐. Goal stays
+incomplete.
+
+2026-09-12 M3 pedal stop uses store
+(working tree, uncommitted): controller play-stop routes through
+transportStop instead of raw transport_stop IPC. Leave-listed
+chrome was not edited. Live Music.ai, guitar-removal −6 dB and M3
+stay unfinished. DESIGN full copy-audit stays ☐. Goal stays
+incomplete.
+
+2026-09-12 M3 click volume refuses song mode
+(working tree, uncommitted): setClickVolume fails loud when a
+reference is loaded, so Stage click cannot write the band click.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 Write record refuses song mode
+(working tree, uncommitted): Write record fails loud when a
+reference is loaded, before save or originals_load. Leave-listed
+chrome was not edited. Live Music.ai, guitar-removal −6 dB and M3
+stay unfinished. DESIGN full copy-audit stays ☐. Goal stays
+incomplete.
+
+2026-09-12 M3 Write original refuses song mode
+(working tree, uncommitted): Write play and loopRange fail loud
+when a reference is loaded, so rehearse cannot write band
+count-in, loop or seek over IPC. Leave-listed chrome was not
+edited. Live Music.ai, guitar-removal −6 dB and M3 stay
+unfinished. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 setlist cue refuses song mode
+(working tree, uncommitted): cueSetlistItem fails loud when a
+reference is loaded instead of writing band tempo, loop, count-in
+and seek over IPC. Leave-listed chrome was not edited. Live
+Music.ai, guitar-removal −6 dB and M3 stay unfinished. DESIGN
+full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 inline chart refuses song mode
+(working tree, uncommitted): playChartInline fails loud when a
+reference is loaded, so Library Play this cannot swap to the band.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 band transpose refuses song mode
+(working tree, uncommitted): transposeCurrentChart fails loud when
+a reference is loaded, so Jo transpose_chart cannot retune the
+band chart. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 band chart refuses song mode
+(working tree, uncommitted): bandLoadChart fails loud when a
+reference is loaded, so Jo load_chart cannot swap the band chart.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 band mutes refuse song mode
+(working tree, uncommitted): bandSet fails loud when a reference
+is loaded, so Jo set_parts cannot mute band parts. Leave-listed
+chrome was not edited. Live Music.ai, guitar-removal −6 dB and M3
+stay unfinished. DESIGN full copy-audit stays ☐. Goal stays
+incomplete.
+
+2026-09-12 M3 band intensity refuses song mode
+(working tree, uncommitted): bandSetIntensity fails loud when a
+reference is loaded, so Jo set_intensity cannot change the band.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 band groove refuses song mode
+(working tree, uncommitted): bandSetStyle fails loud when a
+reference is loaded, so Jo set_style cannot change the band groove.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 band cues refuse song mode
+(working tree, uncommitted): bandCue fails loud when a reference
+is loaded, so Jo trigger_cue cannot queue fill/crash/stop/ending.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 band meter refuses song mode
+(working tree, uncommitted): transportSetTimeSignature fails loud
+when a reference is loaded instead of writing the band meter.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 band count-in refuses song mode
+(working tree, uncommitted): transportSetCountIn fails loud when a
+reference is loaded, and Jo set_count_in throws that refusal.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 Jo seek_bar throws store refusal
+(working tree, uncommitted): seek_bar uses requireCommand so a
+refused transportSeekBar is thrown instead of Jumped to bar N.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 band seek refuses song mode
+(working tree, uncommitted): transportSeekBar fails loud when a
+reference is loaded instead of seeking the band bar. Leave-listed
+chrome was not edited. Live Music.ai, guitar-removal −6 dB and M3
+stay unfinished. DESIGN full copy-audit stays ☐. Goal stays
+incomplete.
+
+2026-09-12 M3 band loop refuses song mode
+(working tree, uncommitted): transportSetLoop fails loud when a
+reference is loaded instead of writing the band 1–5 loop.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐.
+Goal stays incomplete.
+
+2026-09-12 M3 Stage tempo refuses song mode
+(working tree, uncommitted): transportSetTempo fails loud when a
+reference is loaded, so Stage buttons and shortcuts cannot write
+the band clock. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo set_tempo refuses song mode
+(working tree, uncommitted): set_tempo fails loud when a
+reference is loaded instead of writing the band clock. Leave-listed
+chrome was not edited. Live Music.ai, guitar-removal −6 dB and M3
+stay unfinished. DESIGN full copy-audit stays ☐. Goal stays
+incomplete.
+
+2026-09-12 M3 transport loop bars from section
+(working tree, uncommitted): get_telemetry copies a confirmed
+reference section loop onto tel.transport loop_enabled and
+start/end bars. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 transport beats and meter from grid
+(working tree, uncommitted): get_telemetry copies grid
+position_beats and time_signature onto tel.transport when a
+reference playhead has a grid position. Leave-listed chrome was
+not edited. Live Music.ai, guitar-removal −6 dB and M3 stay
+unfinished. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 transport beat and bar progress from grid
+(working tree, uncommitted): get_telemetry copies grid.position
+beat (floored) and bar progress onto tel.transport when a
+reference playhead has a grid position. Leave-listed chrome was
+not edited. Live Music.ai, guitar-removal −6 dB and M3 stay
+unfinished. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
 2026-09-12 M3 transport bar and BPM from grid
 (working tree, uncommitted): get_telemetry copies grid.position
 bar and bpm onto tel.transport when a reference playhead has a

@@ -14,6 +14,7 @@ import {
   useWriting,
 } from "../../src/lib/originals";
 import { SCREENS } from "../../src/screens/registry";
+import { useEngineStore } from "../../src/store/engine";
 import fixture from "../fixtures/seams/original.json";
 
 describe("songwriting workflow", () => {
@@ -48,6 +49,58 @@ describe("songwriting workflow", () => {
     } finally {
       __setIpcForTests(previous);
       useController.setState({ enabled: false, learning: null });
+    }
+  });
+  it("routes pedal play-stop through the store", async () => {
+    const previousController = useController.getState();
+    const previousEngine = useEngineStore.getState();
+    const previousIpc = { ...ipc };
+    const calls: string[] = [];
+    const transportStop = async () => {
+      calls.push("store.transportStop");
+      return { ok: true as const, value: undefined };
+    };
+    __setIpcForTests({
+      invoke: async <T>(command: string) => {
+        calls.push(command);
+        return undefined as T;
+      },
+    });
+    try {
+      useEngineStore.setState({
+        transportStop,
+        telemetry: {
+          ...previousEngine.telemetry,
+          transport: {
+            ...previousEngine.telemetry.transport,
+            state: "playing",
+          },
+        },
+      });
+      useController.setState({
+        enabled: true,
+        busy: false,
+        learning: null,
+        config: {
+          schemaVersion: 1,
+          bindings: [
+            {
+              action: "play",
+              press: { kind: "cc", channel: 1, number: 64 },
+            },
+          ],
+        },
+      });
+      await useController.getState().receive({
+        kind: "cc",
+        channel: 1,
+        number: 64,
+      });
+      expect(calls).toEqual(["store.transportStop"]);
+    } finally {
+      __setIpcForTests(previousIpc);
+      useController.setState(previousController, true);
+      useEngineStore.setState(previousEngine, true);
     }
   });
   it("pedal learn reassigns a press instead of firing two actions; repeated form entries remain reachable", () => {
