@@ -19,9 +19,11 @@ import { checkWritingForm } from "./writingTools";
  * not close during (an edit, save or recall in flight); a request that only waits
  * for advice is `busy` but not blocking, so the close guard lets the window go.
  */
-export const useRoomOperation = create<{ busy: boolean; blocking: boolean }>(
-  () => ({ busy: false, blocking: false }),
-);
+export const useRoomOperation = create<{
+  busy: boolean;
+  blocking: boolean;
+  cancel: (() => void) | null;
+}>(() => ({ busy: false, blocking: false, cancel: null }));
 export function applySongIdea(body: SongBody, base: string, label: string) {
   const w = useWriting.getState();
   if (!w.song || w.busy || useEngineStore.getState().isRecording)

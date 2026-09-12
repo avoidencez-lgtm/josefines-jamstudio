@@ -513,3 +513,33 @@ export function validateRigSnapshot(value: unknown, profiles: RigProfile[]) {
   }
   return { snap, profile };
 }
+
+/** Reasons the room-tool fieldset greys out. Status text must name the same work. */
+export interface RoomToolsGate {
+  blocking: boolean;
+  busy: boolean;
+  recording: boolean;
+  writingBusy: boolean;
+  mediaBusy: boolean;
+  calibrating: boolean;
+}
+
+export function roomToolsDisabled(gate: RoomToolsGate): boolean {
+  return (
+    gate.blocking ||
+    gate.recording ||
+    gate.writingBusy ||
+    gate.mediaBusy ||
+    gate.calibrating
+  );
+}
+
+export function roomToolsStatus(gate: RoomToolsGate): string | null {
+  if (gate.recording) return "Finish the recording to use this tool.";
+  if (gate.calibrating)
+    return "Finish measuring the loopback to use this tool.";
+  if (gate.writingBusy) return "Finish saving the original to use this tool.";
+  if (gate.mediaBusy) return "Finish the current media work to use this tool.";
+  if (gate.busy || gate.blocking) return "Working…";
+  return null;
+}

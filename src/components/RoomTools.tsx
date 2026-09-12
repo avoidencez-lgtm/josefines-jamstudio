@@ -2,8 +2,10 @@ import { type ComponentType, Suspense, lazy, useRef } from "react";
 import { useMedia } from "../lib/media";
 import { useWriting } from "../lib/originals";
 import { useRoomOperation } from "../lib/roomActions";
+import { roomToolsDisabled, roomToolsStatus } from "../lib/roomTools";
 import { SCREENS, SCREEN_ICONS } from "../screens/registry";
 import { type ScreenId, useEngineStore } from "../store/engine";
+import { Button } from "./Button";
 
 /**
  * One registered capability per room. Each tool is its own chunk, loaded the first
@@ -72,9 +74,21 @@ export const ROOM_TOOLS: Record<
 export function RoomTools({ screen }: { screen: ScreenId }) {
   const busy = useRoomOperation((s) => s.busy);
   const blocking = useRoomOperation((s) => s.blocking);
+  const cancel = useRoomOperation((s) => s.cancel);
   const recording = useEngineStore((s) => s.isRecording);
+  const calibrating = useEngineStore((s) => s.calibrating);
   const writingBusy = useWriting((s) => s.busy);
   const mediaBusy = useMedia((s) => s.busy);
+  const gate = {
+    blocking,
+    busy,
+    recording,
+    writingBusy,
+    mediaBusy: Boolean(mediaBusy),
+    calibrating,
+  };
+  const disabled = roomToolsDisabled(gate);
+  const status = roomToolsStatus(gate);
   // A tool mounts the first time its room is shown and then stays mounted (hidden),
   // so scratch drafts survive navigation. No component starts work on mount.
   const shown = useRef(new Set<ScreenId>());
@@ -99,9 +113,7 @@ export function RoomTools({ screen }: { screen: ScreenId }) {
               </span>
             </summary>
             <fieldset
-              disabled={
-                blocking || recording || writingBusy || Boolean(mediaBusy)
-              }
+              disabled={disabled}
               className="room-tool-body"
               aria-label={descriptor.title}
             >
@@ -112,12 +124,13 @@ export function RoomTools({ screen }: { screen: ScreenId }) {
                 </Suspense>
               )}
             </fieldset>
-            {(busy || recording) && (
-              <output className="room-tool-status">
-                {recording
-                  ? "Finish the recording to use this tool."
-                  : "Working…"}
-              </output>
+            {status && <output className="room-tool-status">{status}</output>}
+            {busy && cancel && (
+              <div className="room-tool-row">
+                <Button type="button" variant="secondary" onClick={cancel}>
+                  Cancel
+                </Button>
+              </div>
             )}
           </details>
         );

@@ -8,6 +8,14 @@ import { type Coach, coachBrief, coachSchema } from "../../lib/roomTools";
 import { Button } from "../Button";
 import { Field, SongRequired, Status, currentSong, useTool } from "./shared";
 
+/** Stops an in-flight coach request from Jo or any other room's Cancel. */
+export function abortCoachRequest(cancelled: { current: boolean }) {
+  cancelled.current = true;
+  // An installed agent is stopped; an API answer already submitted is discarded.
+  if (BRAINS[useAi.getState().preferences.selected]?.local)
+    void ipc.invoke("agent_cancel").catch(() => undefined);
+}
+
 export default function CoachTool() {
   const song = useWriting((s) => s.song);
   const { run, message } = useTool();
@@ -71,7 +79,10 @@ export default function CoachTool() {
                 }
               },
               // Waiting for advice changes nothing, so the window may close meanwhile (#63).
-              { blocking: false },
+              {
+                blocking: false,
+                cancel: () => abortCoachRequest(cancelled),
+              },
             )
           }
         >
@@ -80,12 +91,7 @@ export default function CoachTool() {
         {asking && (
           <Button
             variant="secondary"
-            onClick={() => {
-              cancelled.current = true;
-              // An installed agent is stopped; an API answer already submitted is discarded.
-              if (BRAINS[useAi.getState().preferences.selected]?.local)
-                void ipc.invoke("agent_cancel").catch(() => undefined);
-            }}
+            onClick={() => abortCoachRequest(cancelled)}
           >
             Cancel
           </Button>
