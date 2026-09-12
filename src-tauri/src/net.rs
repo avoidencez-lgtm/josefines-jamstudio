@@ -11,7 +11,7 @@ pub mod musicai;
 pub mod review;
 pub mod voice;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -263,25 +263,56 @@ impl CostLog {
         writeln!(f, "{line}").map_err(|e| e.to_string())
     }
 
-    /// Newest last. Lines that do not parse are skipped (a half-written line after
-    /// a crash must not hide the rest).
+    /// Newest last. Invalid UTF-8 and unparseable lines are skipped so a torn
+    /// or binary line cannot hide later entries. Only the last `limit` valid
+    /// rows are kept, so Settings does not buffer the whole log.
     pub fn list(&self, limit: usize) -> Vec<CostEntry> {
+        if limit == 0 {
+            return Vec::new();
+        }
         let Ok(f) = std::fs::File::open(&self.path) else {
             return Vec::new();
         };
-        let entries: Vec<CostEntry> = std::io::BufReader::new(f)
-            .lines()
-            .map_while(Result::ok)
-            .filter_map(|l| serde_json::from_str(&l).ok())
-            .collect();
-        let skip = entries.len().saturating_sub(limit);
-        entries.into_iter().skip(skip).collect()
+        let mut reader = std::io::BufReader::new(f);
+        let mut buf = Vec::new();
+        let mut entries: VecDeque<CostEntry> = VecDeque::new();
+        loop {
+            buf.clear();
+            match reader.read_until(b'\n', &mut buf) {
+                Ok(0) => break,
+                Ok(_) => {
+                    if buf.last() == Some(&b'\n') {
+                        buf.pop();
+                    }
+                    if buf.last() == Some(&b'\r') {
+                        buf.pop();
+                    }
+                    if buf.is_empty() {
+                        continue;
+                    }
+                    let Ok(line) = std::str::from_utf8(&buf) else {
+                        continue;
+                    };
+                    let Ok(entry) = serde_json::from_str(line) else {
+                        continue;
+                    };
+                    if entries.len() == limit {
+                        entries.pop_front();
+                    }
+                    entries.push_back(entry);
+                }
+                Err(_) => break,
+            }
+        }
+        entries.into_iter().collect()
     }
+
+    const TOTALS_TAIL: usize = 10_000;
 
     /// Totals per provider for the summary line in Settings.
     pub fn totals(&self) -> Vec<CostTotal> {
         let mut by: HashMap<String, CostTotal> = HashMap::new();
-        for e in self.list(usize::MAX) {
+        for e in self.list(Self::TOTALS_TAIL) {
             let t = by.entry(e.provider.clone()).or_insert_with(|| CostTotal {
                 provider: e.provider.clone(),
                 ..CostTotal::default()
@@ -522,6 +553,7 @@ fn persist_cost(log: &CostLog, cost: &CostEntry, on_log_error: impl FnOnce(&str)
 mod tests {
     use super::*;
     use crate::keys::{FailingStore, MemoryStore};
+    use std::io::Write;
 
     #[test]
     fn speech_units_include_uncertain_requests_and_old_logs_stay_readable() {
@@ -786,6 +818,47 @@ mod tests {
         assert_eq!(g.calls, 3);
         assert_eq!(g.failures, 1);
         assert_eq!(g.bytes_in, 600);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cost_log_skips_invalid_utf8_and_keeps_later_entries() {
+        let dir = std::env::temp_dir().join(format!("jam-costlog-utf8-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        log.append(&CostEntry {
+            at_ms: 1,
+            provider: "gemini".into(),
+            method: "POST".into(),
+            path: "/v1/early".into(),
+            status: 200,
+            ..CostEntry::default()
+        })
+        .unwrap();
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(log.path())
+            .unwrap()
+            .write_all(b"\n\x80\xff not utf8\n")
+            .unwrap();
+        log.append(&CostEntry {
+            at_ms: 2,
+            provider: "gemini".into(),
+            method: "GET".into(),
+            path: "/v1/later".into(),
+            status: 200,
+            bytes_in: 9,
+            ..CostEntry::default()
+        })
+        .unwrap();
+        let listed = log.list(10);
+        assert_eq!(listed.len(), 2, "{listed:?}");
+        assert_eq!(listed[0].at_ms, 1);
+        assert_eq!(listed[1].at_ms, 2);
+        assert_eq!(listed[1].path, "/v1/later");
+        assert_eq!(log.totals()[0].calls, 2);
+        assert_eq!(log.list(1)[0].at_ms, 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
