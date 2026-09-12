@@ -352,6 +352,8 @@ pub struct AudioEngine {
     render_thread: Option<Thread>,
     blocks_filled: Arc<AtomicU64>,
     filling: Arc<AtomicBool>,
+    /// Count-in and loop to restore after a Write Record take (#288).
+    take_transport_restore: Mutex<Option<(u32, u32, u32, bool)>>,
 }
 
 fn default_style() -> Style {
@@ -539,6 +541,7 @@ impl AudioEngine {
             render_thread: None,
             blocks_filled: Arc::new(AtomicU64::new(0)),
             filling: Arc::new(AtomicBool::new(false)),
+            take_transport_restore: Mutex::new(None),
         }
     }
 
@@ -951,11 +954,32 @@ impl AudioEngine {
         let prepared = self.prepare_recorder(session_id, true)?;
         let _gate = self.render_gate.lock();
         self.stop_transport_under_render_gate();
+        {
+            let tl = self.timeline.lock();
+            *self.take_transport_restore.lock() = Some((
+                tl.count_in_bars,
+                tl.loop_start_bar,
+                tl.loop_end_bar,
+                tl.loop_enabled,
+            ));
+        }
         self.transport_set_count_in(0);
         if let Some(bpm) = self.song_snapshot["body"]["chart"]["defaultBpm"].as_f64() {
             self.transport_set_tempo(bpm);
-            self.transport_set_time_signature((4, 4));
-            self.transport_set_loop(1, 257, false);
+            let time_sig = self.song_snapshot["body"]["chart"]["timeSig"]
+                .as_array()
+                .and_then(|a| Some((a.first()?.as_u64()? as u8, a.get(1)?.as_u64()? as u8)))
+                .unwrap_or((4, 4));
+            self.transport_set_time_signature(time_sig);
+            let chart_bars = self
+                .sequencer
+                .lock()
+                .current_chart
+                .as_ref()
+                .map(|c| c.bars.len() as u32)
+                .filter(|n| *n > 0)
+                .unwrap_or(1);
+            self.transport_set_loop(1, chart_bars.saturating_add(1), false);
         }
         let id = self.install_recorder(prepared);
         self.transport_play();
@@ -1057,6 +1081,10 @@ impl AudioEngine {
             let idle = current.idle();
             std::mem::replace(&mut *current, idle)
         };
+        if let Some((count_in, start, end, enabled)) = self.take_transport_restore.lock().take() {
+            self.transport_set_count_in(count_in);
+            self.transport_set_loop(start, end, enabled);
+        }
         finished.stop_and_save()
     }
 
@@ -2701,6 +2729,56 @@ mod tests {
         assert!(engine.song_snapshot.is_null());
         assert!(engine.sequencer.lock().section_bands.is_empty());
         assert!(engine.ensure_timing_editable().is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn write_record_restores_count_in_and_does_not_invent_a_256_bar_loop() {
+        let mut engine = headless_engine();
+        let root = std::env::temp_dir().join(format!("jam-write-loop-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        *engine.recorder.lock() = crate::recorder::TakeRecorder::new(48_000, root.clone());
+        let doc: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/seams/original.json"))
+                .unwrap();
+        let chart: jam_core::chart::Chart =
+            serde_json::from_value(doc["body"]["chart"].clone()).unwrap();
+        let resolved = chart.resolve();
+        let chart_bars = resolved.bars.len() as u32;
+        let style = engine.sequencer.lock().style.clone();
+        let sections = [(
+            "verse".into(),
+            jam_band::sequencer::SectionBand {
+                styles: [style.clone(), style.clone(), style],
+                intensity: [0.5; 3],
+                gains: [1.0; 3],
+                muted: [false; 3],
+                swing: 0.5,
+            },
+        )]
+        .into();
+        engine
+            .configure_song(resolved, sections, vec![], doc)
+            .unwrap();
+        engine.transport_set_count_in(1);
+        engine.transport_set_loop(1, 8, true);
+        engine.start().unwrap();
+        engine.record_song("loop-restore".into()).unwrap();
+        {
+            let tl = engine.timeline.lock();
+            assert_eq!(tl.count_in_bars, 0);
+            assert_ne!(tl.loop_end_bar, 257, "must not invent a 256-bar loop");
+            assert_eq!(tl.loop_end_bar, chart_bars + 1);
+        }
+        let _ = engine.recorder_stop();
+        engine.stop().unwrap();
+        {
+            let tl = engine.timeline.lock();
+            assert_eq!(tl.count_in_bars, 1);
+            assert_eq!(tl.loop_start_bar, 1);
+            assert_eq!(tl.loop_end_bar, 8);
+            assert!(tl.loop_enabled);
+        }
         std::fs::remove_dir_all(root).unwrap();
     }
 
