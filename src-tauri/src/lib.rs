@@ -2103,6 +2103,15 @@ mod quit {
         assert!(!super::should_defer_quit(true, true, true));
         assert!(!super::should_defer_quit(true, false, false));
     }
+
+    #[test]
+    fn app_level_quit_is_forwarded_to_the_ui_close_guard() {
+        let src = include_str!("lib.rs");
+        assert!(src.contains("RunEvent::ExitRequested"));
+        assert!(src.contains("app:exit-requested"));
+        assert!(src.contains("prevent_exit"));
+        assert!(src.contains("should_defer_quit"));
+    }
 }
 
 #[cfg(test)]

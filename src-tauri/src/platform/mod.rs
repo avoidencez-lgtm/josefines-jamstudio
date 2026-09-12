@@ -40,52 +40,251 @@ pub fn allowed_https_url(url: &str) -> Result<&str, String> {
 
 pub async fn open_https(url: &str) -> Result<(), String> {
     allowed_https_url(url)?;
-    #[cfg(target_os = "macos")]
-    let mut opener = command(std::path::Path::new("/usr/bin/open"));
-    #[cfg(windows)]
-    let mut opener = command(std::path::Path::new("explorer.exe"));
-    #[cfg(not(any(target_os = "macos", windows)))]
-    let mut opener = command(std::path::Path::new("xdg-open"));
-    launch_opener(opener.arg(url)).await
+    open_with_os(url).await
 }
 
 pub async fn open_media(path: &std::path::Path) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let mut opener = command(std::path::Path::new("/usr/bin/open"));
-    #[cfg(windows)]
-    let mut opener = command(std::path::Path::new("explorer.exe"));
-    #[cfg(not(any(target_os = "macos", windows)))]
-    let mut opener = command(std::path::Path::new("xdg-open"));
     // The user's explicit Play action opens their default media player.
-    launch_opener(opener.arg(path)).await
+    open_with_os(&path.to_string_lossy()).await
 }
 
-async fn launch_opener(opener: &mut tokio::process::Command) -> Result<(), String> {
-    // Explorer hands off to an existing process; its exit code does not prove
-    // whether a browser/player opened. macOS open and xdg-open report failure.
+async fn open_with_os(target: &str) -> Result<(), String> {
     #[cfg(windows)]
-    opener
-        .kill_on_drop(false)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    #[cfg(not(windows))]
     {
-        let status = opener.status().await.map_err(|e| e.to_string())?;
-        if !status.success() {
-            return Err(
-                "The system could not open this item. Check the default application.".into(),
-            );
-        }
+        let target = target.to_string();
+        return tokio::task::spawn_blocking(move || windows_shell_open(&target))
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()));
+    }
+    #[cfg(target_os = "macos")]
+    let mut opener = command(std::path::Path::new("/usr/bin/open"));
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let mut opener = command(std::path::Path::new("xdg-open"));
+    #[cfg(not(windows))]
+    launch_opener(opener.arg(target)).await
+}
+
+/// ShellExecuteW is how a user double-clicking an https shortcut opens the
+/// default browser. `explorer.exe` plus CREATE_NO_WINDOW often does nothing.
+#[cfg(windows)]
+fn windows_shell_open(target: &str) -> Result<(), String> {
+    let failed = || -> String {
+        "The system could not open this item. Check the default application.".into()
+    };
+    if target.is_empty() {
+        return Err(failed());
+    }
+    use std::os::windows::ffi::OsStrExt;
+    fn wide(s: &str) -> Vec<u16> {
+        std::ffi::OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteW(
+            hwnd: *mut core::ffi::c_void,
+            operation: *const u16,
+            file: *const u16,
+            parameters: *const u16,
+            directory: *const u16,
+            show: i32,
+        ) -> isize;
+    }
+    const SW_SHOWNORMAL: i32 = 1;
+    let operation = wide("open");
+    let file = wide(target);
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            operation.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if result <= 32 {
+        return Err(failed());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+async fn launch_opener(opener: &mut tokio::process::Command) -> Result<(), String> {
+    let status = opener.status().await.map_err(|e| e.to_string())?;
+    if !status.success() {
+        return Err("The system could not open this item. Check the default application.".into());
     }
     Ok(())
 }
 
 pub fn command(executable: &std::path::Path) -> tokio::process::Command {
+    #[cfg(windows)]
+    let mut command = windows_command(executable);
+    #[cfg(not(windows))]
     let mut command = tokio::process::Command::new(executable);
     command.kill_on_drop(true);
     #[cfg(windows)]
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     command
+}
+
+/// CreateProcessW cannot run `.cmd` / `.bat`; npm agent shims must go through cmd.exe.
+#[cfg(windows)]
+fn windows_command(executable: &std::path::Path) -> tokio::process::Command {
+    if windows_batch_shim(executable) {
+        let mut command = tokio::process::Command::new("cmd.exe");
+        command.arg("/c").arg(executable);
+        command
+    } else {
+        tokio::process::Command::new(executable)
+    }
+}
+
+#[cfg(windows)]
+fn windows_batch_shim(executable: &std::path::Path) -> bool {
+    executable
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "cmd" | "bat"))
+}
+
+/// On Windows, closing this handle kills the whole process tree (`cmd.exe` and `node.exe`).
+pub struct KillTree {
+    #[cfg(windows)]
+    job: Option<isize>,
+}
+
+impl KillTree {
+    pub fn bind(child: &tokio::process::Child) -> Self {
+        #[cfg(windows)]
+        {
+            Self {
+                job: win_job::assign(child),
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = child;
+            Self {}
+        }
+    }
+}
+
+impl Drop for KillTree {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        win_job::close(self.job.take());
+    }
+}
+
+#[cfg(windows)]
+mod win_job {
+    use std::os::windows::io::AsRawHandle;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateJobObjectW(
+            attr: *mut core::ffi::c_void,
+            name: *const u16,
+        ) -> *mut core::ffi::c_void;
+        fn SetInformationJobObject(
+            job: *mut core::ffi::c_void,
+            class: i32,
+            info: *mut core::ffi::c_void,
+            len: u32,
+        ) -> i32;
+        fn AssignProcessToJobObject(
+            job: *mut core::ffi::c_void,
+            process: *mut core::ffi::c_void,
+        ) -> i32;
+        fn CloseHandle(handle: *mut core::ffi::c_void) -> i32;
+    }
+
+    const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION: i32 = 9;
+    const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x2000;
+
+    #[repr(C)]
+    pub struct ExtendedLimit {
+        per_process_user_time_limit: i64,
+        per_job_user_time_limit: i64,
+        limit_flags: u32,
+        _pad0: u32,
+        minimum_working_set_size: usize,
+        maximum_working_set_size: usize,
+        active_process_limit: u32,
+        _pad1: u32,
+        affinity: usize,
+        priority_class: u32,
+        scheduling_class: u32,
+        read_operation_count: u64,
+        write_operation_count: u64,
+        other_operation_count: u64,
+        read_transfer_count: u64,
+        write_transfer_count: u64,
+        other_transfer_count: u64,
+        process_memory_limit: usize,
+        job_memory_limit: usize,
+        peak_process_memory_used: usize,
+        peak_job_memory_used: usize,
+    }
+
+    pub fn assign(child: &tokio::process::Child) -> Option<isize> {
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
+            if job.is_null() {
+                return None;
+            }
+            let mut info = ExtendedLimit {
+                per_process_user_time_limit: 0,
+                per_job_user_time_limit: 0,
+                limit_flags: JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                _pad0: 0,
+                minimum_working_set_size: 0,
+                maximum_working_set_size: 0,
+                active_process_limit: 0,
+                _pad1: 0,
+                affinity: 0,
+                priority_class: 0,
+                scheduling_class: 0,
+                read_operation_count: 0,
+                write_operation_count: 0,
+                other_operation_count: 0,
+                read_transfer_count: 0,
+                write_transfer_count: 0,
+                other_transfer_count: 0,
+                process_memory_limit: 0,
+                job_memory_limit: 0,
+                peak_process_memory_used: 0,
+                peak_job_memory_used: 0,
+            };
+            if SetInformationJobObject(
+                job,
+                JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                (&mut info as *mut ExtendedLimit).cast(),
+                std::mem::size_of::<ExtendedLimit>() as u32,
+            ) == 0
+            {
+                CloseHandle(job);
+                return None;
+            }
+            if AssignProcessToJobObject(job, child.as_raw_handle()) == 0 {
+                CloseHandle(job);
+                return None;
+            }
+            Some(job as isize)
+        }
+    }
+
+    pub fn close(job: Option<isize>) {
+        if let Some(job) = job {
+            unsafe {
+                CloseHandle(job as *mut core::ffi::c_void);
+            }
+        }
+    }
 }
 
 /// Windows executables the app will start: a native `.exe`, or the `.cmd` shim npm
@@ -113,6 +312,11 @@ pub fn find_agent(name: &str, configured: &str) -> Result<PathBuf, String> {
             return Err(
                 "Choose the native .exe or the npm .cmd shim, not another script type.".into(),
             );
+        }
+        if !agent_stem_matches(&path, name) {
+            return Err(format!(
+                "Choose the {name} executable, not a different program."
+            ));
         }
         return Ok(path);
     }
@@ -147,6 +351,12 @@ pub fn find_agent(name: &str, configured: &str) -> Result<PathBuf, String> {
         .ok_or_else(|| format!("{name} is not installed or not on PATH. Install and sign in once, or set its full executable path."))
 }
 
+fn agent_stem_matches(path: &std::path::Path, name: &str) -> bool {
+    path.file_stem()
+        .and_then(|s| s.to_str())
+        .is_some_and(|stem| stem.eq_ignore_ascii_case(name))
+}
+
 #[cfg(test)]
 mod url_tests {
     #[cfg(unix)]
@@ -176,6 +386,14 @@ mod url_tests {
         assert!(super::allowed_https_url("https://user:pass@ffmpeg.org/").is_err());
         assert!(super::allowed_https_url("file:///etc/passwd").is_err());
     }
+
+    #[tokio::test]
+    async fn disallowed_https_fails_before_the_os_opener() {
+        assert!(super::open_https("https://evil.example/").await.is_err());
+        assert!(super::open_https("http://ffmpeg.org/download.html")
+            .await
+            .is_err());
+    }
 }
 
 #[cfg(all(test, windows))]
@@ -191,6 +409,130 @@ mod tests {
         assert!(super::find_agent("codex", &path("codex.cmd")).is_ok());
         assert!(super::find_agent("claude", &path("claude.EXE")).is_ok());
         assert!(super::find_agent("codex", &path("codex.ps1")).is_err());
+        assert!(
+            super::find_agent("codex", &path("claude.EXE")).is_err(),
+            "configured path stem must equal the agent name"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn job_object_extended_limit_is_the_x64_windows_layout() {
+        assert_eq!(std::mem::size_of::<super::win_job::ExtendedLimit>(), 144);
+    }
+
+    #[test]
+    fn windows_cmd_and_bat_shims_launch_through_cmd_exe() {
+        let cmd = super::command(std::path::Path::new(r"C:\npm\claude.cmd"));
+        let debug = format!("{cmd:?}");
+        assert!(
+            debug.contains("cmd.exe"),
+            "CreateProcessW cannot execute .cmd: {debug}"
+        );
+        assert!(debug.contains("/c"), "{debug}");
+        assert!(debug.contains("claude.cmd"), "{debug}");
+        let bat = super::command(std::path::Path::new(r"C:\tools\tool.BAT"));
+        let debug = format!("{bat:?}");
+        assert!(debug.contains("cmd.exe"), "{debug}");
+        let exe = super::command(std::path::Path::new(r"C:\Program Files\claude.exe"));
+        let debug = format!("{exe:?}");
+        assert!(
+            !debug.contains("cmd.exe"),
+            "native .exe must not be wrapped: {debug}"
+        );
+    }
+
+    #[tokio::test]
+    async fn windows_cmd_shim_runs_instead_of_bad_exe_format() {
+        let dir = std::env::temp_dir().join(format!("jam-cmd-run-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("jam-echo.cmd");
+        let output = dir.join("out.txt");
+        std::fs::write(&script, format!("@echo ran>\"{}\"\r\n", output.display())).unwrap();
+        let status = super::command(&script)
+            .status()
+            .await
+            .expect("cmd shim must spawn");
+        assert!(status.success(), "{status:?}");
+        assert_eq!(std::fs::read_to_string(&output).unwrap().trim(), "ran");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn windows_shell_open_reports_failure_instead_of_hidden_explorer() {
+        let err = super::windows_shell_open("").unwrap_err();
+        assert!(err.contains("could not open"), "{err}");
+        let src = include_str!("mod.rs");
+        let https = src
+            .split("pub async fn open_https")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn open_media").next())
+            .unwrap_or("");
+        assert!(
+            !https.contains("explorer.exe"),
+            "https open must not launch explorer.exe"
+        );
+        assert!(https.contains("open_with_os"));
+    }
+
+    #[tokio::test]
+    async fn dropping_the_job_kills_the_cmd_shim_child_tree() {
+        let dir = std::env::temp_dir().join(format!("jam-job-tree-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let child_script = dir.join("jam-child.cmd");
+        let parent = dir.join("jam-shim.cmd");
+        let heartbeat = dir.join("heartbeat.txt");
+        std::fs::write(
+            &child_script,
+            format!(
+                "@echo off\r\n:loop\r\necho alive>\"{}\"\r\nping -n 2 127.0.0.1 >nul\r\ngoto loop\r\n",
+                heartbeat.display()
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            &parent,
+            format!("@echo off\r\ncmd /c \"{}\"\r\n", child_script.display()),
+        )
+        .unwrap();
+        let mut child = super::command(&parent).spawn().expect("shim must spawn");
+        let tree = super::KillTree::bind(&child);
+        let mut saw_heartbeat = false;
+        for _ in 0..40 {
+            if heartbeat.exists() {
+                saw_heartbeat = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert!(saw_heartbeat, "child process never started");
+        drop(tree);
+        let _ = child.kill().await;
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        let first = std::fs::metadata(&heartbeat).unwrap().modified().unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+        let second = std::fs::metadata(&heartbeat).unwrap().modified().unwrap();
+        assert_eq!(
+            first, second,
+            "cmd.exe child kept running after the job closed"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod agent_path_tests {
+    #[test]
+    fn configured_executable_stem_must_match_the_agent() {
+        let dir = std::env::temp_dir().join(format!("jam-agent-stem-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wrong = if cfg!(windows) {
+            dir.join("other.exe")
+        } else {
+            dir.join("other")
+        };
+        std::fs::write(&wrong, b"x").unwrap();
+        assert!(super::find_agent("codex", &wrong.to_string_lossy()).is_err());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -76,7 +76,7 @@ describe("Studio workspaces", () => {
       ).toBe(false);
     }
   });
-  it("transposes when Option typed [ or ] and leaves Enter on a link alone", () => {
+  it("transposes when Option or Windows AltGr typed [ or ] and leaves Enter on a link alone", () => {
     vi.stubGlobal("HTMLInputElement", class HTMLInputElement {});
     vi.stubGlobal("HTMLTextAreaElement", class HTMLTextAreaElement {});
     vi.stubGlobal("HTMLSelectElement", class HTMLSelectElement {});
@@ -116,6 +116,48 @@ describe("Studio workspaces", () => {
       ),
     ).toBe(true);
     expect(transposeCurrentChart).toHaveBeenCalledWith(1);
+    transposeCurrentChart.mockClear();
+    expect(
+      handleShortcut(
+        {
+          key: "[",
+          code: "Digit8",
+          ctrlKey: true,
+          altKey: true,
+          target: null,
+        } as unknown as KeyboardEvent,
+        store,
+        ctx,
+      ),
+    ).toBe(true);
+    expect(transposeCurrentChart).toHaveBeenCalledWith(-1);
+    expect(
+      handleShortcut(
+        {
+          key: "]",
+          code: "Digit9",
+          ctrlKey: true,
+          altKey: true,
+          target: null,
+        } as unknown as KeyboardEvent,
+        store,
+        ctx,
+      ),
+    ).toBe(true);
+    expect(transposeCurrentChart).toHaveBeenCalledWith(1);
+    expect(
+      handleShortcut(
+        {
+          key: "[",
+          code: "Digit8",
+          ctrlKey: true,
+          altKey: false,
+          target: null,
+        } as unknown as KeyboardEvent,
+        store,
+        ctx,
+      ),
+    ).toBe(false);
     expect(
       handleShortcut(
         {
