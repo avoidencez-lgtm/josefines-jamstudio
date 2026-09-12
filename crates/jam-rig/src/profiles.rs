@@ -199,6 +199,9 @@ impl RigProfile {
         if !scene.commands.is_empty() {
             return Ok(scene.commands.clone());
         }
+        if scene_idx > 127 {
+            return Err("scene index above 127".to_string());
+        }
         let idx = u8::try_from(scene_idx).map_err(|_| "scene index above 127".to_string())?;
         Ok(match self.scene_cc {
             Some(cc) => vec![RigCommand::ControlChange { cc, value: idx }],
@@ -370,6 +373,25 @@ mod tests {
                 Rendered::Wait(20),
                 Rendered::Bytes(vec![0xB1, 20, 100]),
             ]
+        );
+    }
+
+    #[test]
+    fn scene_index_128_errors_instead_of_wrapping_to_zero() {
+        let p = RigProfile {
+            scenes: (0..=128)
+                .map(|i| Scene::named(format!("Scene {i}")))
+                .collect(),
+            ..RigProfile::generic()
+        };
+        let err = p.scene_commands(128).unwrap_err();
+        assert!(
+            err.contains("above 127"),
+            "scene 128 must be refused, got {err}"
+        );
+        assert!(
+            p.scene_to_midi(128).is_empty(),
+            "a refused scene must not render Program Change 0"
         );
     }
 
