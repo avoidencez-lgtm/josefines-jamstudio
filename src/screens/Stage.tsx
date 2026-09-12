@@ -388,7 +388,10 @@ export const Stage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2" title="Choose the band volume.">
+            <div
+              className="flex items-center gap-2"
+              title="Choose the band volume."
+            >
               <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
                 Choose the band volume.
               </span>
@@ -405,7 +408,10 @@ export const Stage: React.FC = () => {
                 className="w-16 accent-[var(--accent)] cursor-pointer"
               />
             </div>
-            <div className="flex items-center gap-2" title="Choose the click volume.">
+            <div
+              className="flex items-center gap-2"
+              title="Choose the click volume."
+            >
               <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
                 Choose the click volume.
               </span>
@@ -587,7 +593,9 @@ export const Stage: React.FC = () => {
               variant={band.follow_energy ? "primary" : "secondary"}
               onClick={toggleFollowEnergy}
             >
-              {band.follow_energy ? "This follows your playing." : "This is fixed intensity."}
+              {band.follow_energy
+                ? "This follows your playing."
+                : "This is fixed intensity."}
             </Button>
             {band.follow_energy && (
               <div className="flex items-center gap-1.5">

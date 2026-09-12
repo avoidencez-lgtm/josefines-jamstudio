@@ -133,8 +133,8 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
         <section className="song-empty">
           <h2>Start with your own idea.</h2>
           <p>
-            Create this new song, then use Record & layers to capture a riff. You
-            can add a recorded idea whenever you are ready.
+            Create this new song, then use Record & layers to capture a riff.
+            You can add a recorded idea whenever you are ready.
           </p>
           <Button variant="primary" onClick={w.createSong}>
             Create this new song.
@@ -229,7 +229,10 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
             </button>
           </output>
           <div className="write-navigation">
-            <nav className="write-views" aria-label="These are the writing views.">
+            <nav
+              className="write-views"
+              aria-label="These are the writing views."
+            >
               {(
                 [
                   ["compose", "Compose"],
@@ -576,7 +579,9 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                       run(() => w.arm(w.captureSeconds ? 0 : captureLength))
                     }
                   >
-                    {w.captureSeconds ? "Disarm this capture." : "Arm this capture."}
+                    {w.captureSeconds
+                      ? "Disarm this capture."
+                      : "Arm this capture."}
                   </Button>
                   <Button
                     variant="primary"

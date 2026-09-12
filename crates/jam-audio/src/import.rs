@@ -433,12 +433,20 @@ mod tests {
             .collect();
         let mid = resample_stereo(&orig, 48_000, 44_100).unwrap();
         let mut converter = Converter::new(44_100, 48_000).unwrap();
-        converter
-            .push(&mid, 2, &AtomicBool::new(false))
-            .unwrap();
+        converter.push(&mid, 2, &AtomicBool::new(false)).unwrap();
         let back = converter.finish(&AtomicBool::new(false)).unwrap();
-        let a: Vec<f64> = orig.chunks_exact(2).map(|c| c[0] as f64).collect();
-        let b: Vec<f64> = back.chunks_exact(2).map(|c| c[0] as f64).collect();
+        let a: Vec<f64> = orig
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| c[0] as f64)
+            .collect();
+        let b: Vec<f64> = back
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| c[0] as f64)
+            .collect();
         let mut best = (0isize, f64::NEG_INFINITY);
         for lag in -256isize..=256 {
             let (x, y) = overlap(&a, &b, lag);
@@ -466,7 +474,7 @@ mod tests {
 
     fn overlap(a: &[f64], b: &[f64], lag: isize) -> (Vec<f64>, Vec<f64>) {
         let (a, b) = if lag >= 0 {
-            (&a[lag as usize..], b.as_ref())
+            (&a[lag as usize..], b)
         } else {
             (a, &b[(-lag) as usize..])
         };

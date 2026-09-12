@@ -443,10 +443,11 @@ fn band_telemetry(seq: &BandSequencer) -> BandTelemetry {
         kit_source: seq.kit_status.source.into(),
         kit_message: seq.kit_status.message.clone(),
         bass_source: seq.bass_source().0.into(),
-        bass_message: seq.bass_source().1.into(),
+        bass_message: seq.bass_source().1,
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_ahead_needed(
     tone: &AtomicBool,
     tuner: &AtomicBool,
@@ -1291,7 +1292,9 @@ impl AudioEngine {
             match cpal_out.start(cb) {
                 Ok(()) => (Box::new(cpal_out), prod, input, captured),
                 Err(e) => {
-                    problems.push(format!("The output audio device failed. {e} Running headless."));
+                    problems.push(format!(
+                        "The output audio device failed. {e} Running headless."
+                    ));
                     status.mode = EngineMode::Headless;
                     let (prod, cb, input, captured) = make_output();
                     let mut null = NullOutput::new(requested_rate, requested_buffer as usize);
@@ -1658,6 +1661,7 @@ impl AudioEngine {
                         let mut calib_gen = 0u32;
                         if let Some(run) = calib.lock().as_mut() {
                             calib_gen = run.gen;
+                            #[allow(clippy::needless_range_loop)]
                             for i in 0..block_len {
                                 if run.play_i < run.play.len() {
                                     let sample = run.play[run.play_i];
@@ -2851,7 +2855,11 @@ mod tests {
         engine.start().unwrap();
         assert_eq!(engine.status().mode, EngineMode::Headless);
         assert_eq!(
-            engine.status().output.as_ref().map(|o| o.device_name.as_str()),
+            engine
+                .status()
+                .output
+                .as_ref()
+                .map(|o| o.device_name.as_str()),
             Some("headless")
         );
         engine.stop().unwrap();
@@ -2898,7 +2906,10 @@ mod tests {
             if got.len() >= 24_000 + 256 {
                 break got;
             }
-            assert!(Instant::now() < deadline, "FileInput did not reach sample 24000");
+            assert!(
+                Instant::now() < deadline,
+                "FileInput did not reach sample 24000"
+            );
             thread::sleep(Duration::from_millis(5));
         };
         input.stop().unwrap();

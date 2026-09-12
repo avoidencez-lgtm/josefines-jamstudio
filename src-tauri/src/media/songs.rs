@@ -216,7 +216,13 @@ pub(super) async fn store(base: &Path, mut a: Asset) -> Result<Asset, String> {
             );
         }
         sync_file(&decoded)?;
-        for key in ["songAnalysis", "referenceGrid", "estimatedGrid", "providerAnalysis", "stemSet"] {
+        for key in [
+            "songAnalysis",
+            "referenceGrid",
+            "estimatedGrid",
+            "providerAnalysis",
+            "stemSet",
+        ] {
             if let Some(value) = a.extra.get_mut(key) {
                 // Stale/unknown analysis stays stale; migration cannot certify it.
                 if value["schemaVersion"] == 1 && value["sourceHash"] == old_hash {
@@ -307,7 +313,9 @@ pub(super) fn append_list(base: &Path, result: &mut Value) -> Result<(), String>
             Err(e) => result["warnings"]
                 .as_array_mut()
                 .unwrap()
-                .push(json!(format!("The song {id} is invalid. {e} File left intact."))),
+                .push(json!(format!(
+                    "The song {id} is invalid. {e} File left intact."
+                ))),
         }
     }
     Ok(())

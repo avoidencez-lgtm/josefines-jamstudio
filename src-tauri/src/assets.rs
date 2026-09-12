@@ -4,10 +4,10 @@ use crate::net;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use tauri::Emitter;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
+use tauri::Emitter;
 
 const EMPTY_SHA: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const RELEASE_PREFIX: &str =
@@ -80,12 +80,14 @@ fn sha256_file(path: &Path) -> Result<String, String> {
 fn unpack_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
     let file = File::open(zip_path).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipArchive::new(file).map_err(|_| "Invalid sample-pack ZIP.")?;
-    if zip.len() == 0 || zip.len() > 64 {
+    if zip.is_empty() || zip.len() > 64 {
         return Err("Sample-pack ZIP has an unexpected number of files.".into());
     }
     fs::create_dir_all(dest).map_err(|e| e.to_string())?;
     for i in 0..zip.len() {
-        let mut entry = zip.by_index(i).map_err(|_| "Unreadable sample-pack ZIP entry.")?;
+        let mut entry = zip
+            .by_index(i)
+            .map_err(|_| "Unreadable sample-pack ZIP entry.")?;
         let rel = entry
             .enclosed_name()
             .ok_or("Unsafe path in sample-pack ZIP.")?;
@@ -200,7 +202,7 @@ async fn download_resume(url: &str, part: &Path, expected: u64) -> Result<(), St
     };
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
         file.write_all(&chunk).map_err(|e| e.to_string())?;
-        if file.seek(SeekFrom::Current(0)).map_err(|e| e.to_string())? > MAX_ZIP {
+        if file.stream_position().map_err(|e| e.to_string())? > MAX_ZIP {
             return Err("Sample pack is larger than 64 MB.".into());
         }
     }
@@ -224,7 +226,8 @@ fn status_for(pack: &Pack) -> PackStatus {
         .into(),
         live: false,
         message: if dest.join("kit.json").is_file() {
-            "Pack is unpacked. The band loads kit.json and WAVs from this folder when you play.".into()
+            "Pack is unpacked. The band loads kit.json and WAVs from this folder when you play."
+                .into()
         } else if dest.join("bass.sf2").is_file() {
             "Pack is unpacked. The band loads bass.sf2 and comp.sf2 when you play.".into()
         } else if missing {
@@ -245,8 +248,7 @@ pub async fn ensure(ids: &[String]) -> Result<Vec<PackStatus>, String> {
             .into_iter()
             .map(|mut pack| {
                 pack.state = "synthetic".into();
-                pack.message =
-                    "Synthetic kit only. No GitHub Release zip was downloaded.".into();
+                pack.message = "Synthetic kit only. No GitHub Release zip was downloaded.".into();
                 pack
             })
             .collect());
@@ -380,11 +382,8 @@ mod tests {
         assert!(dir.join("sf2out/bass.sf2").is_file());
 
         let mut bad = zip::ZipWriter::new(File::create(dir.join("bad.zip")).unwrap());
-        bad.start_file(
-            "../escape.wav",
-            zip::write::SimpleFileOptions::default(),
-        )
-        .unwrap();
+        bad.start_file("../escape.wav", zip::write::SimpleFileOptions::default())
+            .unwrap();
         bad.write_all(&[0u8; 8]).unwrap();
         bad.finish().unwrap();
         assert!(unpack_zip(&dir.join("bad.zip"), &dir.join("out2")).is_err());
@@ -417,15 +416,15 @@ mod tests {
             "{}",
             sf2_dir.display()
         );
-        assert_eq!(sha256_file(&kit_zip).unwrap(), packs_sha("standard-rock-kit"));
+        assert_eq!(
+            sha256_file(&kit_zip).unwrap(),
+            packs_sha("standard-rock-kit")
+        );
         assert_eq!(
             sha256_file(&sf2_zip).unwrap(),
             packs_sha("freepats-bass-comp")
         );
-        assert!(
-            packs.iter().all(|p| p.state == "ready"),
-            "{packs:?}"
-        );
+        assert!(packs.iter().all(|p| p.state == "ready"), "{packs:?}");
         eprintln!("home={}", root.display());
         eprintln!(
             "kit.zip={} {}",
@@ -440,10 +439,6 @@ mod tests {
     }
 
     fn packs_sha(id: &str) -> String {
-        packs()
-            .into_iter()
-            .find(|p| p.id == id)
-            .unwrap()
-            .sha256
+        packs().into_iter().find(|p| p.id == id).unwrap().sha256
     }
 }

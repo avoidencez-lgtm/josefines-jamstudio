@@ -164,7 +164,9 @@ export const StudioAssistant = memo(function StudioAssistant() {
         aria-controls="studio-assistant"
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-2 rounded-[var(--radius-m)] border border-[var(--line)] bg-[var(--bg-2)] px-3 py-2 text-xs cursor-pointer"
-        aria-label={open ? "Hide this studio assistant." : "This is the studio assistant."}
+        aria-label={
+          open ? "Hide this studio assistant." : "This is the studio assistant."
+        }
       >
         <ChatCircleDots size={18} aria-hidden="true" />
         {open ? "Hide assistant" : "Assistant"}

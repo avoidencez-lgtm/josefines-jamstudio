@@ -285,7 +285,8 @@ export function parseChartText(
     }
   }
 
-  const name = title ?? (sections.length > 0 ? "This is an untitled chart." : "");
+  const name =
+    title ?? (sections.length > 0 ? "This is an untitled chart." : "");
   if (sections.length === 0) {
     problems.push({ line: 1, message: "no bars found" });
   }

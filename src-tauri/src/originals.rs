@@ -114,9 +114,8 @@ fn body(doc: &Value) -> Result<SongBody, String> {
     if !doc["versions"].is_array() {
         return Err("Song version list must be an array.".into());
     }
-    let b: SongBody =
-        serde_json::from_value(doc["body"].clone())
-            .map_err(|e| format!("The song is invalid. {e}"))?;
+    let b: SongBody = serde_json::from_value(doc["body"].clone())
+        .map_err(|e| format!("The song is invalid. {e}"))?;
     // Bound before resolving a chart, so a hand-edited repeat count cannot allocate forever.
     if b.chart.sections.len() > 64
         || b.chart.arrangement.len() > 128

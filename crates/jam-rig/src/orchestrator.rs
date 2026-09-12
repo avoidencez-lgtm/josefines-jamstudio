@@ -354,8 +354,7 @@ impl RigOrchestrator {
         while beats_to_samples(self.next_pulse as f64 / f64::from(crate::PPQN), bpm, 48_000)
             <= horizon
         {
-            let at =
-                beats_to_samples(self.next_pulse as f64 / f64::from(crate::PPQN), bpm, 48_000);
+            let at = beats_to_samples(self.next_pulse as f64 / f64::from(crate::PPQN), bpm, 48_000);
             self.scheduler.schedule_at(at, vec![CLOCK]);
             self.next_pulse += 1;
         }
@@ -518,7 +517,10 @@ mod tests {
         assert!(orch.send_clock_byte(crate::STOP).unwrap());
         assert!(orch.send_clock_byte(crate::CONTINUE).unwrap());
         let kinds: Vec<u8> = orch.monitor().iter().map(|m| m.bytes[0]).collect();
-        assert_eq!(kinds, vec![crate::START, crate::CLOCK, crate::STOP, crate::CONTINUE]);
+        assert_eq!(
+            kinds,
+            vec![crate::START, crate::CLOCK, crate::STOP, crate::CONTINUE]
+        );
         orch.clear_monitor();
         orch.set_dry_run(true);
         orch.send_program(3).unwrap();
@@ -535,7 +537,7 @@ mod tests {
         orch.on_transport_play(0, 120.0).unwrap();
         let first: Vec<u8> = orch.monitor().iter().map(|m| m.bytes[0]).collect();
         assert_eq!(first[0], START);
-        assert!(first.iter().any(|b| *b == CLOCK));
+        assert!(first.contains(&CLOCK));
         orch.clear_monitor();
         orch.on_transport_pause().unwrap();
         assert_eq!(orch.monitor()[0].bytes, vec![STOP]);

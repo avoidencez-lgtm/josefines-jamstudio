@@ -92,8 +92,8 @@ export default function MelodyTool() {
               return notes.length
                 ? `Sketched ${notes.length} notes. Correct any pitch or timing before previewing harmony.`
                 : "No sustained notes found. Try a clearer, louder single-note recording.";
-            })
-          }
+            });
+          }}
         >
           Extract these notes.{isPreview ? " Desktop only." : ""}
         </Button>

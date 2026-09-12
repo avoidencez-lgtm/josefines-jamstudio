@@ -85,7 +85,8 @@ export function AiSettings() {
         </p>
         {!local && keyErrors[draft.selected] && (
           <p role="alert" className="text-sm text-[var(--fg-1)]">
-            Key rejected by provider. {keyErrors[draft.selected]} Open these API keys below to retry the check.
+            Key rejected by provider. {keyErrors[draft.selected]} Open these API
+            keys below to retry the check.
           </p>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -200,12 +201,14 @@ export function AiSettings() {
               Load these provider models.
             </Button>
             <p className="text-sm text-[var(--fg-1)]">
-              The model ID stays editable. The catalog shows the first provider page
-              (up to 100 for Gemini/Claude); enter another model ID manually if
-              absent.
+              The model ID stays editable. The catalog shows the first provider
+              page (up to 100 for Gemini/Claude); enter another model ID
+              manually if absent.
             </p>
             <details>
-              <summary>These are the response limits and cost estimate.</summary>
+              <summary>
+                These are the response limits and cost estimate.
+              </summary>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
                 <label>
                   Maximum output is in tokens.

@@ -44,7 +44,10 @@ export function WorkspaceViews({
   onChange: (value: string) => void;
 }) {
   return (
-    <fieldset className="workspace-views" aria-label="These are the workspace views.">
+    <fieldset
+      className="workspace-views"
+      aria-label="These are the workspace views."
+    >
       {labels.map((label) => (
         <button
           type="button"

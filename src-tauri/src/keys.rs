@@ -180,7 +180,7 @@ mod tests {
         assert!(err.contains("keychain unavailable"), "{err}");
         let err = store.require("gemini").unwrap_err();
         assert!(err.contains("keychain unavailable"), "{err}");
-        assert!(!err.contains("no API key"), "{err}");
+        assert!(!err.contains("No API key"), "{err}");
         assert!(!err.contains("secret"), "{err}");
     }
 

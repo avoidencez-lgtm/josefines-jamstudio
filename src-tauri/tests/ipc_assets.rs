@@ -70,7 +70,12 @@ fn live_assets_ensure_unpacks_release_zips_and_play_reports_file_sources() {
     );
     let kit_zip = root.join("assets/standard-rock-kit.zip");
     let sf2_zip = root.join("assets/freepats-bass-comp.zip");
-    assert_eq!(kit_zip.metadata().unwrap().len(), 334392, "{}", kit_zip.display());
+    assert_eq!(
+        kit_zip.metadata().unwrap().len(),
+        334392,
+        "{}",
+        kit_zip.display()
+    );
     assert_eq!(
         sf2_zip.metadata().unwrap().len(),
         11_286_874,
@@ -139,7 +144,10 @@ fn diagnostics_report_fps_appends_the_user_log() {
     assert!(line.contains("playhead=60.2"), "{line}");
     let log = user_dir().join("logs").join("jamstudio.log");
     let body = std::fs::read_to_string(&log).unwrap();
-    assert!(body.contains("canvas fps meter=59.6 playhead=60.2"), "{body}");
+    assert!(
+        body.contains("canvas fps meter=59.6 playhead=60.2"),
+        "{body}"
+    );
 }
 
 #[test]
@@ -147,7 +155,14 @@ fn logs_export_is_not_configured_without_a_log_folder() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let gate = studio.err("logs_export", json!({}));
-    assert!(gate.contains("not configured") && gate.contains("logs"), "{gate}");
+    assert!(
+        gate.contains("not configured") && gate.contains("logs"),
+        "{gate}"
+    );
     let version = studio.ok("app_version", json!({}));
-    assert!(version.as_str().unwrap().chars().any(|c| c.is_ascii_digit()));
+    assert!(version
+        .as_str()
+        .unwrap()
+        .chars()
+        .any(|c| c.is_ascii_digit()));
 }

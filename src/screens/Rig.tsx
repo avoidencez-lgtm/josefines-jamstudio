@@ -107,7 +107,9 @@ export const Rig: React.FC = () => {
         <SpeakerHifi size={23} aria-hidden="true" />{" "}
         {profile?.name ?? "Choose this profile."}
         <span>
-          {live ? "Sending these control messages." : "Preview only. Messages are logged."}
+          {live
+            ? "Sending these control messages."
+            : "Preview only. Messages are logged."}
         </span>
       </div>
       {midiPortsError && (
@@ -161,9 +163,7 @@ export const Rig: React.FC = () => {
               <StatusPill
                 status={live ? "ok" : "idle"}
                 label={
-                  live
-                    ? `Open on ${rigState?.port}.`
-                    : "No MIDI port is open."
+                  live ? `Open on ${rigState?.port}.` : "No MIDI port is open."
                 }
               />
             </div>
@@ -439,7 +439,9 @@ export const Rig: React.FC = () => {
                     className={`w-2 h-2 rounded-full shrink-0 ${
                       m.live ? "bg-[var(--accent)]" : "bg-[var(--fg-2)]/40"
                     }`}
-                    title={m.live ? "Sent to the port." : "This is logged only."}
+                    title={
+                      m.live ? "Sent to the port." : "This is logged only."
+                    }
                   />
                   <span className="text-[var(--fg-0)] w-40 shrink-0">
                     {m.text}

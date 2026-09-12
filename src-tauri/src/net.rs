@@ -172,10 +172,14 @@ pub fn validate(req: &FetchRequest) -> Result<(&'static ProviderEntry, String), 
         .ok_or_else(|| format!("Provider \"{}\" is not on the allow-list.", req.provider))?;
     let path = req.path.as_str();
     if !path.starts_with('/') || path.starts_with("//") {
-        return Err(format!("The path must start with a single '/'. Got {path:?}."));
+        return Err(format!(
+            "The path must start with a single '/'. Got {path:?}."
+        ));
     }
     if path.contains("://") || path.contains('@') || path.contains("..") || path.contains('\\') {
-        return Err(format!("The path may not point outside the provider. Got {path:?}."));
+        return Err(format!(
+            "The path may not point outside the provider. Got {path:?}."
+        ));
     }
     if path.chars().any(|c| c.is_control() || c.is_whitespace()) {
         return Err("The path contains whitespace or control characters.".into());
@@ -247,7 +251,8 @@ impl CostLog {
 
     pub fn append(&self, entry: &CostEntry) -> Result<(), String> {
         if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("Cannot create {}. {e}", parent.display()))?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Cannot create {}. {e}", parent.display()))?;
         }
         let mut f = std::fs::OpenOptions::new()
             .create(true)
@@ -492,12 +497,13 @@ fn llm_tokens(body: &str) -> LlmTokens {
         .get("completion_tokens")
         .or_else(|| usage.get("output_tokens"))
         .and_then(|v| v.as_u64());
-    let total = usage.get("total_tokens").and_then(|v| v.as_u64()).or_else(|| {
-        match (prompt, completion) {
+    let total = usage
+        .get("total_tokens")
+        .and_then(|v| v.as_u64())
+        .or_else(|| match (prompt, completion) {
             (Some(p), Some(c)) => Some(p.saturating_add(c)),
             _ => None,
-        }
-    });
+        });
     LlmTokens {
         prompt,
         completion,
@@ -572,9 +578,8 @@ mod tests {
             (openai.prompt, openai.completion, openai.total),
             (Some(8), Some(2), Some(10))
         );
-        let chat = llm_tokens(
-            r#"{"usage":{"prompt_tokens":4,"completion_tokens":6,"total_tokens":10}}"#,
-        );
+        let chat =
+            llm_tokens(r#"{"usage":{"prompt_tokens":4,"completion_tokens":6,"total_tokens":10}}"#);
         assert_eq!(chat.total, Some(10));
         assert_eq!(llm_tokens("not-json").total, None);
         assert_eq!(llm_tokens(r#"{"ok":true}"#).prompt, None);
@@ -688,7 +693,7 @@ mod tests {
         let err = provider_fetch(req("gemini", "/v1beta/models"), &store, &log)
             .await
             .unwrap_err();
-        assert!(err.contains("no API key"), "{err}");
+        assert!(err.contains("No API key"), "{err}");
         assert!(
             log.list(10).is_empty(),
             "nothing is logged when nothing was sent"
@@ -708,7 +713,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("keychain unavailable"), "{err}");
-        assert!(!err.contains("no API key"), "{err}");
+        assert!(!err.contains("No API key"), "{err}");
         assert!(
             log.list(10).is_empty(),
             "nothing is logged when the keychain cannot be read"

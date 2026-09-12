@@ -80,7 +80,9 @@ export function SongLab() {
             ))}
           </select>
         </label>
-        <Button onClick={() => setScreen("settings")}>Open these AI settings.</Button>
+        <Button onClick={() => setScreen("settings")}>
+          Open these AI settings.
+        </Button>
       </div>
       <label className="song-chords">
         Write your direction.

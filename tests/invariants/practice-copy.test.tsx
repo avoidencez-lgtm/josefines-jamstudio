@@ -36,7 +36,9 @@ it("offers bounded practice controls beside a real library selection and keeps p
     expect(html).toContain('min="50" max="150"');
     expect(html).toContain('value="-12"');
     expect(html).toContain('value="12"');
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Create this practice copy./);
+    expect(html).toMatch(
+      /<button[^>]*disabled=""[^>]*>Create this practice copy./,
+    );
     expect(html).not.toContain("<audio");
     expect(html).toContain(
       "I agree to upload this song and pay the provider charge.",

@@ -57,7 +57,10 @@ impl Grid {
             })
             || self.sections.len() > 64
         {
-            return Err("Invalid beat map. Confirm bars in Songs, or reanalyze for an estimated grid.".into());
+            return Err(
+                "Invalid beat map. Confirm bars in Songs, or reanalyze for an estimated grid."
+                    .into(),
+            );
         }
         let bars = (self.beats.len() - 1) / self.beats_per_bar;
         if self.sections.iter().enumerate().any(|(i, s)| {

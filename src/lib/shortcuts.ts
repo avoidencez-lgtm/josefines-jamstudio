@@ -25,7 +25,8 @@ const key = (k: string) => (e: KeyboardEvent) =>
 export const SHORTCUTS: Shortcut[] = [
   {
     keys: "Q",
-    description: "Toggle this reference practice ramp using the current session settings.",
+    description:
+      "Toggle this reference practice ramp using the current session settings.",
     group: "Practice",
     matches: code("KeyQ"),
     run: toggleReferenceRamp,
@@ -135,7 +136,8 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     keys: "1 – 9",
-    description: "Jump to this bar. The range is 1–9 from the start of the form.",
+    description:
+      "Jump to this bar. The range is 1–9 from the start of the form.",
     group: "Practice",
     matches: (e) =>
       /^Digit[1-9]$/.test(e.code) && !e.ctrlKey && !e.metaKey && !e.altKey,

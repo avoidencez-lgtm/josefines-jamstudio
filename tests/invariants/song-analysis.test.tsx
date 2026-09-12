@@ -102,5 +102,5 @@ it("validates saved local measurements, groups passages without rewriting eviden
   ).toContain("Tempo was not found.");
   expect(
     renderToStaticMarkup(createElement(SongAnalysis, { value: {} })),
-  ).toContain("Analyze again.");
+  ).toContain("Analyze again to replace it.");
 });

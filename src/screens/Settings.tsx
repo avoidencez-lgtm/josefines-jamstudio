@@ -79,10 +79,7 @@ const EngineStatusView: React.FC<{
       "These are the stream errors.",
       `The stream has ${status.stream_errors} errors.`,
     ],
-    [
-      "These are the input gaps.",
-      `The input has ${status.input_gaps} gaps.`,
-    ],
+    ["These are the input gaps.", `The input has ${status.input_gaps} gaps.`],
   ];
   return (
     <div className="flex flex-col gap-3">
@@ -261,29 +258,30 @@ export const Settings: React.FC = () => {
             </li>
             <li>
               Store provider keys in AI & models. Keys live in the OS keychain.
-              Test this key stays not configured. Check this key status looks only in the keychain.
+              Test this key stays not configured. Check this key status looks
+              only in the keychain.
             </li>
             <li>
-              Open Rig, create a loopMIDI or IAC port, then Check this virtual MIDI.
-              HeadRush and Black Spirit are not claimed here.
+              Open Rig, create a loopMIDI or IAC port, then Check this virtual
+              MIDI. HeadRush and Black Spirit are not claimed here.
             </li>
             <li>
-              Check these sample packs After unpack, the band plays kit.json/WAVs and
-              FreePats bass.sf2/comp.sf2 from JosefinesJamstudio/assets. A
-              missing pack stays synthetic or sine and says so. Download needs
-              JAM_LIVE=1. See docs/guide/setup.md.
+              Check these sample packs After unpack, the band plays
+              kit.json/WAVs and FreePats bass.sf2/comp.sf2 from
+              JosefinesJamstudio/assets. A missing pack stays synthetic or sine
+              and says so. Download needs JAM_LIVE=1. See docs/guide/setup.md.
             </li>
             <li>
               These are the diagnostics. Reduced motion is saved as
-              ui.reducedMotion. Meter
-              and playhead fps are rAF reports, not a 60 fps pass. The tuner
-              starts off so Stage shows tempo and bar.
+              ui.reducedMotion. Meter and playhead fps are rAF reports, not a 60
+              fps pass. The tuner starts off so Stage shows tempo and bar.
             </li>
             <li>
-              In Songs, import a track, mark the guitar, Check this guitar residual, then Load this minus-guitar mix. In Sessions, record a take, read
-              Progress from the take files, export, and open README.txt. Opening
-              Logic and real-song residual at or below -6 dB stay V2 / not
-              claimed.
+              In Songs, import a track, mark the guitar, Check this guitar
+              residual, then Load this minus-guitar mix. In Sessions, record a
+              take, read Progress from the take files, export, and open
+              README.txt. Opening Logic and real-song residual at or below -6 dB
+              stay V2 / not claimed.
             </li>
             <li>
               Signing and notarisation are not configured. Installers stay

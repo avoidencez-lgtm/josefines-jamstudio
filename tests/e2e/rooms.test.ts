@@ -426,7 +426,9 @@ describe("rooms, end to end through the preview engine", () => {
     expect(store.rigState?.currentProfile.id).toBe("headrush-pedalboard");
     expect(store.rigState?.followSections).toBe(true);
     expect(store.rigState?.live).toBe(false);
-    expect(store.midiPorts).toEqual([{ name: "Preview MIDI Out is simulated." }]);
+    expect(store.midiPorts).toEqual([
+      { name: "Preview MIDI Out is simulated." },
+    ]);
     expect(store.midiPortsError).toBeNull();
 
     await store.selectRigProfile("black-spirit-200");

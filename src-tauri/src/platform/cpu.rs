@@ -29,9 +29,7 @@ pub fn sample(window: Duration) -> IdleCpuSample {
     let wall0 = Instant::now();
     std::thread::sleep(window);
     let wall = wall0.elapsed().as_secs_f64().max(1e-6);
-    let percent = process_cpu_seconds().map(|end| {
-        (100.0 * (end - start).max(0.0) / wall) as f32
-    });
+    let percent = process_cpu_seconds().map(|end| (100.0 * (end - start).max(0.0) / wall) as f32);
     let measured = percent
         .map(|p| format!("This process used {p:.1}% of one core over {seconds:.1} s. "))
         .unwrap_or_default();
@@ -134,7 +132,10 @@ mod tests {
     fn idle_sample_is_finite_and_never_proven() {
         let sample = sample(Duration::from_millis(50));
         assert!(!sample.proven, "{sample:?}");
-        assert!(sample.message.contains("Idle CPU is not proven"), "{sample:?}");
+        assert!(
+            sample.message.contains("Idle CPU is not proven"),
+            "{sample:?}"
+        );
         assert!(sample.message.contains("WebView+engine"), "{sample:?}");
         if let Some(percent) = sample.percent {
             assert!(percent.is_finite() && percent >= 0.0, "{percent}");

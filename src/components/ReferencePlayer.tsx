@@ -42,14 +42,22 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
     }
   };
   return (
-    <section className="workspace-stack" aria-label="This is the reference player.">
+    <section
+      className="workspace-stack"
+      aria-label="This is the reference player."
+    >
       <div>
         <h2>{song.label}</h2>
         <p className="workspace-note">
-          {song.state === "playing" ? "This reference is playing." : song.state === "paused" ? "This reference is paused." : "This reference is stopped."}
+          {song.state === "playing"
+            ? "This reference is playing."
+            : song.state === "paused"
+              ? "This reference is paused."
+              : "This reference is stopped."}
         </p>
         <p className="font-mono tabular-nums">
-          This is {song.position.toFixed(1)} / {song.seconds.toFixed(1)} seconds of the source.
+          This is {song.position.toFixed(1)} / {song.seconds.toFixed(1)} seconds
+          of the source.
         </p>
       </div>
       {song.grid ? (
@@ -59,7 +67,8 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
         >
           <h3 className="font-semibold">These are the bars and sections.</h3>
           <p className="workspace-note">
-            Confirmed from local estimates. This has {song.grid.beats_per_bar} beats per bar. {song.grid.bars} bars are complete.
+            Confirmed from local estimates. This has {song.grid.beats_per_bar}{" "}
+            beats per bar. {song.grid.bars} bars are complete.
           </p>
           <p className="font-mono tabular-nums">
             {song.grid.position
@@ -89,10 +98,12 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
             </p>
           )}
           <p className="workspace-note">
-            {song.grid.origin === "estimated-local" ? "Section loops start at the estimated downbeat." : "Section loops start at the confirmed downbeat."}{" "}
-            Press Play if the reference is paused. The readout follows
-            audio consumed by the output; queued audio finishes before a new
-            loop is heard.
+            {song.grid.origin === "estimated-local"
+              ? "Section loops start at the estimated downbeat."
+              : "Section loops start at the confirmed downbeat."}{" "}
+            Press Play if the reference is paused. The readout follows audio
+            consumed by the output; queued audio finishes before a new loop is
+            heard.
             {song.grid.origin === "estimated-local"
               ? " This map is a local 4/4 guess from the first beat. Confirm bars in Songs before a practice ramp. Music.ai estimates never write this grid."
               : " Names and beat grouping were entered by you, not detected automatically."}
@@ -108,14 +119,20 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
         >
           <p className="workspace-note">
             Local estimates. Low confidence.{" "}
-            {song.analysis.key ? `${song.analysis.key}.` : "This key is unknown."}
+            {song.analysis.key
+              ? `${song.analysis.key}.`
+              : "This key is unknown."}
             {song.analysis.bpm !== null &&
               ` ${song.analysis.bpm.toFixed(1)} BPM.`}
           </p>
           <p className="text-2xl font-semibold">
-            {song.analysis.chord ? `This chord is ${song.analysis.chord}.` : "This chord is unknown."}
+            {song.analysis.chord
+              ? `This chord is ${song.analysis.chord}.`
+              : "This chord is unknown."}
             <span className="ml-6 text-base font-normal">
-              {song.analysis.next_chord ? `Next is ${song.analysis.next_chord}.` : "Next is unknown."}
+              {song.analysis.next_chord
+                ? `Next is ${song.analysis.next_chord}.`
+                : "Next is unknown."}
             </span>
           </p>
           <p className="workspace-note">
@@ -141,7 +158,9 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
               [song.state === "playing" ? "transportPause" : "transportPlay"]()
           }
         >
-          {song.state === "playing" ? "Pause the reference." : "Play the reference."}
+          {song.state === "playing"
+            ? "Pause the reference."
+            : "Play the reference."}
         </Button>
         <Button
           disabled={locked}

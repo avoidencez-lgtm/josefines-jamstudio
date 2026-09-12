@@ -44,7 +44,9 @@ export function StemMixer({ song }: { song: ReferenceState }) {
         mutes apply together and are saved with this song.
       </p>
       <fieldset disabled={locked} className="workspace-stack">
-        <legend className="sr-only">These are the track levels and mutes.</legend>
+        <legend className="sr-only">
+          These are the track levels and mutes.
+        </legend>
         {mix.map((stem, index) => (
           <div key={stem.id} className="workspace-actions">
             <label className="room-tool-field">

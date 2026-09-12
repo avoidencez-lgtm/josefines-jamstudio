@@ -233,7 +233,8 @@ export function createPreviewEngine(
     sendClock: false,
     dryRun: false,
     port: null,
-    portDescription: "No MIDI port is open. Browser preview only logs messages.",
+    portDescription:
+      "No MIDI port is open. Browser preview only logs messages.",
     live: false,
     monitor: [],
   };

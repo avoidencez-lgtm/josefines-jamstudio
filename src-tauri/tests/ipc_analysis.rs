@@ -68,10 +68,7 @@ fn guitar_residual_is_not_configured_without_marked_stems() {
     let source = user_dir().join(format!("{}.wav", unique("residual")));
     write_tone(&source);
     let asset = studio.ok("media_import", json!({"path":source,"kind":"audio"}));
-    let residual = studio.err(
-        "media_guitar_residual",
-        json!({"assetId": asset["id"]}),
-    );
+    let residual = studio.err("media_guitar_residual", json!({"assetId": asset["id"]}));
     assert!(
         residual.contains("not configured") && residual.contains("-6"),
         "{residual}"
@@ -92,8 +89,8 @@ fn guitar_residual_writes_minus_guitar_mix_when_stems_are_marked() {
     write_stereo_tone(&guitar, 440.0);
     write_stereo_tone(&band, 0.0);
     let manifest = dir.join("song.json");
-    let mut doc = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap())
-        .unwrap();
+    let mut doc =
+        serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap()).unwrap();
     let hash = doc["sourceHash"].as_str().unwrap().to_string();
     doc["stemSet"] = json!({
         "schemaVersion": 1,
@@ -118,8 +115,8 @@ fn guitar_residual_writes_minus_guitar_mix_when_stems_are_marked() {
         mix.canonicalize().unwrap(),
         dir.join("minus-guitar.wav").canonicalize().unwrap()
     );
-    let saved = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap())
-        .unwrap();
+    let saved =
+        serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap()).unwrap();
     assert_eq!(saved["minusGuitar"]["path"], "minus-guitar.wav");
     assert_eq!(saved["minusGuitar"]["pass"], true);
     studio.ok(
@@ -166,8 +163,8 @@ fn minus_guitar_load_is_loud_when_the_mix_file_is_gone() {
     write_stereo_tone(&dir.join("guitar.wav"), 440.0);
     write_stereo_tone(&dir.join("band.wav"), 0.0);
     let manifest = dir.join("song.json");
-    let mut doc = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap())
-        .unwrap();
+    let mut doc =
+        serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap()).unwrap();
     let hash = doc["sourceHash"].as_str().unwrap().to_string();
     doc["stemSet"] = json!({
         "schemaVersion": 1,
@@ -189,7 +186,8 @@ fn minus_guitar_load_is_loud_when_the_mix_file_is_gone() {
         json!({"assetId": id, "useMinusGuitar": true}),
     );
     assert!(
-        err.contains("minus-guitar.wav is missing") && err.contains("Check this guitar residual again"),
+        err.contains("minus-guitar.wav is missing")
+            && err.contains("Check this guitar residual again"),
         "{err}"
     );
 }
@@ -206,8 +204,8 @@ fn recorded_musicai_fixture_persists_without_writing_the_grid() {
         .parent()
         .unwrap()
         .join("song.json");
-    let before = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap())
-        .unwrap();
+    let before =
+        serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap()).unwrap();
     assert!(before.get("referenceGrid").is_none());
     std::env::set_var("JAM_MUSICAI_FIXTURE", "1");
     let saved = studio.ok(
@@ -221,8 +219,8 @@ fn recorded_musicai_fixture_persists_without_writing_the_grid() {
     assert_eq!(saved["providerAnalysis"]["bpm"], 120.0);
     assert_eq!(saved["providerAnalysis"]["key"], "C Major");
     assert!(saved.get("referenceGrid").is_none());
-    let after = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap())
-        .unwrap();
+    let after =
+        serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap()).unwrap();
     assert!(after.get("referenceGrid").is_none());
     assert_eq!(after["providerAnalysis"]["sourceHash"], after["sourceHash"]);
 }

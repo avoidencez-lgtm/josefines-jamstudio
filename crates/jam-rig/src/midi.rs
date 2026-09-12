@@ -52,7 +52,8 @@ pub struct MidiPortInfo {
 /// Output ports the OS exposes right now. An error here means the MIDI subsystem
 /// itself is unavailable (not merely that nothing is plugged in).
 pub fn list_output_ports() -> Result<Vec<MidiPortInfo>, String> {
-    let out = MidiOutput::new(CLIENT_NAME).map_err(|e| format!("MIDI output is unavailable. {e}"))?;
+    let out =
+        MidiOutput::new(CLIENT_NAME).map_err(|e| format!("MIDI output is unavailable. {e}"))?;
     let mut ports = Vec::new();
     for p in out.ports() {
         let name = out

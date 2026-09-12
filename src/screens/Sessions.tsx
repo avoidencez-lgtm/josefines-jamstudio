@@ -318,7 +318,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
                   setFavourites(false);
                 }}
               >
-                Clear search
+                Clear this search.
               </Button>
             </div>
           </div>
@@ -328,7 +328,8 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
             <CassetteTape size={40} aria-hidden="true" />
             <p>Your first take will appear here.</p>
             <p className="text-[var(--fg-1)]">
-              Hit <strong>Record a new take</strong> to record multi-track stems.
+              Hit <strong>Record a new take</strong> to record multi-track
+              stems.
             </p>
           </div>
         ) : (

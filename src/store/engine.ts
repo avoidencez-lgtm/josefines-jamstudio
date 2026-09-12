@@ -674,7 +674,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
     },
     deleteTake: async (takeId) => {
       if (
-        await runOk("The delete take", () => ipc.invoke("takes_delete", { takeId }))
+        await runOk("The delete take", () =>
+          ipc.invoke("takes_delete", { takeId }),
+        )
       )
         set((state) => ({ takes: state.takes.filter((t) => t.id !== takeId) }));
     },
@@ -729,7 +731,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
         set({ rigState: state });
         get().notify(
           "info",
-          state.live ? `MIDI output is ${state.port}.` : "The MIDI port is closed.",
+          state.live
+            ? `MIDI output is ${state.port}.`
+            : "The MIDI port is closed.",
         );
       }
     },
@@ -774,7 +778,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
       return analysis;
     },
     reviewTake: async (takeId) => {
-      return run("The take review", () => ipc.invoke("takes_review", { takeId }));
+      return run("The take review", () =>
+        ipc.invoke("takes_review", { takeId }),
+      );
     },
     exportTakeDaw: async (takeId) => {
       const report = await run("The export take", () =>
@@ -819,7 +825,8 @@ export const useEngineStore = create<EngineState>((set, get) => {
           settings: s.settings ? { ...s.settings, ...config } : s.settings,
         }));
         if (status.last_error) get().notify("error", status.last_error);
-        else get().notify("info", `Audio is running at ${status.sample_rate} Hz.`);
+        else
+          get().notify("info", `Audio is running at ${status.sample_rate} Hz.`);
       } else {
         // The engine restarted anyway (possibly headless); show what it is doing now.
         await get().refreshEngineStatus();

@@ -83,7 +83,10 @@ export const Jo: React.FC = () => {
         {lastBrain && <span>Last reply used {lastBrain}.</span>}
         <span>These are text commands and optional ElevenLabs voice.</span>
       </div>
-      <div className="jo-suggestions" aria-label="These are the suggested prompts.">
+      <div
+        className="jo-suggestions"
+        aria-label="These are the suggested prompts."
+      >
         {[
           "Set tempo to 100.",
           "Drop the bass.",

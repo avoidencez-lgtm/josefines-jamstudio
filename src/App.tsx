@@ -118,10 +118,12 @@ export const App: React.FC = () => {
         else cleanup = off;
       })
       .catch((e) =>
-        useEngineStore.getState().notify(
-          "error",
-          `Could not watch the close request. ${String(e).replace(/^Error:\s*/, "")}`,
-        ),
+        useEngineStore
+          .getState()
+          .notify(
+            "error",
+            `Could not watch the close request. ${String(e).replace(/^Error:\s*/, "")}`,
+          ),
       );
     return () => {
       disposed = true;
@@ -149,10 +151,12 @@ export const App: React.FC = () => {
         else off = cleanup;
       })
       .catch((e) =>
-        useEngineStore.getState().notify(
-          "error",
-          `Could not watch the quit request. ${String(e).replace(/^Error:\s*/, "")}`,
-        ),
+        useEngineStore
+          .getState()
+          .notify(
+            "error",
+            `Could not watch the quit request. ${String(e).replace(/^Error:\s*/, "")}`,
+          ),
       );
     return () => {
       disposed = true;
@@ -214,10 +218,12 @@ export const App: React.FC = () => {
         else cleanup = c;
       })
       .catch((e) =>
-        useEngineStore.getState().notify(
-          "error",
-          `Could not start the studio. ${String(e).replace(/^Error:\s*/, "")}`,
-        ),
+        useEngineStore
+          .getState()
+          .notify(
+            "error",
+            `Could not start the studio. ${String(e).replace(/^Error:\s*/, "")}`,
+          ),
       );
     return () => {
       disposed = true;
@@ -389,10 +395,13 @@ export const App: React.FC = () => {
             Keep your unsaved work?
           </h2>
           <p className="mb-5 text-sm">
-            Your song, chart or film has unsaved changes. Keep these edits before you close.
+            Your song, chart or film has unsaved changes. Keep these edits
+            before you close.
           </p>
           <div className="flex gap-3">
-            <Button onClick={() => setShowClose(false)}>Keep these edits.</Button>
+            <Button onClick={() => setShowClose(false)}>
+              Keep these edits.
+            </Button>
             <Button
               variant="danger"
               onClick={async () => {

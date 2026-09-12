@@ -78,7 +78,10 @@ pub fn validate(config: &Config) -> Result<(), String> {
         || !config.brightness.is_finite()
         || !(0.0..=1.0).contains(&config.brightness)
     {
-        return Err("Choose 1–8 prompts, 40–240 BPM as a request, and density/brightness from 0 to 1.".into());
+        return Err(
+            "Choose 1–8 prompts, 40–240 BPM as a request, and density/brightness from 0 to 1."
+                .into(),
+        );
     }
     Ok(())
 }
@@ -154,7 +157,9 @@ pub fn decode_audio(value: &Value) -> Result<Vec<i16>, String> {
         }
         samples.extend(
             bytes
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|s| i16::from_le_bytes([s[0], s[1]])),
         );
     }
@@ -283,8 +288,8 @@ impl Machine {
 
     pub fn apply(&mut self, patch: Config) -> Result<(), String> {
         validate(&patch)?;
-        let reset = (patch.bpm - self.config.bpm).abs() > f64::EPSILON
-            || patch.scale != self.config.scale;
+        let reset =
+            (patch.bpm - self.config.bpm).abs() > f64::EPSILON || patch.scale != self.config.scale;
         self.config = patch;
         self.send(prompt_message(&self.config.prompts));
         self.send(config_message(&self.config));
@@ -344,7 +349,10 @@ mod tests {
             })
             .unwrap();
         assert_eq!(machine.config.bpm, 110.0);
-        assert_eq!(machine.outbound.last().unwrap()["playbackControl"], "RESET_CONTEXT");
+        assert_eq!(
+            machine.outbound.last().unwrap()["playbackControl"],
+            "RESET_CONTEXT"
+        );
         assert!(!machine.status().drives_clock);
     }
 

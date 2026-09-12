@@ -344,8 +344,12 @@ pub async fn media_separate_stems(
     .await;
     receipt["status"] = json!(if result.is_ok() { "ready" } else { "failed" });
     receipt["error"] = json!(result.as_ref().err());
-    write(&receipt_path, &receipt)
-        .map_err(|e| format!("{e}. The stem recovery folder is {}.", receipt_dir.display()))?;
+    write(&receipt_path, &receipt).map_err(|e| {
+        format!(
+            "{e}. The stem recovery folder is {}.",
+            receipt_dir.display()
+        )
+    })?;
     result.map_err(|e| format!("{e} The stem recovery folder is {}. Import stems.zip locally if it was downloaded; check provider history before any paid retry.", receipt_dir.display()))?;
     Ok(receipt)
 }

@@ -143,7 +143,10 @@ interface MediaLibrary {
   assets: MediaAsset[];
   jobs: MediaJob[];
 }
-export function newShot(title = "This is the opening.", seconds = 8): MediaShot {
+export function newShot(
+  title = "This is the opening.",
+  seconds = 8,
+): MediaShot {
   return {
     id: crypto.randomUUID(),
     title,

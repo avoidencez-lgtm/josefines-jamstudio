@@ -561,7 +561,9 @@ impl AudioOutput for CpalOutput {
                 SampleFormat::I16 => build_output::<i16>(&device, &cfg, callback, errors),
                 SampleFormat::U16 => build_output::<u16>(&device, &cfg, callback, errors),
                 SampleFormat::I32 => build_output::<i32>(&device, &cfg, callback, errors),
-                other => Err(format!("The output sample format {other:?} is not supported.")),
+                other => Err(format!(
+                    "The output sample format {other:?} is not supported."
+                )),
             }?;
             let buffer_frames = match cfg.buffer_size {
                 BufferSize::Fixed(n) => Some(n),
@@ -688,7 +690,9 @@ impl AudioInput for CpalInput {
                 SampleFormat::I16 => build_input::<i16>(&device, &cfg, channel, callback, errors),
                 SampleFormat::U16 => build_input::<u16>(&device, &cfg, channel, callback, errors),
                 SampleFormat::I32 => build_input::<i32>(&device, &cfg, channel, callback, errors),
-                other => Err(format!("The input sample format {other:?} is not supported.")),
+                other => Err(format!(
+                    "The input sample format {other:?} is not supported."
+                )),
             }?;
             let buffer_frames = match cfg.buffer_size {
                 BufferSize::Fixed(n) => Some(n),

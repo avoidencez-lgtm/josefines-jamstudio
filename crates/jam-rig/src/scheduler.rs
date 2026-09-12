@@ -56,10 +56,7 @@ impl MidiScheduler {
     }
 
     pub fn schedule_pc(&mut self, target_sample: u64, channel: u8, program: u8) {
-        self.schedule(
-            target_sample,
-            vec![0xC0 | (channel & 0x0F), program & 0x7F],
-        );
+        self.schedule(target_sample, vec![0xC0 | (channel & 0x0F), program & 0x7F]);
     }
 
     pub fn due(&mut self, now_sample: u64) -> Vec<(u64, Vec<u8>)> {
@@ -120,7 +117,10 @@ mod tests {
 
         let want = target - sched.lookahead_samples();
         assert_eq!(want, 381_600);
-        assert!(sched.flush_due(want.saturating_sub(1), &mut sink).unwrap().is_empty());
+        assert!(sched
+            .flush_due(want.saturating_sub(1), &mut sink)
+            .unwrap()
+            .is_empty());
         let sent = sched.flush_due(want, &mut sink).unwrap();
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].1, vec![0xC0, 12]);
@@ -155,7 +155,10 @@ mod tests {
                 assert_eq!(pair[1] - pair[0], step, "{bpm} {pair:?}");
             }
             assert_eq!(sink.messages[0], vec![START]);
-            assert_eq!(sink.messages.iter().filter(|m| **m == vec![CLOCK]).count(), 24);
+            assert_eq!(
+                sink.messages.iter().filter(|m| **m == vec![CLOCK]).count(),
+                24
+            );
         }
     }
 
@@ -174,10 +177,7 @@ mod tests {
         assert_eq!(kinds[24], CLOCK);
         assert_eq!(kinds[25], STOP);
         assert_eq!(kinds[26], CONTINUE);
-        assert_eq!(
-            kinds.iter().filter(|b| **b == CLOCK).count(),
-            48
-        );
+        assert_eq!(kinds.iter().filter(|b| **b == CLOCK).count(), 48);
         assert_eq!(sink.messages[25], vec![STOP]);
         assert_eq!(sink.messages[26], vec![CONTINUE]);
     }

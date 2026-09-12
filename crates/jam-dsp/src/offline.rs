@@ -340,7 +340,7 @@ fn chord(chroma: &[f64; 12]) -> Option<String> {
     }
     let peak = chroma.iter().copied().fold(0.0_f64, f64::max);
     let mut scores = Vec::new();
-    for root in 0..12 {
+    for (root, note) in NOTES.iter().enumerate() {
         for (suffix, ivs) in [
             ("", &[0usize, 4, 7][..]),
             ("m", &[0, 3, 7][..]),
@@ -355,7 +355,7 @@ fn chord(chroma: &[f64; 12]) -> Option<String> {
             let n = notes.len() as f64;
             scores.push((
                 notes.iter().map(|n| chroma[*n]).sum::<f64>() / (n.sqrt() * norm),
-                format!("{}{suffix}", NOTES[root]),
+                format!("{note}{suffix}"),
             ));
         }
     }
@@ -443,7 +443,13 @@ mod tests {
             .chords
             .iter()
             .filter_map(|c| c.chord.clone())
-            .max_by_key(|n| result.chords.iter().filter(|c| c.chord.as_ref() == Some(n)).count())
+            .max_by_key(|n| {
+                result
+                    .chords
+                    .iter()
+                    .filter(|c| c.chord.as_ref() == Some(n))
+                    .count()
+            })
     }
 
     #[test]
@@ -457,7 +463,11 @@ mod tests {
                 let name = NOTES[root as usize];
                 let major = [octave + root, octave + root + 4, octave + root + 7];
                 let minor = [octave + root, octave + root + 3, octave + root + 7];
-                assert_eq!(heard_chord(&major).as_deref(), Some(name), "{name} major {octave}");
+                assert_eq!(
+                    heard_chord(&major).as_deref(),
+                    Some(name),
+                    "{name} major {octave}"
+                );
                 let minor_name = format!("{name}m");
                 assert_eq!(
                     heard_chord(&minor).as_deref(),
@@ -503,7 +513,11 @@ mod tests {
             input[frame * 2 + 1] = 1.0;
         }
         let found = onsets(&input);
-        assert_eq!(found.len(), expect.len(), "false positives or misses: {found:?}");
+        assert_eq!(
+            found.len(),
+            expect.len(),
+            "false positives or misses: {found:?}"
+        );
         for (want, got) in expect.iter().zip(found.iter()) {
             assert!(
                 (got - want).abs() <= 0.012,
@@ -605,9 +619,15 @@ mod tests {
         assert_eq!(grid.beats[0], 0.0);
         assert!((grid.beats[4] - 2.0).abs() < 1e-9, "bar-2 downbeat");
         assert_eq!(grid.sections[0].label, "C");
-        assert_eq!((grid.sections[0].start_bar, grid.sections[0].end_bar), (1, 3));
+        assert_eq!(
+            (grid.sections[0].start_bar, grid.sections[0].end_bar),
+            (1, 3)
+        );
         assert_eq!(grid.sections[1].label, "F");
-        assert_eq!((grid.sections[1].start_bar, grid.sections[1].end_bar), (3, 5));
+        assert_eq!(
+            (grid.sections[1].start_bar, grid.sections[1].end_bar),
+            (3, 5)
+        );
         assert!(estimate_grid(&SongAnalysis {
             beats: vec![0.0, 0.5],
             ..analysis
@@ -618,17 +638,9 @@ mod tests {
     #[test]
     fn guitar_residual_is_minus_six_db_or_lower_only_when_the_guitar_is_weak_in_the_backing() {
         let n = 4800;
-        let guitar: Vec<f32> = (0..n)
-            .map(|i| (i as f32 * 0.25).sin() * 0.5)
-            .collect();
-        let clean: Vec<f32> = (0..n)
-            .map(|i| (i as f32 * 0.07).sin() * 0.4)
-            .collect();
-        let leaky: Vec<f32> = clean
-            .iter()
-            .zip(&guitar)
-            .map(|(b, g)| b + g)
-            .collect();
+        let guitar: Vec<f32> = (0..n).map(|i| (i as f32 * 0.25).sin() * 0.5).collect();
+        let clean: Vec<f32> = (0..n).map(|i| (i as f32 * 0.07).sin() * 0.4).collect();
+        let leaky: Vec<f32> = clean.iter().zip(&guitar).map(|(b, g)| b + g).collect();
         let half: Vec<f32> = clean
             .iter()
             .zip(&guitar)

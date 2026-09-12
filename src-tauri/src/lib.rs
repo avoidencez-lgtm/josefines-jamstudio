@@ -359,7 +359,11 @@ fn transport_play<R: tauri::Runtime>(
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     let tel = eng.get_telemetry();
-    let now = beats_to_samples(tel.transport.position_beats, tel.transport.bpm, eng.sample_rate());
+    let now = beats_to_samples(
+        tel.transport.position_beats,
+        tel.transport.bpm,
+        eng.sample_rate(),
+    );
     let bpm = tel.transport.bpm;
     eng.transport_play();
     // A fresh run should fire the first section's scene again.
@@ -464,12 +468,10 @@ fn render_out_path(
     style_id: &str,
     seed: u64,
 ) -> Result<PathBuf, String> {
-    let root = user_root
-        .canonicalize()
-        .or_else(|_| {
-            std::fs::create_dir_all(user_root).map_err(|e| e.to_string())?;
-            user_root.canonicalize().map_err(|e| e.to_string())
-        })?;
+    let root = user_root.canonicalize().or_else(|_| {
+        std::fs::create_dir_all(user_root).map_err(|e| e.to_string())?;
+        user_root.canonicalize().map_err(|e| e.to_string())
+    })?;
     if let Some(raw) = out_path {
         let path = PathBuf::from(raw);
         let parent = path
@@ -532,13 +534,7 @@ fn band_render_offline(
     let out = render_out_path(lib.user_root(), out_path, &style.id, seed)?;
     drop(lib);
     let resolved = chart.map(|c| c.resolve());
-    let buses = jam_band::offline::bus_rms_db(
-        style.clone(),
-        bars,
-        bpm,
-        seed,
-        resolved.clone(),
-    )?;
+    let buses = jam_band::offline::bus_rms_db(style.clone(), bars, bpm, seed, resolved.clone())?;
     let (left, right) = jam_band::offline::render_style(style, bars, bpm, seed, resolved)?;
     let frames = jam_band::offline::write_wav(&out, &left, &right)?;
     Ok(serde_json::json!({
@@ -1198,8 +1194,12 @@ async fn takes_analyze(
         .as_object_mut()
         .unwrap()
         .extend(fields.as_object().unwrap().clone());
-    originals::save_take_manifest(&take)
-        .map_err(|e| format!("Cannot save the take analysis beside {}. {e}", take.path_input))?;
+    originals::save_take_manifest(&take).map_err(|e| {
+        format!(
+            "Cannot save the take analysis beside {}. {e}",
+            take.path_input
+        )
+    })?;
     Ok(analysis)
 }
 
@@ -1218,8 +1218,12 @@ fn takes_review(take_id: String, state: State<'_, AppState>) -> Result<serde_jso
         .ok_or("Analyze the take first. Review uses those numbers, never audio.")?;
     let review = net::review::recorded(&analysis)?;
     take.extra.insert("review".into(), review.clone());
-    originals::save_take_manifest(&take)
-        .map_err(|e| format!("Cannot save the take review beside {}. {e}", take.path_input))?;
+    originals::save_take_manifest(&take).map_err(|e| {
+        format!(
+            "Cannot save the take review beside {}. {e}",
+            take.path_input
+        )
+    })?;
     persist_session_review(&take.session_id, &review)?;
     Ok(review)
 }
@@ -1574,9 +1578,11 @@ pub fn configure<R: tauri::Runtime>(
                 let mut last_had_reference = false;
                 let mut last_busy = false;
                 loop {
-                    std::thread::sleep(std::time::Duration::from_millis(
-                        if last_busy { 33 } else { 250 },
-                    ));
+                    std::thread::sleep(std::time::Duration::from_millis(if last_busy {
+                        33
+                    } else {
+                        250
+                    }));
                     let (tel, status, recording_error) = {
                         let eng = eng.lock();
                         eng.poll_stream_errors();
@@ -1614,13 +1620,9 @@ pub fn configure<R: tauri::Runtime>(
                             }
                         }
                     }
-                    let clock_busy = matches!(
-                        tel.transport.state.as_str(),
-                        "playing" | "counting_in"
-                    ) || tel
-                        .reference
-                        .as_ref()
-                        .is_some_and(|r| r.state == "playing");
+                    let clock_busy =
+                        matches!(tel.transport.state.as_str(), "playing" | "counting_in")
+                            || tel.reference.as_ref().is_some_and(|r| r.state == "playing");
                     if clock_busy || last_out.as_ref() != Some(&tel.output_level) {
                         let _ = app_handle.emit("meters", &tel.output_level);
                         last_out = Some(tel.output_level.clone());
@@ -1877,12 +1879,8 @@ pub fn logs_dir() -> PathBuf {
 /// otherwise leaves a stale empty file.
 pub fn append_user_log(line: &str) -> Result<PathBuf, String> {
     let dir = logs_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| {
-        format!(
-            "Logs could not be created at {}. {e}",
-            dir.display()
-        )
-    })?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Logs could not be created at {}. {e}", dir.display()))?;
     let path = dir.join("jamstudio.log");
     let mut file = std::fs::OpenOptions::new()
         .create(true)
@@ -2138,10 +2136,7 @@ mod home_logs {
 
     #[test]
     fn append_user_log_writes_a_line() {
-        let root = std::env::temp_dir().join(format!(
-            "jam-home-log-{}",
-            std::process::id()
-        ));
+        let root = std::env::temp_dir().join(format!("jam-home-log-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         std::env::set_var("JAM_USER_DIR", &root);

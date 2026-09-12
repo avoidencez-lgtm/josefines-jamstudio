@@ -79,7 +79,11 @@ pub fn mixer_set_bus<R: Runtime>(
                 at_next_bar: false,
             });
         }
-        _ => return Err(format!("Unknown mixer bus '{id}'. Use band, click, drums, bass or comp.")),
+        _ => {
+            return Err(format!(
+                "Unknown mixer bus '{id}'. Use band, click, drums, bass or comp."
+            ))
+        }
     }
     let (band, click) = state.engine.lock().mix_levels();
     let buses = json!([
@@ -128,7 +132,9 @@ pub fn lyria_vibe<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Status, String> {
-    let mut patch = Config::default();
-    patch.prompts = prompts;
+    let patch = Config {
+        prompts,
+        ..Config::default()
+    };
     lyria::lyria_set(patch, app, state)
 }

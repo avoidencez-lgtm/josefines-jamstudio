@@ -136,8 +136,8 @@ struct Project {
     shots: Vec<Shot>,
 }
 fn project(v: &Value) -> Result<Project, String> {
-    let p: Project =
-        serde_json::from_value(v.clone()).map_err(|e| format!("The video project is invalid. {e}"))?;
+    let p: Project = serde_json::from_value(v.clone())
+        .map_err(|e| format!("The video project is invalid. {e}"))?;
     valid_id(&p.id)?;
     if p.schema_version != 1
         || p.title.trim().is_empty()
@@ -229,7 +229,10 @@ fn list_media(base: &Path) -> Result<Value, String> {
                 Err(e) => result["warnings"]
                     .as_array_mut()
                     .unwrap()
-                    .push(json!(format!("The file {} is invalid. {e} File left intact.", p.display()))),
+                    .push(json!(format!(
+                        "The file {} is invalid. {e} File left intact.",
+                        p.display()
+                    ))),
             }
         }
     }
@@ -826,22 +829,22 @@ async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
         source.extra.insert("songAnalysis".into(), analysis.clone());
         if let Ok(parsed) = serde_json::from_value::<jam_audio::offline::SongAnalysis>(analysis) {
             if let Ok(grid) = jam_audio::offline::estimate_grid(&parsed) {
-            let mut value = serde_json::to_value(grid).map_err(|e| e.to_string())?;
-            value["sourceHash"] = json!(analysis_hash);
-            if let Some(old) = source.extra.get("estimatedGrid") {
-                if old["schemaVersion"] == 1 {
-                    if let Some(fields) = old.as_object() {
-                        for (key, kept) in fields {
-                            value
-                                .as_object_mut()
-                                .unwrap()
-                                .entry(key.clone())
-                                .or_insert(kept.clone());
+                let mut value = serde_json::to_value(grid).map_err(|e| e.to_string())?;
+                value["sourceHash"] = json!(analysis_hash);
+                if let Some(old) = source.extra.get("estimatedGrid") {
+                    if old["schemaVersion"] == 1 {
+                        if let Some(fields) = old.as_object() {
+                            for (key, kept) in fields {
+                                value
+                                    .as_object_mut()
+                                    .unwrap()
+                                    .entry(key.clone())
+                                    .or_insert(kept.clone());
+                            }
                         }
                     }
                 }
-            }
-            source.extra.insert("estimatedGrid".into(), value);
+                source.extra.insert("estimatedGrid".into(), value);
             }
         }
         save_asset(base, &source)?;

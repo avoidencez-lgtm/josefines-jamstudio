@@ -54,10 +54,12 @@ export function ShortcutsHelp({
     setLanguage(next);
     // The choice holds no secrets; it lives with the other app settings.
     void saveRoomPreference("helpLanguage", next).catch((e) =>
-      useEngineStore.getState().notify(
-        "error",
-        `Could not save the help language. ${String(e).replace(/^Error:\s*/, "")}`,
-      ),
+      useEngineStore
+        .getState()
+        .notify(
+          "error",
+          `Could not save the help language. ${String(e).replace(/^Error:\s*/, "")}`,
+        ),
     );
   };
   const matches = manual.chapters.filter((c) =>
@@ -79,7 +81,9 @@ export function ShortcutsHelp({
     >
       <header className="manual-heading">
         <div>
-          <h1>{nb ? "Åpne hjelp og veiledninger." : "Open help and guides."}</h1>
+          <h1>
+            {nb ? "Åpne hjelp og veiledninger." : "Open help and guides."}
+          </h1>
           <p>
             {nb
               ? "Fra første idé til ferdig låt. Filene dine lagres lokalt i skrivebordsappen."
@@ -112,14 +116,18 @@ export function ShortcutsHelp({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <label htmlFor="manual-chapter">{nb ? "Velg et kapittel." : "Choose a chapter."}</label>
+          <label htmlFor="manual-chapter">
+            {nb ? "Velg et kapittel." : "Choose a chapter."}
+          </label>
           <select
             id="manual-chapter"
             value={chapter?.id ?? ""}
             onChange={(e) => setSelected(e.target.value)}
           >
             {!chapter && (
-              <option value="">{nb ? "Dette har ingen treff." : "This has no matches."}</option>
+              <option value="">
+                {nb ? "Dette har ingen treff." : "This has no matches."}
+              </option>
             )}
             {matches.map((c) => (
               <option key={c.id} value={c.id}>
@@ -138,7 +146,11 @@ export function ShortcutsHelp({
             <>
               <h2>{chapter.title[language]}</h2>
               <nav
-                aria-label={nb ? "Dette er emnene i kapitlet." : "These are the topics in this chapter."}
+                aria-label={
+                  nb
+                    ? "Dette er emnene i kapitlet."
+                    : "These are the topics in this chapter."
+                }
               >
                 {chapter.sections.map((s) => (
                   <a
@@ -180,7 +192,11 @@ export function ShortcutsHelp({
           )}
           {chapter?.id === "start" && (
             <section>
-              <h3>{nb ? "Dette er hurtigtastene." : "These are the keyboard shortcuts."}</h3>
+              <h3>
+                {nb
+                  ? "Dette er hurtigtastene."
+                  : "These are the keyboard shortcuts."}
+              </h3>
               <p>
                 {nb
                   ? "Hurtigtastene er av når fokus er i hjelpen eller du skriver i et felt. I skjemaeditoren spiller Ctrl/Cmd+Enter skjemaet, og Ctrl/Cmd+S lagrer det."

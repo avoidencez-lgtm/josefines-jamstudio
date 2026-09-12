@@ -416,7 +416,9 @@ it("Add section, take it out of the form, Delete section: a version is kept, its
   expect(body().lyrics?.[id]).toBeUndefined();
   expect(writing().selected).toBe("verse");
   expect(song().versions).toHaveLength(1);
-  expect(song().versions[0].name).toBe("Before deleting This is a new section.");
+  expect(song().versions[0].name).toBe(
+    "Before deleting This is a new section.",
+  );
   expect(song().versions[0].body).toEqual(beforeDelete);
   expect(song().versions[0].body.lyrics?.[id]).toBe("Bridge words");
 

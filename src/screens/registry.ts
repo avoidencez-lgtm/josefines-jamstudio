@@ -79,7 +79,12 @@ export const SCREENS: ScreenDescriptor[] = [
     iconName: "CassetteTape",
     description: "These are takes and exports.",
   },
-  { id: "rig", label: "Rig", iconName: "Guitar", description: "These are pedals and MIDI." },
+  {
+    id: "rig",
+    label: "Rig",
+    iconName: "Guitar",
+    description: "These are pedals and MIDI.",
+  },
   {
     id: "settings",
     label: "Settings",

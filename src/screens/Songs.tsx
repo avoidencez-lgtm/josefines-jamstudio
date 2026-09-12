@@ -145,7 +145,9 @@ export function Songs() {
         </label>
         <Button
           disabled={locked}
-          onClick={() => void m.work("Refreshing this audio library.", m.refresh)}
+          onClick={() =>
+            void m.work("Refreshing this audio library.", m.refresh)
+          }
         >
           Refresh this library.
         </Button>
@@ -194,8 +196,8 @@ export function Songs() {
         </div>
         <p className="workspace-note mt-2">
           {isPreview && "Open the desktop app to import and listen. "}
-          WAV, MP3, FLAC, AAC/ALAC M4A, AIFF and Ogg Vorbis. Mono or stereo.
-          Up to 512 MB and 10 minutes. Import, analysis and playback run locally
+          WAV, MP3, FLAC, AAC/ALAC M4A, AIFF and Ogg Vorbis. Mono or stereo. Up
+          to 512 MB and 10 minutes. Import, analysis and playback run locally
           without FFmpeg. Your original is kept beside a 48 kHz source WAV.
         </p>
       </details>
@@ -243,7 +245,7 @@ export function Songs() {
               songs.length ? setQuery("") : engine.setScreen("sessions")
             }
           >
-            {songs.length ? "Clear search" : "Open recorded takes."}
+            {songs.length ? "Clear this search." : "Open recorded takes."}
           </Button>
         </div>
       ) : (
@@ -360,7 +362,8 @@ export function Songs() {
                     })
                   }
                 >
-                  <Play size={18} aria-hidden="true" /> Listen in the media player.
+                  <Play size={18} aria-hidden="true" /> Listen in the media
+                  player.
                 </Button>
                 <Button
                   disabled={locked}
@@ -497,14 +500,16 @@ export function Songs() {
         </div>
       )}
       <p className="workspace-note">
-        Load this in Jamstudio plays the reference through the native audio engine.
-        It has pause, seek and seconds loops. The system player is also available.
-        Practice copies support local speed and pitch changes. Local analysis
-        estimates steady tempo, major/minor chords and key. Prepare or import
-        stems to mix instruments in the native player. Load this minus-guitar mix plays minus-guitar.wav after Check this guitar residual passes.
-        It stays loud if that check has not passed or the file is gone. Confirm bars and named
-        sections to use section loops; automatic section detection is pending.
-        Use Library for chord charts and Stage for rehearsing them.
+        Load this in Jamstudio plays the reference through the native audio
+        engine. It has pause, seek and seconds loops. The system player is also
+        available. Practice copies support local speed and pitch changes. Local
+        analysis estimates steady tempo, major/minor chords and key. Prepare or
+        import stems to mix instruments in the native player. Load this
+        minus-guitar mix plays minus-guitar.wav after Check this guitar residual
+        passes. It stays loud if that check has not passed or the file is gone.
+        Confirm bars and named sections to use section loops; automatic section
+        detection is pending. Use Library for chord charts and Stage for
+        rehearsing them.
       </p>
     </div>
   );

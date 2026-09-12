@@ -246,7 +246,9 @@ export function FinishingDesk() {
                 })
               }
             >
-              {recipe === "lift" ? "Preview this lift." : "Preview more of this space."}
+              {recipe === "lift"
+                ? "Preview this lift."
+                : "Preview more of this space."}
             </Button>
           ))}
         </div>
@@ -254,13 +256,15 @@ export function FinishingDesk() {
           <div className="finish-proposal">
             <h3>{proposal.label}</h3>
             <p className="song-help">
-              {proposal.label === "This is a section lift."}
+              {proposal.label === "This is a section lift."
                 ? "Raise the intensity of audible, unlocked parts."
                 : "Lower drums and comp intensity while keeping the bass steady."}{" "}
               Chords, duration, guitar clips and rig scenes stay in place.
             </p>
             <table>
-              <caption className="sr-only">These are the proposed intensity changes.</caption>
+              <caption className="sr-only">
+                These are the proposed intensity changes.
+              </caption>
               <thead>
                 <tr>
                   <th>This is the part.</th>
@@ -274,11 +278,7 @@ export function FinishingDesk() {
                     <tr key={PARTS[i]}>
                       <th scope="row">
                         {PARTS[i]}
-                        {p.locked
-                          ? " is locked."
-                          : p.muted
-                            ? " is muted."
-                            : ""}
+                        {p.locked ? " is locked." : p.muted ? " is muted." : ""}
                       </th>
                       <td>
                         {Math.round(

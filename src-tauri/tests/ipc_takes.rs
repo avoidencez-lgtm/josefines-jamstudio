@@ -1032,7 +1032,10 @@ fn take_review_is_not_configured_without_a_fixture() {
     );
     studio.ok("takes_analyze", json!({"takeId": take.id}));
     let after = studio.err("takes_review", json!({"takeId": take.id}));
-    assert!(after.contains("not configured") && after.contains("JAM_LIVE=1"), "{after}");
+    assert!(
+        after.contains("not configured") && after.contains("JAM_LIVE=1"),
+        "{after}"
+    );
 }
 
 #[test]
@@ -1045,7 +1048,10 @@ fn recorded_review_fixture_writes_from_analysis_numbers() {
     let review = studio.ok("takes_review", json!({"takeId": take.id}));
     assert_eq!(review["fromAudio"], false);
     assert_eq!(review["origin"], "synthetic-analysis");
-    assert!(review["analysisSummary"].as_str().unwrap().contains("attack"));
+    assert!(review["analysisSummary"]
+        .as_str()
+        .unwrap()
+        .contains("attack"));
     let session = serde_json::from_slice::<Value>(
         &std::fs::read(
             common::user_dir()

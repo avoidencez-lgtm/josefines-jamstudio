@@ -50,7 +50,10 @@ fn voice_commands_are_registered_guarded_and_cancelled_by_generation() {
         gate.contains("not configured") && gate.contains("JAM_LIVE=1"),
         "{gate}"
     );
-    assert_eq!(initial["lastReleaseToFirstAudioMs"], serde_json::Value::Null);
+    assert_eq!(
+        initial["lastReleaseToFirstAudioMs"],
+        serde_json::Value::Null
+    );
     assert_eq!(initial["liveTurns"], 0);
     let mut settings = studio.ok("settings_get", json!({}));
     settings["voice"] =

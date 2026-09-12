@@ -228,7 +228,9 @@ export const Library: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-6">
         {/* Left: charts and styles */}
         <div className="flex flex-col gap-6 min-w-0">
-          <Panel title={`These are ${visibleCharts.length} of ${charts.length} charts.`}>
+          <Panel
+            title={`These are ${visibleCharts.length} of ${charts.length} charts.`}
+          >
             {!visibleCharts.length && (
               <div className="workspace-stack py-4">
                 <p className="workspace-note">
@@ -242,7 +244,7 @@ export const Library: React.FC = () => {
                       setCollection("All charts");
                     }}
                   >
-                    Clear search
+                    Clear this search.
                   </Button>
                 </div>
               </div>
@@ -270,7 +272,10 @@ export const Library: React.FC = () => {
                       <div className="text-sm text-[var(--fg-0)] truncate">
                         {c.name}
                         {editing && (
-                          <span className="text-[var(--fg-2)]"> This is editing.</span>
+                          <span className="text-[var(--fg-2)]">
+                            {" "}
+                            This is editing.
+                          </span>
                         )}
                       </div>
                       <div className="text-[10px] font-mono text-[var(--fg-2)]">
@@ -375,7 +380,10 @@ export const Library: React.FC = () => {
                     }
                   />
                 ) : (
-                  <StatusPill status="error" label="This chart is not playable yet." />
+                  <StatusPill
+                    status="error"
+                    label="This chart is not playable yet."
+                  />
                 )}
                 {dirty && (
                   <span className="text-[10px] font-mono text-[var(--fg-2)]">

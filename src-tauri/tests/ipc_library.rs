@@ -749,8 +749,7 @@ fn importing_a_chart_file_copies_it_into_the_user_charts_folder() {
         json!({"path": garbage.to_string_lossy()}),
     );
     assert!(
-        err.starts_with(&format!("Cannot read {}.", garbage.display()))
-            && err.contains("line 1"),
+        err.starts_with(&format!("Cannot read {}.", garbage.display())) && err.contains("line 1"),
         "{err}"
     );
 

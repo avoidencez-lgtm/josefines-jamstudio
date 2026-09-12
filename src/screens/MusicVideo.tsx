@@ -445,7 +445,8 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       <div hidden={view !== "Create music" && view !== "Soundtrack"}>
         <details className="video-audio-lab" open={audioOnly || undefined}>
           <summary>
-            Generate a song. <span>Models include Lyria, MiniMax, Eleven and local.</span>
+            Generate a song.{" "}
+            <span>Models include Lyria, MiniMax, Eleven and local.</span>
           </summary>
           <div className="video-audio-fields">
             <label>
@@ -559,8 +560,8 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             {chosenAudio?.description} Generated audio is saved and analyzed
             locally. AI Music opens completed songs in Stage, stopped and ready
             for practice. Failed analysis can be retried from the saved job
-            without generating again. Cancel this local work keeps any received provider output.
-            An already submitted request may still finish and
+            without generating again. Cancel this local work keeps any received
+            provider output. An already submitted request may still finish and
             be billed. Model access and API billing are separate from ChatGPT
             and Claude subscriptions.
           </p>
@@ -636,7 +637,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       >
         <section className="video-source">
           <div>
-            <span className="video-eyebrow">This section is the soundtrack.</span>
+            <span className="video-eyebrow">
+              This section is the soundtrack.
+            </span>
             <h2>{audio ? audio.label : "Start with the song."}</h2>
             <p>
               {audio
@@ -732,11 +735,14 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       <div hidden={audioOnly || view !== "Storyboard"}>
         <details className="video-direction-settings">
           <summary>
-            Set the creative direction. <span>Look, subject and the AI director.</span>
+            Set the creative direction.{" "}
+            <span>Look, subject and the AI director.</span>
           </summary>
           <section className="video-direction">
             <div>
-              <span className="video-eyebrow">This section is the creative direction.</span>
+              <span className="video-eyebrow">
+                This section is the creative direction.
+              </span>
               <h2>One visual story.</h2>
             </div>
             <label>
@@ -815,7 +821,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
           <div className="video-storyboard">
             <div className="video-section-heading">
               <div>
-                <span className="video-eyebrow">This section is the storyboard.</span>
+                <span className="video-eyebrow">
+                  This section is the storyboard.
+                </span>
                 <h2>
                   {project.shots.length} shots. {time(total)}.
                 </h2>
@@ -857,10 +865,16 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   </span>
                   <span
                     className={s.assetId ? "video-dot ready" : "video-dot"}
-                    title={s.assetId ? "A clip is assigned." : "This shot needs footage."}
+                    title={
+                      s.assetId
+                        ? "A clip is assigned."
+                        : "This shot needs footage."
+                    }
                   />
                   <small>
-                    {s.assetId ? "This clip is assigned." : "This shot needs a clip."}
+                    {s.assetId
+                      ? "This clip is assigned."
+                      : "This shot needs a clip."}
                   </small>
                 </button>
               ))}

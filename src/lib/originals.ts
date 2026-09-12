@@ -308,7 +308,8 @@ export const useWriting = create<WritingState>((set, get) => ({
           ...song.versions,
           {
             id: crypto.randomUUID(),
-            name: name?.trim() || `This is version ${song.versions.length + 1}.`,
+            name:
+              name?.trim() || `This is version ${song.versions.length + 1}.`,
             body: structuredClone(song.body),
           },
         ],
@@ -455,7 +456,9 @@ export const useWriting = create<WritingState>((set, get) => ({
       sessionId: song?.id ?? "ideas",
     });
     await useEngineStore.getState().loadTakes();
-    set({ message: "This idea is saved. Add it below, then trim the part you want." });
+    set({
+      message: "This idea is saved. Add it below, then trim the part you want.",
+    });
     useEngineStore.getState().notify("info", "This idea is saved.");
     useEngineStore.getState().setScreen("originals");
   },

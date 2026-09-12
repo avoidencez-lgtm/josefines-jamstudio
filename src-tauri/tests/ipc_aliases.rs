@@ -36,10 +36,7 @@ fn transport_locate_moves_by_beats_and_seek_bar_still_works() {
 fn mixer_set_bus_changes_band_gain_and_keeps_volume_commands() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
-    let buses = studio.ok(
-        "mixer_set_bus",
-        json!({"id":"band","patch":{"gain":0.25}}),
-    );
+    let buses = studio.ok("mixer_set_bus", json!({"id":"band","patch":{"gain":0.25}}));
     assert_eq!(buses[0]["id"], "band");
     assert!(buses[0]["gainDb"].as_f64().unwrap() < -10.0);
     studio.ok("audio_set_band_volume", json!({"volume": 0.8}));
@@ -74,7 +71,9 @@ fn band_render_offline_writes_wav_under_user_dir() {
     std::env::set_var("JAM_SYNTHETIC_KIT", "1");
     let studio = Studio::boot();
     let root = std::env::var("JAM_USER_DIR").expect("scenario sets JAM_USER_DIR");
-    let out = std::path::PathBuf::from(&root).join("renders").join("offline.wav");
+    let out = std::path::PathBuf::from(&root)
+        .join("renders")
+        .join("offline.wav");
     let result = studio.ok(
         "band_render_offline",
         json!({
@@ -104,9 +103,7 @@ fn band_render_offline_writes_wav_under_user_dir() {
     assert!((again["bassRmsDb"].as_f64().unwrap() - bass).abs() <= 0.05);
     assert!((again["compRmsDb"].as_f64().unwrap() - comp).abs() <= 0.05);
     assert!(out.is_file(), "{}", out.display());
-    let spec = hound::WavReader::open(&out)
-        .expect("wav")
-        .spec();
+    let spec = hound::WavReader::open(&out).expect("wav").spec();
     assert_eq!(spec.sample_rate, 48_000);
     assert_eq!(spec.channels, 2);
     assert_eq!(spec.bits_per_sample, 24);

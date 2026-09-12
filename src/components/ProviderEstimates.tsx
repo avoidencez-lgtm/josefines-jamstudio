@@ -28,7 +28,10 @@ export function ProviderEstimates({
   const hasKey = useEngineStore((s) => Boolean(s.keysPresent.musicai));
   const saved = readProviderAnalysis(song.providerAnalysis);
   return (
-    <section className="workspace-stack" aria-label="These are the Music.ai estimates.">
+    <section
+      className="workspace-stack"
+      aria-label="These are the Music.ai estimates."
+    >
       <h3>These are the Music.ai estimates.</h3>
       <p className="workspace-note">
         Live Music.ai jobs are not configured. Add a Music.ai key in Settings,

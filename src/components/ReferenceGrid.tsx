@@ -150,8 +150,8 @@ export function ReferenceGridEditor({
               ? `Bar 1 starts at ${analysis.beats[first - 1].toFixed(3)} source seconds.`
               : "No beat time."}{" "}
             {bars} complete bars available. Pickup audio and the incomplete
-            ending remain outside this map. For compound meters, count the
-            beats detected by the analysis.
+            ending remain outside this map. For compound meters, count the beats
+            detected by the analysis.
           </p>
           {sections.map((section, index) => (
             <div key={section.id} className="workspace-actions">

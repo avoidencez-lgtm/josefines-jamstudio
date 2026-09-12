@@ -258,9 +258,11 @@ impl ReferenceSong {
                 .grid
                 .as_ref()
                 .ok_or("Confirm bars in Songs and reload the reference before starting a ramp.")?;
-        if grid.origin != "confirmed-local" {
-            return Err("Confirm bars in Songs and reload the reference before starting a ramp.".into());
-        }
+            if grid.origin != "confirmed-local" {
+                return Err(
+                    "Confirm bars in Songs and reload the reference before starting a ramp.".into(),
+                );
+            }
             if self.info.loop_enabled
                 && (!ramp::aligned(grid, self.info.loop_start)
                     || !ramp::aligned(grid, self.info.loop_end))

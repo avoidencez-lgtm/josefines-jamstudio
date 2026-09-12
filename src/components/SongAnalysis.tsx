@@ -31,7 +31,9 @@ export function SongAnalysis({
         {notice}
         {value ? (
           <p className="workspace-note">
-            Saved analysis is unreadable or from another version. Analyze again to replace it.
+            {
+              "Saved analysis is unreadable or from another version. Analyze again to replace it."
+            }
           </p>
         ) : null}
       </>
@@ -42,7 +44,10 @@ export function SongAnalysis({
     Math.max(0, Math.ceil(passages.length / 16) - 1),
   );
   return (
-    <section className="workspace-stack" aria-label="This is the estimated harmony.">
+    <section
+      className="workspace-stack"
+      aria-label="This is the estimated harmony."
+    >
       {notice}
       <h3>This is the estimated harmony.</h3>
       <p className="workspace-note">

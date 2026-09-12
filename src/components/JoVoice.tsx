@@ -94,12 +94,14 @@ export function JoVoice() {
     <section className="flex flex-col gap-3" aria-label="This is the Jo voice.">
       <JoVoiceControls disabled={!saved?.voiceId || saving} />
       <p className="text-sm text-[var(--fg-1)]">
-        Hold the button, Space or Enter while focused. Release this to send up to 20
-        seconds to ElevenLabs. A new press interrupts Jo. Provider charges
+        Hold the button, Space or Enter while focused. Release this to send up
+        to 20 seconds to ElevenLabs. A new press interrupts Jo. Provider charges
         apply.
       </p>
       <details>
-        <summary className="cursor-pointer text-sm">Open the voice setup.</summary>
+        <summary className="cursor-pointer text-sm">
+          Open the voice setup.
+        </summary>
         <div className="flex flex-wrap items-end gap-3 py-3">
           <label className="room-tool-field">
             Choose the microphone.
@@ -244,12 +246,12 @@ export function JoVoice() {
           </Button>
         </div>
         <p className="text-sm text-[var(--fg-1)]">
-          These are optional estimates; enter your account's rates and Save this voice setup.
-          Blank means unknown; 0 means an explicit zero estimate. Settings shows
-          submitted seconds, characters and estimated cost, including
-          interrupted requests. These estimates exclude subscription allowances,
-          taxes and voice-specific charges; the provider's invoice is
-          authoritative.
+          These are optional estimates; enter your account's rates and Save this
+          voice setup. Blank means unknown; 0 means an explicit zero estimate.
+          Settings shows submitted seconds, characters and estimated cost,
+          including interrupted requests. These estimates exclude subscription
+          allowances, taxes and voice-specific charges; the provider's invoice
+          is authoritative.
         </p>
         <div className="flex flex-wrap items-end gap-3 py-3">
           <label className="room-tool-field">
@@ -282,8 +284,9 @@ export function JoVoice() {
         <p className="text-sm text-[var(--fg-1)]">
           {shortcut ? `Shortcut ${shortcut} is on. ` : "Shortcut is off. "}When
           enabled, hold it in any app and release to send microphone audio to
-          ElevenLabs. Save this voice setup to remember the combination; enabling is
-          session-only. In Write → Hands-free controls, learn the two-press pedal.
+          ElevenLabs. Save this voice setup to remember the combination;
+          enabling is session-only. In Write → Hands-free controls, learn the
+          two-press pedal.
         </p>
         {message && (
           <output className="text-sm text-[var(--fg-1)]">{message}</output>
@@ -348,7 +351,9 @@ export function JoVoiceControls({
               void cancelVoice();
           }}
         >
-          {phase === "listening" ? "Release this to send." : "Hold this to talk."}
+          {phase === "listening"
+            ? "Release this to send."
+            : "Hold this to talk."}
         </Button>
         {active && (
           <Button type="button" onClick={() => void cancelVoice()}>

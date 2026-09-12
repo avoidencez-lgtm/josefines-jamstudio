@@ -282,7 +282,9 @@ mod tests {
         assert!((frames as f64 / 48_000.0 - 2.0 / 1.25).abs() <= 0.001);
         let start = frames / 2 - 24_000;
         let mut samples: Vec<f64> = output
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .skip(start)
             .take(48_000)
             .map(|c| c[0] as f64)
@@ -315,7 +317,9 @@ mod tests {
         let output = stereo(&input, 1.0, 2.0, &AtomicBool::new(false)).unwrap();
         let frames = output.len() / 2;
         let samples: Vec<f32> = output
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .skip(frames / 4)
             .take(frames / 2)
             .map(|c| c[0])
@@ -326,8 +330,8 @@ mod tests {
             .filter(|(_, p)| p[0] <= 0.0 && p[1] > 0.0)
             .map(|(i, p)| i as f64 + (-p[0] / (p[1] - p[0])) as f64)
             .collect();
-        let f0 = (crossings.len() - 1) as f64 * 48_000.0
-            / (crossings.last().unwrap() - crossings[0]);
+        let f0 =
+            (crossings.len() - 1) as f64 * 48_000.0 / (crossings.last().unwrap() - crossings[0]);
         assert!((f0 - 1122.5).abs() <= 5.0, "f0 {f0} Hz");
     }
 

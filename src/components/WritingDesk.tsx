@@ -39,7 +39,10 @@ export function ArrangementDesk() {
   const select = (id: string) => w.select(id);
   const inForm = chart.arrangement.some((a) => a.sectionId === selected.id);
   return (
-    <section className="write-arrange" aria-label="This is the song arrangement.">
+    <section
+      className="write-arrange"
+      aria-label="This is the song arrangement."
+    >
       <div className="song-section-heading">
         <div className="write-inline">
           <h2>This is the song map.</h2>
@@ -228,8 +231,10 @@ export function ArrangementDesk() {
           </select>
         </label>
         <p className="song-help">
-          Repeated sections share chords, lyrics and band settings. Make this variation for an independent edit.
-          Guitar layers stay at their numbered bars when you rearrange. Delete this section removes a section that is no longer in the form. A version is kept first.
+          Repeated sections share chords, lyrics and band settings. Make this
+          variation for an independent edit. Guitar layers stay at their
+          numbered bars when you rearrange. Delete this section removes a
+          section that is no longer in the form. A version is kept first.
         </p>
       </details>
     </section>
@@ -407,7 +412,10 @@ export function HarmonyDesk() {
           </p>
         )}
       </section>
-      <aside className="write-harmony-inspector" aria-label="This is the harmony explorer.">
+      <aside
+        className="write-harmony-inspector"
+        aria-label="This is the harmony explorer."
+      >
         <h2>Find the next colour.</h2>
         <p className="song-help">
           Replace the selected chord. Its beat length stays the same.
@@ -467,7 +475,8 @@ export function HarmonyDesk() {
         </div>
         <p className="song-help">
           {previous ? `“Shared” counts notes in common with ${previous}. ` : ""}
-          Theory suggestions run locally. Your ear chooses the chord; Play this song or Loop this section auditions the band.
+          Theory suggestions run locally. Your ear chooses the chord; Play this
+          song or Loop this section auditions the band.
         </p>
       </aside>
     </div>
@@ -531,7 +540,10 @@ export function LyricsDesk() {
   const lyric = song.body.lyrics?.[section.id] ?? "";
   const lines = lyric.split("\n").filter((l) => l.trim());
   return (
-    <section className="write-lyrics" aria-label="These are the section lyrics.">
+    <section
+      className="write-lyrics"
+      aria-label="These are the section lyrics."
+    >
       <div>
         <div className="song-section-heading">
           <h2>These are the {section.name} lyrics.</h2>
@@ -557,7 +569,8 @@ export function LyricsDesk() {
           />
         </label>
         <p className="song-help">
-          Saved with this section. Repeated sections share these words; Make this variation creates a separate draft.
+          Saved with this section. Repeated sections share these words; Make
+          this variation creates a separate draft.
         </p>
       </div>
       <aside>

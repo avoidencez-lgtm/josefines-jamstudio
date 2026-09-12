@@ -1024,10 +1024,7 @@ fn rig_clock_follows_transport_play_pause_and_stop() {
             .as_array()
             .cloned()
             .unwrap();
-        let kinds: Vec<u64> = mon
-            .iter()
-            .filter_map(|m| m["bytes"][0].as_u64())
-            .collect();
+        let kinds: Vec<u64> = mon.iter().filter_map(|m| m["bytes"][0].as_u64()).collect();
         if kinds.contains(&0xFA) && kinds.contains(&0xF8) {
             break mon;
         }

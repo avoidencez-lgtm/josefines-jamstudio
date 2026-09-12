@@ -108,8 +108,8 @@ pub fn read_manifest(dir: &Path) -> Result<KitManifest, String> {
 
 /// 48 kHz mono PCM. Stereo is averaged. Other rates are refused.
 pub fn read_wav_48k(path: &Path) -> Result<Vec<f32>, String> {
-    let mut reader = hound::WavReader::open(path)
-        .map_err(|e| format!("Cannot read {}. {e}", path.display()))?;
+    let mut reader =
+        hound::WavReader::open(path).map_err(|e| format!("Cannot read {}. {e}", path.display()))?;
     let spec = reader.spec();
     if spec.sample_rate != 48_000 {
         return Err(format!(
@@ -138,7 +138,9 @@ pub fn read_wav_48k(path: &Path) -> Result<Vec<f32>, String> {
         return Ok(pcm);
     }
     Ok(pcm
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|f| 0.5 * (f[0] + f[1]))
         .collect())
 }

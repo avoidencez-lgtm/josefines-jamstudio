@@ -174,13 +174,7 @@ impl Sf2Synth {
             }
             return;
         }
-        render_sine(
-            &mut self.voices,
-            self.sample_rate,
-            channel,
-            left,
-            right,
-        );
+        render_sine(&mut self.voices, self.sample_rate, channel, left, right);
     }
 }
 
@@ -194,7 +188,8 @@ fn engine_mut(fonts: &mut FontPair, channel: u8) -> &mut Synthesizer {
 
 fn load_font(path: &Path, sample_rate: u32) -> Result<Synthesizer, String> {
     let mut file = File::open(path).map_err(|e| format!("Cannot read {}. {e}", path.display()))?;
-    let font = SoundFont::new(&mut file).map_err(|e| format!("{} is not a SoundFont. {e}", path.display()))?;
+    let font = SoundFont::new(&mut file)
+        .map_err(|e| format!("{} is not a SoundFont. {e}", path.display()))?;
     let mut settings = SynthesizerSettings::new(sample_rate as i32);
     settings.enable_reverb_and_chorus = false;
     settings.maximum_polyphony = 32;
@@ -352,7 +347,14 @@ fn inst_header(name: &[u8], bag: u16) -> Vec<u8> {
     out
 }
 
-fn sample_header(name: &[u8], start: u32, end: u32, loop_start: u32, loop_end: u32, rate: u32) -> Vec<u8> {
+fn sample_header(
+    name: &[u8],
+    start: u32,
+    end: u32,
+    loop_start: u32,
+    loop_end: u32,
+    rate: u32,
+) -> Vec<u8> {
     let mut out = vec![0u8; 46];
     out[..name.len().min(19)].copy_from_slice(&name[..name.len().min(19)]);
     out[20..24].copy_from_slice(&start.to_le_bytes());
@@ -434,6 +436,9 @@ mod tests {
         let mut left = vec![0.0f32; 2048];
         let mut right = vec![0.0f32; 2048];
         synth.render(&mut left, &mut right);
-        assert!(left.iter().any(|s| s.abs() > 0.001), "FreePats pack was silent");
+        assert!(
+            left.iter().any(|s| s.abs() > 0.001),
+            "FreePats pack was silent"
+        );
     }
 }

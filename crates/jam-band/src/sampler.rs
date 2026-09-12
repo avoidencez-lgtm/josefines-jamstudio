@@ -96,10 +96,7 @@ impl Sampler {
         if std::env::var("JAM_SYNTHETIC_KIT").as_deref() == Ok("1") {
             return (
                 Self::new_with_synthetic_kit(sample_rate),
-                KitStatus::synthetic(
-                    kit_id,
-                    "Synthetic kit forced (JAM_SYNTHETIC_KIT=1).".into(),
-                ),
+                KitStatus::synthetic(kit_id, "Synthetic kit forced (JAM_SYNTHETIC_KIT=1).".into()),
             );
         }
         let dir = kit::pack_dir(kit_id);
@@ -112,18 +109,13 @@ impl Sampler {
                     message: format!("Playing unpacked kit from {}.", dir.display()),
                 },
             ),
-            Err(_) if !dir.join("kit.json").is_file() => {
-                (
-                    Self::new_with_synthetic_kit(sample_rate),
-                    KitStatus::missing(kit_id),
-                )
-            }
+            Err(_) if !dir.join("kit.json").is_file() => (
+                Self::new_with_synthetic_kit(sample_rate),
+                KitStatus::missing(kit_id),
+            ),
             Err(err) => (
                 Self::new_with_synthetic_kit(sample_rate),
-                KitStatus::synthetic(
-                    kit_id,
-                    format!("{err} Playing the bundled synthetic kit."),
-                ),
+                KitStatus::synthetic(kit_id, format!("{err} Playing the bundled synthetic kit.")),
             ),
         }
     }
@@ -152,13 +144,15 @@ impl Sampler {
                 if files.is_empty() {
                     return Err(format!("Instrument '{}' has no WAV files.", inst.name));
                 }
-                sampler.sample_bank.entry(inst.name.clone()).or_default().push(
-                    VelocityLayer {
+                sampler
+                    .sample_bank
+                    .entry(inst.name.clone())
+                    .or_default()
+                    .push(VelocityLayer {
                         lo: layer.velocity[0],
                         hi: layer.velocity[1],
                         files,
-                    },
-                );
+                    });
             }
         }
         if sampler.sample_bank.is_empty() {
@@ -176,13 +170,14 @@ impl Sampler {
     }
 
     pub fn load_sample(&mut self, instrument: &str, pcm: Vec<f32>) {
-        self.sample_bank.entry(instrument.into()).or_default().push(
-            VelocityLayer {
+        self.sample_bank
+            .entry(instrument.into())
+            .or_default()
+            .push(VelocityLayer {
                 lo: 0.0,
                 hi: 1.0,
                 files: vec![Arc::new(pcm)],
-            },
-        );
+            });
     }
 
     pub fn has_instrument(&self, instrument: &str) -> bool {
@@ -541,7 +536,11 @@ mod tests {
         std::env::set_var("JAM_KIT_DIR", &dir);
         let (mut sampler, status) = Sampler::open("standard-rock-kit", 48_000);
         assert_eq!(status.source, crate::kit::SYNTHETIC);
-        assert!(status.message.contains("not unpacked"), "{}", status.message);
+        assert!(
+            status.message.contains("not unpacked"),
+            "{}",
+            status.message
+        );
         assert!(status.message.contains("JAM_LIVE=1"), "{}", status.message);
         assert!(sampler.has_instrument("kick"));
         sampler.trigger("kick", 1.0);

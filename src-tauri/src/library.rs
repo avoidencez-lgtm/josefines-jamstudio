@@ -55,13 +55,16 @@ impl Library {
         self.user_chart_ids.clear();
 
         if let Err(e) = self.styles.load_from_dir(&BUNDLED_STYLES) {
-            self.load_errors.push(format!("The bundled styles could not load. {e}"));
+            self.load_errors
+                .push(format!("The bundled styles could not load. {e}"));
         }
         if let Err(e) = self.charts.load_from_dir(&BUNDLED_CHARTS) {
-            self.load_errors.push(format!("The bundled charts could not load. {e}"));
+            self.load_errors
+                .push(format!("The bundled charts could not load. {e}"));
         }
         if let Err(e) = self.rigs.load_from_dir(&BUNDLED_RIGS) {
-            self.load_errors.push(format!("The bundled rigs could not load. {e}"));
+            self.load_errors
+                .push(format!("The bundled rigs could not load. {e}"));
         }
         let (_, errs) = self.styles.load_from_fs_dir(self.styles_dir());
         self.load_errors.extend(errs);
@@ -79,7 +82,8 @@ impl Library {
         self.load_errors.extend(errs);
         for chart in user.list() {
             if let Err(e) = validate_chart(chart) {
-                self.load_errors.push(format!("Chart {} is invalid. {e}", chart.id));
+                self.load_errors
+                    .push(format!("Chart {} is invalid. {e}", chart.id));
                 continue;
             }
             self.user_chart_ids.push(chart.id.clone());
@@ -174,10 +178,10 @@ impl Library {
     /// Parses a chart JSON file anywhere on disk, copies it into the user charts
     /// directory (so it is there next launch) and registers it.
     pub fn import_chart_file(&mut self, path: &Path) -> Result<Chart, String> {
-        let content =
-            std::fs::read_to_string(path).map_err(|e| format!("Cannot read {}. {e}", path.display()))?;
-        let chart: Chart =
-            jam_core::json::from_str(&content).map_err(|e| format!("Cannot read {}. {e}", path.display()))?;
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("Cannot read {}. {e}", path.display()))?;
+        let chart: Chart = jam_core::json::from_str(&content)
+            .map_err(|e| format!("Cannot read {}. {e}", path.display()))?;
         validate_chart(&chart)?;
         self.save_chart(&chart)?;
         Ok(chart)
@@ -187,7 +191,8 @@ impl Library {
     pub fn save_chart(&mut self, chart: &Chart) -> Result<PathBuf, String> {
         validate_chart(chart)?;
         let dir = self.charts_dir();
-        std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create {}. {e}", dir.display()))?;
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("Cannot create {}. {e}", dir.display()))?;
         let file = dir.join(format!("{}.json", safe_file_stem(&chart.id)));
         let json = serde_json::to_string_pretty(chart).map_err(|e| e.to_string())?;
         let temp = file.with_extension("json.tmp");
@@ -215,7 +220,8 @@ impl Library {
         let file = self
             .find_user_chart_file(id)
             .ok_or_else(|| format!("\"{id}\" is not a user chart"))?;
-        std::fs::remove_file(&file).map_err(|e| format!("Cannot delete {}. {e}", file.display()))?;
+        std::fs::remove_file(&file)
+            .map_err(|e| format!("Cannot delete {}. {e}", file.display()))?;
         self.reload();
         Ok(())
     }

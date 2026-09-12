@@ -18,10 +18,9 @@ export function FootControls() {
       <p className="song-help">
         Keep playing while a pedal saves the idea, starts a take or loops a
         section. Select a MIDI input, click Learn, then press the pedal. Each
-        press has one action. This uses one press to start listening and another to send.
-        A press while waiting cancels.
-        Open the voice setup in Jo AI. Provider charges apply. The
-        microphone stops after 20 seconds.
+        press has one action. This uses one press to start listening and another
+        to send. A press while waiting cancels. Open the voice setup in Jo AI.
+        Provider charges apply. The microphone stops after 20 seconds.
       </p>
       <div className="song-controls">
         <label>
@@ -66,7 +65,9 @@ export function FootControls() {
             <div className="song-pedal-row" key={key}>
               <strong>{label}</strong>
               <span>
-                {binding ? describePress(binding.press) : "This pedal is unassigned."}
+                {binding
+                  ? describePress(binding.press)
+                  : "This pedal is unassigned."}
               </span>
               <Button
                 disabled={!c.port || c.busy}

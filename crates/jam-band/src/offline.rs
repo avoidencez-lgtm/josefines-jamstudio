@@ -82,6 +82,7 @@ pub fn bus_rms_db(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_style_parts(
     style: Style,
     bars: u32,
@@ -172,9 +173,8 @@ mod tests {
     #[test]
     fn one_bar_at_120_is_exact_frames() {
         std::env::set_var("JAM_SYNTHETIC_KIT", "1");
-        let style: Style =
-            serde_json::from_str(include_str!("../../../styles/rock-straight.json"))
-                .expect("bundled style");
+        let style: Style = serde_json::from_str(include_str!("../../../styles/rock-straight.json"))
+            .expect("bundled style");
         let (left, right) = render_style(style, 1, 120.0, 1, None).expect("render");
         assert_eq!(left.len(), 96_000);
         assert_eq!(right.len(), 96_000);
@@ -184,9 +184,8 @@ mod tests {
     #[test]
     fn bus_rms_repeats_within_half_a_decibel() {
         std::env::set_var("JAM_SYNTHETIC_KIT", "1");
-        let style: Style =
-            serde_json::from_str(include_str!("../../../styles/rock-straight.json"))
-                .expect("bundled style");
+        let style: Style = serde_json::from_str(include_str!("../../../styles/rock-straight.json"))
+            .expect("bundled style");
         let a = bus_rms_db(style.clone(), 1, 120.0, 1, None).expect("buses");
         let b = bus_rms_db(style, 1, 120.0, 1, None).expect("buses");
         assert!(a.0 > -60.0 && a.1 > -60.0 && a.2 > -60.0, "{a:?}");
