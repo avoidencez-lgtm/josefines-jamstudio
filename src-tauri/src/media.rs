@@ -45,6 +45,24 @@ fn merge_unknown_v1(old: Option<&Value>, mut next: Value) -> Value {
     }
     next
 }
+
+async fn until_canceled() {
+    loop {
+        if CANCEL.load(Ordering::Relaxed) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+async fn cancellable<T>(
+    work: impl std::future::Future<Output = Result<T, String>>,
+) -> Result<T, String> {
+    tokio::select! {
+        result = work => result,
+        _ = until_canceled() => Err("Media operation canceled".into()),
+    }
+}
 pub fn root() -> PathBuf {
     Library::default_user_root().join("music-videos")
 }
@@ -1276,7 +1294,7 @@ pub async fn media_generate(
     let file = base.join("jobs").join(format!("{id}.json"));
     let mut job = json!({"schemaVersion":1,"id":id,"request":request,"status":"unknown","message":"Request started. If interrupted, check provider history before generating again."});
     write(&file, &job)?;
-    let result = async {
+    let result = cancellable(async {
         let bytes = api::fetch(
             &m,
             &path,
@@ -1286,7 +1304,7 @@ pub async fn media_generate(
         )
         .await?;
         finish_job(&base, &mut job, api::response(&m, bytes)?, &m, &state).await
-    }
+    })
     .await;
     job["message"] = json!(result.err().unwrap_or_default());
     write(&file, &job)?;
@@ -1319,7 +1337,7 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
     if job["status"] == "ready" {
         return Ok(public_job(job));
     }
-    let result=async {
+    let result = cancellable(async {
         if job.get("rawPath").is_some() || job.get("assetId").is_some() || job.get("targetAssetId").is_some() {
             return finish_import(&base, &mut job, &m).await;
         }
@@ -1330,7 +1348,7 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
             api::Output::Download(uri.into(),ext.into())
         } else {return Err("No recoverable task ID. Check provider history and import the result; this button never starts another paid generation.".into());};
         finish_job(&base,&mut job,output,&m,&state).await
-    }.await;
+    }).await;
     job["message"] = json!(result.err().unwrap_or_default());
     write(&file, &job)?;
     Ok(public_job(job))
@@ -1640,6 +1658,22 @@ mod tests {
     }
 
     use super::*;
+
+    #[tokio::test]
+    async fn media_network_cancel_does_not_wait_for_provider_timeout() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(true, Ordering::Relaxed);
+        let started = std::time::Instant::now();
+        let err = cancellable(async {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            Ok::<_, String>(())
+        })
+        .await
+        .unwrap_err();
+        CANCEL.store(false, Ordering::Relaxed);
+        assert!(err.contains("canceled"), "{err}");
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
 
     #[tokio::test]
     async fn reanalysis_refuses_nested_future_grid_without_rewriting() {
