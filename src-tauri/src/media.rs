@@ -849,13 +849,14 @@ async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
         nested_version_ok(&source.extra, "songAnalysis")?;
         nested_version_ok(&source.extra, "estimatedGrid")?;
         let previous_analysis = source.extra.get("songAnalysis").cloned();
+        let previous_grid = source.extra.remove("estimatedGrid");
         let analysis = merge_unknown_v1(previous_analysis.as_ref(), analysis);
         source.extra.insert("songAnalysis".into(), analysis.clone());
         if let Ok(parsed) = serde_json::from_value::<jam_audio::offline::SongAnalysis>(analysis) {
             if let Ok(grid) = jam_audio::offline::estimate_grid(&parsed) {
                 let mut value = serde_json::to_value(grid).map_err(|e| e.to_string())?;
                 value["sourceHash"] = json!(analysis_hash);
-                let value = merge_unknown_v1(source.extra.get("estimatedGrid"), value);
+                let value = merge_unknown_v1(previous_grid.as_ref(), value);
                 source.extra.insert("estimatedGrid".into(), value);
             }
         }
@@ -1667,6 +1668,41 @@ mod tests {
             "{err}"
         );
         assert_eq!(fs::read(&manifest).unwrap(), before);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn reanalysis_drops_stale_estimated_grid_when_estimation_fails() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        let home = std::env::temp_dir().join(format!("jam-stale-grid-{}", id()));
+        let base = home.join("music-videos");
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let raw = base.join("assets/generated-source.wav");
+        synthetic_audio(&raw, 3);
+        let mut imported = import(&base, &raw, "audio", "Synthetic import")
+            .await
+            .unwrap();
+        imported.extra.insert(
+            "estimatedGrid".into(),
+            json!({
+                "schemaVersion": 1,
+                "origin": "stale",
+                "sourceHash": "0".repeat(64),
+                "beats": [0.0, 0.5],
+                "future": "keep"
+            }),
+        );
+        save_asset(&base, &imported).unwrap();
+        let analyzed = analyze_source(&base, &imported.id).await.unwrap();
+        assert!(
+            !analyzed.extra.contains_key("estimatedGrid"),
+            "{:?}",
+            analyzed.extra.get("estimatedGrid")
+        );
+        let saved = asset(&base, &imported.id).unwrap();
+        assert!(!saved.extra.contains_key("estimatedGrid"));
+        assert!(saved.extra.contains_key("songAnalysis"));
         fs::remove_dir_all(home).unwrap();
     }
 
