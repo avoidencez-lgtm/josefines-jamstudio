@@ -6,6 +6,7 @@ import {
   songFingerprint,
 } from "../../src/lib/jo/studioTools";
 import {
+  commitSectionDeletion,
   defaultSection,
   newOriginal,
   sectionBars,
@@ -17,9 +18,9 @@ import {
   deleteSection,
   duplicateSection,
   harmonyChoices,
-  uniqueSectionName,
   setSectionEnergy,
   transformPhrase,
+  uniqueSectionName,
 } from "../../src/lib/writingTools";
 import { useEngineStore } from "../../src/store/engine";
 
@@ -118,6 +119,34 @@ it("deletes only sections outside the form, with their lyrics and settings, and 
   single.chart.sections = [single.chart.sections[0]];
   single.chart.arrangement = [];
   expect(() => deleteSection(single, "verse")).toThrow(/at least one/);
+});
+
+it("does not keep a version when deleting a section is refused (#362)", () => {
+  const w = useWriting.getState();
+  w.edit((b) => {
+    duplicateSection(b, "verse", "idea");
+    b.chart.arrangement = b.chart.arrangement.filter(
+      (a) => a.sectionId !== "idea",
+    );
+  });
+  expect(currentSong().versions).toHaveLength(0);
+  useEngineStore.setState({ isRecording: true });
+  expect(commitSectionDeletion("idea")).toBe(false);
+  expect(useWriting.getState().message).toContain("Save the take");
+  expect(currentSong().body.chart.sections.map((s) => s.id)).toContain("idea");
+  expect(currentSong().versions).toHaveLength(0);
+  useEngineStore.setState({ isRecording: false });
+  const before = structuredClone(currentSong().body);
+  expect(commitSectionDeletion("idea")).toBe(true);
+  expect(currentSong().versions).toHaveLength(1);
+  expect(currentSong().versions[0].name).toBe(
+    "Before deleting This is Verse variation 3.",
+  );
+  expect(currentSong().versions[0].body).toEqual(before);
+  expect(currentSong().body.chart.sections.map((s) => s.id)).toEqual([
+    "verse",
+    "chorus",
+  ]);
 });
 
 it("groups a slider drag or a run of typing into one Undo step (#38)", () => {
@@ -231,9 +260,9 @@ it("shares section lyrics with both AI paths and applies reviewed seeds without 
 
 it("numbers each added section so chart text can round-trip (#425)", () => {
   expect(uniqueSectionName(["Verse", "Chorus"])).toBe("This is a new section.");
-  expect(
-    uniqueSectionName(["Verse", "Chorus", "This is a new section."]),
-  ).toBe("This is a new section 2.");
+  expect(uniqueSectionName(["Verse", "Chorus", "This is a new section."])).toBe(
+    "This is a new section 2.",
+  );
   const w = useWriting.getState();
   w.edit((b) => {
     const id = "section-a";

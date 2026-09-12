@@ -9,6 +9,7 @@ import { useState } from "react";
 import { keyName } from "../lib/chart/notes";
 import {
   arrangementRanges,
+  commitSectionDeletion,
   defaultSection,
   sectionBars,
   useWriting,
@@ -17,12 +18,11 @@ import {
   PHRASE_MOVES,
   arrangedBars,
   chordNotes,
-  deleteSection,
   duplicateSection,
   harmonyChoices,
-  uniqueSectionName,
   setSectionEnergy,
   transformPhrase,
+  uniqueSectionName,
 } from "../lib/writingTools";
 import { Button } from "./Button";
 import { ChordShapes } from "./ChordShapes";
@@ -91,15 +91,7 @@ export function ArrangementDesk() {
                 : "Delete this unused section with its lyrics and band settings."
             }
             onClick={() => {
-              if (song.versions.length >= 20) {
-                useWriting.setState({
-                  message:
-                    "Remove an unused version first so the song before the deletion can be kept.",
-                });
-                return;
-              }
-              w.version(`Before deleting ${selected.name}`);
-              w.edit((b) => deleteSection(b, selected.id));
+              if (!commitSectionDeletion(selected.id)) return;
               const sections = useWriting.getState().song?.body.chart.sections;
               if (sections && !sections.some((s) => s.id === selected.id))
                 select(sections[0].id);
