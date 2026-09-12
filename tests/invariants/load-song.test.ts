@@ -244,3 +244,27 @@ it("does not reinterpret questions or negated song requests as transport/style c
   ])
     expect(parseNaturalIntent(text).toolCalls).toEqual([]);
 });
+
+it("strips trailing punctuation and and-play so the library title still matches", async () => {
+  const invoke = mockLibrary();
+  expect(parseNaturalIntent("load song Blå natt.").toolCalls).toEqual([
+    call("Blå natt"),
+  ]);
+  expect(parseNaturalIntent("load song Blå natt and play").toolCalls).toEqual([
+    call("Blå natt"),
+  ]);
+  expect(
+    parseNaturalIntent("last inn sangen Blå natt og spill").toolCalls,
+  ).toEqual([call("Blå natt")]);
+  expect(parseNaturalIntent("load song.").toolCalls).toEqual([]);
+  expect(parseNaturalIntent("load song and play").toolCalls).toEqual([]);
+  expect(await handleJoQuery("load song Blå natt.")).toContain("Blå natt");
+  expect(invoke).toHaveBeenLastCalledWith("media_reference_load", {
+    assetId: "song-a",
+    useStems: undefined,
+    useMinusGuitar: undefined,
+  });
+  await expect(dispatchJoToolCall(call("Blå natt."))).resolves.toContain(
+    "Blå natt",
+  );
+});

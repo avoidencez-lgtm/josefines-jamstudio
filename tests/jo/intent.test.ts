@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { dismissStudioAssistantTurn } from "../../src/components/StudioAssistant";
 import { parseNaturalIntent } from "../../src/lib/jo/intent";
 
 describe("Jo Natural Intent Parser", () => {
@@ -14,6 +15,21 @@ describe("Jo Natural Intent Parser", () => {
     expect(stopRes.toolCalls[0]).toEqual({
       name: "transport_control",
       arguments: { action: "stop" },
+    });
+
+    for (const text of ["stop playing", "stop playback"]) {
+      expect(parseNaturalIntent(text).toolCalls[0]).toEqual({
+        name: "transport_control",
+        arguments: { action: "stop" },
+      });
+    }
+    expect(parseNaturalIntent("pause playing").toolCalls[0]).toEqual({
+      name: "transport_control",
+      arguments: { action: "pause" },
+    });
+    expect(parseNaturalIntent("play").toolCalls[0]).toEqual({
+      name: "transport_control",
+      arguments: { action: "play" },
     });
   });
 
@@ -57,6 +73,37 @@ describe("Jo Natural Intent Parser", () => {
       name: "set_style",
       arguments: { styleId: "metal-gallop" },
     });
+    expect(parseNaturalIntent("straight rock").toolCalls[0]).toEqual({
+      name: "set_style",
+      arguments: { styleId: "rock-straight" },
+    });
+    expect(parseNaturalIntent("6/8").toolCalls[0]).toEqual({
+      name: "set_style",
+      arguments: { styleId: "ballad-68" },
+    });
+    expect(readFileSync("src/lib/jo/intent.ts", "utf8")).not.toMatch(
+      /blues-shuffle|funk-16|jazz-swing|metal-gallop|ballad-68|rock-straight/,
+    );
+  });
+
+  it("does not pretend to understand unrecognized text or run unasked transport", () => {
+    const miss = parseNaturalIntent("what key is this in");
+    expect(miss.toolCalls).toEqual([]);
+    expect(miss.reply).toMatch(/didn't catch/i);
+    expect(miss.reply).not.toMatch(/Got it|understood/i);
+  });
+
+  it("clears studio assistant busy state when the guitarist cancels", () => {
+    const work = {
+      cancelled: { current: false },
+      running: { current: true },
+      generation: { current: 3 },
+    };
+    const dismissed = dismissStudioAssistantTurn(work);
+    expect(dismissed.busy).toBe(false);
+    expect(work.cancelled.current).toBe(true);
+    expect(work.running.current).toBe(false);
+    expect(work.generation.current).toBe(4);
   });
 
   it("parses parts muting", () => {

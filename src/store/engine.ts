@@ -96,7 +96,7 @@ export interface EngineState {
   notify: (kind: Notice["kind"], text: string) => void;
   dismissNotice: (id: number) => void;
   setTone: (on: boolean, hz?: number) => Promise<void>;
-  setTuner: (on: boolean) => Promise<void>;
+  setTuner: (on: boolean) => Promise<CommandResult>;
   setClickVolume: (volume: number) => Promise<void>;
   setBandVolume: (volume: number) => Promise<void>;
 
@@ -104,13 +104,13 @@ export interface EngineState {
   transportPlay: () => Promise<CommandResult>;
   transportPause: () => Promise<CommandResult>;
   transportStop: () => Promise<CommandResult>;
-  transportSeekBar: (bar: number) => Promise<void>;
+  transportSeekBar: (bar: number) => Promise<CommandResult>;
   transportSetLoop: (
     startBar: number,
     endBar: number,
     enabled: boolean,
   ) => Promise<CommandResult>;
-  transportSetCountIn: (bars: number) => Promise<void>;
+  transportSetCountIn: (bars: number) => Promise<CommandResult>;
   transportSetTempo: (bpm: number) => Promise<CommandResult<number>>;
   transportSetTimeSignature: (
     numerator: number,
@@ -151,7 +151,7 @@ export interface EngineState {
   deleteUserChart: (chartId: string) => Promise<void>;
   /** Load a chart object straight into the band without saving (editor preview). */
   playChartInline: (chart: Chart) => Promise<boolean>;
-  transposeCurrentChart: (semitones: number) => Promise<void>;
+  transposeCurrentChart: (semitones: number) => Promise<CommandResult>;
 
   // Recorder & Takes
   takes: TakeMetadata[];
@@ -372,7 +372,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
 
     setTuner: async (on) => {
       set({ tunerOn: on });
-      await run("The tuner", () => ipc.invoke("tuner_set", { on }));
+      return command("The tuner", () => ipc.invoke("tuner_set", { on }));
     },
 
     setClickVolume: async (volume) => {
@@ -407,7 +407,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       return command("Stop", () => ipc.invoke<void>("transport_stop"));
     },
     transportSeekBar: async (bar) => {
-      await run("Seek", () => ipc.invoke("transport_seek_bar", { bar }));
+      return command("Seek", () => ipc.invoke("transport_seek_bar", { bar }));
     },
     transportSetLoop: async (startBar, endBar, enabled) => {
       return command("The loop", () =>
@@ -415,7 +415,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       );
     },
     transportSetCountIn: async (bars) => {
-      await run("The count-in", () =>
+      return command("The count-in", () =>
         ipc.invoke("transport_set_count_in", { bars }),
       );
     },
@@ -566,7 +566,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
     },
     transposeCurrentChart: async (semitones) => {
       const current = get().currentChart;
-      if (!current) return;
+      if (!current) return { ok: false, error: "Load a chart first." };
       const moved = transposeChart(current, semitones);
       const loaded = get().loadedOriginal;
       if (loaded) {
@@ -577,19 +577,22 @@ export const useEngineStore = create<EngineState>((set, get) => {
           versions: [],
           body: { ...loaded.body, chart: moved },
         };
-        if (
-          await runOk("The transpose song", () =>
-            ipc.invoke("originals_load", { document, keepPlayback: true }),
-          )
-        ) {
+        const result = await command("The transpose song", () =>
+          ipc.invoke("originals_load", { document, keepPlayback: true }),
+        );
+        if (result.ok) {
           set({
             currentChart: moved,
             loadedOriginal: { id: loaded.id, body: document.body },
           });
         }
-        return;
+        return result;
       }
-      await get().playChartInline(moved);
+      const result = await command("The play chart", () =>
+        ipc.invoke("band_load_chart_inline", { chart: moved }),
+      );
+      if (result.ok) set({ currentChart: moved, loadedOriginal: null });
+      return result;
     },
 
     startRecording: async (sessionId = "default-session") => {

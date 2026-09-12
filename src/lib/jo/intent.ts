@@ -1,4 +1,59 @@
+import { bundledStyles } from "../../ipc/preview";
+import { useEngineStore } from "../../store/engine";
 import type { JoToolCall } from "./persona";
+
+const STYLE_NOISE = new Set([
+  "groove",
+  "notes",
+  "note",
+  "16th",
+  "8th",
+  "slow",
+  "the",
+  "and",
+  "for",
+  "some",
+  "with",
+]);
+
+function listedStyles() {
+  const live = useEngineStore.getState().styles;
+  return live.length ? live : bundledStyles();
+}
+
+function styleFromUtterance(lower: string) {
+  let best: { id: string; name: string; score: number } | undefined;
+  for (const style of listedStyles()) {
+    const name = style.name.toLowerCase();
+    const genre = style.genre.toLowerCase();
+    const idText = style.id.replaceAll("-", " ");
+    let score = 0;
+    if (lower.includes(name)) score += 4;
+    if (lower.includes(idText)) score += 4;
+    if (genre.length > 2 && lower.includes(genre)) score += 3;
+    const meter = style.feel?.timeSig;
+    if (meter && lower.includes(`${meter[0]}/${meter[1]}`)) score += 2;
+    for (const token of `${name} ${idText}`.split(/[^a-z0-9/]+/)) {
+      if (token.length < 4 || STYLE_NOISE.has(token)) continue;
+      if (lower.includes(token)) score += 1;
+    }
+    if (score > 0 && score > (best?.score ?? 0))
+      best = { id: style.id, name: style.name, score };
+  }
+  return best;
+}
+
+/** Strip wrap-quotes, a trailing play request, then trailing punctuation. */
+export function cleanSongQuery(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^["“]([\s\S]*)["”]$/, "$1")
+    .trim()
+    .replace(/(?:^|\s+)(?:and play|og spill)\s*$/i, "")
+    .trim()
+    .replace(/[.!?]+$/u, "")
+    .trim();
+}
 
 export function parseNaturalIntent(
   text: string,
@@ -13,12 +68,18 @@ export function parseNaturalIntent(
 } {
   const lower = text.toLowerCase().trim();
   const toolCalls: JoToolCall[] = [];
-  const reply = "This is understood.";
+  const reply = "I didn't catch that. Try blues in A at 90.";
   const load = /^(?:load song|last(?: inn)? sang(?:en)?)\s+(.+)$/i.exec(
     text.trim(),
   );
   if (load) {
-    const query = load[1].replace(/^["“](.*)["”]$/, "$1").trim();
+    const query = cleanSongQuery(load[1]);
+    if (!query)
+      return {
+        reply:
+          "Use load song followed by its title, or last inn sangen followed by its title.",
+        toolCalls: [],
+      };
     return {
       reply: "Looking for the song in your local library.",
       toolCalls: [{ name: "load_song", arguments: { query } }],
@@ -64,26 +125,37 @@ export function parseNaturalIntent(
   if (reference) {
     const loop = /^(?:loop|gjenta)\s+(.+?)[.!]?$/.exec(lower);
     if (loop) {
+      const wanted = loop[1].replace(/^(?:the|den|det)\s+/, "").trim();
       const matches =
-        reference.sections?.filter(
-          (s) =>
-            s.label.toLowerCase() === loop[1] || s.id.toLowerCase() === loop[1],
-        ) ?? [];
-      if (matches.length !== 1)
+        reference.sections?.filter((s) => {
+          const label = s.label.toLowerCase();
+          const id = s.id.toLowerCase();
+          return (
+            label === wanted ||
+            id === wanted ||
+            label === loop[1] ||
+            id === loop[1]
+          );
+        }) ?? [];
+      if (matches.length > 1)
         return {
           reply:
             "Choose one unique confirmed section in the reference player. Confirm and name its bars in Songs first if needed.",
           toolCalls: [],
         };
-      return {
-        reply: "Looping the confirmed reference section.",
-        toolCalls: [
-          {
-            name: "loop_reference_section",
-            arguments: { assetId: reference.assetId, sectionId: matches[0].id },
-          },
-        ],
-      };
+      if (matches.length === 1)
+        return {
+          reply: "Looping the confirmed reference section.",
+          toolCalls: [
+            {
+              name: "loop_reference_section",
+              arguments: {
+                assetId: reference.assetId,
+                sectionId: matches[0].id,
+              },
+            },
+          ],
+        };
     }
     const percent =
       /^(?:(?:set|sett) )?(?:speed|hastighet)(?: to| til)?\s+(\d{1,3})\s*(?:%|percent|prosent)?[.!]?$/.exec(
@@ -122,7 +194,7 @@ export function parseNaturalIntent(
       toolCalls: [{ name: "songwriting", arguments: { action: "next" } }],
     };
   const rehearsal =
-    /^(?:loop|practice) (?:the )?(verse|chorus|bridge|solo|intro|outro|section)$/.exec(
+    /^(?:loop|practice) (?:the )?(verse|chorus|bridge|solo|intro|outro|section)[.!?]?$/.exec(
       lower,
     );
   if (rehearsal)
@@ -198,43 +270,14 @@ export function parseNaturalIntent(
     };
   }
 
-  // 2. Styles (e.g. "play some funk" shouldn't just trigger generic "play")
-  if (lower.includes("shuffle") || lower.includes("blues shuffle")) {
+  // 2. Styles from the registry (never match hard-coded style ids).
+  const style = styleFromUtterance(lower);
+  if (style) {
     toolCalls.push({
       name: "set_style",
-      arguments: { styleId: "blues-shuffle" },
+      arguments: { styleId: style.id },
     });
-    return { reply: "Switching to Blues Shuffle.", toolCalls };
-  }
-  if (lower.includes("funk") || lower.includes("funky")) {
-    toolCalls.push({ name: "set_style", arguments: { styleId: "funk-16" } });
-    return { reply: "Locking in the 16th-note funk groove.", toolCalls };
-  }
-  if (lower.includes("jazz") || lower.includes("swing")) {
-    toolCalls.push({ name: "set_style", arguments: { styleId: "jazz-swing" } });
-    return { reply: "Stepping into Jazz Swing.", toolCalls };
-  }
-  if (
-    lower.includes("metal") ||
-    lower.includes("gallop") ||
-    lower.includes("heavy")
-  ) {
-    toolCalls.push({
-      name: "set_style",
-      arguments: { styleId: "metal-gallop" },
-    });
-    return { reply: "Locked in for a heavy metal gallop.", toolCalls };
-  }
-  if (lower.includes("ballad") || lower.includes("6/8")) {
-    toolCalls.push({ name: "set_style", arguments: { styleId: "ballad-68" } });
-    return { reply: "Slowing down for the 6/8 ballad.", toolCalls };
-  }
-  if (lower.includes("straight rock")) {
-    toolCalls.push({
-      name: "set_style",
-      arguments: { styleId: "rock-straight" },
-    });
-    return { reply: "This is driving a straight 8th rock groove.", toolCalls };
+    return { reply: `This is switching to ${style.name}.`, toolCalls };
   }
 
   // 3. Cues
@@ -377,18 +420,6 @@ export function parseNaturalIntent(
   }
 
   // 8. General Playback / Transport
-  if (
-    lower.includes("play") ||
-    lower.includes("start") ||
-    lower.includes("let's jam") ||
-    lower === "go"
-  ) {
-    toolCalls.push({
-      name: "transport_control",
-      arguments: { action: "play" },
-    });
-    return { reply: "This is rolling.", toolCalls };
-  }
   if (lower.includes("pause") || lower.includes("hold on")) {
     toolCalls.push({
       name: "transport_control",
@@ -402,6 +433,18 @@ export function parseNaturalIntent(
       arguments: { action: "stop" },
     });
     return { reply: "This playback is stopping.", toolCalls };
+  }
+  if (
+    /\bplay\b/.test(lower) ||
+    lower.includes("start") ||
+    lower.includes("let's jam") ||
+    lower === "go"
+  ) {
+    toolCalls.push({
+      name: "transport_control",
+      arguments: { action: "play" },
+    });
+    return { reply: "This is rolling.", toolCalls };
   }
 
   return { reply, toolCalls };
