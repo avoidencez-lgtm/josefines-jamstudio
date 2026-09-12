@@ -3180,10 +3180,10 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/lib/roomActions.ts", "utf8")).toContain(
     "`This is before ${label}.`",
   );
-  expect(
-    readFileSync("src/components/FinishingDesk.tsx", "utf8"),
-  ).not.toContain("`Before ${label}`");
-  expect(readFileSync("src/components/FinishingDesk.tsx", "utf8")).toContain(
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).not.toContain(
+    "`Before ${label}`",
+  );
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).toContain(
     "`This is before ${label}.`",
   );
   expect(readFileSync("src/lib/jo/songLab.ts", "utf8")).not.toContain(
