@@ -222,6 +222,7 @@ pub fn voice_chord(chord_symbol: &str, voicing_kind: &str) -> Vec<u8> {
         ("triad", ChordQuality::Sus4) | ("triad", ChordQuality::Sus7) => &[0, 5, 7],
         ("triad", ChordQuality::Sus2) => &[0, 2, 7],
         ("triad", ChordQuality::Augmented) => &[0, 4, 8],
+        ("triad", ChordQuality::Power5) => &[0, 7, 12],
         ("triad", _) => &[0, 4, 7],
         ("drop2", ChordQuality::Dominant7) => &[0, 10, 16, 19], // Root, b7, 3, 5
         ("drop2", ChordQuality::Major7) => &[0, 11, 16, 19],
@@ -303,6 +304,8 @@ pub fn bass_note_for_chord(
                 5
             } else if quality == ChordQuality::Sus2 {
                 2
+            } else if quality == ChordQuality::Power5 {
+                7
             } else {
                 4
             }
@@ -453,6 +456,25 @@ mod tests {
         assert_eq!(parse_chord("Ch7"), Some((0, ChordQuality::HalfDiminished)));
         assert_eq!(relative("C-7b5", "shell"), vec![0, 3, 10]);
         assert_eq!(relative("Ch7", "drop2"), relative("Cm7b5", "drop2"));
+    }
+
+    #[test]
+    fn power_chords_keep_no_third_under_triad_or_walking_bass() {
+        assert_eq!(parse_chord("C5"), Some((0, ChordQuality::Power5)));
+        assert_eq!(parse_chord("E5"), Some((4, ChordQuality::Power5)));
+        assert_eq!(relative("C5", "triad"), vec![0, 7, 12]);
+        assert_eq!(relative("E5", "triad"), vec![0, 7, 12]);
+        assert_eq!(relative("C5", "power"), vec![0, 7, 12]);
+        assert!(
+            !relative("C5", "triad").contains(&4),
+            "power chord must not include a major 3rd"
+        );
+        let third = bass_note_for_chord(0, ChordQuality::Power5, 3, 0);
+        let root = bass_note_for_chord(0, ChordQuality::Power5, 1, 0);
+        let fifth = bass_note_for_chord(0, ChordQuality::Power5, 5, 0);
+        assert_ne!((third as i32 - root as i32).rem_euclid(12), 4);
+        assert_eq!((third as i32 - root as i32).rem_euclid(12), 7);
+        assert_eq!((fifth as i32 - root as i32).rem_euclid(12), 7);
     }
 
     #[test]
