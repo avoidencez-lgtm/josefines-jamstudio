@@ -447,7 +447,7 @@ impl BandSequencer {
             }
 
             TimelineEvent::LoopWrapped { .. } => {
-                self.pending_note_offs.clear();
+                self.release_pending_notes();
                 self.update_pattern_for_intensity();
             }
         }
@@ -614,6 +614,12 @@ impl BandSequencer {
         }
         for (bus, samples) in self.part_audio.iter_mut().zip([d, dr, b, c]) {
             bus.extend(samples);
+        }
+    }
+
+    fn release_pending_notes(&mut self) {
+        for n in std::mem::take(&mut self.pending_note_offs) {
+            self.synth.note_off(n.channel, n.key);
         }
     }
 
@@ -1076,6 +1082,40 @@ mod tests {
             start_beats: 0.5,
         };
         seq.render_span(&span2, spb, 4.0, &mut l, &mut r);
+        assert_eq!(seq.pending_note_offs.len(), 0);
+        assert_eq!(seq.synth.sustaining_voices(CH_BASS), 0);
+    }
+
+    #[test]
+    fn loop_wrap_sends_note_off_before_clearing_pending() {
+        let _lock = crate::kit::lock_test_env();
+        let style = style_with(
+            0.5,
+            vec![],
+            vec![BassNote {
+                degree: 1,
+                octave: 0,
+                at_beats: 0.0,
+                dur_beats: 4.0,
+                velocity: 0.9,
+            }],
+            vec![],
+        );
+        let mut seq = BandSequencer::new(style, 48_000, 1);
+        let mut l = vec![0.0f32; 12_000];
+        let mut r = vec![0.0f32; 12_000];
+        let span = Span {
+            offset: 0,
+            frames: 12_000,
+            start_beats: 0.0,
+        };
+        seq.render_span(&span, 24_000.0, 4.0, &mut l, &mut r);
+        assert_eq!(seq.synth.sustaining_voices(CH_BASS), 1);
+        assert!(!seq.pending_note_offs.is_empty());
+        seq.handle_timeline_event(&TimelineEvent::LoopWrapped {
+            from_sample: 96_000,
+            to_sample: 0,
+        });
         assert_eq!(seq.pending_note_offs.len(), 0);
         assert_eq!(seq.synth.sustaining_voices(CH_BASS), 0);
     }
