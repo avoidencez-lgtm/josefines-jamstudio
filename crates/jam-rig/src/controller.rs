@@ -11,12 +11,27 @@ pub struct PedalPress {
     pub number: u8,
 }
 
-#[derive(Default)]
 pub struct PressFilter {
     held: BTreeMap<(u8, u8, u8), bool>,
     last_program: Option<(u8, u8, u64)>,
+    /// When true (default), a CC value of 0 after 127 is a press (latching /
+    /// toggle pedals). When false, CC uses momentary rising-edge only.
+    cc_toggle: bool,
+}
+impl Default for PressFilter {
+    fn default() -> Self {
+        Self {
+            held: BTreeMap::new(),
+            last_program: None,
+            cc_toggle: true,
+        }
+    }
 }
 impl PressFilter {
+    pub fn set_cc_toggle(&mut self, on: bool) {
+        self.cc_toggle = on;
+    }
+
     pub fn receive(&mut self, time_us: u64, bytes: &[u8]) -> Option<PedalPress> {
         let (&status, data) = bytes.split_first()?;
         let channel = (status & 15) + 1;
@@ -46,7 +61,8 @@ impl PressFilter {
                     .held
                     .insert((group, channel, number), down)
                     .unwrap_or(false);
-                if !down || was_down {
+                let cc_edge = group == 0xb0 && self.cc_toggle && down != was_down;
+                if !cc_edge && (!down || was_down) {
                     return None;
                 }
                 if group == 0xb0 {
@@ -121,7 +137,10 @@ mod tests {
         assert!(f.receive(0, &[0xb0, 64, 0]).is_none());
         assert_eq!(f.receive(1, &[0xb1, 64, 127]).unwrap().channel, 2);
         assert!(f.receive(2, &[0xb1, 64, 127]).is_none());
-        assert!(f.receive(3, &[0xb1, 64, 0]).is_none());
+        assert!(
+            f.receive(3, &[0xb1, 64, 0]).is_some(),
+            "latching CC 0 is a press, not a discarded release"
+        );
         assert!(f.receive(4, &[0xb1, 64, 127]).is_some());
         assert!(f.receive(5, &[0x90, 60, 90]).is_some());
         assert!(f.receive(6, &[0x80, 60, 0]).is_none());
@@ -130,5 +149,27 @@ mod tests {
         assert!(f.receive(9, &[0xc0, 12]).is_none());
         assert!(f.receive(300_000, &[0xc0, 12]).is_some());
         assert!(f.receive(400_000, &[0xc0, 255]).is_none());
+    }
+
+    #[test]
+    fn latching_cc_zero_is_a_press_and_momentary_mode_still_drops_release() {
+        let mut toggle = PressFilter::default();
+        assert_eq!(toggle.receive(0, &[0xb0, 14, 127]).unwrap().number, 14);
+        assert_eq!(
+            toggle.receive(1, &[0xb0, 14, 0]).unwrap().number,
+            14,
+            "toggle pedals send 0 on the next physical press"
+        );
+        assert!(toggle.receive(2, &[0xb0, 14, 0]).is_none());
+        assert!(toggle.receive(3, &[0xb0, 14, 127]).is_some());
+
+        let mut momentary = PressFilter::default();
+        momentary.set_cc_toggle(false);
+        assert!(momentary.receive(0, &[0xb0, 14, 127]).is_some());
+        assert!(
+            momentary.receive(1, &[0xb0, 14, 0]).is_none(),
+            "momentary CC 0 stays a release"
+        );
+        assert!(momentary.receive(2, &[0xb0, 14, 127]).is_some());
     }
 }
