@@ -82,26 +82,37 @@ export function parseNaturalIntent(
   if (reference) {
     const loop = /^(?:loop|gjenta)\s+(.+?)[.!]?$/.exec(lower);
     if (loop) {
+      const wanted = loop[1].replace(/^(?:the|den|det)\s+/, "").trim();
       const matches =
-        reference.sections?.filter(
-          (s) =>
-            s.label.toLowerCase() === loop[1] || s.id.toLowerCase() === loop[1],
-        ) ?? [];
-      if (matches.length !== 1)
+        reference.sections?.filter((s) => {
+          const label = s.label.toLowerCase();
+          const id = s.id.toLowerCase();
+          return (
+            label === wanted ||
+            id === wanted ||
+            label === loop[1] ||
+            id === loop[1]
+          );
+        }) ?? [];
+      if (matches.length > 1)
         return {
           reply:
             "Choose one unique confirmed section in the reference player. Confirm and name its bars in Songs first if needed.",
           toolCalls: [],
         };
-      return {
-        reply: "Looping the confirmed reference section.",
-        toolCalls: [
-          {
-            name: "loop_reference_section",
-            arguments: { assetId: reference.assetId, sectionId: matches[0].id },
-          },
-        ],
-      };
+      if (matches.length === 1)
+        return {
+          reply: "Looping the confirmed reference section.",
+          toolCalls: [
+            {
+              name: "loop_reference_section",
+              arguments: {
+                assetId: reference.assetId,
+                sectionId: matches[0].id,
+              },
+            },
+          ],
+        };
     }
     const percent =
       /^(?:(?:set|sett) )?(?:speed|hastighet)(?: to| til)?\s+(\d{1,3})\s*(?:%|percent|prosent)?[.!]?$/.exec(
@@ -140,7 +151,7 @@ export function parseNaturalIntent(
       toolCalls: [{ name: "songwriting", arguments: { action: "next" } }],
     };
   const rehearsal =
-    /^(?:loop|practice) (?:the )?(verse|chorus|bridge|solo|intro|outro|section)$/.exec(
+    /^(?:loop|practice) (?:the )?(verse|chorus|bridge|solo|intro|outro|section)[.!?]?$/.exec(
       lower,
     );
   if (rehearsal)

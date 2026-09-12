@@ -138,10 +138,31 @@ it("loops only a unique confirmed reference section and propagates native failur
   expect(parseNaturalIntent("loop Chorus", reference).toolCalls).toEqual([
     call,
   ]);
+  expect(parseNaturalIntent("loop the verse", reference).toolCalls).toEqual([
+    {
+      name: "loop_reference_section",
+      arguments: { assetId: "fixture", sectionId: "verse" },
+    },
+  ]);
   expect(parseNaturalIntent("gjenta Chorus", reference).toolCalls).toEqual([
     call,
   ]);
   expect(parseNaturalIntent("loop missing", reference).toolCalls).toEqual([]);
+  expect(
+    parseNaturalIntent("loop the verse", {
+      assetId: "fixture",
+      speed: 1,
+      sections: [],
+    }).toolCalls,
+  ).toEqual([
+    { name: "songwriting", arguments: { action: "loop", name: "verse" } },
+  ]);
+  expect(
+    parseNaturalIntent("loop the verse", { assetId: "fixture", speed: 1 })
+      .toolCalls,
+  ).toEqual([
+    { name: "songwriting", arguments: { action: "loop", name: "verse" } },
+  ]);
   expect(
     parseNaturalIntent("loop Chorus", {
       ...reference,
