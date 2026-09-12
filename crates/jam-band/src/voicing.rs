@@ -13,6 +13,10 @@ pub enum ChordQuality {
     HalfDiminished,
     Power5,
     Sus4,
+    /// sus2: root, major 2nd, 5th.
+    Sus2,
+    /// 7sus / 9sus: sus4 plus a minor seventh.
+    Sus7,
 }
 
 /// Chart tokens that mean "no chord": keep drums, skip bass and comp.
@@ -149,8 +153,16 @@ fn classify_quality(suffix: &str) -> ChordQuality {
             ChordQuality::Minor
         };
     }
-    if q.starts_with("sus") {
-        return ChordQuality::Sus4;
+    // sus2 before sus4; 7sus/9sus before a leading 7/9 as dominant (#289).
+    if q.contains("sus2") {
+        return ChordQuality::Sus2;
+    }
+    if q.contains("sus") {
+        return if has_seventh_ext(q) {
+            ChordQuality::Sus7
+        } else {
+            ChordQuality::Sus4
+        };
     }
     if q == "5" || q.starts_with("power") {
         return ChordQuality::Power5;
@@ -182,10 +194,13 @@ pub fn voice_chord(chord_symbol: &str, voicing_kind: &str) -> Vec<u8> {
         ("shell", ChordQuality::HalfDiminished) => &[0, 3, 10], // b5 left to the bass
         ("shell", ChordQuality::Diminished) => &[0, 3, 6],
         ("shell", ChordQuality::Sus4) => &[0, 5, 7],
+        ("shell", ChordQuality::Sus2) => &[0, 2, 7],
+        ("shell", ChordQuality::Sus7) => &[0, 5, 10],
         ("power", _) => &[0, 7, 12], // Root, 5, 8ve
         ("triad", ChordQuality::Minor) | ("triad", ChordQuality::Minor7) => &[0, 3, 7],
         ("triad", ChordQuality::Diminished) | ("triad", ChordQuality::HalfDiminished) => &[0, 3, 6],
-        ("triad", ChordQuality::Sus4) => &[0, 5, 7],
+        ("triad", ChordQuality::Sus4) | ("triad", ChordQuality::Sus7) => &[0, 5, 7],
+        ("triad", ChordQuality::Sus2) => &[0, 2, 7],
         ("triad", _) => &[0, 4, 7],
         ("drop2", ChordQuality::Dominant7) => &[0, 10, 16, 19], // Root, b7, 3, 5
         ("drop2", ChordQuality::Major7) => &[0, 11, 16, 19],
@@ -195,6 +210,8 @@ pub fn voice_chord(chord_symbol: &str, voicing_kind: &str) -> Vec<u8> {
         ("drop2", ChordQuality::Major) => &[0, 7, 12, 16],
         ("drop2", ChordQuality::Minor) => &[0, 7, 12, 15],
         ("drop2", ChordQuality::Sus4) => &[0, 7, 12, 17],
+        ("drop2", ChordQuality::Sus2) => &[0, 7, 12, 14],
+        ("drop2", ChordQuality::Sus7) => &[0, 10, 17, 19],
         (_, ChordQuality::Major) => &[0, 4, 7],
         (_, ChordQuality::Minor) => &[0, 3, 7],
         (_, ChordQuality::Minor7) => &[0, 3, 7, 10],
@@ -202,6 +219,8 @@ pub fn voice_chord(chord_symbol: &str, voicing_kind: &str) -> Vec<u8> {
         (_, ChordQuality::HalfDiminished) => &[0, 3, 6, 10],
         (_, ChordQuality::Diminished) => &[0, 3, 6, 9],
         (_, ChordQuality::Sus4) => &[0, 5, 7],
+        (_, ChordQuality::Sus2) => &[0, 2, 7],
+        (_, ChordQuality::Sus7) => &[0, 5, 7, 10],
         (_, ChordQuality::Power5) => &[0, 7, 12],
         (_, ChordQuality::Dominant7) => &[0, 4, 7, 10],
     };
@@ -257,8 +276,10 @@ pub fn bass_note_for_chord(
         3 => {
             if minor_third {
                 3
-            } else if quality == ChordQuality::Sus4 {
+            } else if matches!(quality, ChordQuality::Sus4 | ChordQuality::Sus7) {
                 5
+            } else if quality == ChordQuality::Sus2 {
+                2
             } else {
                 4
             }
@@ -361,6 +382,28 @@ mod tests {
         assert_eq!(voice_chord("C/E", "shell"), voice_chord("C", "shell"));
         assert_eq!(parse_chord("Esus"), Some((4, ChordQuality::Sus4)));
         assert_eq!(parse_chord("E5"), Some((4, ChordQuality::Power5)));
+        assert_eq!(parse_chord("Csus2"), Some((0, ChordQuality::Sus2)));
+        assert_eq!(parse_chord("A7sus4"), Some((9, ChordQuality::Sus7)));
+        assert_eq!(parse_chord("A9sus4"), Some((9, ChordQuality::Sus7)));
+    }
+
+    fn relative(symbol: &str, voicing: &str) -> Vec<i32> {
+        let notes = voice_chord(symbol, voicing);
+        let root = notes[0] as i32;
+        notes.iter().map(|&n| n as i32 - root).collect()
+    }
+
+    #[test]
+    fn sus2_and_seventh_sus_keep_the_suspended_family() {
+        assert_eq!(relative("Csus2", "triad"), vec![0, 2, 7]);
+        assert_eq!(relative("Csus2", "shell"), vec![0, 2, 7]);
+        assert_eq!(relative("A7sus4", "shell"), vec![0, 5, 10]);
+        assert_eq!(relative("A7sus4", "drop2")[0], 0);
+        assert_eq!(relative("A9sus4", "triad"), vec![0, 5, 7]);
+        let seventh_sus = relative("A7sus4", "four-note");
+        assert_eq!(seventh_sus, vec![0, 5, 7, 10]);
+        assert!(!relative("Csus2", "triad").contains(&5), "sus2 must not voice a 4th");
+        assert!(!seventh_sus.contains(&4), "7sus must not voice a major 3rd");
     }
 
     #[test]
