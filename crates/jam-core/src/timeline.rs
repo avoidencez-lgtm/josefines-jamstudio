@@ -157,7 +157,7 @@ impl Timeline {
     }
 
     pub fn set_count_in(&mut self, bars: u32) {
-        self.count_in_bars = bars;
+        self.count_in_bars = bars.min(4);
     }
 
     pub fn play(&mut self) {
@@ -562,6 +562,19 @@ mod tests {
         assert_eq!(bar_beat_at(3.5, (4, 4)), (1, 4));
         assert_eq!(bar_beat_at(4.0, (4, 4)), (2, 1));
         assert_eq!(bar_beat_at(7.9, (4, 4)), (2, 4));
+    }
+
+    #[test]
+    fn count_in_clamps_to_four_bars() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(999);
+        assert_eq!(tl.count_in_bars, 4);
+        tl.set_count_in(0);
+        assert_eq!(tl.count_in_bars, 0);
+        tl.set_count_in(4);
+        assert_eq!(tl.count_in_bars, 4);
+        tl.set_count_in(2);
+        assert_eq!(tl.count_in_bars, 2);
     }
 
     #[test]

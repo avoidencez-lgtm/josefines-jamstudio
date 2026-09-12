@@ -288,6 +288,10 @@ fn count_in_holds_the_song_position_until_the_band_comes_in() {
     );
     let err = studio.err("transport_set_count_in", json!({"bars": 1.5}));
     assert!(err.contains("expected u32"), "{err}");
+    studio.ok("transport_set_count_in", json!({"bars": 999}));
+    wait_for(&studio, "count-in clamped to four bars", |t| {
+        t["transport"]["count_in_bars"] == 4
+    });
 
     studio.ok("transport_set_count_in", json!({"bars": 1}));
     studio.ok("transport_set_tempo", json!({"bpm": 240.0}));

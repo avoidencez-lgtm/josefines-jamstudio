@@ -379,6 +379,21 @@ describe("browser preview engine", () => {
     expect(s.live).toBe(false);
   });
 
+  it("clamps count-in to four bars like the desktop engine", async () => {
+    await engine.invoke("transport_set_count_in", { bars: 999 });
+    const tel = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(tel.transport.count_in_bars).toBe(4);
+    await engine.invoke("transport_set_count_in", { bars: -3 });
+    const low = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(low.transport.count_in_bars).toBe(0);
+  });
+
   it("emits tuner.state null when the tuner turns off", async () => {
     const seen: Array<TunerTelemetry | null> = [];
     await engine.listen<TunerTelemetry | null>("tuner.state", (t) => {
