@@ -437,7 +437,7 @@ Files are truth; SQLite is a cache ([ADR 0005](adr/0005-files-are-truth-sqlite-i
   styles/  charts/  rigs/  controls/     user-added seam files (same schemas as the bundled ones)
   songs/<slug>/               song.json, source.wav (48 kHz), stems/<name>.wav, analysis/<kind>-<provider>.json
   sessions/<date>-<slug>/     session.json, takes/<n>/take.json + <kind>.wav
-  exports/<session>/<take>/   stems + tempo.mid + README.txt
+  exports/<take>[-<number>]/  stems + tempo map + README.txt
 ```
 
 ```ts
@@ -653,6 +653,10 @@ Reference mixes and MIDI alternatives start muted. Relative file references allo
 moving the export folder between Windows and Mac. Import never opens a network,
 modifies the original audio, or saves over a project. Logic-compatible WAV/MIDI
 exports remain available. This is a one-way performance handoff, not a hosted DAW.
+Every export reserves a fresh folder with `create_dir`; repeats use numbered
+suffixes. Earlier bundles and DAW projects saved inside them are never overwritten.
+On failure, only the newly reserved folder is removed; a cleanup error names the
+partial folder. Both `takes_export_daw` and `export_logic` return the new location.
 
 ## Implemented text providers and Song Lab (2026-09-04)
 

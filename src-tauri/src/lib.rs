@@ -1405,7 +1405,6 @@ async fn takes_export_daw(
 ) -> Result<jam_audio::export::ExportReport, String> {
     let (takes, _) = all_takes(&state)?;
     let mut take = take_from(&takes, &take_id)?.clone();
-    let export_path = Library::default_user_root().join("exports").join(&take.id);
 
     let chart: Option<Chart> = serde_json::from_value(take.snapshot["body"]["chart"].clone())
         .ok()
@@ -1486,71 +1485,96 @@ async fn takes_export_daw(
         stems: &stems,
         take_dir: Path::new(&take.path_input).parent(),
     };
-    let mut report = jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
-        .map_err(|e| e.to_string())?;
-    if let Some(bytes) = performance_midi {
-        std::fs::write(export_path.join("band-notes.mid"), bytes).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(
-        export_path.join("song-snapshot.json"),
-        serde_json::to_vec_pretty(&take.snapshot).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    if let Ok(clips) = serde_json::from_value::<Vec<jam_audio::workstation::ClipSpec>>(
-        take.snapshot["body"]["clips"].clone(),
-    ) {
-        for (i, spec) in clips.into_iter().enumerate() {
-            if spec.muted {
-                continue;
+    let export_root = Library::default_user_root().join("exports");
+    std::fs::create_dir_all(&export_root).map_err(|e| e.to_string())?;
+    let mut export_path = export_root.join(&take.id);
+    let mut suffix = 2_u64;
+    loop {
+        match std::fs::create_dir(&export_path) {
+            Ok(()) => break,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                export_path = export_root.join(format!("{}-{suffix}", take.id));
+                suffix = suffix.checked_add(1).ok_or("No free export folder name.")?;
             }
-            let clip = originals::read_clip(spec, &state, &takes)?;
-            let path = export_path.join(format!("guitar-layer-{}.wav", i + 1));
-            jam_audio::export::write_clip_stem(
-                &path,
-                &clip,
-                take.sample_count,
-                sample_rate,
-                take.tempo,
-            )
-            .map_err(|e| e.to_string())?;
-            report
-                .copied_stems
-                .push(path.to_string_lossy().into_owned());
+            Err(e) => return Err(e.to_string()),
         }
     }
-    let info_path = export_path.join(format!("{}-info.json", take.id));
-    if report.missing_stems.is_empty() {
-        report.reaper_script = Some(
-            jam_audio::export::write_reaper_import(&export_path, &job, &report, &take.midi)
-                .map_err(|e| e.to_string())?,
-        );
-    }
-    let mut info: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(&info_path).map_err(|e| e.to_string())?)
+    let result = (|| {
+        let mut report = jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
             .map_err(|e| e.to_string())?;
-    info["schemaVersion"] = serde_json::json!(1);
-    info["tempoSource"] = serde_json::json!(if recorded_tempo_map.is_some() {
-        "recorded-reference"
-    } else {
-        "constant-take-tempo"
-    });
-    info["recordedTempoMap"] = serde_json::json!(recorded_tempo_map);
-    if let Some(raw) = take.extra.get("referenceTiming") {
-        info["referenceTiming"] = raw.clone();
+        if let Some(bytes) = performance_midi {
+            std::fs::write(export_path.join("band-notes.mid"), bytes).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(
+            export_path.join("song-snapshot.json"),
+            serde_json::to_vec_pretty(&take.snapshot).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        if let Ok(clips) = serde_json::from_value::<Vec<jam_audio::workstation::ClipSpec>>(
+            take.snapshot["body"]["clips"].clone(),
+        ) {
+            for (i, spec) in clips.into_iter().enumerate() {
+                if spec.muted {
+                    continue;
+                }
+                let clip = originals::read_clip(spec, &state, &takes)?;
+                let path = export_path.join(format!("guitar-layer-{}.wav", i + 1));
+                jam_audio::export::write_clip_stem(
+                    &path,
+                    &clip,
+                    take.sample_count,
+                    sample_rate,
+                    take.tempo,
+                )
+                .map_err(|e| e.to_string())?;
+                report
+                    .copied_stems
+                    .push(path.to_string_lossy().into_owned());
+            }
+        }
+        let info_path = export_path.join(format!("{}-info.json", take.id));
+        if report.missing_stems.is_empty() {
+            report.reaper_script = Some(
+                jam_audio::export::write_reaper_import(&export_path, &job, &report, &take.midi)
+                    .map_err(|e| e.to_string())?,
+            );
+        }
+        let mut info: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&info_path).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+        info["schemaVersion"] = serde_json::json!(1);
+        info["tempoSource"] = serde_json::json!(if recorded_tempo_map.is_some() {
+            "recorded-reference"
+        } else {
+            "constant-take-tempo"
+        });
+        info["recordedTempoMap"] = serde_json::json!(recorded_tempo_map);
+        if let Some(raw) = take.extra.get("referenceTiming") {
+            info["referenceTiming"] = raw.clone();
+        }
+        info["stems"] = serde_json::json!(report.copied_stems);
+        info["missingStems"] = serde_json::json!(report.missing_stems);
+        info["reaperScript"] = serde_json::json!(report.reaper_script);
+        info["howTo"] = serde_json::json!("Import the tempo map first. Put the individual guitar, drums, bass, comp and guitar-layer stems at bar 1. Band and master are reference mixes: mute them while mixing the individual stems. Import band-notes.mid on separate instrument tracks if wanted.");
+        if reference {
+            info["howTo"] = serde_json::json!("Import the tempo map first. Place Guitar DI and Band at time zero with original speed, and mute Master, Drums, Bass and Comp. All WAVs retain recorded timing. Sections follow source playback, including loops; partial bars and lead-ins mean DAW bar numbers can differ from source bars. Edge tempo outside the confirmed grid is extrapolated, not analysed.");
+        }
+        std::fs::write(
+            info_path,
+            serde_json::to_vec_pretty(&info).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(report)
+    })();
+    if let Err(error) = &result {
+        if let Err(cleanup) = std::fs::remove_dir_all(&export_path) {
+            return Err(format!(
+                "{error} Partial export files remain at {}. {cleanup}",
+                export_path.display()
+            ));
+        }
     }
-    info["stems"] = serde_json::json!(report.copied_stems);
-    info["missingStems"] = serde_json::json!(report.missing_stems);
-    info["reaperScript"] = serde_json::json!(report.reaper_script);
-    info["howTo"] = serde_json::json!("Import the tempo map first. Put the individual guitar, drums, bass, comp and guitar-layer stems at bar 1. Band and master are reference mixes: mute them while mixing the individual stems. Import band-notes.mid on separate instrument tracks if wanted.");
-    if reference {
-        info["howTo"] = serde_json::json!("Import the tempo map first. Place Guitar DI and Band at time zero with original speed, and mute Master, Drums, Bass and Comp. All WAVs retain recorded timing. Sections follow source playback, including loops; partial bars and lead-ins mean DAW bar numbers can differ from source bars. Edge tempo outside the confirmed grid is extrapolated, not analysed.");
-    }
-    std::fs::write(
-        info_path,
-        serde_json::to_vec_pretty(&info).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(report)
+    result
 }
 
 #[tauri::command]

@@ -786,11 +786,14 @@ fn daw_export_reports_a_missing_stem_and_skips_the_reaper_script() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let take = synthetic_take(0.5, "1800000000.001");
+    let previous = studio.ok("takes_export_daw", json!({"takeId": take.id}));
+    let previous_dir = PathBuf::from(previous["dir"].as_str().unwrap());
+    let previous_band = std::fs::read(previous_dir.join(format!("{}-band.wav", take.id))).unwrap();
     std::fs::remove_file(&take.band).unwrap();
     let report = studio.ok("takes_export_daw", json!({"takeId": take.id}));
     assert_eq!(
         PathBuf::from(report["dir"].as_str().unwrap()),
-        user_dir().join("exports").join(&take.id)
+        user_dir().join("exports").join(format!("{}-2", take.id))
     );
     assert_eq!(
         report["missingStems"],
@@ -800,6 +803,71 @@ fn daw_export_reports_a_missing_stem_and_skips_the_reaper_script() {
     assert_eq!(report["copiedStems"].as_array().unwrap().len(), 2);
     assert_eq!(report["reaperScript"], Value::Null);
     assert!(Path::new(report["midiFile"].as_str().unwrap()).is_file());
+    let dir = PathBuf::from(report["dir"].as_str().unwrap());
+    assert!(!dir.join(format!("{}-band.wav", take.id)).exists());
+    assert!(!dir.join("Import into REAPER.lua").exists());
+    assert_eq!(
+        std::fs::read(previous_dir.join(format!("{}-band.wav", take.id))).unwrap(),
+        previous_band
+    );
+    assert!(Path::new(previous["reaperScript"].as_str().unwrap()).is_file());
+}
+
+#[test]
+fn failed_layer_export_preserves_the_previous_bundle_and_cleans_its_own_folder() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = synthetic_take(0.5, "1800000000.005");
+    let report = studio.ok("takes_export_daw", json!({"takeId": take.id}));
+    let dir = PathBuf::from(report["dir"].as_str().unwrap());
+    std::fs::write(dir.join("my-mix.rpp"), b"user's saved project").unwrap();
+    let before: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            let bytes = std::fs::read(&path).unwrap();
+            (path, bytes)
+        })
+        .collect();
+    let original = manifest(&take.dir);
+    let mut damaged = original.clone();
+    damaged["tempo"] = json!(100.0);
+    damaged["snapshot"]["body"] = json!({"clips": [{
+        "takeId": unique("missing-layer"), "trimStart": 0.0, "trimEnd": 0.5,
+        "startBar": 1, "repeats": 1, "gain": 1.0, "muted": false
+    }]});
+    let bytes = serde_json::to_vec(&damaged).unwrap();
+    std::fs::write(take.dir.join("take.json"), &bytes).unwrap();
+    assert!(studio
+        .err("takes_export_daw", json!({"takeId": take.id}))
+        .contains("not in the library"));
+    for (path, bytes) in before {
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
+    assert_eq!(std::fs::read(take.dir.join("take.json")).unwrap(), bytes);
+    let retry = user_dir().join("exports").join(format!("{}-2", take.id));
+    assert!(
+        !retry.exists(),
+        "failed export must remove its partial files"
+    );
+
+    std::fs::write(
+        take.dir.join("take.json"),
+        serde_json::to_vec(&original).unwrap(),
+    )
+    .unwrap();
+    // An existing file is also a collision, never an export destination to truncate.
+    std::fs::write(&retry, b"keep this file").unwrap();
+    let report = studio.ok("export_logic", json!({"takeId": take.id}));
+    assert_eq!(
+        PathBuf::from(report["dir"].as_str().unwrap()),
+        user_dir().join("exports").join(format!("{}-3", take.id))
+    );
+    assert_eq!(std::fs::read(retry).unwrap(), b"keep this file");
+    assert_eq!(
+        std::fs::read(dir.join("my-mix.rpp")).unwrap(),
+        b"user's saved project"
+    );
 }
 
 #[test]
@@ -1015,8 +1083,10 @@ fn invalid_midi_export_keeps_the_previous_bundle_and_take_unchanged() {
         serde_json::to_vec(&legacy).unwrap(),
     )
     .unwrap();
-    studio.ok("takes_export_daw", json!({"takeId": take.id}));
-    assert!(midi.parent().unwrap().join("band-notes.mid").is_file());
+    let report = studio.ok("takes_export_daw", json!({"takeId": take.id}));
+    assert!(Path::new(report["dir"].as_str().unwrap())
+        .join("band-notes.mid")
+        .is_file());
 }
 
 #[test]
@@ -1069,8 +1139,10 @@ fn daw_export_uses_recorded_reference_speed_steps_and_preserves_source_audio() {
         serde_json::to_vec(&saved).unwrap(),
     )
     .unwrap();
-    studio.ok("takes_export_daw", json!({"takeId":take.id}));
-    let info: Value = serde_json::from_slice(&std::fs::read(info_path).unwrap()).unwrap();
+    let report = studio.ok("takes_export_daw", json!({"takeId":take.id}));
+    let new_info =
+        Path::new(report["dir"].as_str().unwrap()).join(format!("{}-info.json", take.id));
+    let info: Value = serde_json::from_slice(&std::fs::read(new_info).unwrap()).unwrap();
     assert_eq!(info["tempoSource"], "constant-take-tempo");
     assert!(info["recordedTempoMap"].is_null());
 }
