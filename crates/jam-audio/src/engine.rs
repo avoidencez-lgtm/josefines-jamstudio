@@ -822,6 +822,10 @@ impl AudioEngine {
         seq.load_chart(chart);
     }
 
+    pub fn band_set_section_styles(&self, styles: std::collections::BTreeMap<String, Style>) {
+        self.sequencer.lock().section_styles = styles;
+    }
+
     pub fn band_set(&self, patch: BandPatch) {
         let mut seq = self.sequencer.lock();
         if let Some(st) = patch.style {

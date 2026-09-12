@@ -1,7 +1,10 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import { ReferenceGridEditor } from "../../src/components/ReferenceGrid";
+import {
+  ReferenceGridEditor,
+  nextReferenceSection,
+} from "../../src/components/ReferenceGrid";
 import { ReferencePlayer } from "../../src/components/ReferencePlayer";
 import { TransportBar } from "../../src/components/TransportBar";
 import type { ReferenceState } from "../../src/ipc/contract";
@@ -10,6 +13,19 @@ import { Songs } from "../../src/screens/Songs";
 import { useEngineStore } from "../../src/store/engine";
 import referenceGrid from "../fixtures/seams/reference-grid.json";
 import analysis from "../fixtures/seams/song-analysis.json";
+
+it("adds a reference section whose endBar min is not greater than max (#328)", () => {
+  const bars = 8;
+  const first = nextReferenceSection([], bars);
+  expect(first.startBar).toBe(1);
+  expect(first.endBar).toBe(bars + 1);
+  expect(first.startBar).toBeLessThan(first.endBar);
+  const second = nextReferenceSection([first], bars);
+  expect(second.startBar).toBeLessThan(bars + 1);
+  expect(second.startBar + 1).toBeLessThanOrEqual(bars + 1);
+  expect(second.endBar).toBe(bars + 1);
+  expect(Math.min(second.startBar + 1, bars + 1)).toBeLessThanOrEqual(bars + 1);
+});
 
 it("offers bounded practice controls beside a real library selection and keeps preview disabled", () => {
   const initial = useMedia.getInitialState();

@@ -19,6 +19,7 @@ import {
   COALESCE_MS,
   type Original,
   arrangementRanges,
+  commitSectionDeletion,
   defaultSection,
   sectionBars,
   useWriting,
@@ -427,8 +428,7 @@ it("Add section, take it out of the form, Delete section: a version is kept, its
     b.chart.arrangement.splice(2, 1);
   });
   const beforeDelete = structuredClone(body());
-  w.version("Before deleting This is a new section.");
-  w.edit((b) => deleteSection(b, id));
+  expect(commitSectionDeletion(id)).toBe(true);
   const sections = song().body.chart.sections;
   if (!sections.some((s) => s.id === id)) w.select(sections[0].id);
 

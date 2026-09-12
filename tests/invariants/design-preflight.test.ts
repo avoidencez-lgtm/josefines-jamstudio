@@ -2677,7 +2677,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "} variation ${body.chart.sections.length + 1}`",
   );
   expect(readFileSync("src/lib/writingTools.ts", "utf8")).toContain(
-    "This is ${source.name.slice(0, 60)} variation ${body.chart.sections.length + 1}.",
+    "This is ${base} variation ${n}.",
   );
   expect(
     readFileSync("src/components/tools/AudioProfilesTool.tsx", "utf8"),
@@ -2694,8 +2694,11 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).not.toContain(
     'name: "New section"',
   );
+  expect(readFileSync("src/lib/writingTools.ts", "utf8")).toContain(
+    'const first = "This is a new section.";',
+  );
   expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).toContain(
-    'name: "This is a new section."',
+    "uniqueSectionName(b.chart.sections.map((s) => s.name))",
   );
   expect(readFileSync("src/lib/jo/songLab.ts", "utf8")).not.toContain(
     'chords: "Alternative chords"',
@@ -3177,10 +3180,10 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/lib/roomActions.ts", "utf8")).toContain(
     "`This is before ${label}.`",
   );
-  expect(
-    readFileSync("src/components/FinishingDesk.tsx", "utf8"),
-  ).not.toContain("`Before ${label}`");
-  expect(readFileSync("src/components/FinishingDesk.tsx", "utf8")).toContain(
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).not.toContain(
+    "`Before ${label}`",
+  );
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).toContain(
     "`This is before ${label}.`",
   );
   expect(readFileSync("src/lib/jo/songLab.ts", "utf8")).not.toContain(

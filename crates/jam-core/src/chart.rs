@@ -54,6 +54,8 @@ pub struct ResolvedBar {
     pub section_id: String,
     pub section_name: String,
     pub chords: Vec<BarChord>,
+    #[serde(default)]
+    pub style_override_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -85,6 +87,7 @@ impl Chart {
                             section_id: sec.id.clone(),
                             section_name: sec.name.clone(),
                             chords: bar_chords.clone(),
+                            style_override_id: sec.style_override_id.clone(),
                         });
                         current_bar_idx += 1;
                     }
@@ -345,6 +348,61 @@ mod tests {
         let resolved = chart.resolve();
         assert_eq!(resolved.bars.len(), 1);
         assert_eq!(resolved.bars[0].chords[0].chord, "C");
+    }
+
+    #[test]
+    fn resolve_copies_section_style_override() {
+        let bar = |chord: &str| {
+            vec![BarChord {
+                chord: chord.into(),
+                beats: 4.0,
+            }]
+        };
+        let chart = Chart {
+            schema_version: 1,
+            id: "form".into(),
+            name: "form".into(),
+            key_tonic: 0,
+            mode: "major".into(),
+            time_sig: (4, 4),
+            default_bpm: 120.0,
+            default_style_id: Some("blues-shuffle".into()),
+            sections: vec![
+                ChartSection {
+                    id: "verse".into(),
+                    name: "Verse".into(),
+                    bars: vec![bar("Am"), bar("G")],
+                    style_override_id: None,
+                },
+                ChartSection {
+                    id: "chorus".into(),
+                    name: "Chorus".into(),
+                    bars: vec![bar("C"), bar("F")],
+                    style_override_id: Some("rock-straight".into()),
+                },
+            ],
+            arrangement: vec![
+                ArrangementItem {
+                    section_id: "verse".into(),
+                    repeats: 1,
+                },
+                ArrangementItem {
+                    section_id: "chorus".into(),
+                    repeats: 1,
+                },
+            ],
+        };
+        let resolved = chart.resolve();
+        assert_eq!(resolved.bars[0].style_override_id, None);
+        assert_eq!(resolved.bars[1].style_override_id, None);
+        assert_eq!(
+            resolved.bars[2].style_override_id.as_deref(),
+            Some("rock-straight")
+        );
+        assert_eq!(
+            resolved.bars[3].style_override_id.as_deref(),
+            Some("rock-straight")
+        );
     }
 
     #[test]

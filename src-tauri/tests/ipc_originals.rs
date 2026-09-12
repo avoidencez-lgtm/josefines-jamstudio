@@ -1025,6 +1025,11 @@ fn audition_plays_a_trimmed_clip_of_a_take_and_checks_its_spec() {
     let previewing = previewing.expect("a preview voice is playing");
     assert_eq!(previewing.take_id, take_id);
     assert_eq!(previewing.trim_end, duration);
+    studio.ok("clip_audition_stop", json!({}));
+    assert!(
+        state.engine.lock().audition.lock().is_none(),
+        "Stop listening clears the preview voice"
+    );
     wait_until("the transport to stop for the preview", || {
         telemetry(&studio)["transport"]["state"] == "stopped"
     });

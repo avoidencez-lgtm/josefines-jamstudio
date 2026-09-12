@@ -49,6 +49,19 @@ describe("chart text parser", () => {
     expect(resolveChart(chart as Chart)).toHaveLength(24);
   });
 
+  it("accepts slash chords with a lowercase bass note (#350)", () => {
+    const { chart, problems } = parseChartText(
+      "[A]\n| C/e | G/b | D/f# | Am/g |",
+    );
+    expect(problems).toEqual([]);
+    expect(chart?.sections[0].bars.map((b) => b[0].chord)).toEqual([
+      "C/e",
+      "G/b",
+      "D/f#",
+      "Am/g",
+    ]);
+  });
+
   it("treats N.C., rest and - as playable rest bars (#130)", () => {
     for (const tok of [
       "N.C.",
@@ -195,6 +208,18 @@ arrangement: chorus, verse x2, chorus
       "chorus",
       "chorus",
     ]);
+    expect(
+      resolveChart(chart as Chart).map((b) => b.styleOverrideId ?? null),
+    ).toEqual([
+      null,
+      null,
+      "rock-straight",
+      "rock-straight",
+      "rock-straight",
+      "rock-straight",
+      null,
+      null,
+    ]);
   });
 
   it("plays an explicit repeats: 0 once, matching Chart::resolve", () => {
@@ -272,6 +297,48 @@ arrangement: mix 2, chorus x2, verse 2
     const { chart, problems } = parseChartText("# Empty\nkey: C");
     expect(chart).toBeNull();
     expect(problems.length).toBeGreaterThan(0);
+  });
+
+  it("serializes arrangement by section name so UUID ids round-trip (#327)", () => {
+    const verseId = "section-7c9b2e4a-1111-2222-3333-444444444444";
+    const chorusId = "section-8d0c3f5b-5555-6666-7777-888888888888";
+    const chart: Chart = {
+      schemaVersion: 1,
+      id: "named-form",
+      name: "named-form",
+      keyTonic: 0,
+      mode: "major",
+      timeSig: [4, 4],
+      defaultBpm: 120,
+      sections: [
+        {
+          id: verseId,
+          name: "Verse",
+          bars: [[{ chord: "Am", beats: 4 }]],
+        },
+        {
+          id: chorusId,
+          name: "Chorus",
+          bars: [[{ chord: "C", beats: 4 }]],
+        },
+      ],
+      arrangement: [
+        { sectionId: chorusId, repeats: 1 },
+        { sectionId: verseId, repeats: 2 },
+        { sectionId: chorusId, repeats: 1 },
+      ],
+    };
+    const text = chartToText(chart);
+    expect(text).toContain("arrangement: Chorus, Verse x2, Chorus");
+    expect(text).not.toContain(verseId);
+    expect(text).not.toContain(chorusId);
+    const { chart: parsed, problems } = parseChartText(text);
+    expect(problems).toEqual([]);
+    expect(parsed?.arrangement).toEqual([
+      { sectionId: "chorus", repeats: 1 },
+      { sectionId: "verse", repeats: 2 },
+      { sectionId: "chorus", repeats: 1 },
+    ]);
   });
 
   it("round-trips every bundled chart through text", () => {
