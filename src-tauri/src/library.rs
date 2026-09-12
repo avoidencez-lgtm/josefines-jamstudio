@@ -218,22 +218,12 @@ impl Library {
             .map_err(|e| format!("Cannot create {}. {e}", dir.display()))?;
         let file = dir.join(format!("{}.json", safe_file_stem(&chart.id)));
         let json = serde_json::to_string_pretty(chart).map_err(|e| e.to_string())?;
-        let temp = file.with_extension("json.tmp");
-        std::fs::write(&temp, json).map_err(|e| format!("Cannot write {}. {e}", temp.display()))?;
-        std::fs::OpenOptions::new()
-            .write(true)
-            .open(&temp)
-            .and_then(|f| f.sync_all())
-            .map_err(|e| e.to_string())?;
-        let bak = file.with_extension("json.bak");
-        let had_file = file.exists();
-        if had_file {
-            if let Err(e) = std::fs::copy(&file, &bak) {
-                let _ = std::fs::remove_file(&temp);
-                return Err(e.to_string());
-            }
-        }
-        finish_atomic_replace(&temp, &file)?;
+        crate::persistence::write(
+            &file,
+            json.as_bytes(),
+            Some(&file.with_extension("json.bak")),
+        )
+        .map_err(|e| format!("Cannot write {}. {e}", file.display()))?;
         self.charts.insert(chart.clone());
         if !self.user_chart_ids.contains(&chart.id) {
             self.user_chart_ids.push(chart.id.clone());
@@ -272,14 +262,6 @@ impl Library {
                     .is_some_and(|c| c.id == id)
         })
     }
-}
-
-fn finish_atomic_replace(temp: &Path, dest: &Path) -> Result<(), String> {
-    if let Err(e) = std::fs::rename(temp, dest) {
-        let _ = std::fs::remove_file(temp);
-        return Err(e.to_string());
-    }
-    Ok(())
 }
 
 fn metronome_fallback(time_sig: (u8, u8)) -> Style {
@@ -607,32 +589,21 @@ mod tests {
     }
 
     #[test]
-    fn save_chart_cleans_up_temp_and_keeps_the_current_file_when_rename_fails() {
+    fn save_chart_keeps_an_existing_directory_when_replacement_fails() {
         let root = temp_root("chart-rename-fail");
-        std::fs::create_dir_all(&root).unwrap();
-        let dest = root.join("blues-12-bar.json");
-        let bak = root.join("blues-12-bar.json.bak");
-        let temp = root.join("blues-12-bar.json.tmp");
-        std::fs::write(&bak, b"previous-good").unwrap();
-        // A missing source must not delete the current file or roll it back to
-        // an older backup, including on Windows.
-        std::fs::write(&dest, b"current").unwrap();
-        let err = finish_atomic_replace(&temp, &dest).unwrap_err();
-        assert!(!err.is_empty(), "{err}");
-        assert!(!temp.exists(), "orphaned json.tmp must be unlinked");
-        assert_eq!(std::fs::read(&dest).unwrap(), b"current");
-        assert_eq!(std::fs::read(&bak).unwrap(), b"previous-good");
         let mut lib = Library::load_from(root.clone());
         let chart = lib.chart("blues-12-bar").unwrap();
         std::fs::create_dir_all(lib.charts_dir()).unwrap();
         let file = lib.charts_dir().join("blues-12-bar.json");
         std::fs::create_dir(&file).unwrap();
+        std::fs::write(file.join("keep.txt"), b"existing folder").unwrap();
         let err = lib.save_chart(&chart).unwrap_err();
         assert!(!err.is_empty(), "{err}");
-        assert!(
-            !file.with_extension("json.tmp").exists(),
-            "save_chart unlinks json.tmp after a failed rename"
+        assert_eq!(
+            std::fs::read(file.join("keep.txt")).unwrap(),
+            b"existing folder"
         );
+        assert_eq!(std::fs::read_dir(lib.charts_dir()).unwrap().count(), 1);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

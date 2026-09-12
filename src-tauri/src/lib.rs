@@ -11,6 +11,7 @@ pub mod lyria;
 pub mod media;
 pub mod net;
 pub mod originals;
+mod persistence;
 pub mod platform;
 pub mod settings;
 pub mod store;
@@ -1366,19 +1367,8 @@ fn persist_session_review(session_id: &str, review: &serde_json::Value) -> Resul
     }
     doc["review"] = review.clone();
     let bytes = serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?;
-    let temp = path.with_extension("json.tmp");
-    std::fs::write(&temp, &bytes).map_err(|e| format!("Cannot write {}. {e}", temp.display()))?;
-    std::fs::OpenOptions::new()
-        .write(true)
-        .open(&temp)
-        .and_then(|f| f.sync_all())
-        .map_err(|e| format!("Cannot write {}. {e}", temp.display()))?;
-    if path.exists() {
-        std::fs::copy(&path, path.with_extension("json.bak"))
-            .map_err(|e| format!("Cannot write session.json. {e}"))?;
-    }
-    std::fs::rename(&temp, &path).map_err(|e| format!("Cannot write session.json. {e}"))?;
-    Ok(())
+    persistence::write(&path, &bytes, Some(&path.with_extension("json.bak")))
+        .map_err(|e| format!("Cannot write session.json. {e}"))
 }
 
 /// Section markers for a chart in playing order: `(name, first bar)`.

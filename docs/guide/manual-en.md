@@ -124,7 +124,7 @@ A disk revision prevents one window from silently overwriting another. If the fi
 
 ### Closing and backups
 
-Save before closing. The native app blocks close during a recording/operation and asks about unsaved song, chart or film drafts. Keep these edits lets you save; Discard these edits and close abandons unsaved edits. Quitting from the app menu or with Cmd+Q on the Mac goes through the same check. Browser reload protection depends on the browser. Prior files are retained as backups during saves, but a backup is not a complete version history. Copy the whole user folder to another location for a real backup.
+Save before closing. The native app blocks close during a recording/operation and asks about unsaved song, chart or film drafts. Keep these edits lets you save; Discard these edits and close abandons unsaved edits. Quitting from the app menu or with Cmd+Q on the Mac goes through the same check. Browser reload protection depends on the browser. Prior files are retained as backups during saves, but a backup is not a complete version history. Copy the whole user folder to another location for a real backup. Document saves use fresh temporary files. If replacement fails, the current file stays intact and the earlier backup is restored. If restoring the backup also fails, the error names its retained recovery file. Older temporary files are kept for manual recovery.
 
 ## Stage: play and practise
 
@@ -450,7 +450,7 @@ To recover a previous file, first copy the damaged file and its backup somewhere
 
 ### Damaged files and interrupted recordings
 
-Unreadable songs, takes and media entries are reported individually while healthy entries remain visible. Invalid user charts are skipped. On startup, damaged settings are first preserved as settings.json.broken-<timestamp>, then a valid settings.json.bak is restored, or defaults if no valid backup exists. A recovery notice names the preserved file. Check your audio device and MIDI port before playing. If settings become damaged while the app is running, restart to recover. Permission or disk errors require fixing the reported access problem. Keep the error path when requesting help. The recorder uses a bounded disk queue and periodically updates WAV headers. A disk failure is reported; partial files may remain, but they are not claimed as a successfully saved take. Retained render intermediates consume disk space.
+Unreadable songs, takes and media entries are reported individually while healthy entries remain visible. Invalid user charts are skipped. On startup, damaged settings are first preserved as settings.json.broken-<timestamp>, then a valid settings.json.bak is restored, or defaults if no valid backup exists. A recovery notice names the preserved file. Check your audio device and MIDI port before playing. If settings become damaged while the app is running, saving settings preserves the damaged file before writing the new settings. Restarting restores a valid backup or defaults as described above. Permission or disk errors require fixing the reported access problem. Keep the error path when requesting help. The recorder uses a bounded disk queue and periodically updates WAV headers. A disk failure is reported; partial files may remain, but they are not claimed as a successfully saved take. Retained render intermediates consume disk space.
 
 ## Troubleshooting and acceptance
 

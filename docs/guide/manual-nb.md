@@ -124,7 +124,7 @@ En diskrevisjon hindrer at ett vindu overskriver et annet uten varsel. Hvis file
 
 ### Lukking og sikkerhetskopier
 
-Lagre før du lukker. Skrivebordsappen hindrer lukking under opptak/arbeid og spør om ulagrede låt-, skjema- eller filmutkast. Keep these edits lar deg lagre; Discard these edits and close forkaster ulagrede endringer. Avslutning fra appmenyen eller med Cmd+Q på Mac går gjennom samme kontroll. Vern mot ny innlasting av nettleseren avhenger av nettleseren. Forrige fil beholdes som sikkerhetskopi ved lagring, men en slik kopi er ikke en full versjonshistorikk. Kopier hele brukermappen til et annet sted for en ordentlig sikkerhetskopi.
+Lagre før du lukker. Skrivebordsappen hindrer lukking under opptak/arbeid og spør om ulagrede låt-, skjema- eller filmutkast. Keep these edits lar deg lagre; Discard these edits and close forkaster ulagrede endringer. Avslutning fra appmenyen eller med Cmd+Q på Mac går gjennom samme kontroll. Vern mot ny innlasting av nettleseren avhenger av nettleseren. Forrige fil beholdes som sikkerhetskopi ved lagring, men en slik kopi er ikke en full versjonshistorikk. Kopier hele brukermappen til et annet sted for en ordentlig sikkerhetskopi. Dokumenter lagres via nye midlertidige filer. Hvis filbyttet mislykkes, beholdes gjeldende fil og den tidligere sikkerhetskopien gjenopprettes. Hvis også gjenopprettingen mislykkes, viser feilmeldingen hvor kopien er bevart. Eldre midlertidige filer beholdes for manuell gjenoppretting.
 
 ## Stage: spill og øv
 
@@ -450,7 +450,7 @@ For å gjenopprette en tidligere fil: kopier først skadet fil og sikkerhetskopi
 
 ### Skadede filer og avbrutte opptak
 
-Uleselige låter, opptak og medieoppføringer rapporteres enkeltvis mens friske oppføringer fortsatt vises. Ugyldige brukerskjemaer hoppes over. Ved oppstart bevares skadede innstillinger først som settings.json.broken-<tidsstempel>. Deretter gjenopprettes en gyldig settings.json.bak, eller standardverdier hvis ingen gyldig kopi finnes. En melding viser hvor den skadede filen er bevart. Kontroller lydenhet og MIDI-port før avspilling. Start appen på nytt for å gjenopprette innstillinger som skades mens den kjører. Ved tilgangs- eller diskfeil må det meldte problemet løses. Ta vare på filbanen i feilmeldingen når du ber om hjelp. Opptakeren bruker en avgrenset diskkø og oppdaterer WAV-hoder jevnlig. Diskfeil rapporteres; delvise filer kan bli igjen, men regnes ikke som vellykket lagrede opptak. Mellomfiler fra rendring bruker diskplass.
+Uleselige låter, opptak og medieoppføringer rapporteres enkeltvis mens friske oppføringer fortsatt vises. Ugyldige brukerskjemaer hoppes over. Ved oppstart bevares skadede innstillinger først som settings.json.broken-<tidsstempel>. Deretter gjenopprettes en gyldig settings.json.bak, eller standardverdier hvis ingen gyldig kopi finnes. En melding viser hvor den skadede filen er bevart. Kontroller lydenhet og MIDI-port før avspilling. Hvis innstillingene skades mens appen kjører, bevares den skadede filen før nye innstillinger lagres. Ved omstart gjenopprettes en gyldig sikkerhetskopi eller standardverdier som beskrevet over. Ved tilgangs- eller diskfeil må det meldte problemet løses. Ta vare på filbanen i feilmeldingen når du ber om hjelp. Opptakeren bruker en avgrenset diskkø og oppdaterer WAV-hoder jevnlig. Diskfeil rapporteres; delvise filer kan bli igjen, men regnes ikke som vellykket lagrede opptak. Mellomfiler fra rendring bruker diskplass.
 
 ## Feilsøking og godkjenning i praksis
 

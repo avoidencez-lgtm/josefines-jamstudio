@@ -156,17 +156,8 @@ fn write(path: &Path, value: &Value) -> Result<(), String> {
     if bytes.len() > 2_000_000 {
         return Err(format!("Media document {} exceeds 2 MB", path.display()));
     }
-    let temp = path.with_extension("tmp");
-    fs::write(&temp, bytes).map_err(|e| write_err(path, e))?;
-    fs::OpenOptions::new()
-        .write(true)
-        .open(&temp)
-        .and_then(|f| f.sync_all())
-        .map_err(|e| write_err(path, e))?;
-    if path.exists() {
-        fs::copy(path, path.with_extension("bak")).map_err(|e| write_err(path, e))?;
-    }
-    fs::rename(temp, path).map_err(|e| write_err(path, e))
+    crate::persistence::write(path, &bytes, Some(&path.with_extension("bak")))
+        .map_err(|e| write_err(path, e))
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -2024,10 +2015,10 @@ mod tests {
         );
     }
     #[test]
-    fn write_names_the_document_when_the_temp_file_cannot_be_created() {
+    fn write_names_the_document_when_the_destination_is_a_directory() {
         let base = std::env::temp_dir().join(format!("jam-write-{}", id()));
         let file = base.join("projects").join("clip.json");
-        fs::create_dir_all(file.with_extension("tmp")).unwrap();
+        fs::create_dir_all(&file).unwrap();
         let err = write(&file, &json!({"schemaVersion": 1})).unwrap_err();
         assert!(
             err.contains("clip.json") && err.contains("Cannot write media document"),

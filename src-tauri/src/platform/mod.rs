@@ -435,6 +435,56 @@ mod url_tests {
 #[cfg(all(test, windows))]
 mod tests {
     #[test]
+    fn failed_chart_replacement_keeps_the_prior_backup_when_the_file_is_open() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let root = std::env::temp_dir().join(format!("jam-locked-chart-{}", std::process::id()));
+        let mut library = crate::library::Library::load_from(root.clone());
+        let mut chart = library.chart("blues-12-bar").unwrap();
+        let path = library.save_chart(&chart).unwrap();
+        let backup = path.with_extension("json.bak");
+        let first = std::fs::read(&path).unwrap();
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        chart.name = "Blocked second revision".into();
+        assert!(library.save_chart(&chart).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), first);
+        assert!(
+            !backup.exists(),
+            "A failed save must not leave a newly created backup"
+        );
+        drop(held);
+        chart.name = "Second revision".into();
+        library.save_chart(&chart).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let prior_backup = std::fs::read(&backup).unwrap();
+        // FILE_SHARE_READ permits the backup read but denies final replacement.
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        chart.name = "Uncommitted third revision".into();
+        assert!(library.save_chart(&chart).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert!(
+            std::fs::read(&backup).unwrap() == prior_backup,
+            "A failed final rename must keep the previous backup"
+        );
+        assert_eq!(library.chart(&chart.id).unwrap().name, "Second revision");
+        drop(held);
+        library.save_chart(&chart).unwrap();
+        assert_eq!(std::fs::read(&backup).unwrap(), before);
+        assert_eq!(
+            library.chart(&chart.id).unwrap().name,
+            "Uncommitted third revision"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn windows_accepts_native_exe_and_npm_cmd_shim_only() {
         let dir = std::env::temp_dir().join(format!("jam-agent-shim-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

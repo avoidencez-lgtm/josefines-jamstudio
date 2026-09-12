@@ -734,7 +734,7 @@ and REAPER. Recordings snapshot the meter; timing edits are refused during a tak
 Charts and styles with different meters are refused before playback changes.
 
 Settings writes flush a temporary file, retain the previous valid `.bak`, then
-rename. On startup, malformed settings are archived as `settings.json.broken-<timestamp>` before restoring a valid backup or defaults. A one-time UI notice names the archive. Read/permission failures are reported without replacing the source. Ordinary saves still refuse corrupt input; restart to recover. Unknown fields in a valid backup survive recovery. Song saves and scans enforce the same 2 MB compact JSON limit, with a shared 8 MB formatted-file bound.
+rename. On startup, malformed settings are archived as `settings.json.broken-<timestamp>` before restoring a valid backup or defaults. A one-time UI notice names the archive. Read/permission failures are reported without replacing the source. Saving settings while the app is running also archives malformed input before writing the new settings, leaving the existing backup intact. Unknown fields in a valid backup survive recovery. Song saves and scans enforce the same 2 MB compact JSON limit, with a shared 8 MB formatted-file bound.
 Take scanning reports damaged manifests individually and once per session; a cache
 row the current code cannot read falls back to its plain columns or is skipped with a
 warning, never hiding the takes on disk. Complete cached manifests
@@ -757,6 +757,19 @@ are added); master/monitor click and test tone are excluded.
 `lib/finishing.ts` transforms song documents without producing audio. Transition rehearsal reuses `useWriting.loopRange` and native transport IPC. Contrast variants preserve timing and locked/muted parts. Section comps require compatible original recording snapshots and reuse `GuitarClip`; optional `compSlot` identifies a managed bar interval, survives JSON saves and is ignored by native playback. Same-slot replacement preserves unrelated layers. Versions and Undo precede/recover accepted edits. No new IPC command or provider seam is introduced.
 
 Original and Film save completions preserve newer in-memory edits while advancing the disk revision. Film Undo retains that revision. Original listing isolates malformed documents; chart loading validates user overrides before registration and chart saves keep a previous-file backup. Structural chart limits are checked before arrangement expansion.
+
+Originals, charts, settings, media/song metadata and session reviews share
+`persistence::write`. Commits are serialized within the process; caller revision
+checks still apply. Each write uses exclusively created, uniquely named temporary
+files beside its destination, then syncs and closes them before replacement.
+An existing backup is retained until the document replacement succeeds. A failed
+replacement restores that backup, or removes a newly created backup when none
+existed before. Failed restoration reports the retained recovery path. Existing
+directories and links are refused as document/backup targets. Cleanup attempts
+to remove only temporary files owned by that attempt; older temporary files are
+left intact. This covers reported I/O failures. Crash leftovers are retained for
+manual recovery; automatic restoration of those files is not claimed.
+
 # Implemented room capability layer (2026-09-05)
 
 `RoomTools` supplies one registered expandable tool for each of the ten existing rooms. It composes existing writing/media/engine stores; it does not introduce a second document database or a provider framework. Pure operations live in `roomTools.ts`; foreground actions and the close-guard flags live in `roomActions.ts` (`busy` serialises tools; `blocking` marks work the window must not close during, so a pending coach answer never traps the window). Each tool is its own chunk, loaded the first time its room is shown; from then on hidden room drafts remain mounted and subscribe to selected stable fields rather than whole stores or transport telemetry. Screens and the manual reader are lazily imported by `App` for the same reason, and screen modules export only components; shared helpers and stores live under `src/lib/`.

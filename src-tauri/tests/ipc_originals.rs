@@ -151,6 +151,61 @@ fn save_returns_the_stored_document_and_writes_it_under_the_user_folder() {
 }
 
 #[test]
+fn saving_preserves_a_previous_temporary_song_file() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let id = unique("recoverable-song");
+    let first = studio.ok("originals_save", json!({"document": song(&id)}));
+    let file = song_file(&id);
+    let temporary = file.with_extension("json.tmp");
+    let recovery = serde_json::to_vec(&first).unwrap();
+    std::fs::write(&temporary, &recovery).unwrap();
+    let mut edited = first;
+    edited["title"] = json!("A later edit");
+    let second = studio.ok("originals_save", json!({"document": edited}));
+    assert!(
+        temporary.is_file(),
+        "An earlier temporary save must not be consumed"
+    );
+    assert_eq!(std::fs::read(&temporary).unwrap(), recovery);
+    assert_eq!(second["revision"], 2);
+    assert_eq!(read_json(&file), second);
+}
+
+#[test]
+fn failed_song_backup_keeps_the_song_and_cleans_only_its_new_temporary_files() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let id = unique("failed-song-save");
+    let first = studio.ok("originals_save", json!({"document": song(&id)}));
+    let file = song_file(&id);
+    let before = std::fs::read(&file).unwrap();
+    let backup = file.with_extension("json.bak");
+    std::fs::create_dir(&backup).unwrap();
+    std::fs::write(backup.join("keep.txt"), b"unrelated recovery").unwrap();
+    let mut edited = first;
+    edited["title"] = json!("Cannot be committed");
+    assert!(!studio
+        .err("originals_save", json!({"document": edited}))
+        .is_empty());
+    assert_eq!(std::fs::read(&file).unwrap(), before);
+    assert_eq!(
+        std::fs::read(backup.join("keep.txt")).unwrap(),
+        b"unrelated recovery"
+    );
+    assert!(
+        !std::fs::read_dir(file.parent().unwrap())
+            .unwrap()
+            .any(|entry| {
+                let name = entry.unwrap().file_name();
+                let name = name.to_string_lossy();
+                name.starts_with(&id) && name.contains(".tmp")
+            }),
+        "A failed save must clean the temporary files it created"
+    );
+}
+
+#[test]
 fn save_checks_the_revision_against_the_file_on_disk() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

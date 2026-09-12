@@ -161,7 +161,7 @@ impl Default for AppSettings {
     }
 }
 
-// Serialises writers; normal saves refuse corrupt input. Startup archives it before recovery.
+// Serialises settings updates; malformed input is archived before replacement.
 static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn load_from(path: &std::path::Path) -> Result<AppSettings, String> {
@@ -213,21 +213,9 @@ fn write_to(
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let temp = path.with_extension("json.tmp");
-    fs::write(
-        &temp,
-        serde_json::to_vec_pretty(settings).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    fs::OpenOptions::new()
-        .write(true)
-        .open(&temp)
-        .and_then(|f| f.sync_all())
-        .map_err(|e| e.to_string())?;
-    if keep_backup && path.exists() {
-        fs::copy(path, path.with_extension("json.bak")).map_err(|e| e.to_string())?;
-    }
-    fs::rename(temp, path).map_err(|e| e.to_string())
+    let bytes = serde_json::to_vec_pretty(settings).map_err(|e| e.to_string())?;
+    let backup = keep_backup.then(|| path.with_extension("json.bak"));
+    crate::persistence::write(path, &bytes, backup.as_deref()).map_err(|e| e.to_string())
 }
 
 pub fn save_settings(settings: &AppSettings) -> Result<(), String> {

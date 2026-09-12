@@ -209,17 +209,8 @@ fn write_document(root: &Path, mut doc: Value) -> Result<Value, String> {
         return Err("Song file exceeds the 8 MB disk-read limit. Remove unused versions.".into());
     }
     fs::create_dir_all(root).map_err(|e| e.to_string())?;
-    let temp = file.with_extension("json.tmp");
-    fs::write(&temp, bytes).map_err(|e| e.to_string())?;
-    fs::OpenOptions::new()
-        .write(true)
-        .open(&temp)
-        .and_then(|f| f.sync_all())
+    crate::persistence::write(&file, &bytes, Some(&file.with_extension("json.bak")))
         .map_err(|e| e.to_string())?;
-    if file.exists() {
-        fs::copy(&file, file.with_extension("json.bak")).map_err(|e| e.to_string())?;
-    }
-    fs::rename(temp, file).map_err(|e| e.to_string())?;
     Ok(doc)
 }
 

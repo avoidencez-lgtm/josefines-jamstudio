@@ -520,11 +520,17 @@ fn failed_rig_persistence_keeps_the_runtime_state_unchanged() {
     let before = studio.ok("rig_get_state", json!({}));
     let path = user_dir().join("settings.json");
     let valid = std::fs::read_to_string(&path).unwrap();
+    let backup = path.with_extension("json.bak");
+    let saved_backup = path.with_extension("json.bak.saved");
     for corrupt in [true, false] {
         let original = if corrupt { "broken settings" } else { &valid };
         std::fs::write(&path, original).unwrap();
         if !corrupt {
-            std::fs::create_dir(path.with_extension("json.tmp")).unwrap();
+            if backup.exists() {
+                std::fs::rename(&backup, &saved_backup).unwrap();
+            }
+            std::fs::create_dir(&backup).unwrap();
+            std::fs::write(backup.join("keep.txt"), "recovery bytes").unwrap();
         }
         for (command, args) in [
             ("rig_set_follow_sections", json!({"enabled": false})),
@@ -544,7 +550,15 @@ fn failed_rig_persistence_keeps_the_runtime_state_unchanged() {
             assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
         }
         if !corrupt {
-            std::fs::remove_dir(path.with_extension("json.tmp")).unwrap();
+            assert_eq!(
+                std::fs::read_to_string(backup.join("keep.txt")).unwrap(),
+                "recovery bytes"
+            );
+            std::fs::remove_file(backup.join("keep.txt")).unwrap();
+            std::fs::remove_dir(&backup).unwrap();
+            if saved_backup.exists() {
+                std::fs::rename(&saved_backup, &backup).unwrap();
+            }
         }
     }
     std::fs::write(&path, valid).unwrap();
