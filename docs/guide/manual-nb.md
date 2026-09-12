@@ -396,7 +396,7 @@ Koble navngitte skjemaseksjoner til scener, og aktiver følging når du er klar.
 
 Velg MIDI-inngang i Write → Record & layers → Hands-free controls. Klikk Learn ved en handling, trykk pedalen én gang og aktiver pedalhandlinger. Innlæring lagrer uten å utføre handlingen. Du kan blant annet velge Keep this riff, Record or save this take, Play or stop this, Loop this selected section, Loop this next section og Keep this version. Fangst må være aktivert før Keep. Koblinger lagres; aktiv tilkobling og bryter velges bevisst hver økt.
 
-CC utløses når verdien passerer 64 oppover; note-on utløser notekoblinger. Slipp og holdte verdier utløser ikke på nytt. Dupliserte Program Change innen 250 ms og samsvarende riggutgang som kommer i retur innen 500 ms undertrykkes. Et HeadRush-trykk for riggvalg kan også endre den fysiske tonen. Bruk et egnet MIDI-grensesnitt, og test trykk/slipp, ny tilkobling og tilbakekobling på den faktiske riggen.
+CC utløses når verdien passerer 64 oppover; note-on utløser notekoblinger. La Use toggle CC pedals være avslått for momentane pedaler som sender 0 når du slipper. Slå det på for pedaler som veksler mellom 127 og 0 ved påfølgende trykk. Valget lagres; et bytte kobler valgt inngang til på nytt og deaktiverer handlinger til du aktiverer dem igjen. Holdte verdier utløser ikke på nytt i noen av modusene. Dupliserte Program Change innen 250 ms og samsvarende riggutgang som kommer i retur innen 500 ms undertrykkes. Et HeadRush-trykk for riggvalg kan også endre den fysiske tonen. Bruk et egnet MIDI-grensesnitt, og test trykk/slipp, ny tilkobling og tilbakekobling på den faktiske riggen.
 
 ### Dette lagrer gitarlyden med låten.
 

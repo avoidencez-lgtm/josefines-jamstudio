@@ -9,7 +9,10 @@ pub fn controller_ports() -> Result<Vec<String>, String> {
 #[tauri::command]
 pub fn controller_open(port: Option<String>, state: State<'_, AppState>) -> Result<(), String> {
     let connection = port
-        .map(|name| jam_rig::controller::ControllerInput::open(&name))
+        .map(|name| {
+            let toggle = controller_config()?["ccToggle"].as_bool().unwrap_or(false);
+            jam_rig::controller::ControllerInput::open(&name, toggle)
+        })
         .transpose()?;
     *state.controller.lock() = connection;
     Ok(())
@@ -18,6 +21,9 @@ fn validate(doc: &Value) -> Result<(), String> {
     let bindings = doc["bindings"].as_array().ok_or("Missing pedal bindings")?;
     if doc["schemaVersion"] != 1 || bindings.len() > 16 || doc.to_string().len() > 32_000 {
         return Err("Invalid pedal configuration".into());
+    }
+    if doc.get("ccToggle").is_some_and(|v| !v.is_boolean()) {
+        return Err("Choose momentary or toggle CC pedals.".into());
     }
     let mut seen = std::collections::BTreeSet::new();
     for b in bindings {
@@ -82,6 +88,10 @@ mod tests {
             serde_json::from_str(include_str!("../../tests/fixtures/seams/controller.json"))
                 .unwrap();
         assert!(validate(&fixture).is_ok());
+        for toggle in [true, false] {
+            assert!(validate(&json!({"schemaVersion":1,"bindings":[],"ccToggle":toggle})).is_ok());
+        }
+        assert!(validate(&json!({"schemaVersion":1,"bindings":[],"ccToggle":"false"})).is_err());
         assert!(validate(&json!({"schemaVersion":1,"bindings":[{"action":"ramp","press":{"kind":"note","channel":1,"number":60}}]})).is_ok());
         let b = json!({"action":"keep","press":{"kind":"program","channel":1,"number":12}});
         assert!(validate(&json!({"schemaVersion":1,"bindings":[b.clone()]})).is_ok());

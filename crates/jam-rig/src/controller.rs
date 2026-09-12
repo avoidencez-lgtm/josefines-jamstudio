@@ -11,21 +11,12 @@ pub struct PedalPress {
     pub number: u8,
 }
 
+#[derive(Default)]
 pub struct PressFilter {
     held: BTreeMap<(u8, u8, u8), bool>,
     last_program: Option<(u8, u8, u64)>,
-    /// When true (default), a CC value of 0 after 127 is a press (latching /
-    /// toggle pedals). When false, CC uses momentary rising-edge only.
+    /// Opt-in for toggle pedals; momentary pedals must ignore release by default.
     cc_toggle: bool,
-}
-impl Default for PressFilter {
-    fn default() -> Self {
-        Self {
-            held: BTreeMap::new(),
-            last_program: None,
-            cc_toggle: true,
-        }
-    }
 }
 impl PressFilter {
     pub fn set_cc_toggle(&mut self, on: bool) {
@@ -57,12 +48,9 @@ impl PressFilter {
                 } else {
                     kind == 0x90 && *value > 0
                 };
-                let was_down = self
-                    .held
-                    .insert((group, channel, number), down)
-                    .unwrap_or(false);
-                let cc_edge = group == 0xb0 && self.cc_toggle && down != was_down;
-                if !cc_edge && (!down || was_down) {
+                let was_down = self.held.insert((group, channel, number), down);
+                let cc_edge = group == 0xb0 && self.cc_toggle && Some(down) != was_down;
+                if !cc_edge && (!down || was_down.unwrap_or(false)) {
                     return None;
                 }
                 if group == 0xb0 {
@@ -94,7 +82,7 @@ impl ControllerInput {
             .map(|p| input.port_name(p).map_err(|e| e.to_string()))
             .collect()
     }
-    pub fn open(name: &str) -> Result<Self, String> {
+    pub fn open(name: &str, cc_toggle: bool) -> Result<Self, String> {
         let mut input = MidiInput::new("Jamstudio foot controls").map_err(|e| e.to_string())?;
         input.ignore(Ignore::None);
         let port = input
@@ -104,6 +92,7 @@ impl ControllerInput {
             .ok_or("MIDI input disappeared. Rescan and choose the port again.")?;
         let (sender, receiver) = mpsc::sync_channel(32);
         let mut filter = PressFilter::default();
+        filter.set_cc_toggle(cc_toggle);
         let connection = input
             .connect(
                 &port,
@@ -138,8 +127,8 @@ mod tests {
         assert_eq!(f.receive(1, &[0xb1, 64, 127]).unwrap().channel, 2);
         assert!(f.receive(2, &[0xb1, 64, 127]).is_none());
         assert!(
-            f.receive(3, &[0xb1, 64, 0]).is_some(),
-            "latching CC 0 is a press, not a discarded release"
+            f.receive(3, &[0xb1, 64, 0]).is_none(),
+            "momentary release must not run the action again"
         );
         assert!(f.receive(4, &[0xb1, 64, 127]).is_some());
         assert!(f.receive(5, &[0x90, 60, 90]).is_some());
@@ -154,6 +143,8 @@ mod tests {
     #[test]
     fn latching_cc_zero_is_a_press_and_momentary_mode_still_drops_release() {
         let mut toggle = PressFilter::default();
+        toggle.set_cc_toggle(true);
+        assert!(toggle.receive(0, &[0xb0, 14, 0]).is_some());
         assert_eq!(toggle.receive(0, &[0xb0, 14, 127]).unwrap().number, 14);
         assert_eq!(
             toggle.receive(1, &[0xb0, 14, 0]).unwrap().number,
@@ -164,7 +155,6 @@ mod tests {
         assert!(toggle.receive(3, &[0xb0, 14, 127]).is_some());
 
         let mut momentary = PressFilter::default();
-        momentary.set_cc_toggle(false);
         assert!(momentary.receive(0, &[0xb0, 14, 127]).is_some());
         assert!(
             momentary.receive(1, &[0xb0, 14, 0]).is_none(),

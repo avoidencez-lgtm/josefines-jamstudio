@@ -626,7 +626,11 @@ The second songwriting slice adds Rust guitar auditioning and explicitly opened
 MIDI input. `ControllerInput` filters PC/CC/note presses into a bounded queue; the
 existing telemetry worker emits them to the shared frontend controller registry.
 Learning persists a validated, versioned `controller.json`; pedal actions use the
-same writing commands as buttons and Jo. Releases/held CCs do not trigger commands,
+same writing commands as buttons and Jo. The optional `ccToggle` boolean defaults
+to false: momentary CC releases do not trigger commands. Toggle mode accepts both
+edges across 64 for pedals that alternate values on successive presses. The mode
+is read when opening the input; changing it in the UI saves, reconnects and disarms
+control. Held CCs do not retrigger in either mode,
 and recent echoed rig messages are filtered before dispatch. No MIDI input is opened
 or armed automatically. Rehearsal ranges are computed from the existing arrangement.
 

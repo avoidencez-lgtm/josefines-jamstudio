@@ -289,7 +289,9 @@ The step-by-step guide is [songwriting.md](guide/songwriting.md).
   H works with keyboard-emulating foot pedals. Raw MIDI input is learned in Write;
   `controller.json` stores the same action and press data illustrated in
   `tests/fixtures/seams/controller.json`. The Rust press filter accepts PC, CC and
-  notes; the frontend action registry lives in `src/lib/controller.ts`.
+  notes; `ccToggle` defaults to false for momentary pedals. Set it to true for
+  alternating CC values and reopen the input to apply it. The frontend action
+  registry lives in `src/lib/controller.ts`.
 - Song tones use `body.toneProfileId` and `body.sections[id].rigScene` (a scene index
   in the existing rig profile). To rename or change available hardware scenes,
   copy the rig's JSON into the user `rigs/` folder and edit its `scenes` commands;

@@ -396,7 +396,7 @@ Map named chart sections to scenes and enable following when ready. Write can in
 
 In Write → Record & layers → Hands-free controls, choose MIDI input. Click Learn beside an action, press the pedal once, then enable pedal actions. Learning saves without executing the action. Actions include Keep this riff, Record or save this take, Play or stop this, Loop this selected section, Loop this next section and Keep this version. Capture must be armed before Keep. Bindings persist; the live connection and enable switch are deliberate each session.
 
-CC values trigger on crossing 64 upward; note-on triggers a note binding. Releases and held values do not retrigger. Duplicate Program Changes within 250 ms and matching rig output echoed within 500 ms are suppressed. A HeadRush rig-selection press can also change the hardware tone. Use a suitable MIDI interface and test press/release, reconnect and feedback behavior on the real rig.
+CC values trigger on crossing 64 upward; note-on triggers a note binding. Leave Use toggle CC pedals off for momentary pedals that send 0 on release. Enable it for pedals that alternate 127 and 0 on successive presses. The choice is saved; changing it reconnects the selected input and disables actions until you enable them again. Held values do not retrigger in either mode. Duplicate Program Changes within 250 ms and matching rig output echoed within 500 ms are suppressed. A HeadRush rig-selection press can also change the hardware tone. Use a suitable MIDI interface and test press/release, reconnect and feedback behavior on the real rig.
 
 ### This is a song tone snapshot.
 

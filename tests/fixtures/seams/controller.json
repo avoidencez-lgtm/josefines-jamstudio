@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "ccToggle": false,
   "bindings": [
     {
       "action": "keep",

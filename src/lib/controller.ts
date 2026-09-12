@@ -26,6 +26,7 @@ export interface PedalPress {
 }
 export interface PedalConfig {
   schemaVersion: number;
+  ccToggle?: boolean;
   bindings: { action: PedalAction; press: PedalPress }[];
   [key: string]: unknown;
 }
@@ -60,6 +61,7 @@ interface ControllerState {
   busy: boolean;
   refresh: () => Promise<void>;
   connect: (port: string) => Promise<void>;
+  setCcToggle: (on: boolean) => Promise<void>;
   receive: (press: PedalPress) => Promise<void>;
   remove: (action: PedalAction) => Promise<void>;
 }
@@ -100,6 +102,30 @@ export const useController = create<ControllerState>((set, get) => ({
           ? "Connected. Learn your pedals, then enable control."
           : "This is disconnected.",
       });
+    } catch (e) {
+      set({ message: String(e) });
+    } finally {
+      set({ busy: false });
+    }
+  },
+  setCcToggle: async (on) => {
+    if (get().busy) return;
+    const { config, port } = get();
+    set({ busy: true, enabled: false, learning: null });
+    try {
+      if (["opening", "listening"].includes(useVoice.getState().phase))
+        await cancelVoice();
+      const next = { ...config, ccToggle: on };
+      await ipc.invoke("controller_save", { document: next });
+      set({
+        config: next,
+        message: "Pedal mode saved. Enable control when ready.",
+      });
+      if (port) {
+        await ipc.invoke("controller_open", { port: null });
+        set({ port: "" });
+        await get().connect(port);
+      }
     } catch (e) {
       set({ message: String(e) });
     } finally {
