@@ -49,18 +49,35 @@ pub fn controller_config() -> Result<Value, String> {
     validate(&doc)?;
     Ok(doc)
 }
+/// Windows `rename` does not replace an existing file. Remove the destination
+/// first on that OS, and always drop the temp file if publish fails.
+fn replace_file(from: &std::path::Path, to: &std::path::Path) -> Result<(), String> {
+    let published = (|| {
+        #[cfg(windows)]
+        if to.exists() {
+            std::fs::remove_file(to).map_err(|e| e.to_string())?;
+        }
+        std::fs::rename(from, to).map_err(|e| e.to_string())
+    })();
+    if published.is_err() {
+        let _ = std::fs::remove_file(from);
+    }
+    published
+}
+
 #[tauri::command]
 pub fn controller_save(document: Value) -> Result<(), String> {
     validate(&document)?;
     let root = Library::default_user_root();
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    let dest = root.join("controller.json");
     let temp = root.join("controller.json.tmp");
     std::fs::write(
         &temp,
         serde_json::to_vec_pretty(&document).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
-    std::fs::rename(temp, root.join("controller.json")).map_err(|e| e.to_string())
+    replace_file(&temp, &dest)
 }
 
 #[cfg(test)]
@@ -77,5 +94,35 @@ mod tests {
         assert!(validate(&json!({"schemaVersion":1,"bindings":[b.clone()]})).is_ok());
         assert!(validate(&json!({"schemaVersion":1,"bindings":[b.clone(),b]})).is_err());
         assert!(validate(&json!({"schemaVersion":1,"bindings":[{"action":"delete","press":{"kind":"cc","channel":1,"number":12}}]})).is_err());
+    }
+
+    #[test]
+    fn controller_save_replaces_an_existing_file_and_cleans_up_temp_on_error() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-controller-save-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let dest = root.join("controller.json");
+        let temp = root.join("controller.json.tmp");
+        std::fs::write(&dest, b"old").unwrap();
+        std::fs::write(&temp, b"new").unwrap();
+        replace_file(&temp, &dest).unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), b"new");
+        assert!(!temp.exists());
+
+        std::fs::write(&temp, b"again").unwrap();
+        std::fs::remove_file(&dest).unwrap();
+        std::fs::create_dir(&dest).unwrap();
+        assert!(replace_file(&temp, &dest).is_err());
+        assert!(
+            !temp.exists(),
+            "a failed replace must not leave controller.json.tmp"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
