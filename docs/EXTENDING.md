@@ -129,6 +129,10 @@ reports the bundled synthetic kit only and never writes files. After unpack,
 ready status checks every installed file against the retained, SHA-256-verified
 release ZIP. Missing or modified samples require reinstalling the pack; status
 checks run off the UI thread. A failed install preserves the previous pack.
+Resume validates the full HTTP `Content-Range` and declared response length
+against the manifest and saved prefix. A valid response starting at zero replaces
+the prefix. An invalid range or HTTP 416 retries once without `Range`. The prefix
+is kept until a valid response can replace it. See [HTTP range semantics](https://www.rfc-editor.org/rfc/rfc9110.html#name-content-range).
 `Sampler::open` loads `kit.json` and WAVs from
 `~/JosefinesJamstudio/assets/<id>/` (or `JAM_KIT_DIR` / `JAM_USER_DIR`).
 `Sf2Synth::open` loads `freepats-bass-comp` (`bass.sf2`, `comp.sf2`) with

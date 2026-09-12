@@ -332,10 +332,37 @@ fn unpack_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn content_range_start(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+fn content_range_start(headers: &reqwest::header::HeaderMap, expected: u64) -> Option<u64> {
     let value = headers.get(reqwest::header::CONTENT_RANGE)?.to_str().ok()?;
-    let rest = value.trim().strip_prefix("bytes")?.trim_start();
-    rest.split(['-', '/']).next()?.parse().ok()
+    let (unit, value) = value.trim().split_once(' ')?;
+    if !unit.eq_ignore_ascii_case("bytes") {
+        return None;
+    }
+    let number = |s: &str| {
+        if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+            None
+        } else {
+            s.parse::<u64>().ok()
+        }
+    };
+    let (range, total) = value.split_once('/')?;
+    let (start, end) = range.split_once('-')?;
+    let (start, end) = (number(start)?, number(end)?);
+    if end < start || end >= MAX_ZIP || (expected > 0 && end >= expected) {
+        return None;
+    }
+    if total != "*" {
+        let total = number(total)?;
+        if total <= end || total > MAX_ZIP || (expected > 0 && total != expected) {
+            return None;
+        }
+    }
+    if let Some(length) = headers.get(reqwest::header::CONTENT_LENGTH) {
+        if number(length.to_str().ok()?)? != end - start + 1 {
+            return None;
+        }
+    }
+    Some(start)
 }
 
 async fn download_resume(
@@ -358,9 +385,12 @@ async fn download_resume(
         .map_err(|e| e.to_string())?;
     let mut restarted = false;
     loop {
-        let mut have = part.metadata().map(|m| m.len()).unwrap_or(0);
-        if expected > 0 && have > expected {
-            let _ = fs::remove_file(part);
+        let mut have = if restarted {
+            0
+        } else {
+            part.metadata().map(|m| m.len()).unwrap_or(0)
+        };
+        if have > MAX_ZIP || (expected > 0 && have > expected) {
             have = 0;
         }
         if expected > 0 && have == expected {
@@ -373,26 +403,28 @@ async fn download_resume(
         }
         let mut response = req.send().await.map_err(|e| e.to_string())?;
         let status = response.status();
-        if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
-            let _ = fs::remove_file(part);
-            if restarted {
-                return Err(format!("Sample pack download failed ({status})."));
+        let range_start = content_range_start(response.headers(), expected);
+        let partial = status == reqwest::StatusCode::PARTIAL_CONTENT;
+        if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE
+            || (partial && !range_start.is_some_and(|start| start == have || start == 0))
+        {
+            if restarted || have == 0 {
+                return Err(format!("Sample pack download returned an unusable byte range ({status}). Retry the download."));
             }
+            // Retry once without Range. Keep the prefix until a valid response
+            // can replace it; never write a wrong-offset fragment at byte zero.
             restarted = true;
             continue;
         }
-        if !status.is_success() && status != reqwest::StatusCode::PARTIAL_CONTENT {
+        if status != reqwest::StatusCode::OK && !partial {
             return Err(format!("Sample pack download failed ({status})."));
         }
-        let range_start = content_range_start(response.headers());
-        let resume =
-            status == reqwest::StatusCode::PARTIAL_CONTENT && have > 0 && range_start == Some(have);
-        if !resume && have > 0 {
-            let _ = fs::remove_file(part);
+        let resume = partial && have > 0 && range_start == Some(have);
+        if !resume {
             have = 0;
         }
         if let Some(len) = response.content_length() {
-            let total = if resume { have + len } else { len };
+            let total = have.saturating_add(len);
             if total > MAX_ZIP {
                 return Err("Sample pack is larger than 64 MB.".into());
             }
@@ -412,7 +444,7 @@ async fn download_resume(
         } else {
             response
                 .content_length()
-                .map(|len| if resume { have + len } else { len })
+                .map(|len| have.saturating_add(len))
                 .unwrap_or(0)
         };
         let mut last = 255u8;
@@ -696,11 +728,12 @@ mod tests {
         buf
     }
 
-    fn spawn_http(replies: Vec<HttpReply>) -> (String, thread::JoinHandle<()>) {
+    fn spawn_http(replies: Vec<HttpReply>) -> (String, thread::JoinHandle<Vec<String>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let addr = listener.local_addr().unwrap();
         let handle = thread::spawn(move || {
+            let mut requests = Vec::new();
             for reply in replies {
                 let deadline = std::time::Instant::now() + Duration::from_secs(3);
                 let mut stream = loop {
@@ -708,15 +741,15 @@ mod tests {
                         Ok((stream, _)) => break stream,
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                             if std::time::Instant::now() >= deadline {
-                                return;
+                                return requests;
                             }
                             thread::sleep(Duration::from_millis(10));
                         }
-                        Err(_) => return,
+                        Err(_) => return requests,
                     }
                 };
                 stream.set_nonblocking(false).ok();
-                let _ = read_http_request(&mut stream);
+                requests.push(String::from_utf8(read_http_request(&mut stream)).unwrap());
                 if !reply.delay.is_zero() {
                     thread::sleep(reply.delay);
                 }
@@ -732,6 +765,7 @@ mod tests {
                 let _ = stream.write_all(head.as_bytes());
                 let _ = stream.write_all(&reply.body);
             }
+            requests
         });
         (format!("http://127.0.0.1:{}", addr.port()), handle)
     }
@@ -1021,7 +1055,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let part = dir.join("pack.zip.part");
-        fs::write(&part, vec![0u8; 80]).unwrap();
+        fs::write(&part, b"prefix").unwrap();
         let body = b"restored-pack-bytes".to_vec();
         let (url, handle) = spawn_http(vec![
             HttpReply {
@@ -1039,7 +1073,12 @@ mod tests {
         ]);
         tauri::async_runtime::block_on(download_resume(&url, &part, body.len() as u64, |_| {}))
             .unwrap();
-        handle.join().unwrap();
+        let requests = handle.join().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests[0]
+            .to_ascii_lowercase()
+            .contains("\r\nrange: bytes=6-\r\n"));
+        assert!(!requests[1].to_ascii_lowercase().contains("\r\nrange:"));
         assert_eq!(fs::read(&part).unwrap(), body);
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1092,9 +1131,71 @@ mod tests {
             delay: Duration::ZERO,
         }]);
         tauri::async_runtime::block_on(download_resume(&url, &part, 10, |_| {})).unwrap();
-        handle.join().unwrap();
+        let requests = handle.join().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0]
+            .to_ascii_lowercase()
+            .contains("\r\nrange: bytes=5-\r\n"));
         assert_eq!(fs::read(&part).unwrap(), b"AAAAABBBBB");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn download_resume_restarts_once_for_an_unusable_partial_response() {
+        let root = test_root();
+        let part = root.dir.join("pack.zip.part");
+        // A wrong nonzero start cannot become the beginning of a full archive.
+        // Nor may matching starts hide an invalid end, total, unit or length.
+        for range in [
+            "bytes 3-7/10",
+            "bytes 5-4/10",
+            "bytes 5-9/9",
+            "bytes 5-9/11",
+            "bytes 5-8/10",
+            "bytes5-9/10",
+            "bytes 5-garbage/10",
+            "items 5-9/10",
+            "",
+        ] {
+            fs::write(&part, b"AAAAA").unwrap();
+            let partial = || HttpReply {
+                status: 206,
+                headers: if range.is_empty() {
+                    vec![]
+                } else {
+                    vec![("Content-Range".into(), range.into())]
+                },
+                body: b"BBBBB".to_vec(),
+                delay: Duration::ZERO,
+            };
+            let (url, handle) = spawn_http(vec![
+                partial(),
+                HttpReply {
+                    status: 200,
+                    headers: vec![],
+                    body: b"0123456789".to_vec(),
+                    delay: Duration::ZERO,
+                },
+            ]);
+            tauri::async_runtime::block_on(download_resume(&url, &part, 10, |_| {})).unwrap();
+            let requests = handle.join().unwrap();
+            assert_eq!(requests.len(), 2, "{range}");
+            assert!(requests[0]
+                .to_ascii_lowercase()
+                .contains("\r\nrange: bytes=5-\r\n"));
+            assert!(!requests[1].to_ascii_lowercase().contains("\r\nrange:"));
+            assert_eq!(fs::read(&part).unwrap(), b"0123456789", "{range}");
+
+            fs::write(&part, b"AAAAA").unwrap();
+            let (url, handle) = spawn_http(vec![partial(), partial()]);
+            assert!(
+                tauri::async_runtime::block_on(download_resume(&url, &part, 10, |_| {})).is_err()
+            );
+            let requests = handle.join().unwrap();
+            assert_eq!(requests.len(), 2, "{range}");
+            assert!(!requests[1].to_ascii_lowercase().contains("\r\nrange:"));
+            assert_eq!(fs::read(&part).unwrap(), b"AAAAA", "{range}");
+        }
     }
 
     #[test]
