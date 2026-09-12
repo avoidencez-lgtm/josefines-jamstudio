@@ -288,6 +288,9 @@ pub struct EngineStatus {
     pub stream_errors: u64,
     /// Blocks where the input ring had fewer frames than needed (input starvation).
     pub input_gaps: u64,
+    /// Output callback underruns since the engine started.
+    #[serde(default)]
+    pub xruns: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -366,6 +369,7 @@ fn default_style() -> Style {
                 timing_ms: 2.0,
                 velocity: 0.05,
             },
+            extra: std::collections::HashMap::new(),
         }
     })
 }
@@ -537,7 +541,9 @@ impl AudioEngine {
     }
 
     pub fn status(&self) -> EngineStatus {
-        self.status.lock().clone()
+        let mut status = self.status.lock().clone();
+        status.xruns = self.xruns.load(Ordering::Relaxed);
+        status
     }
 
     // ----- mixer -----------------------------------------------------------
@@ -1235,6 +1241,7 @@ impl AudioEngine {
             last_error: None,
             stream_errors: 0,
             input_gaps: 0,
+            xruns: 0,
         };
         let mut problems: Vec<String> = Vec::new();
 
@@ -2111,6 +2118,15 @@ mod tests {
         });
         assert_eq!(engine.timeline.lock().state, TransportState::Stopped);
         assert_eq!(engine.sequencer.lock().active_cue, Cue::None);
+    }
+
+    #[test]
+    fn engine_status_publishes_xruns() {
+        let engine = AudioEngine::new(AudioConfig::default());
+        assert_eq!(engine.status().xruns, 0);
+        engine.xruns.store(7, Ordering::SeqCst);
+        assert_eq!(engine.status().xruns, 7);
+        assert_eq!(engine.get_telemetry().xruns, 7);
     }
 
     #[test]

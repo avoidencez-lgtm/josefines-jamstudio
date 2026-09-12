@@ -980,7 +980,13 @@ export const useEngineStore = create<EngineState>((set, get) => {
         }),
         ipc.listen<EngineStatus>("engine.status", (engineStatus) => {
           const prev = get().engineStatus;
-          set({ engineStatus });
+          set((state) => ({
+            engineStatus,
+            telemetry: {
+              ...state.telemetry,
+              xruns: engineStatus.xruns ?? state.telemetry.xruns,
+            },
+          }));
           if (
             !isPreview &&
             engineStatus.last_error &&

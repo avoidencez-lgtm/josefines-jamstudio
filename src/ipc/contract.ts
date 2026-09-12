@@ -76,6 +76,7 @@ export interface EngineStatus {
   last_error: string | null;
   stream_errors: number;
   input_gaps: number;
+  xruns: number;
 }
 
 export interface TransportTelemetry {
