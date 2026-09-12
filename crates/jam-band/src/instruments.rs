@@ -18,6 +18,7 @@ struct SineVoice {
     velocity: f32,
     age_samples: usize,
     decay_samples: usize,
+    release_samples: usize,
     is_bass: bool,
 }
 
@@ -105,8 +106,7 @@ impl Sf2Synth {
         let is_bass = channel == 0;
         let freq = 440.0 * 2.0f32.powf((key as f32 - 69.0) / 12.0);
         let phase_inc = freq / self.sample_rate as f32;
-        let decay_sec = if is_bass { 0.8 } else { 1.2 };
-        let decay_samples = (self.sample_rate as f32 * decay_sec) as usize;
+        let release_samples = (self.sample_rate as f32 * 0.05) as usize;
         self.voices
             .retain(|v| !(v.channel == channel && v.key == key));
         if self.voices.len() >= self.max_polyphony {
@@ -119,7 +119,9 @@ impl Sf2Synth {
             phase_inc,
             velocity: velocity.clamp(0.0, 1.0),
             age_samples: 0,
-            decay_samples,
+            // Hold until note-off; the 50 ms release is applied there (#365).
+            decay_samples: usize::MAX,
+            release_samples,
             is_bass,
         });
     }
@@ -131,8 +133,8 @@ impl Sf2Synth {
             return;
         }
         for v in self.voices.iter_mut() {
-            if v.channel == channel && v.key == key {
-                v.decay_samples = v.age_samples + (self.sample_rate as f32 * 0.05) as usize;
+            if v.channel == channel && v.key == key && v.decay_samples == usize::MAX {
+                v.decay_samples = v.age_samples + v.release_samples.max(1);
             }
         }
     }
@@ -199,7 +201,7 @@ fn load_font(path: &Path, sample_rate: u32) -> Result<Synthesizer, String> {
 
 fn render_sine(
     voices: &mut Vec<SineVoice>,
-    sample_rate: u32,
+    _sample_rate: u32,
     channel: u8,
     left: &mut [f32],
     right: &mut [f32],
@@ -216,8 +218,13 @@ fn render_sine(
             if current_age >= v.decay_samples {
                 break;
             }
-            let t = current_age as f32 / sample_rate as f32;
-            let env = (-4.0 * t).exp() * v.velocity;
+            let env = if v.decay_samples == usize::MAX {
+                v.velocity
+            } else {
+                let remaining = v.decay_samples.saturating_sub(current_age);
+                let rel = remaining as f32 / v.release_samples.max(1) as f32;
+                v.velocity * rel.clamp(0.0, 1.0)
+            };
             let sample = if v.is_bass {
                 let s1 = (v.phase * 2.0 * std::f32::consts::PI).sin();
                 let s2 = (v.phase * 4.0 * std::f32::consts::PI).sin() * 0.35;
@@ -384,6 +391,33 @@ mod tests {
         assert!(left.iter().any(|&s| s.abs() > 0.05));
         assert!(right.iter().any(|&s| s.abs() > 0.05));
         assert_eq!(synth.source, SINE);
+    }
+
+    #[test]
+    fn sine_fallback_holds_until_note_off() {
+        let mut synth = Sf2Synth::new(48_000);
+        synth.note_on(0, 33, 0.9);
+        let mut left = vec![0.0f32; 48_000];
+        let mut right = vec![0.0f32; 48_000];
+        synth.render(&mut left, &mut right);
+        assert_eq!(synth.sustaining_voices(0), 1);
+        let late = left[40_000..].iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        assert!(
+            late > 0.05,
+            "ballad whole-note sine must still sound after 0.8s, peak {late}"
+        );
+        synth.note_off(0, 33);
+        left.fill(0.0);
+        right.fill(0.0);
+        synth.render(&mut left[..256], &mut right[..256]);
+        assert_eq!(synth.sustaining_voices(0), 0);
+        let releasing = left[..256].iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        assert!(releasing > 0.0, "50ms release should still make sound");
+        left.fill(0.0);
+        right.fill(0.0);
+        synth.render(&mut left, &mut right);
+        synth.render(&mut left, &mut right);
+        assert!(synth.voices.is_empty());
     }
 
     #[test]

@@ -249,6 +249,49 @@ describe("Jo reports accepted actions", () => {
     expect(result).not.toMatch(/Press Play/i);
   });
 
+  it("says tap again only when there are not enough taps", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    await expect(
+      dispatchJoToolCall({ name: "tap_tempo", arguments: {} }),
+    ).resolves.toBe("Tap again to set tempo.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("fails loud when the engine refuses the tapped tempo", async () => {
+    let now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    vi.spyOn(ipc, "invoke").mockRejectedValue(
+      "Save the take before changing the band.",
+    );
+    now = 0;
+    await expect(
+      dispatchJoToolCall({ name: "tap_tempo", arguments: {} }),
+    ).resolves.toBe("Tap again to set tempo.");
+    now = 500;
+    await expect(
+      dispatchJoToolCall({ name: "tap_tempo", arguments: {} }),
+    ).rejects.toThrow("Save the take before changing the band.");
+    expect(
+      useEngineStore.getState().notices.some((n) => n.kind === "error"),
+    ).toBe(true);
+  });
+
+  it("fails loud when the tapped BPM is out of range", async () => {
+    let now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    now = 0;
+    await dispatchJoToolCall({ name: "tap_tempo", arguments: {} });
+    now = 10;
+    await expect(
+      dispatchJoToolCall({ name: "tap_tempo", arguments: {} }),
+    ).rejects.toThrow(/20–300/);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(
+      useEngineStore.getState().notices.some((n) => n.kind === "error"),
+    ).toBe(true);
+  });
+
   it("action acks are sentences, not JSON dumps", async () => {
     const text = readFileSync("src/lib/jo/dispatcher.ts", "utf8");
     expect(text).not.toContain("JSON.stringify(analysis)");

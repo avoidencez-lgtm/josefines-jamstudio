@@ -1648,12 +1648,9 @@ pub fn configure<R: tauri::Runtime>(
                         let _ = app_handle.emit("transport:state", &tel.transport);
                         last_transport = Some(tel.transport.clone());
                     }
-                    let mut band = tel.band.clone();
-                    if !clock_busy {
-                        band.current_energy = 0.0;
-                    }
+                    let band = tel.band.clone().for_emit(clock_busy);
                     if clock_busy || last_band.as_ref() != Some(&band) {
-                        let _ = app_handle.emit("band:state", &tel.band);
+                        let _ = app_handle.emit("band:state", &band);
                         last_band = Some(band);
                     }
                     let tuner_active = tel.tuner.is_some();

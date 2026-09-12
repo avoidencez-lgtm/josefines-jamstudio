@@ -332,9 +332,8 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
 
     case "tap_tempo": {
       const bpm = await store.tapTempo();
-      return bpm == null
-        ? "Tap again to set tempo."
-        : `Tempo set to ${bpm} BPM.`;
+      if (bpm == null) return "Tap again to set tempo.";
+      return `Tempo set to ${bpm} BPM.`;
     }
 
     case "seek_bar": {

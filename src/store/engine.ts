@@ -443,11 +443,12 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const intervals = recent.slice(1).map((t, i) => t - recent[i]);
       const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
       const bpm = Math.round(60_000 / avg);
-      if (bpm >= 20 && bpm <= 300) {
-        const result = await get().transportSetTempo(bpm);
-        return result.ok ? result.value : null;
+      if (bpm < 20 || bpm > 300) {
+        const error = `Tempo failed. Tap tempo ${bpm} BPM is outside 20–300.`;
+        get().notify("error", error);
+        throw new Error(error);
       }
-      return null;
+      return requireCommand(await get().transportSetTempo(bpm));
     },
 
     setTempoTrainer: (patch) =>
