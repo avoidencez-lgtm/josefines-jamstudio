@@ -759,10 +759,16 @@ impl AudioEngine {
         self.ensure_timing_editable()?;
         let _gate = self.render_gate.lock();
         self.stop_transport_under_render_gate();
-        self.reference.lock().take();
-        self.reference_serial.store(0, Ordering::Release);
+        self.clear_reference();
         self.song_snapshot = serde_json::Value::Null;
         Ok(())
+    }
+
+    fn clear_reference(&self) {
+        let mut reference = self.reference.lock();
+        reference.take();
+        // Every return to band frames (serial zero) must invalidate queued source audio.
+        self.reference_serial.store(0, Ordering::Release);
     }
 
     pub fn reference_seek(&self, seconds: f64) -> Result<(), String> {
@@ -875,7 +881,7 @@ impl AudioEngine {
     }
 
     pub fn band_load_chart(&mut self, chart: ResolvedChart) {
-        self.reference.lock().take();
+        self.clear_reference();
         self.song_snapshot = serde_json::Value::Null;
         self.clips.lock().clear();
         let mut seq = self.sequencer.lock();
@@ -1097,7 +1103,7 @@ impl AudioEngine {
             return Err("Save the recording before changing the song.".into());
         }
         self.transport_stop();
-        self.reference.lock().take();
+        self.clear_reference();
         self.transport_set_tempo(chart.default_bpm);
         self.transport_set_time_signature(chart.time_sig);
         self.transport_set_loop(1, chart.bars.len() as u32 + 1, false);
@@ -2839,6 +2845,67 @@ mod tests {
         engine.load_reference(song).unwrap();
         engine.locate(2.0).unwrap();
         assert!((engine.get_telemetry().reference.unwrap().position - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn returning_from_a_reference_releases_band_audio_and_silences_queued_source_frames() {
+        let doc: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/seams/original.json"))
+                .unwrap();
+        let chart: jam_core::chart::Chart =
+            serde_json::from_value(doc["body"]["chart"].clone()).unwrap();
+        for target in ["unload", "chart", "original"] {
+            let mut engine = headless_engine();
+            let song = crate::song::ReferenceSong::new(
+                "reference".into(),
+                "Reference".into(),
+                vec![0.0; 48_000],
+            )
+            .unwrap();
+            let old_stamp = u64::from(song.source_serial()) << 32;
+            engine.load_reference(song).unwrap();
+            let (mut playback, output) = RingBuffer::new(2);
+            let (_input, guitar) = RingBuffer::new(2);
+            let (recorded, _captured) = RingBuffer::new(2);
+            let mut tap = OutputTap {
+                playback: output,
+                input: guitar,
+                recorded,
+                xruns: Arc::new(AtomicU64::new(0)),
+                lost: Arc::new(AtomicBool::new(false)),
+                filling: Arc::new(AtomicBool::new(true)),
+                input_monitor: Arc::clone(&engine.input_monitor),
+                reference_serial: Arc::clone(&engine.reference_serial),
+                recording: false,
+                reference_position: Arc::clone(&engine.reference_position),
+            };
+            playback
+                .push(OutputFrame {
+                    output: [0.9; 2],
+                    reference_position: old_stamp,
+                    synthetic: true,
+                    ..Default::default()
+                })
+                .unwrap();
+            match target {
+                "unload" => engine.unload_reference().unwrap(),
+                "chart" => engine.band_load_chart(chart.resolve()),
+                _ => engine
+                    .configure_song(chart.resolve(), Default::default(), vec![], doc.clone())
+                    .unwrap(),
+            }
+            playback
+                .push(OutputFrame {
+                    output: [0.25; 2],
+                    synthetic: true,
+                    ..Default::default()
+                })
+                .unwrap();
+            let mut heard = [1.0; 4];
+            tap.render(&mut heard);
+            assert_eq!(heard, [0.0, 0.0, 0.25, 0.25], "{target}");
+            assert!(!tap.lost.load(Ordering::Acquire));
+        }
     }
 
     fn headless_engine() -> AudioEngine {

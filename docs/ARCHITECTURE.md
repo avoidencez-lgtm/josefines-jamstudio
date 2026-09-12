@@ -768,6 +768,11 @@ the take rather than silently compressing its timeline. Device round-trip latenc
 is measured by `audio_calibrate_latency` (three clicks on a cable loopback) or
 typed as a manual guitar offset; synthetic FileInput never applies an estimate.
 
+Queued reference frames also carry a source serial. Unloading the reference,
+loading a band chart, and loading an original all clear the reference and reset
+the callback's serial together. Old source frames become silence while new band
+frames remain audible; the callback never locks to inspect the loaded song.
+
 Files and their writer are prepared in a separate idle recorder before acquiring
 the render gate. Installing it and starting the song timeline share that gate,
 so disk latency cannot insert an intermediate recorded idle block before bar 1.
