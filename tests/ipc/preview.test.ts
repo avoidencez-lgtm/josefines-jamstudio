@@ -519,6 +519,20 @@ describe("browser preview engine", () => {
     expect(low.transport.count_in_bars).toBe(0);
   });
 
+  it("rejects a transport meter that does not match the active style", async () => {
+    await expect(
+      engine.invoke("transport_set_time_signature", {
+        numerator: 3,
+        denominator: 4,
+      }),
+    ).rejects.toThrow(/matching style/);
+    const state = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(state.transport.time_signature).toEqual([4, 4]);
+  });
+
   it("emits tuner.state null when the tuner turns off", async () => {
     const seen: Array<TunerTelemetry | null> = [];
     await engine.listen<TunerTelemetry | null>("tuner.state", (t) => {

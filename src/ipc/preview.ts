@@ -843,7 +843,15 @@ export function createPreviewEngine(
       transport.bpm = Math.max(20, Math.min(300, Number(a.bpm)));
     },
     transport_set_time_signature: (a) => {
-      transport.time_signature = [Number(a.numerator), Number(a.denominator)];
+      const meter = [Number(a.numerator), Number(a.denominator)] as [
+        number,
+        number,
+      ];
+      const styleMeter = styles.get(band.style_id)?.feel.timeSig;
+      if (!styleMeter || meter.some((n, i) => n !== styleMeter[i])) {
+        throw new Error("Load a chart with a matching style to change meter.");
+      }
+      transport.time_signature = meter;
     },
     transport_set_click_volume: (a) => {
       clickVolume = Number(a.volume);
