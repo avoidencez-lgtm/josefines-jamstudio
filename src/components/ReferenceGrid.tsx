@@ -23,6 +23,17 @@ const savedSchema = z.object({
     .max(64),
 });
 
+/** Start and end bars for a newly added map row. Keeps HTML min <= max. */
+export function nextReferenceSection(
+  sections: { endBar: number }[],
+  bars: number,
+): { startBar: number; endBar: number } {
+  const endBar = bars + 1;
+  const lastEnd = sections.at(-1)?.endBar ?? 1;
+  const startBar = Math.min(Math.max(1, lastEnd), bars);
+  return { startBar, endBar };
+}
+
 /** User confirmation is explicit; local estimates do not identify downbeats. */
 export function ReferenceGridEditor({
   song,
@@ -183,7 +194,7 @@ export function ReferenceGridEditor({
                 <input
                   type="number"
                   required
-                  min={section.startBar + 1}
+                  min={Math.min(section.startBar + 1, bars + 1)}
                   max={bars + 1}
                   step={1}
                   value={section.endBar}
@@ -207,13 +218,14 @@ export function ReferenceGridEditor({
             type="button"
             disabled={bars === 0 || sections.length >= 64}
             onClick={() => {
+              const range = nextReferenceSection(sections, bars);
               setSections([
                 ...sections,
                 {
                   id: crypto.randomUUID(),
                   label: "",
-                  startBar: sections.at(-1)?.endBar ?? 1,
-                  endBar: bars + 1,
+                  startBar: range.startBar,
+                  endBar: range.endBar,
                 },
               ]);
               setConfirmed(false);
