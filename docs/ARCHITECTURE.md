@@ -498,7 +498,7 @@ A seam is a definition (trait or schema), one registry, and consumers. There is 
 | Styles | `Style` schema (`jam-core`, zod mirror) | `jam-core::registry::styles` (bundled `styles/` via `include_dir` + `~/JosefinesJamstudio/styles/`) | band sequencer, Stage picker, Jo `set_style` |
 | Charts | `Chart` schema | `jam-core::registry::charts` + TS parser for text charts | band, Stage, Jo `load_chart` |
 | Rig profiles | `RigProfile` schema | `jam-core::registry::rigs` | `jam-rig`, Rig screen |
-| Control maps | `ControlMap` schema | `jam-core::registry::controls` | `src/lib/controls.ts`, `jam-rig::input` |
+| Control maps | `ControlMap` schema | `jam-core::registry::controls` (bundled `controls/` + `~/JosefinesJamstudio/controls/`) | `src/lib/controls.ts` (`matchControlMidi`), `src/lib/controller.ts`, `Library` |
 | Jo tools | `JoAction { declaration, run }`, `StudioTool { declaration, edit }`; shared argument validation | `JO_ACTIONS` / `JO_TOOLS` in `src/lib/jo/tools.ts`, document edits in `STUDIO_TOOLS`; legacy actions remain in `dispatcher.ts` | provider declarations, conversation/voice dispatch; planned control-map export remains separate |
 | Providers | traits in §6.1 | `src-tauri/src/net/registry.rs` | analysis pipeline, voice, music, `provider_fetch` |
 | Instruments | `Instrument` trait (`note_on`, `note_off`, `render(&mut [f32])`) | `jam-band::instruments::factory` | sequencer |

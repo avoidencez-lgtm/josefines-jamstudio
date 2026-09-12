@@ -23,6 +23,10 @@ describe("Seam Manifest Invariants", () => {
 
       expect(parsed).toHaveProperty("name");
       expect(typeof parsed.name).toBe("string");
+      if (dirName === "controls") {
+        expect(Array.isArray(parsed.bindings), file).toBe(true);
+        expect(parsed.bindings.length, file).toBeGreaterThan(0);
+      }
     }
   };
 

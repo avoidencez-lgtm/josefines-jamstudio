@@ -390,13 +390,27 @@ fn transport_stop(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+fn notify_rig_playhead(state: &AppState) -> Result<(), String> {
+    let eng = state.engine.lock();
+    let tel = eng.get_telemetry();
+    let now = beats_to_samples(
+        tel.transport.position_beats,
+        tel.transport.bpm,
+        eng.sample_rate(),
+    );
+    let bpm = tel.transport.bpm;
+    drop(eng);
+    state.rig.lock().on_transport_tick(now, bpm)
+}
+
 #[tauri::command]
 fn transport_seek_bar(bar: u32, state: State<'_, AppState>) -> Result<(), String> {
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.ensure_band_grid()?;
     eng.transport_seek_bar(bar);
-    Ok(())
+    drop(eng);
+    notify_rig_playhead(&*state)
 }
 
 #[tauri::command]
@@ -428,7 +442,8 @@ fn transport_set_tempo(bpm: f64, state: State<'_, AppState>) -> Result<(), Strin
     eng.ensure_timing_editable()?;
     eng.ensure_band_grid()?;
     eng.transport_set_tempo(bpm);
-    Ok(())
+    drop(eng);
+    notify_rig_playhead(&*state)
 }
 
 #[tauri::command]
@@ -875,6 +890,7 @@ struct LibraryInfo {
     charts_dir: String,
     user_chart_ids: Vec<String>,
     load_errors: Vec<String>,
+    control_maps: Vec<String>,
 }
 
 #[tauri::command]
@@ -886,6 +902,7 @@ fn library_reload(state: State<'_, AppState>) -> LibraryInfo {
         charts_dir: lib.charts_dir().to_string_lossy().into_owned(),
         user_chart_ids: lib.user_chart_ids().to_vec(),
         load_errors: lib.load_errors().to_vec(),
+        control_maps: lib.control_maps().into_iter().map(|m| m.id).collect(),
     }
 }
 
@@ -959,11 +976,11 @@ fn rig_select_profile(
     let saved = load_settings()?
         .rig
         .section_mappings
-        .remove(&profile_id)
+        .get(&profile_id)
+        .cloned()
         .unwrap_or_default();
     let mut rig = state.rig.lock();
-    let mut mappings = rig.section_mappings.clone();
-    mappings.retain(|_, idx| *idx < profile.scenes.len());
+    let mut mappings = std::collections::HashMap::new();
     for (section, idx) in saved {
         if idx < profile.scenes.len() {
             mappings.insert(section, idx);
@@ -1702,7 +1719,14 @@ pub fn configure<R: tauri::Runtime>(
                             tel.transport.bpm,
                             tel.status.sample_rate,
                         );
-                        let _ = rig.lock().on_transport_tick(now, tel.transport.bpm);
+                        let mut rig = rig.lock();
+                        let was_live = rig.is_live();
+                        if let Err(e) = rig.on_transport_tick(now, tel.transport.bpm) {
+                            let _ = app_handle.emit("rig:error", &e);
+                        }
+                        if was_live && !rig.is_live() {
+                            let _ = app_handle.emit("rig:state", &rig_state_dto(&rig));
+                        }
                     }
                     if tel.reference.is_none()
                         && tel.transport.state == "playing"

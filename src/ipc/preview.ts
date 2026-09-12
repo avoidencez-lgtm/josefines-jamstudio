@@ -873,6 +873,7 @@ export function createPreviewEngine(
       chartsDir: "(preview) ~/JosefinesJamstudio/charts",
       userChartIds: [...userCharts],
       loadErrors: [],
+      controlMaps: ["default", "black-spirit-200"],
     }),
     band_set: (a) => {
       const p = a.args as BandPatch;

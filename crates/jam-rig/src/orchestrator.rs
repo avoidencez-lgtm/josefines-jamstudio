@@ -46,6 +46,11 @@ pub struct RigOrchestrator {
     clock_running: bool,
     clock_paused: bool,
     next_pulse: u64,
+    /// Transport is playing even if Send Clock is currently off, so toggling
+    /// clock on mid-song can arm START/CONTINUE and ticks.
+    transport_playing: bool,
+    last_now: u64,
+    last_bpm: f64,
 }
 
 impl RigOrchestrator {
@@ -68,6 +73,9 @@ impl RigOrchestrator {
             clock_running: false,
             clock_paused: false,
             next_pulse: 0,
+            transport_playing: false,
+            last_now: 0,
+            last_bpm: 0.0,
         };
         me.reset_controls();
         me
@@ -95,6 +103,7 @@ impl RigOrchestrator {
         self.profile = profile;
         self.current_scene = 0;
         self.last_sent_scene = None;
+        self.last_section = None;
         self.reset_controls();
     }
 
@@ -161,10 +170,7 @@ impl RigOrchestrator {
         self.section_mappings.remove(section);
     }
 
-    fn send_bytes(&mut self, bytes: Vec<u8>, reason: &str) -> Result<(), String> {
-        if !self.dry_run {
-            self.sink.send(&bytes)?;
-        }
+    fn record_monitor(&mut self, bytes: Vec<u8>, reason: &str, live: bool) {
         if self.monitor.len() == MONITOR_CAPACITY {
             self.monitor.pop_front();
         }
@@ -173,8 +179,20 @@ impl RigOrchestrator {
             text: describe_message(&bytes),
             bytes,
             reason: reason.to_string(),
-            live: self.sink.is_live(),
+            live,
         });
+    }
+
+    fn send_bytes(&mut self, bytes: Vec<u8>, reason: &str) -> Result<(), String> {
+        if !self.dry_run {
+            if let Err(e) = self.sink.send(&bytes) {
+                self.close_port();
+                self.record_monitor(bytes, reason, false);
+                return Err(e);
+            }
+        }
+        let live = self.sink.is_live();
+        self.record_monitor(bytes, reason, live);
         Ok(())
     }
 
@@ -221,7 +239,9 @@ impl RigOrchestrator {
         self.run_commands(
             &[RigCommand::ProgramChange { program }],
             &format!("manual {name}"),
-        )
+        )?;
+        self.last_sent_scene = None;
+        Ok(())
     }
 
     /// Turns a knob: clamps to the declared range and remembers the value.
@@ -251,7 +271,7 @@ impl RigOrchestrator {
             return Ok(None);
         }
         self.last_section = Some(section.to_string());
-        if self.song_mappings.is_none() && !self.follow_sections {
+        if !self.follow_sections {
             return Ok(None);
         }
         let mappings = self
@@ -281,6 +301,7 @@ impl RigOrchestrator {
     /// song restarts in the same section.
     pub fn reset_section_tracking(&mut self) {
         self.last_section = None;
+        self.last_sent_scene = None;
     }
 
     pub fn set_clock(&mut self, on: bool) {
@@ -291,6 +312,21 @@ impl RigOrchestrator {
             self.scheduler.clear();
         }
         self.send_clock = on;
+        if on && self.transport_playing && !self.clock_running {
+            let resume = self.clock_paused;
+            let status = if resume { CONTINUE } else { START };
+            self.clock_paused = false;
+            self.clock_running = true;
+            let now = self.last_now;
+            let bpm = if self.last_bpm > 0.0 {
+                self.last_bpm
+            } else {
+                120.0
+            };
+            let _ = self.send_clock_byte(status);
+            self.rebase_next_pulse(now, bpm, resume);
+            let _ = self.pump_clock(now, bpm);
+        }
     }
 
     pub fn set_dry_run(&mut self, on: bool) {
@@ -307,19 +343,27 @@ impl RigOrchestrator {
     }
 
     pub fn on_transport_play(&mut self, now_sample: u64, bpm: f64) -> Result<(), String> {
+        self.transport_playing = true;
+        self.last_now = now_sample;
+        self.last_bpm = bpm;
         if !self.send_clock {
             return Ok(());
         }
-        let status = if self.clock_paused { CONTINUE } else { START };
+        if self.clock_running && !self.clock_paused {
+            self.rebase_next_pulse(now_sample, bpm, true);
+            return self.pump_clock(now_sample, bpm);
+        }
+        let resume = self.clock_paused;
+        let status = if resume { CONTINUE } else { START };
         self.clock_paused = false;
         self.clock_running = true;
         self.send_clock_byte(status)?;
-        let beats = samples_to_beats(now_sample, bpm, 48_000);
-        self.next_pulse = (beats * f64::from(crate::PPQN)).ceil() as u64;
+        self.rebase_next_pulse(now_sample, bpm, resume);
         self.pump_clock(now_sample, bpm)
     }
 
     pub fn on_transport_pause(&mut self) -> Result<(), String> {
+        self.transport_playing = false;
         if !self.send_clock || !self.clock_running {
             return Ok(());
         }
@@ -331,6 +375,7 @@ impl RigOrchestrator {
     }
 
     pub fn on_transport_stop(&mut self) -> Result<(), String> {
+        self.transport_playing = false;
         let was = self.clock_running || self.clock_paused;
         self.clock_running = false;
         self.clock_paused = false;
@@ -343,19 +388,57 @@ impl RigOrchestrator {
     }
 
     pub fn on_transport_tick(&mut self, now_sample: u64, bpm: f64) -> Result<(), String> {
+        let jumped_back = now_sample < self.last_now;
+        let tempo_changed = self.last_bpm > 0.0 && (self.last_bpm - bpm).abs() > 0.01;
+        if jumped_back || tempo_changed {
+            self.rebase_next_pulse(now_sample, bpm, false);
+        }
+        self.last_now = now_sample;
+        self.last_bpm = bpm;
         if !self.send_clock || !self.clock_running {
             return Ok(());
         }
         self.pump_clock(now_sample, bpm)
     }
 
+    fn rebase_next_pulse(&mut self, now_sample: u64, bpm: f64, skip_at_or_before: bool) {
+        if bpm <= 0.0 {
+            return;
+        }
+        self.scheduler.clear();
+        let beats = samples_to_beats(now_sample, bpm, 48_000);
+        let mut pulse = (beats * f64::from(crate::PPQN)).ceil() as u64;
+        loop {
+            let at = Self::pulse_sample(pulse, bpm);
+            if skip_at_or_before && at <= now_sample {
+                pulse += 1;
+                continue;
+            }
+            if !skip_at_or_before && at < now_sample {
+                pulse += 1;
+                continue;
+            }
+            break;
+        }
+        self.next_pulse = pulse;
+        self.last_now = now_sample;
+        self.last_bpm = bpm;
+    }
+
+    fn pulse_sample(pulse: u64, bpm: f64) -> u64 {
+        beats_to_samples(pulse as f64 / f64::from(crate::PPQN), bpm, 48_000)
+    }
+
     fn pump_clock(&mut self, now_sample: u64, bpm: f64) -> Result<(), String> {
+        if bpm <= 0.0 {
+            return Ok(());
+        }
         let horizon = now_sample + beats_to_samples(1.0, bpm, 48_000);
-        while beats_to_samples(self.next_pulse as f64 / f64::from(crate::PPQN), bpm, 48_000)
-            <= horizon
-        {
-            let at = beats_to_samples(self.next_pulse as f64 / f64::from(crate::PPQN), bpm, 48_000);
-            self.scheduler.schedule_at(at, vec![CLOCK]);
+        while Self::pulse_sample(self.next_pulse, bpm) <= horizon {
+            let at = Self::pulse_sample(self.next_pulse, bpm);
+            if at >= now_sample || (self.next_pulse == 0 && at == 0) {
+                self.scheduler.schedule_at(at, vec![CLOCK]);
+            }
             self.next_pulse += 1;
         }
         for (_, bytes) in self.scheduler.due(now_sample) {
@@ -418,6 +501,15 @@ mod tests {
     }
 
     #[test]
+    fn follow_sections_off_is_silent_even_when_song_mappings_exist() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.song_mappings = Some([("Chorus".into(), 2)].into());
+        orch.follow_sections = false;
+        assert_eq!(orch.on_section_change("Chorus").unwrap(), None);
+        assert!(orch.monitor().is_empty());
+    }
+
+    #[test]
     fn knobs_clamp_and_remember() {
         let profile = RigProfile {
             midi_channel: 1,
@@ -443,6 +535,20 @@ mod tests {
     }
 
     #[test]
+    fn send_program_invalidates_last_sent_scene_so_section_automation_can_return() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.set_section_mapping("Verse".into(), 0);
+        orch.set_section_mapping("Bridge".into(), 0);
+        assert_eq!(orch.on_section_change("Verse").unwrap(), Some(0));
+        orch.send_program(3).unwrap();
+        assert_eq!(
+            orch.on_section_change("Bridge").unwrap(),
+            Some(0),
+            "manual PC must not suppress the next mapped scene"
+        );
+    }
+
+    #[test]
     fn changing_profile_drops_mappings_that_no_longer_fit() {
         let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
         orch.set_section_mapping("Chorus".into(), 7);
@@ -455,6 +561,27 @@ mod tests {
         assert_eq!(orch.section_mappings.get("Verse"), Some(&1));
         assert_eq!(orch.section_mappings.get("Chorus"), None);
         assert!(orch.select_scene(5).is_err());
+    }
+
+    #[test]
+    fn play_restart_and_profile_swap_resend_the_current_section_scene() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.set_section_mapping("Verse".into(), 0);
+        assert_eq!(orch.on_section_change("Verse").unwrap(), Some(0));
+        orch.reset_section_tracking();
+        assert_eq!(
+            orch.on_section_change("Verse").unwrap(),
+            Some(0),
+            "a new playthrough must send the mapped scene again"
+        );
+
+        orch.set_profile(quad_cortex_like());
+        orch.set_section_mapping("Verse".into(), 1);
+        assert_eq!(
+            orch.on_section_change("Verse").unwrap(),
+            Some(1),
+            "a new profile must send the current section on the new device"
+        );
     }
 
     #[test]
@@ -552,5 +679,104 @@ mod tests {
         orch.clear_monitor();
         orch.on_transport_play(0, 120.0).unwrap();
         assert_eq!(orch.monitor()[0].bytes, vec![START]);
+    }
+
+    #[test]
+    fn resume_does_not_flush_a_clock_pulse_already_sent_before_pause() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.set_clock(true);
+        orch.on_transport_play(0, 120.0).unwrap();
+        orch.on_transport_tick(100, 120.0).unwrap();
+        orch.on_transport_pause().unwrap();
+        orch.clear_monitor();
+        orch.on_transport_play(101, 120.0).unwrap();
+        let clocks = orch.monitor().iter().filter(|m| m.bytes == [CLOCK]).count();
+        assert_eq!(
+            clocks, 0,
+            "pulse 1 at sample 100 must not fire again at 101"
+        );
+        assert_eq!(orch.monitor()[0].bytes, vec![CONTINUE]);
+    }
+
+    #[test]
+    fn clock_rebases_on_seek_and_tempo_and_set_clock_arms_while_running() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.set_clock(true);
+        orch.on_transport_play(0, 120.0).unwrap();
+        orch.on_transport_tick(96_000, 120.0).unwrap();
+        let after_run = orch.monitor().iter().filter(|m| m.bytes == [CLOCK]).count();
+        assert!(
+            after_run > 1,
+            "expected several clock pulses, got {after_run}"
+        );
+        orch.clear_monitor();
+        orch.on_transport_tick(0, 120.0).unwrap();
+        assert!(
+            orch.monitor().iter().any(|m| m.bytes == [CLOCK]),
+            "seek back to sample 0 must rebase next_pulse so clock resumes"
+        );
+        orch.clear_monitor();
+        orch.on_transport_tick(48_000, 60.0).unwrap();
+        let burst = orch.monitor().iter().filter(|m| m.bytes == [CLOCK]).count();
+        assert!(
+            burst < 30,
+            "tempo change must rebase instead of flushing a burst, got {burst}"
+        );
+
+        orch.clear_monitor();
+        orch.on_transport_play(48_000, 60.0).unwrap();
+        assert!(
+            orch.monitor().iter().all(|m| m.bytes[0] != START),
+            "Play while already running must not send a second START"
+        );
+
+        let mut late = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        late.on_transport_play(0, 120.0).unwrap();
+        assert!(late.monitor().is_empty());
+        late.set_clock(true);
+        assert_eq!(late.monitor()[0].bytes, vec![START]);
+        assert!(
+            late.monitor().iter().any(|m| m.bytes == [CLOCK]),
+            "Send Clock mid-song must arm ticks"
+        );
+    }
+
+    struct DisconnectSink {
+        live: bool,
+    }
+    impl MidiSink for DisconnectSink {
+        fn send(&mut self, _: &[u8]) -> Result<(), String> {
+            self.live = false;
+            Err("MIDI send to \"Roland UM-ONE\" failed. disconnected".into())
+        }
+        fn describe(&self) -> String {
+            "Roland UM-ONE".into()
+        }
+        fn is_live(&self) -> bool {
+            self.live
+        }
+    }
+
+    #[test]
+    fn send_failure_closes_the_port_and_clears_live() {
+        let mut orch = RigOrchestrator::new(
+            quad_cortex_like(),
+            Box::new(DisconnectSink { live: true }),
+        );
+        assert!(orch.is_live());
+        let err = orch.send_program(1).unwrap_err();
+        assert!(err.contains("failed"), "{err}");
+        assert!(
+            !orch.is_live(),
+            "a disconnected port must fall back to MemorySink"
+        );
+        assert!(
+            orch.port_description().contains("No MIDI port is open"),
+            "{}",
+            orch.port_description()
+        );
+        orch.send_program(2).unwrap();
+        assert!(!orch.is_live());
+        assert_eq!(orch.monitor().last().unwrap().bytes, vec![0xC0, 2]);
     }
 }
