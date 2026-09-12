@@ -248,18 +248,23 @@ fn a_corrupt_settings_file_is_never_overwritten_and_the_next_start_recovers_the_
             && read.contains("Restore settings.json.bak"),
         "{read}"
     );
-    let write = studio.err("settings_set", json!({ "settings": good }));
-    assert!(
-        write.starts_with(&format!("Cannot read {path_text}.")),
-        "{write}"
-    );
-    assert_eq!(
-        fs::read_to_string(settings_path()).unwrap(),
-        "not json",
-        "a refused save leaves the damaged bytes alone"
-    );
+    studio.ok("settings_set", json!({ "settings": good }));
+    assert_eq!(read_json(&settings_path()), good);
+    let archived: Vec<_> = user_dir()
+        .read_dir()
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("settings.json.broken-"))
+        })
+        .collect();
+    assert_eq!(archived.len(), 1);
+    assert_eq!(fs::read_to_string(&archived[0]).unwrap(), "not json");
 
-    // Startup is the only place that repairs: it archives the damage first.
+    // Startup still archives leftover damage when the user never saved.
+    fs::write(settings_path(), "not json").unwrap();
     let restarted = Studio::boot();
     let notice = restarted.ok("settings_recovery_notice", json!({}));
     let notice = notice.as_str().expect("a recovery notice");
@@ -345,6 +350,7 @@ fn audio_set_config_restarts_the_headless_engine_and_persists_the_devices() {
     // The render thread can count more input gaps between these two IPC reads.
     assert!(current["input_gaps"].as_u64().unwrap() >= status["input_gaps"].as_u64().unwrap());
     current["input_gaps"] = status["input_gaps"].clone();
+    current["xruns"] = status["xruns"].clone();
     assert_eq!(current, status);
     let mut expected = default_settings();
     for key in [
@@ -550,10 +556,12 @@ fn engine_status_describes_the_headless_streams_and_restart_keeps_them() {
             "buffer_size": 256,
             "last_error": null,
             "stream_errors": 0,
-            "input_gaps": status["input_gaps"]
+            "input_gaps": status["input_gaps"],
+            "xruns": status["xruns"]
         })
     );
     assert!(status["input_gaps"].as_u64().is_some());
+    assert!(status["xruns"].as_u64().is_some());
 
     studio.ok("transport_set_count_in", json!({ "bars": 0 }));
     studio.ok("metronome_set", json!({ "on": true, "bpm": 150.0 }));
