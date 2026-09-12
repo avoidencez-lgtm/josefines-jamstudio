@@ -110,15 +110,23 @@ export function buildRequest(
   userText: string,
   ctx: JoContext,
 ): GeminiRequest {
-  const turns: GeminiContent[] = history
-    .filter((m) => m.id !== "welcome")
-    .slice(-8)
-    .map((m) => ({
-      role: m.sender === "user" ? "user" : "model",
-      parts: [{ text: m.text }],
-    }));
+  const turns: GeminiContent[] = [];
+  for (const m of history.filter((m) => m.id !== "welcome").slice(-8)) {
+    const role = m.sender === "user" ? "user" : "model";
+    const last = turns.at(-1);
+    if (last?.role === role) {
+      last.parts[0].text = `${last.parts[0].text}\n${m.text}`;
+    } else {
+      turns.push({ role, parts: [{ text: m.text }] });
+    }
+  }
   while (turns[0]?.role === "model") turns.shift();
-  turns.push({ role: "user", parts: [{ text: userText }] });
+  const tail = turns.at(-1);
+  if (tail?.role === "user") {
+    tail.parts[0].text = `${tail.parts[0].text}\n${userText}`;
+  } else {
+    turns.push({ role: "user", parts: [{ text: userText }] });
+  }
   return {
     systemInstruction: {
       parts: [

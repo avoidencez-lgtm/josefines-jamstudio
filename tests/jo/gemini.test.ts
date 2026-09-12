@@ -54,6 +54,34 @@ describe("Jo's Gemini request", () => {
     ).toContain("shot-a");
   });
 
+  it("merges consecutive assistant turns so Anthropic roles keep alternating", () => {
+    const history = [
+      {
+        id: "u1",
+        sender: "user" as const,
+        text: "change the verse groove",
+        timestamp: "Jo",
+      },
+      {
+        id: "j1",
+        sender: "jo" as const,
+        text: "Proposed song edits. Review them below.",
+        timestamp: "Jo",
+      },
+      {
+        id: "j2",
+        sender: "jo" as const,
+        text: "The proposal was set aside. Your new message replaces it. Nothing was applied.",
+        timestamp: "This is a review.",
+      },
+    ];
+    const req = buildRequest(history, "what is the current bpm?", ctx);
+    const roles = req.contents.map((c) => c.role);
+    expect(roles).toEqual(["user", "model", "user"]);
+    expect(req.contents[1]?.parts[0]?.text).toContain("Proposed song edits");
+    expect(req.contents[1]?.parts[0]?.text).toContain("Nothing was applied");
+  });
+
   it("does not send the UI welcome as a model turn", () => {
     const welcome = {
       id: "welcome",
