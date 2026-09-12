@@ -1064,7 +1064,29 @@ fn recorded_review_fixture_writes_from_analysis_numbers() {
     .unwrap();
     assert_eq!(session["review"]["fromAudio"], false);
     assert_eq!(session["review"]["origin"], "synthetic-analysis");
+    let seen: Arc<Mutex<Vec<Value>>> = Arc::default();
+    let sink = Arc::clone(&seen);
+    studio.app().listen_any("export:state", move |event| {
+        sink.lock()
+            .unwrap()
+            .push(serde_json::from_str(event.payload()).unwrap());
+    });
     let exported = studio.ok("export_logic", json!({"takeId": take.id}));
     assert!(exported["folder"].as_str().unwrap().contains(&take.id));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if !seen.lock().unwrap().is_empty() {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no export:state event from export_logic"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(seen.lock().unwrap()[0]["folder"]
+        .as_str()
+        .unwrap()
+        .contains(&take.id));
     std::env::remove_var("JAM_REVIEW_FIXTURE");
 }
