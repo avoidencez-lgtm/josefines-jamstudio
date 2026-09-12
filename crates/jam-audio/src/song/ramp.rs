@@ -49,8 +49,8 @@ pub(super) fn aligned(grid: &Grid, seconds: f64) -> bool {
     grid.beats
         .iter()
         .step_by(grid.beats_per_bar)
-        // Sample-accurate slack: BPM math and JSON round-trips exceed 1e-11 s.
-        .any(|b| (b - seconds).abs() <= 1.0 / 48_000.0)
+        // JSON/IPC round-trips leave ~1e-9..1e-7 s; a whole sample early must not pass.
+        .any(|b| (b - seconds).abs() <= 1e-6)
 }
 
 /// Skip a partial first bar. The cached boundary makes per-frame work constant time.
