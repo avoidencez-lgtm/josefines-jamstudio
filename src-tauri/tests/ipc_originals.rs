@@ -186,7 +186,15 @@ fn save_checks_the_revision_against_the_file_on_disk() {
 fn save_refuses_invalid_ids_without_touching_the_disk() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
-    for id in ["../escape", "my song", "", "sång", &"a".repeat(101)] {
+    for id in [
+        "../escape",
+        "my song",
+        "",
+        "sång",
+        "MySong",
+        "Blues-Shuffle",
+        &"a".repeat(101),
+    ] {
         assert_eq!(
             studio.err("originals_save", json!({ "document": song(id) })),
             "Invalid song or take id.",
@@ -896,6 +904,15 @@ fn favourite_marks_the_take_manifest_on_disk_and_rejects_unknown_takes() {
         .find(|t| t["id"] == take_id)
         .unwrap();
     assert_eq!(entry["favourite"], true);
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    let cached = cached.iter().find(|t| t.id == take_id).unwrap();
+    assert_eq!(cached.extra.get("favourite"), Some(&json!(true)));
 
     let cleared = studio.ok(
         "takes_favourite",
