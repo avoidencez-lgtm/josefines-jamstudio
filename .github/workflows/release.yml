@@ -17,8 +17,24 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    name: require green main CI
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Require successful main CI for the tag commit
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          success=$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" --workflow ci --event push --status success --limit 1 --json databaseId --jq 'length == 1')
+          test "$success" = "true"
+
   build:
     name: bundle (${{ matrix.name }})
+    needs: verify
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -81,6 +97,28 @@ jobs:
           releaseBody: |
             Unsigned preview build. See the README for supported workflows and pending owner checks.
             macOS: right-click the app and choose Open the first time. Windows: choose "More info", then "Run anyway".
+          generateReleaseNotes: true
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.args }}
+
+  checksums:
+    name: release checksums
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets and create SHA-256 sums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir release-assets
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir release-assets
+          rm -f release-assets/SHA256SUMS.txt
+          cd release-assets
+          find . -maxdepth 1 -type f -print0 | sort -z | xargs -0 -r sha256sum > ../SHA256SUMS.txt
+          test -s ../SHA256SUMS.txt
+      - name: Attach SHA-256 sums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
