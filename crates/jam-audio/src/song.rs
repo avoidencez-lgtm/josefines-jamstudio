@@ -610,7 +610,13 @@ impl ReferenceSong {
                     };
                     let frame = if processing {
                         let limit = (end.ceil() as usize).min(length) * 2;
-                        match self.streams[index].frame(&samples[..limit], self.position, rate) {
+                        let wrap = self.info.loop_enabled.then_some(loop_start as usize);
+                        match self.streams[index].frame(
+                            &samples[..limit],
+                            self.position,
+                            rate,
+                            wrap,
+                        ) {
                             Ok(frame) => frame,
                             Err(error) => {
                                 self.info.processing_error = Some(error);

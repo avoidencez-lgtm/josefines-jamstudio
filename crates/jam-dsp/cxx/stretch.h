@@ -13,6 +13,7 @@ public:
     std::size_t seek_length() const;
     void seek(rust::Slice<const float> input);
     void process(rust::Slice<const float> input, rust::Slice<float> output);
+    void flush(rust::Slice<float> output);
 };
 std::unique_ptr<Stretch> new_stretch(double speed, double semitones);
 }
