@@ -115,13 +115,24 @@ fn first_bpm(value: &Value) -> Option<f64> {
         .and_then(|rows| rows.iter().find_map(|row| number(&row["bpm"])))
 }
 
+fn ordered_span(start: f64, end: f64) -> Result<(f64, f64), String> {
+    if start > end {
+        return Err("Span start must not exceed end.".into());
+    }
+    Ok((start, end))
+}
+
 fn chord_spans(value: &Value) -> Result<Vec<ChordSpan>, String> {
     let rows = rows(value, "chordMap")?;
     rows.iter()
         .map(|row| {
+            let (start, end) = ordered_span(
+                bound(&row["start"], "chord start")?,
+                bound(&row["end"], "chord end")?,
+            )?;
             Ok(ChordSpan {
-                start: bound(&row["start"], "chord start")?,
-                end: bound(&row["end"], "chord end")?,
+                start,
+                end,
                 chord: text(&row["chord"]).or_else(|| text(&row["label"])),
             })
         })
@@ -135,11 +146,11 @@ fn section_spans(value: &Value) -> Result<Vec<SectionSpan>, String> {
             let name = text(&row["section"])
                 .or_else(|| text(&row["name"]))
                 .ok_or_else(|| "Each section needs a name.".to_string())?;
-            Ok(SectionSpan {
-                start: bound(&row["start"], "section start")?,
-                end: bound(&row["end"], "section end")?,
-                name,
-            })
+            let (start, end) = ordered_span(
+                bound(&row["start"], "section start")?,
+                bound(&row["end"], "section end")?,
+            )?;
+            Ok(SectionSpan { start, end, name })
         })
         .collect()
 }
@@ -228,5 +239,15 @@ mod tests {
     fn unordered_beats_are_refused() {
         let err = beat_starts(&json!([{"start": 1.0}, {"start": 0.2}])).unwrap_err();
         assert!(err.contains("order"), "{err}");
+    }
+
+    #[test]
+    fn inverted_chord_and_section_spans_are_refused() {
+        let err = chord_spans(&json!([{"start": 10.0, "end": 2.0, "chord": "Am"}])).unwrap_err();
+        assert!(err.contains("Span start must not exceed end"), "{err}");
+        let err =
+            section_spans(&json!([{"start": 8.0, "end": 1.0, "section": "Verse"}])).unwrap_err();
+        assert!(err.contains("Span start must not exceed end"), "{err}");
+        assert!(chord_spans(&json!([{"start": 1.0, "end": 1.0, "chord": "C"}])).is_ok());
     }
 }
