@@ -38,6 +38,28 @@ fn keychain_unavailable(err: keyring::Error) -> String {
     format!("The keychain is unavailable ({reason}). Unlock or allow access to the OS keychain, then retry in Settings.")
 }
 
+/// Windows Credential Manager blobs are capped at 2560 bytes; reject control
+/// characters and trim surrounding whitespace before any OS keychain call.
+pub(crate) const SECRET_MAX_BYTES: usize = 2560;
+
+pub(crate) fn prepare_secret(secret: &str) -> Result<String, String> {
+    let trimmed = secret.trim_matches([' ', '\t', '\n', '\r']);
+    if trimmed.is_empty() {
+        return Err("API key is empty. Paste the key without extra spaces.".into());
+    }
+    if trimmed.bytes().any(|b| b < 0x20 || b == 0x7f) {
+        return Err(
+            "API key contains control characters. Paste the key without line breaks.".into(),
+        );
+    }
+    if trimmed.len() > SECRET_MAX_BYTES {
+        return Err(format!(
+            "API key is too long. The limit is {SECRET_MAX_BYTES} bytes."
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
 fn delete_result(result: keyring::Result<()>) -> Result<(), String> {
     match result {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -60,8 +82,9 @@ impl Default for KeyringStore {
 
 impl SecretStore for KeyringStore {
     fn set(&self, provider: &str, secret: &str) -> Result<(), String> {
+        let secret = prepare_secret(secret)?;
         let entry = keyring::Entry::new(&self.service, provider).map_err(keychain_unavailable)?;
-        entry.set_password(secret).map_err(keychain_unavailable)?;
+        entry.set_password(&secret).map_err(keychain_unavailable)?;
         Ok(())
     }
 
@@ -88,8 +111,9 @@ pub struct MemoryStore {
 
 impl SecretStore for MemoryStore {
     fn set(&self, provider: &str, secret: &str) -> Result<(), String> {
+        let secret = prepare_secret(secret)?;
         let mut map = self.secrets.lock().unwrap();
-        map.insert(provider.to_string(), secret.to_string());
+        map.insert(provider.to_string(), secret);
         Ok(())
     }
 
@@ -152,6 +176,38 @@ mod tests {
         assert!(!store.has("gemini").unwrap());
         assert_eq!(store.get("gemini").unwrap(), None);
         store.delete("gemini").unwrap();
+    }
+
+    #[test]
+    fn secret_store_trims_whitespace_and_rejects_control_chars_and_oversize() {
+        let store = MemoryStore::default();
+        store
+            .set("gemini", "  sk-live\r\n")
+            .expect("surrounding whitespace and CRLF are stripped");
+        assert_eq!(store.get("gemini").unwrap().as_deref(), Some("sk-live"));
+
+        let empty = store.set("openai", " \r\n\t ").unwrap_err();
+        assert!(empty.contains("empty"), "{empty}");
+        assert!(!store.has("openai").unwrap());
+
+        let control = store.set("anthropic", "sk-live\0hidden").unwrap_err();
+        assert!(control.contains("control characters"), "{control}");
+        assert!(!store.has("anthropic").unwrap());
+
+        let longest = "k".repeat(SECRET_MAX_BYTES);
+        store.set("openrouter", &longest).unwrap();
+        assert_eq!(
+            store.get("openrouter").unwrap().as_deref(),
+            Some(longest.as_str())
+        );
+        let too_long = store
+            .set("minimax", &"k".repeat(SECRET_MAX_BYTES + 1))
+            .unwrap_err();
+        assert!(
+            too_long.contains(&SECRET_MAX_BYTES.to_string()) && too_long.contains("too long"),
+            "{too_long}"
+        );
+        assert!(!store.has("minimax").unwrap());
     }
 
     #[test]

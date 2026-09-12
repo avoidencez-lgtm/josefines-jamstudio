@@ -67,6 +67,20 @@ pub struct SeamRegistry<T: VersionedManifest> {
     items: HashMap<String, T>,
 }
 
+/// Current chart, style, rig and control-map schema. Newer files must be refused
+/// so unknown fields are not silently dropped (invariant 6).
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 1;
+
+fn refuse_future_schema<T: VersionedManifest>(item: &T, origin: &str) -> Result<(), String> {
+    let version = item.schema_version();
+    if version > SUPPORTED_SCHEMA_VERSION {
+        return Err(format!(
+            "Cannot read {origin}. schemaVersion {version} is newer than this app supports ({SUPPORTED_SCHEMA_VERSION}). Update the app before loading this file."
+        ));
+    }
+    Ok(())
+}
+
 impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
     pub fn new() -> Self {
         Self {
@@ -81,6 +95,7 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
                 if let Some(content) = file.contents_utf8() {
                     match crate::json::from_str::<T>(content) {
                         Ok(item) => {
+                            refuse_future_schema(&item, &file.path().display().to_string())?;
                             self.items.insert(item.id().to_string(), item);
                             count += 1;
                         }
@@ -112,6 +127,12 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
                     match std::fs::read_to_string(&p) {
                         Ok(content) => match crate::json::from_str::<T>(&content) {
                             Ok(item) => {
+                                if let Err(e) =
+                                    refuse_future_schema(&item, &p.display().to_string())
+                                {
+                                    errors.push(e);
+                                    continue;
+                                }
                                 let id = item.id().to_string();
                                 if let Some(first) = loaded_from.get(&id) {
                                     errors.push(format!(
@@ -263,6 +284,29 @@ mod tests {
         assert_eq!(count, 1);
         assert_ne!(charts.get("blues-12-bar").unwrap().name, bundled);
         assert_eq!(charts.get("blues-12-bar").unwrap().name, "User blues");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn future_schema_versions_are_refused_instead_of_dropping_fields() {
+        let dir = std::env::temp_dir().join(format!("jam-registry-future-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("future.json"),
+            br#"{"schemaVersion":2,"id":"future-chart","name":"Future","keyTonic":0,"mode":"major","timeSig":[4,4],"defaultBpm":120,"sections":[{"id":"a","name":"A","bars":[[{"chord":"C","beats":4}]]}],"arrangement":[{"sectionId":"a"}],"futureField":true}"#,
+        )
+        .unwrap();
+        let mut charts: SeamRegistry<Chart> = SeamRegistry::new();
+        let (count, errors) = charts.load_from_fs_dir(&dir);
+        assert_eq!(count, 0);
+        assert_eq!(errors.len(), 1);
+        assert!(
+            errors[0].contains("schemaVersion 2") && errors[0].contains("future.json"),
+            "{}",
+            errors[0]
+        );
+        assert!(charts.get("future-chart").is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -503,6 +503,18 @@ fn analysis_of_a_synthetic_a3_sine_finds_pitched_frames_in_tune() {
     // M6 stationary-tone precision: within three cents of the generated A3.
     assert!((0.0..=3.0).contains(&cents), "{analysis}");
     assert_eq!(((1.0 - cents / 50.0) * 100.0).round(), intonation);
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    let cached = cached.iter().find(|t| t.id == take.id).unwrap();
+    assert!(
+        cached.extra.get("analysis").is_some_and(|v| v.is_object()),
+        "analysis is written back into the SQLite cache"
+    );
 
     let ghost = unique("no-such-take");
     assert_eq!(
@@ -895,6 +907,7 @@ fn media_from_take_mixes_the_clean_stems_into_an_audio_asset() {
 
 #[test]
 fn a_cached_take_whose_folder_is_gone_can_still_be_deleted() {
+    let _scenario = common::scenario();
     let studio = Studio::boot();
     let id = unique("take-gone-from-disk");
     let gone = takes_root().join(&id);
@@ -914,10 +927,21 @@ fn a_cached_take_whose_folder_is_gone_can_still_be_deleted() {
         .insert_take(&meta)
         .unwrap();
     let listed = studio.ok("takes_list", json!({}));
-    assert!(find(&listed, &id).is_some(), "ghost row is listed");
-    studio.ok("takes_delete", json!({ "takeId": id }));
-    let listed = studio.ok("takes_list", json!({}));
-    assert!(find(&listed, &id).is_none(), "ghost row is gone");
+    assert!(
+        find(&listed, &id).is_none(),
+        "a take folder removed outside the app is not listed"
+    );
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    assert!(
+        cached.iter().all(|t| t.id != id),
+        "the vanished take is pruned from the SQLite cache"
+    );
 }
 
 #[test]
@@ -1087,5 +1111,47 @@ fn recorded_review_fixture_writes_from_analysis_numbers() {
         .as_str()
         .unwrap()
         .contains(&take.id));
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    let cached = cached.iter().find(|t| t.id == take.id).unwrap();
+    assert_eq!(
+        cached.extra.get("review").and_then(|v| v.get("origin")),
+        Some(&json!("synthetic-analysis"))
+    );
     std::env::remove_var("JAM_REVIEW_FIXTURE");
+}
+
+#[test]
+fn takes_list_rebuilds_an_empty_sqlite_cache_from_disk() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = synthetic_take(0.2, "1700000000.000");
+    let store = studio.app().state::<app_lib::AppState>().store.lock();
+    let (before, _) = store.list_takes().unwrap();
+    assert!(before.iter().all(|t| t.id != take.id));
+    drop(store);
+    let listed = studio.ok("takes_list", json!({}));
+    assert!(find(&listed, &take.id).is_some());
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    assert!(cached.iter().any(|t| t.id == take.id));
+    studio.ok("takes_reindex", json!({}));
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    assert!(cached.iter().any(|t| t.id == take.id));
 }

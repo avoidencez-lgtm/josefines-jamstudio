@@ -1,6 +1,7 @@
 //! style: Data schemas for styles, drum patterns, and groove structures.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -96,4 +97,23 @@ pub struct Style {
     #[serde(default)]
     pub endings: Vec<DrumPattern>,
     pub humanize: StyleHumanize,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_style_fields_survive_a_rewrite() {
+        let json = include_str!("../../../styles/blues-shuffle.json");
+        let mut value: serde_json::Value = serde_json::from_str(json).unwrap();
+        value["futureAccent"] = serde_json::json!({"keep": true});
+        let style: Style = serde_json::from_value(value).unwrap();
+        assert_eq!(style.extra.get("futureAccent").unwrap()["keep"], true);
+        let round = serde_json::to_value(&style).unwrap();
+        assert_eq!(round["futureAccent"]["keep"], true);
+        assert_eq!(round["id"], "blues-shuffle");
+    }
 }

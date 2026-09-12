@@ -83,10 +83,12 @@ describe("browser preview engine", () => {
     expect(styles.map((s) => s.id).sort()).toEqual([
       "ballad-68",
       "blues-shuffle",
+      "five-four",
       "funk-16",
       "jazz-swing",
       "metal-gallop",
       "rock-straight",
+      "waltz-34",
     ]);
     expect(charts.length).toBe(9);
   });

@@ -22,13 +22,15 @@ const BUNDLED_CHARTS: [&str; 9] = [
 ];
 
 /// (id, name, meter) of every bundled style.
-const BUNDLED_STYLES: [(&str, &str, [u8; 2]); 6] = [
+const BUNDLED_STYLES: [(&str, &str, [u8; 2]); 8] = [
     ("ballad-68", "Slow 6/8 Ballad", [6, 8]),
     ("blues-shuffle", "Blues Shuffle", [4, 4]),
+    ("five-four", "Five Four", [5, 4]),
     ("funk-16", "Funk 16th Groove", [4, 4]),
     ("jazz-swing", "Jazz Swing", [4, 4]),
     ("metal-gallop", "Heavy Metal Gallop", [4, 4]),
     ("rock-straight", "Rock Straight 8th", [4, 4]),
+    ("waltz-34", "Waltz 3/4", [3, 4]),
 ];
 
 const METER_MISMATCH: &str =
@@ -362,6 +364,20 @@ fn an_inline_chart_plays_without_touching_the_library_and_can_change_the_meter()
     });
     assert_eq!(tel["band"]["style_id"], "blues-shuffle");
     assert_eq!(tel["band"]["current_chord"], "A7");
+
+    let three = chart_value(&unique("three-four"), [3, 4], None, &[&[("G", 3.0)]]);
+    studio.ok("band_load_chart_inline", json!({"chart": three}));
+    let tel = telemetry_where(&studio, "3/4 meter", |t| {
+        t["transport"]["time_signature"] == json!([3, 4])
+    });
+    assert_eq!(tel["band"]["style_id"], "waltz-34");
+
+    let five = chart_value(&unique("five-four"), [5, 4], None, &[&[("Em", 5.0)]]);
+    studio.ok("band_load_chart_inline", json!({"chart": five}));
+    let tel = telemetry_where(&studio, "5/4 meter", |t| {
+        t["transport"]["time_signature"] == json!([5, 4])
+    });
+    assert_eq!(tel["band"]["style_id"], "five-four");
 }
 
 #[test]
@@ -452,12 +468,13 @@ fn the_inline_validator_names_what_is_wrong_and_leaves_the_band_untouched() {
             "chart id is empty".into(),
         ),
         (
-            "3/4 with no matching style",
+            "7/8 default style in a different meter",
             with(|c| {
-                c["timeSig"] = json!([3, 4]);
-                c["sections"][0]["bars"] = json!([[{"chord": "Gm7", "beats": 3.0}]]);
+                c["timeSig"] = json!([7, 8]);
+                c["defaultStyleId"] = json!("blues-shuffle");
+                c["sections"][0]["bars"] = json!([[{"chord": "Am", "beats": 7.0}]]);
             }),
-            "No style matches this chart's meter.".into(),
+            "The chart's default style has a different meter. Choose a matching style.".into(),
         ),
         (
             "6/8 with a 4/4 default style",

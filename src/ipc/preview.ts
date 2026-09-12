@@ -203,6 +203,7 @@ export function createPreviewEngine(
       "This browser preview is a simulated engine. No audio is produced.",
     stream_errors: 0,
     input_gaps: 0,
+    xruns: 0,
   };
   let config: AudioConfig = {
     input_device: null,

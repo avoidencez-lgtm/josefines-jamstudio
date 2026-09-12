@@ -1,6 +1,7 @@
 //! chart: Chord charts, arrangement expansion, and chord resolution math.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +18,8 @@ pub struct ChartSection {
     pub bars: Vec<Vec<BarChord>>,
     #[serde(default)]
     pub style_override_id: Option<String>,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -45,6 +48,8 @@ pub struct Chart {
     pub default_style_id: Option<String>,
     pub sections: Vec<ChartSection>,
     pub arrangement: Vec<ArrangementItem>,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -248,11 +253,13 @@ mod tests {
                 name: "Verse".into(),
                 bars: verse_bars,
                 style_override_id: None,
+                extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
                 section_id: "verse".into(),
                 repeats: 2, // 2 chorus = 24 bars
             }],
+            extra: HashMap::new(),
         };
 
         let resolved = chart.resolve();
@@ -301,11 +308,13 @@ mod tests {
                     }],
                 ],
                 style_override_id: None,
+                extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
                 section_id: "a".into(),
                 repeats: 1,
             }],
+            extra: HashMap::new(),
         };
         let r = chart.resolve();
         assert_eq!(r.chord_at(1, 1), ("A7".into(), Some("D7".into())));
@@ -339,11 +348,13 @@ mod tests {
                     beats: 4.0,
                 }]],
                 style_override_id: None,
+                extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
                 section_id: "a".into(),
                 repeats: 0,
             }],
+            extra: HashMap::new(),
         };
         let resolved = chart.resolve();
         assert_eq!(resolved.bars.len(), 1);
@@ -416,5 +427,33 @@ mod tests {
             bars: vec![],
         };
         assert_eq!(chart.chord_at_position(1, 0.0), (String::new(), None));
+    }
+
+    #[test]
+    fn unknown_chart_and_section_fields_survive_a_rewrite() {
+        let json = r#"{
+            "schemaVersion": 1,
+            "id": "waltz-scratch",
+            "name": "Waltz Scratch",
+            "keyTonic": 7,
+            "mode": "major",
+            "timeSig": [3, 4],
+            "defaultBpm": 96.0,
+            "rigSceneId": "verse-clean",
+            "sections": [{
+                "id": "a",
+                "name": "A",
+                "intensity": 0.4,
+                "bars": [[{"chord": "G", "beats": 3.0}]]
+            }],
+            "arrangement": [{"sectionId": "a", "repeats": 1}]
+        }"#;
+        let chart: Chart = serde_json::from_str(json).unwrap();
+        assert_eq!(chart.extra.get("rigSceneId").unwrap(), "verse-clean");
+        assert_eq!(chart.sections[0].extra.get("intensity").unwrap(), 0.4);
+        let round = serde_json::to_value(&chart).unwrap();
+        assert_eq!(round["rigSceneId"], "verse-clean");
+        assert_eq!(round["sections"][0]["intensity"], 0.4);
+        assert_eq!(round["id"], "waltz-scratch");
     }
 }

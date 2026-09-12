@@ -94,7 +94,7 @@ pub(crate) fn valid_id(id: &str) -> Result<(), String> {
         || id.len() > 100
         || !id
             .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-' || c == b'_')
     {
         return Err("Invalid song or take id.".into());
     }
@@ -318,7 +318,10 @@ fn scan_takes(root: &Path) -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
     let mut takes = Vec::new();
     let mut warnings = Vec::new();
     for entry in fs::read_dir(root).map_err(|e| e.to_string())? {
-        let p = entry.map_err(|e| e.to_string())?.path().join("take.json");
+        let Some(dir) = take_dir_from_entry(entry, &mut warnings) else {
+            continue;
+        };
+        let p = dir.join("take.json");
         if p.exists() {
             match fs::read(&p)
                 .map_err(|e| e.to_string())
@@ -333,6 +336,21 @@ fn scan_takes(root: &Path) -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
         }
     }
     Ok((takes, warnings))
+}
+
+fn take_dir_from_entry(
+    entry: Result<fs::DirEntry, std::io::Error>,
+    warnings: &mut Vec<String>,
+) -> Option<PathBuf> {
+    match entry {
+        Ok(entry) => Some(entry.path()),
+        Err(e) => {
+            warnings.push(format!(
+                "Cannot read a take folder entry. {e}. Other takes remain available."
+            ));
+            None
+        }
+    }
 }
 
 pub fn read_clip(spec: ClipSpec, state: &AppState, takes: &[TakeMetadata]) -> Result<Clip, String> {
@@ -516,7 +534,7 @@ pub fn capture_keep(
     state: State<'_, AppState>,
 ) -> Result<TakeMetadata, String> {
     let take = state.engine.lock().keep_capture(session_id)?;
-    state.store.lock().insert_take(&take)?;
+    let _ = state.store.lock().insert_take(&take);
     Ok(take)
 }
 #[tauri::command]
@@ -529,6 +547,7 @@ pub fn takes_favourite(
     take.extra
         .insert("favourite".into(), Value::Bool(favourite));
     save_take_manifest(&take)?;
+    state.store.lock().insert_take(&take)?;
     Ok(take)
 }
 
@@ -545,6 +564,15 @@ mod tests {
             "Invalid song or take id."
         );
         assert!(super::valid_id("take-1").is_ok());
+        assert_eq!(
+            super::valid_id("MySong").unwrap_err(),
+            "Invalid song or take id."
+        );
+        assert_eq!(
+            super::valid_id("Blues-Shuffle").unwrap_err(),
+            "Invalid song or take id."
+        );
+        assert!(super::valid_id("blues-shuffle").is_ok());
     }
 
     #[test]
@@ -634,6 +662,48 @@ mod tests {
         assert_eq!(
             std::fs::read(root.join("bad/take.json")).unwrap(),
             b"broken"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unreadable_take_directory_entries_do_not_hide_other_takes() {
+        let mut warnings = Vec::new();
+        let skipped = super::take_dir_from_entry(
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "access denied",
+            )),
+            &mut warnings,
+        );
+        assert!(skipped.is_none());
+        assert_eq!(warnings.len(), 1);
+        assert!(
+            warnings[0].contains("Other takes remain available"),
+            "{}",
+            warnings[0]
+        );
+
+        let root = std::env::temp_dir().join(format!("jam-take-entry-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("good")).unwrap();
+        std::fs::write(root.join("not-a-folder"), b"x").unwrap();
+        let take = jam_audio::recorder::TakeMetadata {
+            id: "good".into(),
+            ..Default::default()
+        };
+        std::fs::write(
+            root.join("good/take.json"),
+            serde_json::to_vec(&take).unwrap(),
+        )
+        .unwrap();
+        let (takes, scan_warnings) = super::scan_takes(&root).unwrap();
+        assert_eq!(
+            takes.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+            ["good"]
+        );
+        assert!(
+            scan_warnings.is_empty(),
+            "plain files are skipped without aborting: {scan_warnings:?}"
         );
         std::fs::remove_dir_all(root).unwrap();
     }

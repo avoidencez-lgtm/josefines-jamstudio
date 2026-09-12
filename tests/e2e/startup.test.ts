@@ -138,6 +138,7 @@ describe("desktop startup against the preview engine", () => {
       last_error: PREVIEW_LAST_ERROR,
       stream_errors: 0,
       input_gaps: 0,
+      xruns: 0,
     });
     // "Restart audio" in the settings room keeps the same honest answer.
     await store().restartEngine();
@@ -184,19 +185,23 @@ describe("desktop startup against the preview engine", () => {
     const { styles, charts, currentChart, libraryInfo } = store();
     expect(styles.map((s) => s.name)).toEqual([
       "Blues Shuffle",
+      "Five Four",
       "Funk 16th Groove",
       "Heavy Metal Gallop",
       "Jazz Swing",
       "Rock Straight 8th",
       "Slow 6/8 Ballad",
+      "Waltz 3/4",
     ]);
     expect(styles.map((s) => s.id)).toEqual([
       "blues-shuffle",
+      "five-four",
       "funk-16",
       "metal-gallop",
       "jazz-swing",
       "rock-straight",
       "ballad-68",
+      "waltz-34",
     ]);
     for (const s of styles) {
       expect(s.schemaVersion).toBe(1);
