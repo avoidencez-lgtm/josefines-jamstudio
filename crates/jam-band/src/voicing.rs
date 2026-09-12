@@ -431,7 +431,10 @@ mod tests {
         assert_eq!(relative("A9sus4", "triad"), vec![0, 5, 7]);
         let seventh_sus = relative("A7sus4", "four-note");
         assert_eq!(seventh_sus, vec![0, 5, 7, 10]);
-        assert!(!relative("Csus2", "triad").contains(&5), "sus2 must not voice a 4th");
+        assert!(
+            !relative("Csus2", "triad").contains(&5),
+            "sus2 must not voice a 4th"
+        );
         assert!(!seventh_sus.contains(&4), "7sus must not voice a major 3rd");
     }
 
@@ -442,7 +445,10 @@ mod tests {
         assert_eq!(parse_chord("C+7"), Some((0, ChordQuality::Augmented)));
         assert_eq!(relative("Caug", "shell"), vec![0, 4, 8]);
         assert_eq!(relative("C+", "triad"), vec![0, 4, 8]);
-        assert!(!relative("Caug", "triad").contains(&7), "aug must raise the 5th");
+        assert!(
+            !relative("Caug", "triad").contains(&7),
+            "aug must raise the 5th"
+        );
 
         assert_eq!(parse_chord("Cma7"), Some((0, ChordQuality::Major7)));
         assert_eq!(parse_chord("Cma9"), Some((0, ChordQuality::Major7)));
@@ -451,9 +457,15 @@ mod tests {
         assert_eq!(parse_chord("Cmadd9"), Some((0, ChordQuality::Minor)));
         assert_eq!(parse_chord("Cmadd11"), Some((0, ChordQuality::Minor)));
         assert_eq!(relative("Cmadd9", "shell"), vec![0, 3, 7]);
-        assert!(!relative("Cmadd9", "shell").contains(&10), "add9 is not a seventh");
+        assert!(
+            !relative("Cmadd9", "shell").contains(&10),
+            "add9 is not a seventh"
+        );
 
-        assert_eq!(parse_chord("C-7b5"), Some((0, ChordQuality::HalfDiminished)));
+        assert_eq!(
+            parse_chord("C-7b5"),
+            Some((0, ChordQuality::HalfDiminished))
+        );
         assert_eq!(parse_chord("Ch7"), Some((0, ChordQuality::HalfDiminished)));
         assert_eq!(relative("C-7b5", "shell"), vec![0, 3, 10]);
         assert_eq!(relative("Ch7", "drop2"), relative("Cm7b5", "drop2"));
@@ -490,7 +502,11 @@ mod tests {
         let notes = voice_chord("CMin7", "shell");
         let root = notes[0] as i32;
         let rel: Vec<i32> = notes.iter().map(|&n| n as i32 - root).collect();
-        assert_eq!(rel, vec![0, 3, 10], "CMin7 must be a minor seventh, not C-E-G-B");
+        assert_eq!(
+            rel,
+            vec![0, 3, 10],
+            "CMin7 must be a minor seventh, not C-E-G-B"
+        );
     }
 
     #[test]
