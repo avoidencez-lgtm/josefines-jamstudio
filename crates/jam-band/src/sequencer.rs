@@ -966,6 +966,7 @@ mod tests {
 
     #[test]
     fn first_downbeat_sounds_at_sample_zero() {
+        let _lock = crate::kit::lock_test_env();
         let style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
         let (l, _) = render(style, 1, None);
         let peak_first_ms: f32 = l[..480].iter().fold(0.0, |m, s| m.max(s.abs()));
@@ -974,6 +975,7 @@ mod tests {
 
     #[test]
     fn off_beat_hits_are_scheduled_sample_accurately() {
+        let _lock = crate::kit::lock_test_env();
         // Ride on the shuffle "and" (0.67) and a funk 16th (0.25).
         let mut ride = kick(0.67);
         ride.instrument = "ride".into();
@@ -994,6 +996,7 @@ mod tests {
 
     #[test]
     fn swing_moves_straight_eighths() {
+        let _lock = crate::kit::lock_test_env();
         let style = style_with(0.67, vec![kick(1.5)], vec![], vec![]);
         let (l, _) = render(style, 1, None);
         let found = onsets(&l, 0.05);
@@ -1011,6 +1014,7 @@ mod tests {
 
     #[test]
     fn every_bar_downbeat_fires_exactly_once_across_blocks() {
+        let _lock = crate::kit::lock_test_env();
         let style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
         let (l, _) = render(style, 4, None);
         let found = onsets(&l, 0.1);
@@ -1026,6 +1030,7 @@ mod tests {
 
     #[test]
     fn loop_wrap_replays_the_loop_start_downbeat() {
+        let _lock = crate::kit::lock_test_env();
         let style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
         // Loop bars 1..2 (two bars), render four bars of time: expect 4 kicks.
         let (l, _) = render(style, 4, Some((1, 3)));
@@ -1035,6 +1040,7 @@ mod tests {
 
     #[test]
     fn bass_notes_get_a_note_off_from_dur_beats() {
+        let _lock = crate::kit::lock_test_env();
         let style = style_with(
             0.5,
             vec![],
@@ -1073,6 +1079,7 @@ mod tests {
 
     #[test]
     fn comp_follows_split_bar_chords() {
+        let _lock = crate::kit::lock_test_env();
         use jam_core::chart::{BarChord, ResolvedBar, ResolvedChart};
         let style = style_with(
             0.5,
@@ -1137,6 +1144,7 @@ mod tests {
 
     #[test]
     fn slash_bass_plays_the_written_note() {
+        let _lock = crate::kit::lock_test_env();
         use jam_core::chart::{BarChord, ResolvedBar, ResolvedChart};
         let style = style_with(
             0.0,
@@ -1184,6 +1192,7 @@ mod tests {
 
     #[test]
     fn rest_bar_skips_bass_and_comp_but_keeps_drums() {
+        let _lock = crate::kit::lock_test_env();
         use jam_core::chart::{BarChord, ResolvedBar, ResolvedChart};
         let style = style_with(
             0.0,
@@ -1243,6 +1252,7 @@ mod tests {
 
     #[test]
     fn stop_cue_breaks_and_fill_brings_band_back() {
+        let _lock = crate::kit::lock_test_env();
         let style = style_with(0.5, vec![kick(0.0), kick(2.0)], vec![], vec![]);
         let mut seq = BandSequencer::new(style, 48_000, 1);
         seq.cue(Cue::Stop);
@@ -1261,6 +1271,7 @@ mod tests {
 
     #[test]
     fn ending_cue_completes_after_one_bar() {
+        let _lock = crate::kit::lock_test_env();
         let mut style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
         style.endings.push(DrumPattern {
             length_beats: 4.0,
@@ -1284,6 +1295,8 @@ mod tests {
 
     #[test]
     fn muted_parts_stay_silent_and_render_is_deterministic() {
+        // Readers share the fixture writers' lock across both renders.
+        let _lock = crate::kit::lock_test_env();
         let style = style_with(
             0.5,
             vec![kick(0.0), kick(1.0)],
