@@ -823,6 +823,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
         set((s) => ({
           engineStatus: status,
           settings: s.settings ? { ...s.settings, ...config } : s.settings,
+          toneOn: false,
+          tunerOn: false,
+          isRecording: false,
         }));
         if (status.last_error) get().notify("error", status.last_error);
         else
@@ -843,8 +846,14 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const status = await run("The restart audio", () =>
         ipc.invoke<EngineStatus>("engine_restart"),
       );
-      if (status) set({ engineStatus: status });
-      else await get().refreshEngineStatus();
+      if (status) {
+        set({
+          engineStatus: status,
+          toneOn: false,
+          tunerOn: false,
+          isRecording: false,
+        });
+      } else await get().refreshEngineStatus();
     },
 
     checkKey: async (provider) => {

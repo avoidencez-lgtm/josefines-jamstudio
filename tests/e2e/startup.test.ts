@@ -145,6 +145,35 @@ describe("desktop startup against the preview engine", () => {
     expect(store().notices).toEqual([]);
   });
 
+  it("clears tone, tuner and recording flags when the audio engine restarts", async () => {
+    await startDesktop();
+    await store().setTone(true, 440);
+    await store().setTuner(true);
+    useEngineStore.setState({ isRecording: true });
+    expect(store()).toMatchObject({
+      toneOn: true,
+      tunerOn: true,
+      isRecording: true,
+    });
+
+    await store().restartEngine();
+    expect(store()).toMatchObject({
+      toneOn: false,
+      tunerOn: false,
+      isRecording: false,
+    });
+
+    await store().setTone(true, 440);
+    await store().setTuner(true);
+    useEngineStore.setState({ isRecording: true });
+    await store().applyAudioConfig(BASELINE_CONFIG);
+    expect(store()).toMatchObject({
+      toneOn: false,
+      tunerOn: false,
+      isRecording: false,
+    });
+  });
+
   it("fills the library with the bundled styles and charts and opens the standard 12-bar blues", async () => {
     expect(previous.styles).toEqual([]);
     expect(previous.charts).toEqual([]);
