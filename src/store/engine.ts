@@ -26,7 +26,7 @@ import type {
 } from "../ipc/contract";
 import { transposeChart } from "../lib/chart/transpose";
 import { withNextStep } from "../lib/loudError";
-import type { Original } from "../lib/originals";
+import { type Original, useWriting } from "../lib/originals";
 import { savedTakeAnalysis } from "../lib/sessions/analysis";
 
 export type ScreenId =
@@ -570,18 +570,27 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const moved = transposeChart(current, semitones);
       const loaded = get().loadedOriginal;
       if (loaded) {
-        const document: Original = {
-          schemaVersion: 1,
-          id: loaded.id,
-          revision: 0,
-          versions: [],
-          body: { ...loaded.body, chart: moved },
-        };
+        const writing = useWriting.getState();
+        const source = writing.song?.id === loaded.id ? writing.song : null;
+        const document: Original = source
+          ? { ...source, body: { ...source.body, chart: moved } }
+          : {
+              schemaVersion: 1,
+              id: loaded.id,
+              revision: 0,
+              versions: [],
+              body: { ...loaded.body, chart: moved },
+            };
         if (
           await runOk("The transpose song", () =>
             ipc.invoke("originals_load", { document, keepPlayback: true }),
           )
         ) {
+          if (source) {
+            useWriting.getState().edit((body) => {
+              body.chart = moved;
+            });
+          }
           set({
             currentChart: moved,
             loadedOriginal: { id: loaded.id, body: document.body },

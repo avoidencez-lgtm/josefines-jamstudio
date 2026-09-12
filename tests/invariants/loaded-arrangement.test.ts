@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { __setIpcForTests, ipc } from "../../src/ipc/client";
-import { newOriginal, useWriting } from "../../src/lib/originals";
+import { type Original, newOriginal, useWriting } from "../../src/lib/originals";
 import { useEngineStore } from "../../src/store/engine";
 
 const originalIpc = { ...ipc };
@@ -50,17 +50,28 @@ it("keeps the accepted draft through edits and later transport failures, but not
 
 it("Stage transpose reloads a loaded original instead of inlining the chart", async () => {
   const song = newOriginal();
+  song.revision = 3;
+  song.versions = [
+    {
+      id: "v1",
+      name: "This is the first take.",
+      body: structuredClone(song.body),
+    },
+  ];
   useWriting.getState().openSong(song);
   const commands: string[] = [];
   let lastLoad:
-    | { document?: { body: (typeof song)["body"] }; keepPlayback?: boolean }
+    | {
+        document?: Original;
+        keepPlayback?: boolean;
+      }
     | undefined;
   __setIpcForTests({
     invoke: async <T>(command: string, args?: Record<string, unknown>) => {
       commands.push(command);
       if (command === "originals_load") {
         lastLoad = args as {
-          document: { body: (typeof song)["body"] };
+          document: Original;
           keepPlayback?: boolean;
         };
       }
@@ -87,8 +98,20 @@ it("Stage transpose reloads a loaded original instead of inlining the chart", as
   expect(useEngineStore.getState().currentChart?.keyTonic).toBe(
     (song.body.chart.keyTonic + 1) % 12,
   );
+  expect(useWriting.getState().song?.body.chart.keyTonic).toBe(
+    (song.body.chart.keyTonic + 1) % 12,
+  );
+  expect(useWriting.getState().song?.revision).toBe(3);
+  expect(useWriting.getState().song?.versions).toHaveLength(1);
+  expect(useWriting.getState().dirty).toBe(true);
+  expect(lastLoad?.document?.revision).toBe(3);
+  expect(lastLoad?.document?.versions).toHaveLength(1);
   expect(lastLoad?.document?.body.sections).toEqual(song.body.sections);
   expect(lastLoad?.keepPlayback).toBe(true);
+  useWriting.getState().undo();
+  expect(useWriting.getState().song?.body.chart.keyTonic).toBe(
+    song.body.chart.keyTonic,
+  );
 });
 
 it("Stage transpose still inlines a jam chart when no original is loaded", async () => {
