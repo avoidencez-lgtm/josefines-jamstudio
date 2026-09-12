@@ -96,10 +96,13 @@ fn keys_round_trip_on_the_memory_store_and_show_up_in_providers_list() {
     assert_eq!(has_key("elevenlabs"), json!(false));
     assert!(providers_with_keys().is_empty());
 
-    // Stored verbatim: the surrounding spaces survive, nothing is trimmed away.
-    let key = format!(" {} ", unique("key"));
+    // Surrounding whitespace is trimmed before the keychain so paste-from-docs works.
+    let key = unique("key");
     assert_eq!(
-        studio.ok("keys_set", json!({"provider": "elevenlabs", "key": key})),
+        studio.ok(
+            "keys_set",
+            json!({"provider": "elevenlabs", "key": format!(" {key} ")}),
+        ),
         Value::Null
     );
     assert_eq!(has_key("elevenlabs"), json!(true));
