@@ -81,11 +81,34 @@ async fn launch_opener(opener: &mut tokio::process::Command) -> Result<(), Strin
 }
 
 pub fn command(executable: &std::path::Path) -> tokio::process::Command {
+    #[cfg(windows)]
+    let mut command = windows_command(executable);
+    #[cfg(not(windows))]
     let mut command = tokio::process::Command::new(executable);
     command.kill_on_drop(true);
     #[cfg(windows)]
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     command
+}
+
+/// CreateProcessW cannot run `.cmd` / `.bat`; npm agent shims must go through cmd.exe.
+#[cfg(windows)]
+fn windows_command(executable: &std::path::Path) -> tokio::process::Command {
+    if windows_batch_shim(executable) {
+        let mut command = tokio::process::Command::new("cmd.exe");
+        command.arg("/c").arg(executable);
+        command
+    } else {
+        tokio::process::Command::new(executable)
+    }
+}
+
+#[cfg(windows)]
+fn windows_batch_shim(executable: &std::path::Path) -> bool {
+    executable
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "cmd" | "bat"))
 }
 
 /// Windows executables the app will start: a native `.exe`, or the `.cmd` shim npm
@@ -191,6 +214,43 @@ mod tests {
         assert!(super::find_agent("codex", &path("codex.cmd")).is_ok());
         assert!(super::find_agent("claude", &path("claude.EXE")).is_ok());
         assert!(super::find_agent("codex", &path("codex.ps1")).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn windows_cmd_and_bat_shims_launch_through_cmd_exe() {
+        let cmd = super::command(std::path::Path::new(r"C:\npm\claude.cmd"));
+        let debug = format!("{cmd:?}");
+        assert!(
+            debug.contains("cmd.exe"),
+            "CreateProcessW cannot execute .cmd: {debug}"
+        );
+        assert!(debug.contains("/c"), "{debug}");
+        assert!(debug.contains("claude.cmd"), "{debug}");
+        let bat = super::command(std::path::Path::new(r"C:\tools\tool.BAT"));
+        let debug = format!("{bat:?}");
+        assert!(debug.contains("cmd.exe"), "{debug}");
+        let exe = super::command(std::path::Path::new(r"C:\Program Files\claude.exe"));
+        let debug = format!("{exe:?}");
+        assert!(
+            !debug.contains("cmd.exe"),
+            "native .exe must not be wrapped: {debug}"
+        );
+    }
+
+    #[tokio::test]
+    async fn windows_cmd_shim_runs_instead_of_bad_exe_format() {
+        let dir = std::env::temp_dir().join(format!("jam-cmd-run-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("jam-echo.cmd");
+        let output = dir.join("out.txt");
+        std::fs::write(&script, format!("@echo ran>\"{}\"\r\n", output.display())).unwrap();
+        let status = super::command(&script)
+            .status()
+            .await
+            .expect("cmd shim must spawn");
+        assert!(status.success(), "{status:?}");
+        assert_eq!(std::fs::read_to_string(&output).unwrap().trim(), "ran");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
