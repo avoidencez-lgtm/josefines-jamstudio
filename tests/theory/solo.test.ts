@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { clampScaleIdx } from "../../src/components/SoloHelper";
 import {
   classify,
   fretMarks,
@@ -79,6 +80,14 @@ describe("soloing suggestions", () => {
   it("falls back for unreadable symbols", () => {
     expect(suggestForChord("N.C.")).toBeNull();
     expect(suggestForChord("")).toBeNull();
+  });
+});
+
+describe("solo helper scale index", () => {
+  it("clamps the selected scale when the next chord has a shorter list", () => {
+    expect(clampScaleIdx(4, 2)).toBe(1);
+    expect(clampScaleIdx(0, 5)).toBe(0);
+    expect(clampScaleIdx(4, 0)).toBe(0);
   });
 });
 
