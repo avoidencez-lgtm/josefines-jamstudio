@@ -15,6 +15,8 @@ export interface PackStatus {
   state: string;
   live: boolean;
   message: string;
+  percent?: number;
+  licence?: string;
 }
 
 export interface LatencyCalibration {

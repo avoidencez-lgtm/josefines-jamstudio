@@ -15,6 +15,7 @@ import type {
   LyriaStatus,
   MeterTelemetry,
   MidiPortInfo,
+  PackStatus,
   ReferenceState,
   RigProfile,
   RigState,
@@ -189,6 +190,7 @@ export interface EngineState {
   sendRigProgram: (program: number) => Promise<void>;
   clearRigMonitor: () => Promise<void>;
   checkVirtualMidi: () => Promise<CommandResult>;
+  assetPacks: PackStatus[];
   ensureAssets: (ids?: string[]) => Promise<CommandResult>;
   exportLogs: () => Promise<CommandResult<string>>;
 
@@ -758,6 +760,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
     checkVirtualMidi: async () => {
       return command("The virtual MIDI", () => ipc.invoke("rig_virtual_check"));
     },
+    assetPacks: [],
     ensureAssets: async (ids) => {
       return command("The sample packs", () =>
         ipc.invoke("assets_ensure", ids ? { ids } : {}),
@@ -988,6 +991,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
           ) {
             get().notify("error", engineStatus.last_error);
           }
+        }),
+        ipc.listen<PackStatus[]>("assets.state", (assetPacks) => {
+          set({ assetPacks });
         }),
       ]);
 
