@@ -168,8 +168,8 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
         );
     }
 
-    // 4096 bytes is the longest accepted key; one byte more is refused and stores nothing.
-    let longest = "k".repeat(4096);
+    // 2560 bytes is the longest accepted key; one byte more is refused and stores nothing.
+    let longest = "k".repeat(2560);
     assert_eq!(
         studio.ok(
             "keys_set",
@@ -181,13 +181,13 @@ fn keys_set_rejects_unknown_providers_and_blank_or_oversized_keys() {
         state.secret_store.get("openrouter").unwrap().as_deref(),
         Some(longest.as_str())
     );
-    let too_long = "k".repeat(4097);
+    let too_long = "k".repeat(2561);
     assert_eq!(
         studio.err(
             "keys_set",
             json!({"provider": "anthropic", "key": too_long})
         ),
-        "API key is too long. The limit is 4096 bytes."
+        "API key is too long. The limit is 2560 bytes."
     );
     assert_eq!(
         studio.ok("keys_has", json!({"provider": "anthropic"})),
@@ -232,10 +232,10 @@ fn keys_set_names_the_length_limit_when_the_key_is_too_long() {
     studio.ok("keys_set", json!({"provider": "gemini", "key": saved}));
     let err = studio.err(
         "keys_set",
-        json!({"provider": "gemini", "key": "k".repeat(4097)}),
+        json!({"provider": "gemini", "key": "k".repeat(2561)}),
     );
     assert!(
-        err.contains("4096") || err.to_ascii_lowercase().contains("too long"),
+        err.contains("2560") || err.to_ascii_lowercase().contains("too long"),
         "{err}"
     );
     assert_eq!(
