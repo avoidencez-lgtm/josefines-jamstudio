@@ -684,33 +684,35 @@ const UsageLog: React.FC = () => {
     <Panel title="This is the network usage log.">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="flex flex-wrap gap-3 text-xs font-mono text-[var(--fg-1)]">
-          {totals.length === 0 && (
+          {!error && totals.length === 0 && (
             <span className="text-[var(--fg-2)]">No provider calls yet.</span>
           )}
-          {totals.map((t) => (
-            <span
-              key={t.provider}
-              className="px-2 py-1 rounded-[var(--radius-m)] border border-[var(--line)] bg-[var(--bg-2)]"
-            >
-              {t.provider} has {t.calls} call{t.calls === 1 ? "" : "s"}
-              {t.failures > 0 && ` (${t.failures} failed)`}.{" "}
-              {t.invalidValues ? (
-                "Usage amounts are unavailable. Check this provider's local usage log for invalid values."
-              ) : (
-                <>
-                  {formatBytes(t.bytesOut)} out. {formatBytes(t.bytesIn)} in.
-                  {t.sttSeconds > 0 &&
-                    ` ${t.sttSeconds.toFixed(1)} STT seconds.`}
-                  {t.ttsCharacters > 0 && ` ${t.ttsCharacters} TTS characters.`}
-                  {t.totalTokens > 0 && ` ${t.totalTokens} LLM tokens.`}
-                  {t.estimatedCostUsd != null &&
-                    ` Estimated cost is $${t.estimatedCostUsd.toFixed(4)}.`}
-                  {t.unpricedCalls > 0 &&
-                    ` ${t.unpricedCalls} calls have unknown cost.`}
-                </>
-              )}
-            </span>
-          ))}
+          {!error &&
+            totals.map((t) => (
+              <span
+                key={t.provider}
+                className="px-2 py-1 rounded-[var(--radius-m)] border border-[var(--line)] bg-[var(--bg-2)]"
+              >
+                {t.provider} has {t.calls} call{t.calls === 1 ? "" : "s"}
+                {t.failures > 0 && ` (${t.failures} failed)`}.{" "}
+                {t.invalidValues ? (
+                  "Usage amounts are unavailable. Check this provider's local usage log for invalid values."
+                ) : (
+                  <>
+                    {formatBytes(t.bytesOut)} out. {formatBytes(t.bytesIn)} in.
+                    {t.sttSeconds > 0 &&
+                      ` ${t.sttSeconds.toFixed(1)} STT seconds.`}
+                    {t.ttsCharacters > 0 &&
+                      ` ${t.ttsCharacters} TTS characters.`}
+                    {t.totalTokens > 0 && ` ${t.totalTokens} LLM tokens.`}
+                    {t.estimatedCostUsd != null &&
+                      ` Estimated cost is $${t.estimatedCostUsd.toFixed(4)}.`}
+                    {t.unpricedCalls > 0 &&
+                      ` ${t.unpricedCalls} calls have unknown cost.`}
+                  </>
+                )}
+              </span>
+            ))}
         </div>
         <Button size="sm" variant="secondary" onClick={() => load()}>
           Refresh this usage.
@@ -727,7 +729,7 @@ const UsageLog: React.FC = () => {
       {error && (
         <div className="text-xs font-mono text-[var(--record)]">{error}</div>
       )}
-      {entries.length > 0 && (
+      {!error && entries.length > 0 && (
         <ul className="font-mono text-xs divide-y divide-[var(--line)] max-h-56 overflow-y-auto">
           {[...entries].reverse().map((e) => (
             <li
