@@ -1209,11 +1209,12 @@ async fn finish_job(
                 &base.join("jobs").join(format!("{}.json", job_id(job)?)),
                 job,
             )?;
-            (
-                api::download(m, &uri, state.secret_store.as_ref(), &state.cost_log).await?,
-                e,
-                String::new(),
-            )
+            let (bytes, warning) =
+                api::download(m, &uri, state.secret_store.as_ref(), &state.cost_log).await?;
+            if let Some(warning) = warning {
+                job["usageWarning"] = json!(warning);
+            }
+            (bytes, e, String::new())
         }
     };
     if bytes.is_empty() || bytes.len() > 128 * 1024 * 1024 {
@@ -1313,7 +1314,7 @@ pub async fn media_generate(
     let mut job = json!({"schemaVersion":1,"id":id,"request":request,"status":"unknown","message":"Request started. If interrupted, check provider history before generating again."});
     write(&file, &job)?;
     let result = cancellable(async {
-        let bytes = api::fetch(
+        let (bytes, warning) = api::fetch(
             &m,
             &path,
             Some(&body),
@@ -1321,12 +1322,20 @@ pub async fn media_generate(
             &state.cost_log,
         )
         .await?;
+        if let Some(warning) = warning {
+            job["usageWarning"] = json!(warning);
+        }
         finish_job(&base, &mut job, api::response(&m, bytes)?, &m, &state).await
     })
     .await;
-    job["message"] = json!(result.err().unwrap_or_default());
+    job["message"] = json!(operation_message(&job, result));
     write(&file, &job)?;
     Ok(public_job(job))
+}
+fn operation_message(job: &Value, result: Result<(), String>) -> String {
+    result
+        .err()
+        .unwrap_or_else(|| job["usageWarning"].as_str().unwrap_or_default().to_string())
 }
 fn public_job(mut job: Value) -> Value {
     if let Some(o) = job.as_object_mut() {
@@ -1360,14 +1369,16 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
             return finish_import(&base, &mut job, &m).await;
         }
         let output=if let Some(task)=job["taskId"].as_str() {
-            api::poll(&m,&request,task,state.secret_store.as_ref(),&state.cost_log).await?
+            let (output, warning) = api::poll(&m,&request,task,state.secret_store.as_ref(),&state.cost_log).await?;
+            if let Some(warning) = warning { job["usageWarning"] = json!(warning); }
+            output
         } else if let Some(uri)=job["downloadUri"].as_str() {
             let ext=media_extension(job["extension"].as_str().ok_or("Missing media extension")?)?;
             api::Output::Download(uri.into(),ext.into())
         } else {return Err("No recoverable task ID. Check provider history and import the result; this button never starts another paid generation.".into());};
         finish_job(&base,&mut job,output,&m,&state).await
     }).await;
-    job["message"] = json!(result.err().unwrap_or_default());
+    job["message"] = json!(operation_message(&job, result));
     write(&file, &job)?;
     Ok(public_job(job))
 }
@@ -1526,6 +1537,16 @@ pub async fn media_open(path: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn successful_media_job_surfaces_usage_warning_without_losing_result() {
+        let job = json!({"usageWarning":"Usage log unavailable"});
+        assert_eq!(operation_message(&job, Ok(())), "Usage log unavailable");
+        assert_eq!(
+            operation_message(&job, Err("Media failed".into())),
+            "Media failed"
+        );
+    }
+
     fn synthetic_audio(path: &Path, seconds: usize) {
         let mut wav = hound::WavWriter::create(
             path,

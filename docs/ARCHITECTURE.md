@@ -11,6 +11,8 @@ The shared media catalog defines cloud and fixed-loopback ComfyUI protocols;
 all HTTP remains under `net/media.rs`. Tauri asset access is limited to media
 assets and exports, excluding generation receipts. Native preview is silent;
 FFmpeg and the user's external media player own exported audiovisual playback.
+Successful provider responses, task IDs and downloads survive usage-log write
+failures; the saved job exposes the accounting warning without resubmitting work.
 See [music-video setup and acceptance](guide/music-video.md).
 
 ## Current native Jo voice

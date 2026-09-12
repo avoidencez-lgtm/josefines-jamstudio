@@ -306,7 +306,7 @@ Velg Create music, en katalogoppføring og en redigerbar modell-ID. Beskriv arra
 
 Katalogen omfatter Google-musikk/video, ElevenLabs-musikk, MiniMax-musikk, video via Runway og lokale ComfyUI-alternativer for lyd/video, også kinesiske modellfamilier. Velg tilkoblingen oppføringen oppgir; modellnavnet alene sier ikke hvilken API-nøkkel som trengs. Bekreft aktuell tilgang før du baserer et prosjekt på modellen.
 
-Library & jobs beholder jobbkvitteringer. Refresh this job sjekker en eksisterende jobb og sender den aldri inn på nytt. Ukjent resultat etter et avbrudd betyr at du bør sjekke leverandørhistorikken før ny generering. Forespørselen kan allerede være belastet. Oppdater mediebiblioteket når resultatet er klart.
+Library & jobs beholder jobbkvitteringer. Refresh this job sjekker en eksisterende jobb og sender den aldri inn på nytt. Hvis forbruksloggen ikke kan skrives, lagres mottatt resultat eller oppgave-ID fortsatt, og jobben viser advarselen; ikke generer på nytt bare for å reparere regnskapet. Ukjent resultat etter et avbrudd betyr at du bør sjekke leverandørhistorikken før ny generering. Forespørselen kan allerede være belastet. Oppdater mediebiblioteket når resultatet er klart.
 
 Mottatt lyd lagres og analyseres lokalt før jobben blir klar. AI Music åpner en ferdig sang i Stage med avspillingen stoppet; trykk Play når du er klar. Det samme skjer når Refresh this job fullfører en lagret forespørsel. Film beholder resultatet som lydspor. FFmpeg trengs ikke for lydimport, generering eller analyse.
 

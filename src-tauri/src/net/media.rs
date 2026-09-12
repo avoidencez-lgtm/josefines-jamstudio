@@ -152,7 +152,7 @@ pub async fn fetch(
     body: Option<&Value>,
     store: &dyn SecretStore,
     log: &CostLog,
-) -> Result<Vec<u8>, String> {
+) -> Result<(Vec<u8>, Option<String>), String> {
     let local = m.protocol == "comfy";
     let entry = provider(&m.provider);
     let base = if local {
@@ -201,7 +201,7 @@ pub async fn fetch(
         if !response.status().is_success() { return Err(format!("{} returned HTTP {status}. Check model access, credits and prompt in your provider account.", m.name)); }
         read_bounded(response, 192 * 1024 * 1024).await
     }.await;
-    record_media_usage(
+    let usage_warning = record_media_usage(
         log,
         CostEntry {
             at_ms: super::now_ms(),
@@ -217,12 +217,12 @@ pub async fn fetch(
             estimated_cost_usd: None,
             ..CostEntry::default()
         },
-    )?;
-    result
+    );
+    preserve_response(result, usage_warning)
 }
 
-fn record_media_usage(log: &CostLog, entry: CostEntry) -> Result<(), String> {
-    log.append(&entry).map_err(|_| {
+fn record_media_usage(log: &CostLog, entry: CostEntry) -> Option<String> {
+    log.append(&entry).err().map(|_| {
         "Could not save media usage. Check the data folder; do not retry automatically.".into()
     })
 }
@@ -342,15 +342,15 @@ pub async fn separate_stems(
         })
         .err()
         .map(|_| "Could not save the usage log. Check provider history for charges.".to_string());
-    preserve_stem_response(result, usage_error)
+    preserve_response(result, usage_error)
 }
 
-fn preserve_stem_response(
-    result: Result<Vec<u8>, String>,
+fn preserve_response<T>(
+    result: Result<T, String>,
     usage_error: Option<String>,
-) -> Result<(Vec<u8>, Option<String>), String> {
-    // Return paid bytes even when accounting storage fails; the caller preserves the ZIP.
-    result.map(|bytes| (bytes, usage_error))
+) -> Result<(T, Option<String>), String> {
+    // Return paid responses even when accounting storage fails; the caller persists the result.
+    result.map(|value| (value, usage_error))
 }
 pub enum Output {
     Pending(String),
@@ -528,7 +528,7 @@ pub async fn download(
     uri: &str,
     store: &dyn SecretStore,
     log: &CostLog,
-) -> Result<Vec<u8>, String> {
+) -> Result<(Vec<u8>, Option<String>), String> {
     let url = download_url(m, uri)?;
     let path = super::strip_query(url.path());
     super::live_guard("a media download")?;
@@ -561,15 +561,18 @@ pub async fn download(
         read_bounded(resp, 128 * 1024 * 1024).await
     }
     .await;
-    let _ = log.append(&download_entry(
-        m,
-        &path,
-        status,
-        started.elapsed().as_millis() as u64,
-        result.as_ref().map_or(0, |v| v.len() as u64),
-        result.as_ref().err().cloned(),
-    ));
-    result
+    let usage_warning = record_media_usage(
+        log,
+        download_entry(
+            m,
+            &path,
+            status,
+            started.elapsed().as_millis() as u64,
+            result.as_ref().map_or(0, |v| v.len() as u64),
+            result.as_ref().err().cloned(),
+        ),
+    );
+    preserve_response(result, usage_warning)
 }
 
 pub async fn poll(
@@ -578,21 +581,18 @@ pub async fn poll(
     task: &str,
     store: &dyn SecretStore,
     log: &CostLog,
-) -> Result<Output, String> {
+) -> Result<(Output, Option<String>), String> {
     valid_task(task)?;
     if m.protocol.starts_with("runway") {
-        return response(
-            m,
-            fetch(m, &format!("/v1/tasks/{task}"), None, store, log).await?,
-        );
+        let (bytes, warning) = fetch(m, &format!("/v1/tasks/{task}"), None, store, log).await?;
+        return Ok((response(m, bytes)?, warning));
     }
     if m.protocol != "comfy" {
         return Err("This provider does not expose a resumable task.".into());
     }
-    let value: Value =
-        serde_json::from_slice(&fetch(m, &format!("/history/{task}"), None, store, log).await?)
-            .map_err(|_| "Invalid ComfyUI history")?;
-    comfy_output(m, r, task, &value)
+    let (bytes, warning) = fetch(m, &format!("/history/{task}"), None, store, log).await?;
+    let value: Value = serde_json::from_slice(&bytes).map_err(|_| "Invalid ComfyUI history")?;
+    Ok((comfy_output(m, r, task, &value)?, warning))
 }
 fn comfy_output(m: &Model, r: &Generate, task: &str, v: &Value) -> Result<Output, String> {
     let result = &v[task];
@@ -653,7 +653,7 @@ mod tests {
     use super::*;
     #[tokio::test]
     async fn stem_request_rejects_invalid_inputs_missing_keys_and_headless_uploads() {
-        let (bytes, warning) = preserve_stem_response(
+        let (bytes, warning) = preserve_response(
             Ok(b"paid ZIP response".to_vec()),
             Some("Usage log is not writable".into()),
         )
@@ -835,14 +835,14 @@ mod tests {
     }
 
     #[test]
-    fn paid_media_fetch_fails_loud_when_usage_cannot_be_appended() {
+    fn paid_media_response_survives_when_usage_cannot_be_appended() {
         let dir = std::env::temp_dir().join(format!("jam-media-cost-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let blocker = dir.join("not-a-folder");
         std::fs::write(&blocker, b"x").unwrap();
         let log = CostLog::new(blocker.join("usage.jsonl"));
-        let err = record_media_usage(
+        let warning = record_media_usage(
             &log,
             CostEntry {
                 provider: "runway".into(),
@@ -851,11 +851,15 @@ mod tests {
                 ..CostEntry::default()
             },
         )
-        .unwrap_err();
+        .unwrap();
         assert_eq!(
-            err,
+            warning,
             "Could not save media usage. Check the data folder; do not retry automatically."
         );
+        let (bytes, returned_warning) =
+            preserve_response(Ok(b"paid media response".to_vec()), Some(warning)).unwrap();
+        assert_eq!(bytes, b"paid media response");
+        assert!(returned_warning.is_some());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

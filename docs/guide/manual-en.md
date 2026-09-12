@@ -306,7 +306,7 @@ Choose Create music, a catalog entry and an editable model ID. Describe the arra
 
 The current catalog includes Google music/video, ElevenLabs music, MiniMax music, Runway-hosted video and local ComfyUI audio/video options, including Chinese model families. Select the connection named by the entry; the model brand alone does not identify which API key it needs. Verify current access before depending on a model for a project.
 
-Library & jobs keeps generation receipts. Refresh this job polls an existing task and never resubmits it. An unknown result after interruption means check the provider history before generating again. A provider may already have charged the request. Refresh the asset library when a result is ready.
+Library & jobs keeps generation receipts. Refresh this job polls an existing task and never resubmits it. If the usage log cannot be written, the received result or task ID is still saved and the job shows the warning; do not generate again just to repair accounting. An unknown result after interruption means check the provider history before generating again. A provider may already have charged the request. Refresh the asset library when a result is ready.
 
 Received audio is saved and analyzed locally before the job is ready. AI Music opens a completed song in Stage with playback stopped; press Play when ready. The same happens when Refresh this job completes a saved request. Film keeps the result as its soundtrack. No FFmpeg is needed for audio import, generation or analysis.
 
