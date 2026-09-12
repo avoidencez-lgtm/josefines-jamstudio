@@ -172,6 +172,7 @@ mod tests {
 
     #[test]
     fn one_bar_at_120_is_exact_frames() {
+        let _lock = crate::kit::lock_test_env();
         std::env::set_var("JAM_SYNTHETIC_KIT", "1");
         let style: Style = serde_json::from_str(include_str!("../../../styles/rock-straight.json"))
             .expect("bundled style");
@@ -183,6 +184,7 @@ mod tests {
 
     #[test]
     fn bus_rms_repeats_within_half_a_decibel() {
+        let _lock = crate::kit::lock_test_env();
         std::env::set_var("JAM_SYNTHETIC_KIT", "1");
         let style: Style = serde_json::from_str(include_str!("../../../styles/rock-straight.json"))
             .expect("bundled style");
@@ -196,6 +198,7 @@ mod tests {
 
     #[test]
     fn kick_onsets_land_within_one_sample() {
+        let _lock = crate::kit::lock_test_env();
         std::env::set_var("JAM_SYNTHETIC_KIT", "1");
         let style: Style =
             serde_json::from_str(include_str!("../../../tests/fixtures/band/onset-grid.json"))

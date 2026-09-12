@@ -24,7 +24,7 @@ Bruk skrivebordsappen for lyd, filer, MIDI, nøkler, agenter og mediegenerering.
 
 ### Språk og navigasjon
 
-Sidepanelet viser navn og formål for hvert rom. Open help and guides åpner denne søkbare håndboken uten å forkaste rommet du jobbet i. Velg English eller Norsk bokmål. Redigeringskontrollene beholder engelske navn, og den norske veiledningen bruker de samme knappetekstene. Escape lukker hjelpen. Hurtigtaster for transport er satt på pause mens du leser hjelp. Språkvalget lagres sammen med appinnstillingene og brukes neste gang du åpner hjelpen, også etter en omstart. Uten treff sier hjelpen Ingen treff. Prøv et annet søkeord, og Tøm søket tømmer søket.
+Sidepanelet viser navn og formål for hvert rom. Open help and guides åpner denne søkbare håndboken uten å forkaste rommet du jobbet i. Velg English eller Norsk bokmål. Redigeringskontrollene beholder engelske navn, og den norske veiledningen bruker de samme knappetekstene. Escape lukker hjelpen. Hurtigtaster for transport er satt på pause mens du leser hjelp. Språkvalget lagres sammen med appinnstillingene og brukes neste gang du åpner hjelpen, også etter en omstart. Uten treff sier hjelpen Ingen treff. Prøv et annet søkeord, og Tøm dette søket tømmer søket.
 
 ## Write: akkorder og arrangement
 
@@ -154,7 +154,7 @@ Motoren teller slag etter nevneren: 6/8 ved 60 BPM gir seks sekunder per takt. S
 
 ### Finn, rediger og spill
 
-Hvis søket ikke treffer, viser Library No charts match. Try another search or collection. Clear search tømmer søket og samlingen. Søk på tittel, toneart eller tempo, og filtrer mellom medfølgende og egne skjemaer. Når du åpner et skjema, fylles redigeringsfeltet; ulagrede utkast må lagres eller forkastes før du åpner et annet. Create this new chart starter en mal. Play this chart laster det redigerte skjemaet inn i bandet. Save lagrer et brukerskjema. Sletting av en egen overstyring viser den medfølgende versjonen igjen; den innebygde ressursen slettes ikke.
+Hvis søket ikke treffer, viser Library No charts match. Try another search or collection. Clear this search tømmer søket og samlingen. Søk på tittel, toneart eller tempo, og filtrer mellom medfølgende og egne skjemaer. Når du åpner et skjema, fylles redigeringsfeltet; ulagrede utkast må lagres eller forkastes før du åpner et annet. Create this new chart starter en mal. Play this chart laster det redigerte skjemaet inn i bandet. Save lagrer et brukerskjema. Sletting av en egen overstyring viser den medfølgende versjonen igjen; den innebygde ressursen slettes ikke.
 
 ### Syntaks for akkordskjema
 
@@ -348,7 +348,7 @@ Angi lydsporets BPM, klippavstand i taktslag og hvor første slag starter (0–1
 
 ### Finn opptaket du vil beholde
 
-Uten opptak viser Sessions Your first take will appear here. Mislykket eksport sier Export failed og nevner full disk når det er neste steg. Søk blant opptak, filtrer favoritter og oppdater etter innspilling. Et søk uten treff sier No takes match this search og tilbyr Clear search. Review the numbers lagrer et innspilt øvingsnotat fra analysetallene; det er ikke konfigurert uten den fiksturen eller en live tekstleverandørnøkkel, og det lytter aldri til lyd. Listen to the guitar spiller valgt inngang uten bandet. Marker en favoritt, legg gitaren til åpen Write-låt eller eksporter. Sletting krever en bevisst handling; kontroller om en låt/versjon bruker opptaket først. Opptaksanalyse beregner lokale heuristikker for timing, dynamikk og intonasjon; den lytter ikke som en produsent. Øvingsrekke, opptakstid og Progress-panelet (økter denne uken, minutter, høyeste tempo per skjema, timing- og tonehøydesnitt på analyserte av de siste 20 opptakene) viser aktivitet fra opptaksfilene, ikke kvalitet. Uten opptak gjentar Progress Your first take will appear here. Timing og tonehøyde er tomme til Analyze take skriver målinger på et nylig opptak.
+Uten opptak viser Sessions Your first take will appear here. Mislykket eksport sier Export failed og nevner full disk når det er neste steg. Søk blant opptak, filtrer favoritter og oppdater etter innspilling. Et søk uten treff sier No takes match this search og tilbyr Clear this search. Review the numbers lagrer et innspilt øvingsnotat fra analysetallene; det er ikke konfigurert uten den fiksturen eller en live tekstleverandørnøkkel, og det lytter aldri til lyd. Listen to the guitar spiller valgt inngang uten bandet. Marker en favoritt, legg gitaren til åpen Write-låt eller eksporter. Sletting krever en bevisst handling; kontroller om en låt/versjon bruker opptaket først. Opptaksanalyse beregner lokale heuristikker for timing, dynamikk og intonasjon; den lytter ikke som en produsent. Øvingsrekke, opptakstid og Progress-panelet (økter denne uken, minutter, høyeste tempo per skjema, timing- og tonehøydesnitt på analyserte av de siste 20 opptakene) viser aktivitet fra opptaksfilene, ikke kvalitet. Uten opptak gjentar Progress Your first take will appear here. Timing og tonehøyde er tomme til Analyze take skriver målinger på et nylig opptak.
 
 Anslagsdeteksjonen venter på 5 ms med lavt nivå før et nytt anslag kan telles, og krever minst 20 ms mellom kandidatene. Dermed telles ikke nullgjennomgangene i en vedvarende tone som nye anslag. Svake opptak, overlappende toner og legato uten et stille mellomrom kan fortsatt bli oversett; resultatet er et anslag, ikke en notetranskripsjon.
 

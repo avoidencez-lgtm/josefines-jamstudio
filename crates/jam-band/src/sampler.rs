@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn open_missing_pack_stays_synthetic_and_says_so() {
-        let _lock = crate::kit::TEST_ENV.lock().unwrap();
+        let _lock = crate::kit::lock_test_env();
         let dir = fixture_dir("missing");
         std::env::remove_var("JAM_SYNTHETIC_KIT");
         std::env::set_var("JAM_KIT_DIR", &dir);
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn open_file_kit_sets_file_status() {
-        let _lock = crate::kit::TEST_ENV.lock().unwrap();
+        let _lock = crate::kit::lock_test_env();
         let dir = fixture_dir("open-file");
         write_kit(&dir, "kick.wav", 48_000, &[16_383; 64]);
         std::env::remove_var("JAM_SYNTHETIC_KIT");

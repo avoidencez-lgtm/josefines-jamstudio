@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn missing_sf2_stays_sine_and_says_so() {
-        let _lock = crate::kit::TEST_ENV.lock().unwrap();
+        let _lock = crate::kit::lock_test_env();
         let dir = std::env::temp_dir().join(format!("jam-sf2-missing-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::env::remove_var("JAM_SYNTHETIC_KIT");
@@ -401,7 +401,7 @@ mod tests {
 
     #[test]
     fn file_sf2_plays_fixture_not_sine() {
-        let _lock = crate::kit::TEST_ENV.lock().unwrap();
+        let _lock = crate::kit::lock_test_env();
         let dir = std::env::temp_dir().join(format!("jam-sf2-play-{}", std::process::id()));
         write_minimal_sf2(&dir.join("bass.sf2")).expect("bass sf2");
         write_minimal_sf2(&dir.join("comp.sf2")).expect("comp sf2");

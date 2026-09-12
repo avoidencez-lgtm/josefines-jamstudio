@@ -1320,7 +1320,7 @@ mod tests {
 
     #[test]
     fn sequencer_plays_unpacked_kit_and_names_sine_bass() {
-        let _lock = crate::kit::TEST_ENV.lock().unwrap();
+        let _lock = crate::kit::lock_test_env();
         let dir = std::env::temp_dir().join(format!("jam-seq-kit-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let spec = hound::WavSpec {
@@ -1361,7 +1361,7 @@ mod tests {
 
     #[test]
     fn play_picks_up_a_kit_unpacked_after_start() {
-        let _lock = crate::kit::TEST_ENV.lock().unwrap();
+        let _lock = crate::kit::lock_test_env();
         let dir = std::env::temp_dir().join(format!("jam-seq-late-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::env::remove_var("JAM_SYNTHETIC_KIT");
