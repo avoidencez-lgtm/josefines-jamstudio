@@ -233,7 +233,7 @@ impl Library {
                 return Err(e.to_string());
             }
         }
-        finish_atomic_replace(&temp, &file, &bak, had_file)?;
+        finish_atomic_replace(&temp, &file)?;
         self.charts.insert(chart.clone());
         if !self.user_chart_ids.contains(&chart.id) {
             self.user_chart_ids.push(chart.id.clone());
@@ -274,28 +274,10 @@ impl Library {
     }
 }
 
-/// Windows `fs::rename` cannot replace an existing file. Remove the destination
-/// first so a chart save overwrites in place on every platform.
-pub(crate) fn replace_rename(from: &Path, to: &Path) -> Result<(), String> {
-    #[cfg(windows)]
-    if to.exists() {
-        std::fs::remove_file(to).map_err(|e| e.to_string())?;
-    }
-    std::fs::rename(from, to).map_err(|e| e.to_string())
-}
-
-fn finish_atomic_replace(
-    temp: &Path,
-    dest: &Path,
-    bak: &Path,
-    had_file: bool,
-) -> Result<(), String> {
-    if let Err(e) = replace_rename(temp, dest) {
+fn finish_atomic_replace(temp: &Path, dest: &Path) -> Result<(), String> {
+    if let Err(e) = std::fs::rename(temp, dest) {
         let _ = std::fs::remove_file(temp);
-        if had_file && !dest.exists() {
-            let _ = std::fs::copy(bak, dest);
-        }
-        return Err(e);
+        return Err(e.to_string());
     }
     Ok(())
 }
@@ -607,35 +589,39 @@ mod tests {
     }
 
     #[test]
-    fn replace_rename_overwrites_an_existing_file() {
-        let root = temp_root("replace-rename");
-        std::fs::create_dir_all(&root).unwrap();
-        let from = root.join("from.json");
-        let to = root.join("to.json");
-        std::fs::write(&from, b"new").unwrap();
-        std::fs::write(&to, b"old").unwrap();
-        replace_rename(&from, &to).unwrap();
-        assert_eq!(std::fs::read(&to).unwrap(), b"new");
-        assert!(!from.exists());
+    fn save_chart_replaces_an_existing_file_and_keeps_a_backup() {
+        let root = temp_root("replace-chart");
+        let mut lib = Library::load_from(root.clone());
+        let mut chart = lib.chart("blues-12-bar").unwrap();
+        let dest = lib.save_chart(&chart).unwrap();
+        let previous = std::fs::read(&dest).unwrap();
+        chart.name = "Revised blues".into();
+        lib.save_chart(&chart).unwrap();
+        assert_eq!(
+            std::fs::read(dest.with_extension("json.bak")).unwrap(),
+            previous
+        );
+        lib.reload();
+        assert_eq!(lib.chart(&chart.id).unwrap().name, "Revised blues");
         std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
-    fn save_chart_cleans_up_temp_and_restores_bak_when_rename_fails() {
+    fn save_chart_cleans_up_temp_and_keeps_the_current_file_when_rename_fails() {
         let root = temp_root("chart-rename-fail");
         std::fs::create_dir_all(&root).unwrap();
         let dest = root.join("blues-12-bar.json");
         let bak = root.join("blues-12-bar.json.bak");
         let temp = root.join("blues-12-bar.json.tmp");
         std::fs::write(&bak, b"previous-good").unwrap();
-        // Missing temp makes rename fail after a Windows replace has already
-        // removed the destination; bak must come back and temp must not linger.
+        // A missing source must not delete the current file or roll it back to
+        // an older backup, including on Windows.
         std::fs::write(&dest, b"current").unwrap();
-        std::fs::remove_file(&dest).unwrap();
-        let err = finish_atomic_replace(&temp, &dest, &bak, true).unwrap_err();
+        let err = finish_atomic_replace(&temp, &dest).unwrap_err();
         assert!(!err.is_empty(), "{err}");
         assert!(!temp.exists(), "orphaned json.tmp must be unlinked");
-        assert_eq!(std::fs::read(&dest).unwrap(), b"previous-good");
+        assert_eq!(std::fs::read(&dest).unwrap(), b"current");
+        assert_eq!(std::fs::read(&bak).unwrap(), b"previous-good");
         let mut lib = Library::load_from(root.clone());
         let chart = lib.chart("blues-12-bar").unwrap();
         std::fs::create_dir_all(lib.charts_dir()).unwrap();

@@ -345,21 +345,11 @@ pub fn save_manifest(meta: &TakeMetadata) -> Result<(), String> {
         .map_err(|e| format!("Cannot create {}. {e}", temp.display()))?;
     let result = file.write_all(&bytes).and_then(|()| file.sync_all());
     drop(file);
-    let result = result.and_then(|()| replace_file(&temp, &dest));
+    let result = result.and_then(|()| fs::rename(&temp, &dest));
     if result.is_err() {
         let _ = fs::remove_file(&temp);
     }
     result.map_err(|e| format!("Cannot save {}. {e}", dest.display()))
-}
-
-fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
-    match fs::rename(from, to) {
-        Err(_) if to.exists() => {
-            fs::remove_file(to)?;
-            fs::rename(from, to)
-        }
-        other => other,
-    }
 }
 
 /// Reads a WAV file back as mono f32 in -1..1 (channels are averaged), together with its

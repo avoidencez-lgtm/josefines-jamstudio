@@ -76,19 +76,17 @@ pub fn write_stereo(output: &Path, samples: &[f32], cancel: &AtomicBool) -> Resu
             .open(&temp)
             .and_then(|f| f.sync_all())
             .map_err(|e| e.to_string())?;
-        Ok(())
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Audio preparation canceled.".into());
+        }
+        // rename replaces an existing file on Windows and Unix. Never delete
+        // the previous mix if publication fails (for example, a sharing error).
+        std::fs::rename(&temp, output).map_err(|e| e.to_string())
     })();
     if result.is_err() {
         let _ = std::fs::remove_file(&temp);
-        return result;
     }
-    match std::fs::rename(&temp, output) {
-        Err(_) if output.exists() => {
-            std::fs::remove_file(output).map_err(|e| e.to_string())?;
-            std::fs::rename(&temp, output).map_err(|e| e.to_string())
-        }
-        other => other.map_err(|e| e.to_string()),
-    }
+    result
 }
 
 pub fn render(
@@ -137,6 +135,30 @@ pub fn render(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mix_replaces_only_on_success_and_cleans_up_failed_publication() {
+        let root = std::env::temp_dir().join(format!("jam-mix-publish-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let output = root.join("minus-guitar.wav");
+        let previous = root.join("previous.wav");
+        std::fs::write(&output, b"previous mix").unwrap();
+        std::fs::hard_link(&output, &previous).unwrap();
+        let samples = vec![0.1; 9600];
+        write_stereo(&output, &samples, &AtomicBool::new(false)).unwrap();
+        assert_eq!(std::fs::read(&previous).unwrap(), b"previous mix");
+        assert_eq!(hound::WavReader::open(&output).unwrap().duration(), 4800);
+        std::fs::remove_file(&output).unwrap();
+        std::fs::create_dir(&output).unwrap();
+        assert!(write_stereo(&output, &samples, &AtomicBool::new(false)).is_err());
+        assert!(output.is_dir());
+        assert_eq!(
+            std::fs::read_dir(&root).unwrap().count(),
+            2,
+            "failed publication leaves no temporary mix"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn practice_wav_keeps_original_and_existing_output_and_writes_exact_duration() {
         let root = std::env::temp_dir().join(format!("jam-practice-{}", std::process::id()));

@@ -49,16 +49,8 @@ pub fn controller_config() -> Result<Value, String> {
     validate(&doc)?;
     Ok(doc)
 }
-/// Windows `rename` does not replace an existing file. Remove the destination
-/// first on that OS, and always drop the temp file if publish fails.
+/// Publish without deleting the previous configuration if rename fails.
 fn replace_file(from: &std::path::Path, to: &std::path::Path) -> Result<(), String> {
-    #[cfg(windows)]
-    if to.exists() {
-        if let Err(e) = std::fs::remove_file(to) {
-            let _ = std::fs::remove_file(from);
-            return Err(e.to_string());
-        }
-    }
     let published = std::fs::rename(from, to).map_err(|e| e.to_string());
     if published.is_err() {
         let _ = std::fs::remove_file(from);
@@ -115,6 +107,8 @@ mod tests {
         replace_file(&temp, &dest).unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), b"new");
         assert!(!temp.exists());
+        assert!(replace_file(&temp, &dest).is_err());
+        assert_eq!(std::fs::read(&dest).unwrap(), b"new");
 
         std::fs::write(&temp, b"again").unwrap();
         std::fs::remove_file(&dest).unwrap();
