@@ -4,6 +4,7 @@ import { expect, it } from "vitest";
 import {
   ProgramChangeControls,
   clampProgramNumber,
+  committedSliderValue,
 } from "../../src/screens/Rig";
 
 it("keeps a freeform 0-127 program input when named presets exist", () => {
@@ -28,4 +29,9 @@ it("keeps a freeform 0-127 program input when named presets exist", () => {
   expect(html).toContain("Program 0 is Clean.");
   expect(clampProgramNumber("12")).toBe(12);
   expect(clampProgramNumber("200")).toBe(127);
+});
+
+it("commits a slider from the event target, not a stale closure value", () => {
+  expect(committedSliderValue("100")).toBe(100);
+  expect(committedSliderValue("20")).toBe(20);
 });

@@ -499,6 +499,11 @@ export const ProgramChangeControls: React.FC<{
   </>
 );
 
+/** Read a range input from the event target so pointer-up is not a stale closure. */
+export function committedSliderValue(value: string): number {
+  return Number.parseInt(value, 10);
+}
+
 function formatMs(ms: number): string {
   const s = Math.floor(ms / 1000);
   const m = Math.floor(s / 60);
@@ -546,9 +551,14 @@ const ControlRow: React.FC<{
         max={control.max}
         value={local}
         onChange={(e) => setLocal(Number.parseInt(e.target.value, 10))}
-        onPointerUp={() => onChange(local)}
-        onKeyUp={() => onChange(local)}
-        onBlur={() => local !== value && onChange(local)}
+        onPointerUp={(e) =>
+          onChange(committedSliderValue(e.currentTarget.value))
+        }
+        onKeyUp={(e) => onChange(committedSliderValue(e.currentTarget.value))}
+        onBlur={(e) => {
+          const next = committedSliderValue(e.currentTarget.value);
+          if (next !== value) onChange(next);
+        }}
         className="w-full accent-[var(--accent)]"
       />
     </div>
