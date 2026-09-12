@@ -44,6 +44,7 @@ import { useWriting } from "../../src/lib/originals";
 import {
   cueSetlistItem,
   recallRig,
+  saveReducedMotion,
   saveRoomPreference,
   useRoomOperation,
 } from "../../src/lib/roomActions";
@@ -271,6 +272,53 @@ describe("rooms, end to end through the preview engine", () => {
     const onDisk = await ipc.invoke<AppSettings>("settings_get");
     expect(onDisk.helpLanguage).toBe("nb");
     expect(readHelpLanguage({ helpLanguage: "de" })).toBe("en");
+  });
+
+  it("merges reduced motion into ui and toasts when settings_set fails", async () => {
+    vi.stubGlobal("window", {
+      matchMedia: (query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+        addListener() {},
+        removeListener() {},
+        dispatchEvent() {
+          return false;
+        },
+        onchange: null,
+      }),
+    });
+    vi.stubGlobal("document", {
+      documentElement: { classList: { toggle() {} } },
+    });
+    await useEngineStore.getState().loadSettings();
+    const current = await ipc.invoke<AppSettings>("settings_get");
+    await ipc.invoke("settings_set", {
+      settings: { ...current, ui: { theme: "dark", futureAccent: true } },
+    });
+    await saveReducedMotion("on");
+    const saved = await ipc.invoke<AppSettings>("settings_get");
+    expect(saved.ui).toEqual({
+      theme: "dark",
+      futureAccent: true,
+      reducedMotion: "on",
+    });
+    expect(useEngineStore.getState().settings?.ui).toEqual(saved.ui);
+
+    const forward = ipc.invoke.bind(ipc);
+    vi.spyOn(ipc, "invoke").mockImplementation(async (cmd, args) => {
+      if (cmd === "settings_set") throw new Error("settings.json is locked");
+      return forward(cmd, args);
+    });
+    useEngineStore.setState({ notices: [] });
+    await expect(saveReducedMotion("off")).rejects.toThrow(/locked/);
+    expect(lastNotice()).toMatch(/Could not save reduced motion/);
+    vi.restoreAllMocks();
+    const afterFail = await ipc.invoke<AppSettings>("settings_get");
+    expect((afterFail.ui as { reducedMotion?: string }).reducedMotion).toBe(
+      "on",
+    );
   });
 
   it("validates the rehearsal setlist at its boundaries and merges it into the engine's current settings", async () => {

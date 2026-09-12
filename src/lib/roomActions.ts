@@ -5,6 +5,7 @@ import { useEngineStore } from "../store/engine";
 import { helpLanguageSchema } from "./help";
 import { songFingerprint } from "./jo/studioTools";
 import { type SongBody, useWriting } from "./originals";
+import { type ReducedMotion, applyReducedMotion } from "./reducedMotion";
 import {
   type Setlist,
   audioProfileSchema,
@@ -60,6 +61,28 @@ export async function saveRoomPreference(
   const next = { ...current, [key]: value };
   await ipc.invoke("settings_set", { settings: next });
   useEngineStore.setState({ settings: next });
+}
+
+export async function saveReducedMotion(reducedMotion: ReducedMotion) {
+  const current = await ipc.invoke<AppSettings>("settings_get");
+  const ui = {
+    ...((current.ui as Record<string, unknown> | undefined) ?? {}),
+    reducedMotion,
+  };
+  const next = { ...current, ui };
+  try {
+    await ipc.invoke("settings_set", { settings: next });
+    applyReducedMotion(reducedMotion);
+    useEngineStore.setState({ settings: next });
+  } catch (error) {
+    useEngineStore
+      .getState()
+      .notify(
+        "error",
+        `Could not save reduced motion. ${error instanceof Error ? error.message : String(error)}`,
+      );
+    throw error;
+  }
 }
 
 export async function cueSetlistItem(item: Setlist[number]) {

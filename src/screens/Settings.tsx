@@ -8,7 +8,6 @@ import { StatusPill } from "../components/States";
 import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import { ipc } from "../ipc/client";
 import type {
-  AppSettings,
   AudioConfig,
   CostEntry,
   CostTotal,
@@ -17,11 +16,8 @@ import type {
 } from "../ipc/contract";
 import { withNextStep } from "../lib/loudError";
 import { lastMeterFps, lastPlayheadFps } from "../lib/meterFps";
-import {
-  type ReducedMotion,
-  applyReducedMotion,
-  readReducedMotion,
-} from "../lib/reducedMotion";
+import { type ReducedMotion, readReducedMotion } from "../lib/reducedMotion";
+import { saveReducedMotion } from "../lib/roomActions";
 import { useSettingsView } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
 
@@ -412,34 +408,7 @@ export const Settings: React.FC = () => {
                   value={readReducedMotion(settings)}
                   onChange={(e) => {
                     const reducedMotion = e.target.value as ReducedMotion;
-                    void ipc
-                      .invoke<AppSettings>("settings_get")
-                      .then((current) =>
-                        ipc
-                          .invoke("settings_set", {
-                            settings: {
-                              ...current,
-                              ui: {
-                                theme: "dark",
-                                showAdvanced: false,
-                                reducedMotion,
-                              },
-                            },
-                          })
-                          .then(() => {
-                            applyReducedMotion(reducedMotion);
-                            useEngineStore.setState({
-                              settings: {
-                                ...current,
-                                ui: {
-                                  theme: "dark",
-                                  showAdvanced: false,
-                                  reducedMotion,
-                                },
-                              },
-                            });
-                          }),
-                      );
+                    void saveReducedMotion(reducedMotion);
                   }}
                 >
                   <option value="system">Match the OS.</option>
