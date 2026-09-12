@@ -72,11 +72,27 @@ export const JO_ACTIONS: Record<string, JoAction> = {
       },
     },
     run: async (args) => {
-      await ipc.invoke("generate_track", {
+      const result = await ipc.invoke<{
+        job?: { status?: string; message?: string };
+      }>("generate_track", {
         prompt: String(args.prompt),
         provider: String(args.provider),
         lengthMs: Number(args.lengthMs ?? 30_000),
       });
+      const job = result?.job;
+      const started = new Set([
+        "ready",
+        "pending",
+        "download",
+        "importing",
+        "analysis",
+      ]);
+      if (!job || !started.has(String(job.status ?? ""))) {
+        throw new Error(
+          (typeof job?.message === "string" && job.message.trim()) ||
+            "Track generation did not start.",
+        );
+      }
       return "Track generation started.";
     },
   },

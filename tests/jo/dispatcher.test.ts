@@ -37,6 +37,35 @@ const calls: JoToolCall[] = [
   { name: "record_take", arguments: { action: "stop" } },
 ];
 
+it("does not ack generate_track when the provider job already failed", async () => {
+  const invoke = vi
+    .spyOn(ipc, "invoke")
+    .mockResolvedValueOnce({
+      jobId: "job-1",
+      job: {
+        status: "unknown",
+        message: "Live provider calls are disabled without JAM_LIVE=1.",
+      },
+    })
+    .mockResolvedValueOnce({
+      jobId: "job-2",
+      job: { status: "pending", message: "" },
+    });
+  await expect(
+    dispatchJoToolCall({
+      name: "generate_track",
+      arguments: { prompt: "instrumental funk", provider: "lyria3" },
+    }),
+  ).rejects.toThrow(/JAM_LIVE|did not start/i);
+  await expect(
+    dispatchJoToolCall({
+      name: "generate_track",
+      arguments: { prompt: "instrumental funk", provider: "lyria3" },
+    }),
+  ).resolves.toMatch(/started/i);
+  expect(invoke).toHaveBeenCalledTimes(2);
+});
+
 it("skips null and undefined optional tool arguments at the shared validator", () => {
   const call = {
     name: "songwriting",
