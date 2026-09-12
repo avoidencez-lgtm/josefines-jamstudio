@@ -8,6 +8,21 @@ pub const NOT_CONFIGURED: &str = "Lyria RealTime is not configured. Add a Google
 
 const MAX_MESSAGE: usize = 4 * 1024 * 1024;
 const MODEL: &str = "models/lyria-realtime-exp";
+const SCALES: &[&str] = &[
+    "C_MAJOR_A_MINOR",
+    "D_FLAT_MAJOR_B_FLAT_MINOR",
+    "D_MAJOR_B_MINOR",
+    "E_FLAT_MAJOR_C_MINOR",
+    "E_MAJOR_D_FLAT_MINOR",
+    "F_MAJOR_D_MINOR",
+    "G_FLAT_MAJOR_E_FLAT_MINOR",
+    "G_MAJOR_E_MINOR",
+    "A_FLAT_MAJOR_F_MINOR",
+    "A_MAJOR_G_FLAT_MINOR",
+    "B_FLAT_MAJOR_G_MINOR",
+    "B_MAJOR_A_FLAT_MINOR",
+    "SCALE_UNSPECIFIED",
+];
 
 pub fn protocol() -> Value {
     serde_json::from_str(include_str!(
@@ -67,19 +82,19 @@ pub fn validate(config: &Config) -> Result<(), String> {
             p.text.trim().is_empty()
                 || p.text.len() > 300
                 || !p.weight.is_finite()
-                || !(0.0..=2.0).contains(&p.weight)
+                || p.weight == 0.0
         })
         || !config.bpm.is_finite()
-        || !(40.0..=240.0).contains(&config.bpm)
-        || config.scale.trim().is_empty()
-        || config.scale.len() > 40
+        || config.bpm.fract() != 0.0
+        || !(60.0..=200.0).contains(&config.bpm)
+        || !SCALES.contains(&config.scale.as_str())
         || !config.density.is_finite()
         || !(0.0..=1.0).contains(&config.density)
         || !config.brightness.is_finite()
         || !(0.0..=1.0).contains(&config.brightness)
     {
         return Err(
-            "Choose 1–8 prompts, 40–240 BPM as a request, and density/brightness from 0 to 1."
+            "Choose 1–8 nonzero-weight prompts, an allowed scale, whole-number BPM from 60 to 200, and density/brightness from 0 to 1."
                 .into(),
         );
     }
@@ -335,6 +350,41 @@ pub fn recorded_for_session() -> Result<Machine, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn config_matches_the_provider_contract() {
+        let valid = Config {
+            prompts: vec![Prompt {
+                text: "Funk".into(),
+                weight: -1.0,
+            }],
+            bpm: 60.0,
+            scale: "SCALE_UNSPECIFIED".into(),
+            ..Config::default()
+        };
+        assert!(validate(&valid).is_ok());
+
+        for bpm in [59.0, 60.5, 201.0] {
+            assert!(validate(&Config {
+                bpm,
+                ..valid.clone()
+            })
+            .is_err());
+        }
+        assert!(validate(&Config {
+            prompts: vec![Prompt {
+                text: "Funk".into(),
+                weight: 0.0,
+            }],
+            ..valid.clone()
+        })
+        .is_err());
+        assert!(validate(&Config {
+            scale: "CHROMATIC".into(),
+            ..valid
+        })
+        .is_err());
+    }
 
     #[test]
     fn fixture_orders_setup_before_controls_and_decodes_48k_stereo() {
