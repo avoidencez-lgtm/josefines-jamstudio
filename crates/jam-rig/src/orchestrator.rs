@@ -95,6 +95,7 @@ impl RigOrchestrator {
         self.profile = profile;
         self.current_scene = 0;
         self.last_sent_scene = None;
+        self.last_section = None;
         self.reset_controls();
     }
 
@@ -283,6 +284,7 @@ impl RigOrchestrator {
     /// song restarts in the same section.
     pub fn reset_section_tracking(&mut self) {
         self.last_section = None;
+        self.last_sent_scene = None;
     }
 
     pub fn set_clock(&mut self, on: bool) {
@@ -480,6 +482,27 @@ mod tests {
         assert_eq!(orch.section_mappings.get("Verse"), Some(&1));
         assert_eq!(orch.section_mappings.get("Chorus"), None);
         assert!(orch.select_scene(5).is_err());
+    }
+
+    #[test]
+    fn play_restart_and_profile_swap_resend_the_current_section_scene() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.set_section_mapping("Verse".into(), 0);
+        assert_eq!(orch.on_section_change("Verse").unwrap(), Some(0));
+        orch.reset_section_tracking();
+        assert_eq!(
+            orch.on_section_change("Verse").unwrap(),
+            Some(0),
+            "a new playthrough must send the mapped scene again"
+        );
+
+        orch.set_profile(quad_cortex_like());
+        orch.set_section_mapping("Verse".into(), 1);
+        assert_eq!(
+            orch.on_section_change("Verse").unwrap(),
+            Some(1),
+            "a new profile must send the current section on the new device"
+        );
     }
 
     #[test]
