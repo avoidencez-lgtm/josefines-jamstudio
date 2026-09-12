@@ -496,6 +496,13 @@ pub fn clip_audition(spec: ClipSpec, state: State<'_, AppState>) -> Result<(), S
     eng.wake_render();
     Ok(())
 }
+
+#[tauri::command]
+pub fn clip_audition_stop(state: State<'_, AppState>) -> Result<(), String> {
+    let eng = state.engine.lock();
+    eng.audition.lock().take();
+    Ok(())
+}
 #[tauri::command]
 pub fn capture_keep(
     session_id: String,

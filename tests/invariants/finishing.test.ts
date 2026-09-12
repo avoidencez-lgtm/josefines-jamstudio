@@ -1,4 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { FinishingDesk } from "../../src/components/FinishingDesk";
 import { __setIpcForTests, ipc } from "../../src/ipc/client";
 import type { TakeMetadata } from "../../src/ipc/contract";
 import {
@@ -169,6 +172,33 @@ it("reviews missing and overlong clips without treating instrumental lyrics as a
   expect(
     finishingReview(song.body, [], true).some((r) => r.id.startsWith("lyrics")),
   ).toBe(true);
+});
+
+it("offers Stop listening for a guitar selection audition (#361)", async () => {
+  const original = { ...ipc };
+  const writing = useWriting.getState();
+  const initial = useWriting.getInitialState();
+  const previousSong = initial.song;
+  const calls: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      calls.push(command);
+      return undefined as T;
+    },
+  });
+  try {
+    initial.song = newOriginal();
+    useWriting.setState({ song: initial.song, busy: false });
+    const html = renderToStaticMarkup(createElement(FinishingDesk));
+    expect(html).toContain("Listen to this selection.");
+    expect(html).toContain("Stop listening.");
+    await useWriting.getState().action(() => ipc.invoke("clip_audition_stop"));
+    expect(calls).toEqual(["clip_audition_stop"]);
+  } finally {
+    initial.song = previousSong;
+    __setIpcForTests(original);
+    useWriting.setState(writing);
+  }
 });
 
 it("loops a boundary through native transport and refuses an out-of-song loop or active recording", async () => {

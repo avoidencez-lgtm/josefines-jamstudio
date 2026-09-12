@@ -343,6 +343,15 @@ export function FinishingDesk() {
             Listen to this selection.
           </Button>
           <Button
+            variant="secondary"
+            disabled={isPreview}
+            onClick={() =>
+              void w.action(() => ipc.invoke("clip_audition_stop"))
+            }
+          >
+            Stop listening.
+          </Button>
+          <Button
             disabled={!choice?.body}
             onClick={() => {
               if (choice?.body) apply(choice.body, "guitar comp", fingerprint);

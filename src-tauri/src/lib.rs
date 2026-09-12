@@ -1758,6 +1758,7 @@ pub fn configure<R: tauri::Runtime>(
             originals::originals_load,
             originals::capture_arm,
             originals::clip_audition,
+            originals::clip_audition_stop,
             originals::capture_keep,
             originals::takes_favourite,
             keys_set,

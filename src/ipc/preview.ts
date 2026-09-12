@@ -912,6 +912,7 @@ export function createPreviewEngine(
     clip_audition: () => {
       throw new Error("Guitar preview requires the desktop app.");
     },
+    clip_audition_stop: () => null,
     controller_ports: () => [],
     controller_config: () => ({ schemaVersion: 1, bindings: [] }),
     controller_open: () => {
