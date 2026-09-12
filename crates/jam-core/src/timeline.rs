@@ -89,6 +89,8 @@ pub struct Timeline {
     pub loop_enabled: bool,
     pub loop_start_bar: u32,
     pub loop_end_bar: u32,
+    /// Count-in progress to restore after Pause so Play does not skip the rest (#370).
+    paused_count_in: Option<(u32, u32, u32)>,
 }
 
 impl Default for Timeline {
@@ -110,6 +112,7 @@ impl Timeline {
             loop_enabled: false,
             loop_start_bar: 1,
             loop_end_bar: 5, // 4-bar loop by default (bars 1..4, ends at start of bar 5)
+            paused_count_in: None,
         }
     }
 
@@ -163,9 +166,18 @@ impl Timeline {
     pub fn play(&mut self) {
         match self.state {
             TransportState::Paused => {
-                self.state = TransportState::Playing;
+                if let Some((bar, beat, total_bars)) = self.paused_count_in.take() {
+                    self.state = TransportState::CountingIn {
+                        bar,
+                        beat,
+                        total_bars,
+                    };
+                } else {
+                    self.state = TransportState::Playing;
+                }
             }
             TransportState::Stopped => {
+                self.paused_count_in = None;
                 if self.count_in_bars > 0 {
                     self.state = TransportState::CountingIn {
                         bar: 1,
@@ -182,11 +194,20 @@ impl Timeline {
     }
 
     pub fn pause(&mut self) {
-        if matches!(
-            self.state,
-            TransportState::Playing | TransportState::CountingIn { .. }
-        ) {
-            self.state = TransportState::Paused;
+        match self.state {
+            TransportState::Playing => {
+                self.paused_count_in = None;
+                self.state = TransportState::Paused;
+            }
+            TransportState::CountingIn {
+                bar,
+                beat,
+                total_bars,
+            } => {
+                self.paused_count_in = Some((bar, beat, total_bars));
+                self.state = TransportState::Paused;
+            }
+            _ => {}
         }
     }
 
@@ -194,6 +215,7 @@ impl Timeline {
         self.state = TransportState::Stopped;
         self.current_sample = 0;
         self.count_in_sample = 0;
+        self.paused_count_in = None;
     }
 
     pub fn seek_bar(&mut self, bar: u32) {
@@ -584,6 +606,32 @@ mod tests {
         let ev2 = tl.advance(48_000);
         assert_eq!(tl.state, TransportState::Playing);
         assert!(ev2.contains(&TimelineEvent::CountInComplete));
+    }
+
+    #[test]
+    fn pause_during_count_in_resumes_the_remaining_clicks() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_count_in(1);
+        tl.play();
+        tl.advance(48_000); // mid count-in
+        assert!(matches!(
+            tl.state,
+            TransportState::CountingIn { bar: 1, .. }
+        ));
+        let remaining = tl.count_in_sample;
+        tl.pause();
+        assert_eq!(tl.state, TransportState::Paused);
+        assert_eq!(tl.count_in_sample, remaining);
+        tl.play();
+        assert!(
+            matches!(tl.state, TransportState::CountingIn { .. }),
+            "Play must resume the count-in, not start the form"
+        );
+        assert_eq!(tl.count_in_sample, remaining);
+        let ev = tl.advance(48_000);
+        assert_eq!(tl.state, TransportState::Playing);
+        assert!(ev.contains(&TimelineEvent::CountInComplete));
+        assert_eq!(tl.current_sample, 0);
     }
 
     #[test]
