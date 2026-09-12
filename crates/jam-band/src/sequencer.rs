@@ -893,6 +893,7 @@ mod tests {
                 timing_ms: 0.0,
                 velocity: 0.0,
             },
+            extra: std::collections::HashMap::new(),
         }
     }
 
