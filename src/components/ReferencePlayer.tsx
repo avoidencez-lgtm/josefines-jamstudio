@@ -7,13 +7,21 @@ import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 import { StemMixer } from "./Stems";
 
+/** Loop field drafts follow telemetry the same way speed and key do. */
+export function referenceLoopDraft(song: {
+  loop_start: number;
+  loop_end: number;
+}): { start: string; end: string } {
+  return { start: String(song.loop_start), end: String(song.loop_end) };
+}
+
 /** Shared by Songs and Stage; all samples, timing and transport stay in Rust. */
 export function ReferencePlayer({ song }: { song: ReferenceState }) {
   const recording = useEngineStore((s) => s.isRecording);
   const volume = useEngineStore((s) => s.bandVolume);
   const [seek, setSeek] = useState("0");
-  const [start, setStart] = useState(String(song.loop_start));
-  const [end, setEnd] = useState(String(song.loop_end));
+  const [start, setStart] = useState(() => referenceLoopDraft(song).start);
+  const [end, setEnd] = useState(() => referenceLoopDraft(song).end);
   const [speed, setSpeed] = useState((song.speed ?? 1) * 100);
   const [semitones, setSemitones] = useState(song.semitones ?? 0);
   const [processing, setProcessing] = useState(false);
@@ -22,6 +30,14 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
     setSpeed((song.speed ?? 1) * 100);
     setSemitones(song.semitones ?? 0);
   }, [song.speed, song.semitones]);
+  useEffect(() => {
+    const next = referenceLoopDraft({
+      loop_start: song.loop_start,
+      loop_end: song.loop_end,
+    });
+    setStart(next.start);
+    setEnd(next.end);
+  }, [song.loop_start, song.loop_end]);
   const locked = recording || isPreview || processing || rampDraft.busy;
   const practice = async (nextSpeed: number, nextSemitones: number) => {
     if (locked) return;
