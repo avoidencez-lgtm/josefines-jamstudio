@@ -369,11 +369,11 @@ export const useWriting = create<WritingState>((set, get) => ({
     copy.revision = 0;
     copy.body.chart.id = copy.id;
     copy.body.chart.name += " (copy)";
-    const saved = await ipc.invoke<Original>("originals_save", {
+    await ipc.invoke<Original>("originals_save", {
       document: copy,
     });
     if (get().song === song) {
-      set({ song: saved, dirty: false, message: "Copy saved. Original kept." });
+      set({ message: "Copy saved. Original kept." });
     } else {
       set({
         message: "Copy saved. Your newer draft is still open and needs saving.",

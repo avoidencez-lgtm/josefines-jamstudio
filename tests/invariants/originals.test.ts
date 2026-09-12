@@ -5,6 +5,7 @@ import { assignPedal, useController } from "../../src/lib/controller";
 import { parseNaturalIntent } from "../../src/lib/jo/intent";
 import { JO_TOOLS } from "../../src/lib/jo/tools";
 import {
+  type Original,
   arrangementRanges,
   changeGroove,
   defaultSection,
@@ -128,6 +129,39 @@ describe("songwriting workflow", () => {
         restored.song?.body.chart ?? newOriginal().body.chart,
       ).some((r) => r.sectionId === restored.selected),
     ).toBe(true);
+  });
+  it("saveCopy writes the duplicate without replacing the open song or undo history", async () => {
+    const previous = { ...ipc };
+    const savedIds: string[] = [];
+    __setIpcForTests({
+      invoke: async <T>(command: string, args?: Record<string, unknown>) => {
+        if (command === "originals_save") {
+          const document = args?.document as Original;
+          savedIds.push(document.id);
+          return { ...document, revision: 1 } as T;
+        }
+        if (command === "originals_list") return [] as T;
+        return undefined as T;
+      },
+    });
+    try {
+      const w = useWriting.getState();
+      const openId = w.song?.id;
+      w.edit((b) => {
+        b.chart.name = "Draft title";
+      });
+      const past = useWriting.getState().past;
+      await w.saveCopy();
+      const after = useWriting.getState();
+      expect(savedIds).toHaveLength(1);
+      expect(savedIds[0]).not.toBe(openId);
+      expect(after.song?.id).toBe(openId);
+      expect(after.song?.body.chart.name).toBe("Draft title");
+      expect(after.past).toEqual(past);
+      expect(after.message).toBe("Copy saved. Original kept.");
+    } finally {
+      __setIpcForTests(previous);
+    }
   });
   it("fits the band to a trimmed audio loop without changing that audio", () => {
     const clip = {
