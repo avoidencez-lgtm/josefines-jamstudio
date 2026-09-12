@@ -36,7 +36,7 @@ describe("sample pack seam", () => {
     expect(manifest.packs[0].sha256).not.toBe(
       "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     );
-    expect(manifest.packs[0].bytes).toBe(334392);
+    expect(manifest.packs[0].bytes).toBe(5_196_335);
     engine = createPreviewEngine({ autoTick: false });
     const packs = await engine.invoke("assets_status", {});
     expect(packs).toMatchObject([

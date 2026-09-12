@@ -35,9 +35,9 @@ Open **Settings → First run** and walk the list:
 4. Rig: create a loopMIDI port named Jam Virtual (Windows) or enable the IAC
    Driver (macOS), then Check this virtual MIDI. HeadRush and Black Spirit are not
    claimed here.
-5. Sample packs: `assets-v1` / `standard-rock-kit.zip` is published with a
+5. Sample packs: `assets-v1` / `standard-rock-kit-acoustic.zip` is published with a
    recorded SHA-256. `assets_ensure` downloads it only with `JAM_LIVE=1`.
-   After unpack, the band plays that kit and the FreePats bass/piano
+   After unpack, the band plays the CC0 acoustic kit and the FreePats bass/piano
    SoundFonts. A missing pack stays on the synthetic kit or sine voices
    and says so.
 6. Settings → Diagnostics: Reduced motion (Match the OS / Always reduce /
