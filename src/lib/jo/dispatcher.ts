@@ -114,7 +114,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
           w.select(section.id);
         }
         await w.rehearse(a.action === "next");
-        return "Section loop ready. Press Play when ready.";
+        return "This section is looping.";
       }
       if (store.isRecording)
         throw new Error("Save the recording before editing.");

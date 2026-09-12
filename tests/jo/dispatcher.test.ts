@@ -163,6 +163,19 @@ describe("Jo reports accepted actions", () => {
     expect(useMedia.getState().renderPath).toBe("movie.mp4");
   });
 
+  it("says the section loop is playing because rehearse starts transport", async () => {
+    const song = newOriginal();
+    useWriting.setState({ song, selected: "verse", busy: false });
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    const result = await dispatchJoToolCall({
+      name: "songwriting",
+      arguments: { action: "loop", name: "verse" },
+    });
+    expect(invoke).toHaveBeenCalledWith("transport_play");
+    expect(result).toMatch(/looping/i);
+    expect(result).not.toMatch(/Press Play/i);
+  });
+
   it("action acks are sentences, not JSON dumps", async () => {
     const text = readFileSync("src/lib/jo/dispatcher.ts", "utf8");
     expect(text).not.toContain("JSON.stringify(analysis)");
