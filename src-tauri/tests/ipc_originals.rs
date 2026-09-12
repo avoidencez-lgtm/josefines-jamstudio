@@ -202,8 +202,16 @@ fn save_refuses_invalid_ids_without_touching_the_disk() {
         );
     }
     let longest = "a".repeat(100);
+    let mut boundary = song(&longest);
     assert_eq!(
-        studio.ok("originals_save", json!({ "document": song(&longest) }))["id"],
+        studio.err("originals_save", json!({ "document": boundary })),
+        "Chart id may only contain letters, numbers, hyphens and underscores.",
+        "the fixture's appended -chart exceeds the separate chart ID limit"
+    );
+    assert!(!song_file(&longest).exists());
+    boundary["body"]["chart"]["id"] = json!("boundary-chart");
+    assert_eq!(
+        studio.ok("originals_save", json!({ "document": boundary }))["id"],
         longest,
         "100 characters is the longest accepted id"
     );
