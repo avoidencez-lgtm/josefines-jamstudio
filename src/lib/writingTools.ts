@@ -52,6 +52,26 @@ export function checkWritingForm(body: SongBody): void {
 }
 
 /** Distinct sentence names so chartToText/parseChartText can round-trip additions. */
+function variationSourceName(name: string): string {
+  let base = name.trim();
+  for (;;) {
+    const nested = /^This is (.+) variation \d+\.$/.exec(base);
+    if (!nested) return base.slice(0, 60);
+    base = nested[1];
+  }
+}
+
+function variationSectionName(sourceName: string, existing: string[]): string {
+  const base = variationSourceName(sourceName);
+  let n = existing.length + 1;
+  let name = `This is ${base} variation ${n}.`;
+  while (existing.includes(name)) {
+    n += 1;
+    name = `This is ${base} variation ${n}.`;
+  }
+  return name;
+}
+
 export function uniqueSectionName(existing: string[]): string {
   const used = new Set(existing);
   const first = "This is a new section.";
@@ -78,7 +98,10 @@ export function duplicateSection(
   body.chart.sections.push({
     ...structuredClone(source),
     id,
-    name: `This is ${source.name.slice(0, 60)} variation ${body.chart.sections.length + 1}.`,
+    name: variationSectionName(
+      source.name,
+      body.chart.sections.map((s) => s.name),
+    ),
   });
   body.sections[id] = structuredClone(body.sections[sectionId]);
   if (body.lyrics?.[sectionId]) body.lyrics[id] = body.lyrics[sectionId];

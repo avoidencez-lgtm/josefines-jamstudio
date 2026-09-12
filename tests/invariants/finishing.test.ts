@@ -36,6 +36,31 @@ it("isolates contrast to one appearance, preserves locked parts and exact timing
   );
 });
 
+it("keeps a unique-appearance lift in the form without nested variation names (#428)", () => {
+  const song = newOriginal();
+  const first = contrastVariation(song.body, 1, "lift", 0.3, "lifted-chorus");
+  expect(first.chart.arrangement.map((a) => a.sectionId)).toEqual([
+    "verse",
+    "lifted-chorus",
+  ]);
+  expect(first.chart.sections.map((s) => s.id)).toEqual([
+    "verse",
+    "lifted-chorus",
+  ]);
+  expect(first.chart.sections[1].name).toBe("This is Chorus variation 3.");
+  expect(
+    finishingReview(first, [], false).some((r) => r.id.startsWith("unused-")),
+  ).toBe(false);
+  const second = contrastVariation(first, 1, "lift", 0.2, "lifted-again");
+  expect(second.chart.sections.map((s) => s.id)).toEqual([
+    "verse",
+    "lifted-again",
+  ]);
+  expect(second.chart.sections[1].name).toBe("This is Chorus variation 4.");
+  expect(second.chart.sections[1].name).not.toMatch(/This is This is/);
+  expect(second.chart.sections[1].name.split(".").length).toBe(2);
+});
+
 it("comps the correct bars, replaces only the same comp slot and rejects stale takes", () => {
   const song = newOriginal();
   const take = {

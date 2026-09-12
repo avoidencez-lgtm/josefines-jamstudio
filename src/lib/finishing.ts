@@ -4,6 +4,7 @@ import { type Original, type SongBody, arrangementRanges } from "./originals";
 import {
   arrangedBars,
   checkWritingForm,
+  deleteSection,
   duplicateSection,
 } from "./writingTools";
 
@@ -28,11 +29,14 @@ export function contrastVariation(
   if (!item || !Number.isFinite(amount) || amount <= 0 || amount > 0.5)
     throw new Error("Choose a section and a strength between 1 and 50%.");
   const body = structuredClone(source);
-  duplicateSection(body, item.sectionId, id);
+  const sourceId = item.sectionId;
+  duplicateSection(body, sourceId, id);
   body.chart.arrangement = source.chart.arrangement.map((a, i) => ({
     ...a,
     sectionId: i === index ? id : a.sectionId,
   }));
+  if (!body.chart.arrangement.some((a) => a.sectionId === sourceId))
+    deleteSection(body, sourceId);
   const band = body.sections[id];
   for (const [i, part] of band.parts.entries()) {
     if (part.locked || part.muted || (recipe === "space" && i === 1)) continue;

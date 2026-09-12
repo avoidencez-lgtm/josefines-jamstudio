@@ -2677,7 +2677,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "} variation ${body.chart.sections.length + 1}`",
   );
   expect(readFileSync("src/lib/writingTools.ts", "utf8")).toContain(
-    "This is ${source.name.slice(0, 60)} variation ${body.chart.sections.length + 1}.",
+    "This is ${base} variation ${n}.",
   );
   expect(
     readFileSync("src/components/tools/AudioProfilesTool.tsx", "utf8"),
