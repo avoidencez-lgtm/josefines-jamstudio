@@ -21,6 +21,7 @@ import {
   sessionProgress,
   takeDate,
   takeMeasurements,
+  totalRecordedSecs,
 } from "../lib/sessions/stats";
 import { useEngineStore } from "../store/engine";
 
@@ -79,7 +80,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
   }, [latencySamples]);
 
   const sampleRate = engineStatus?.sample_rate || 48_000;
-  const totalSecs = takes.reduce((acc, t) => acc + t.durationSecs, 0);
+  const totalSecs = totalRecordedSecs(takes);
   const streak = practiceStreakDays(takes);
   const progress = sessionProgress(takes, takeAnalysis);
 

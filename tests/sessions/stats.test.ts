@@ -5,6 +5,7 @@ import {
   practiceStreakDays,
   sessionProgress,
   takeMeasurements,
+  totalRecordedSecs,
 } from "../../src/lib/sessions/stats";
 
 const day = (offset: number, now: Date) => {
@@ -165,6 +166,20 @@ describe("jam time", () => {
     expect(formatJamTime(42)).toBe("42 s");
     expect(formatJamTime(15 * 60)).toBe("15 min");
     expect(formatJamTime(2 * 3600 + 5 * 60)).toBe("2 h 5 min");
+  });
+
+  it("skips non-finite take durations so the header is not NaN min", () => {
+    expect(
+      totalRecordedSecs([
+        { durationSecs: 60 },
+        { durationSecs: Number.NaN },
+        { durationSecs: Number.POSITIVE_INFINITY },
+        { durationSecs: 15 },
+      ]),
+    ).toBe(75);
+    expect(
+      formatJamTime(totalRecordedSecs([{ durationSecs: Number.NaN }])),
+    ).toBe("0 s");
   });
 });
 

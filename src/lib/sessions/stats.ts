@@ -131,6 +131,14 @@ export function sessionProgress(
   };
 }
 
+/** Sum take lengths, treating missing or non-finite durations as zero. */
+export function totalRecordedSecs(takes: { durationSecs: number }[]): number {
+  return takes.reduce(
+    (acc, t) => acc + (Number.isFinite(t.durationSecs) ? t.durationSecs : 0),
+    0,
+  );
+}
+
 export function formatJamTime(totalSecs: number): string {
   if (totalSecs < 60) return `${Math.round(totalSecs)} s`;
   const h = Math.floor(totalSecs / 3600);
