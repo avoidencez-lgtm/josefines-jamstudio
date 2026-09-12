@@ -182,8 +182,17 @@ impl Jitter {
         }
     }
 
+    fn cap(&self) -> usize {
+        // At least ~0.5 s of 48 kHz interleaved stereo, or 32× the prefill window.
+        self.prefill.saturating_mul(32).max(48_000)
+    }
+
     pub fn push(&mut self, samples: &[i16]) {
         self.queued.extend(samples);
+        let extra = self.queued.len().saturating_sub(self.cap());
+        if extra > 0 {
+            self.queued.drain(..extra);
+        }
         if !self.primed && self.queued.len() >= self.prefill {
             self.primed = true;
         }
@@ -194,6 +203,7 @@ impl Jitter {
         let need = frames.saturating_mul(2);
         if !self.primed || self.queued.len() < need {
             self.primed = false;
+            self.queued.clear();
             return (vec![0; need], true);
         }
         let mut out = Vec::with_capacity(need);
@@ -366,9 +376,26 @@ mod tests {
         jitter.push(&[5, 6, 7, 8, 9, 10, 11, 12]);
         let (ready, ok) = jitter.take(2);
         assert!(!ok);
-        assert_eq!(ready.len(), 4);
+        assert_eq!(ready, vec![5, 6, 7, 8]);
         let (_, late) = jitter.take(8);
         assert!(late);
+    }
+
+    #[test]
+    fn jitter_drops_stale_samples_on_underflow_and_bounds_the_queue() {
+        let mut jitter = Jitter::new(4);
+        jitter.push(&(1..100).collect::<Vec<i16>>());
+        let (_, starving) = jitter.take(200);
+        assert!(starving);
+        assert!(jitter.queued.is_empty());
+        jitter.push(&[11, 12, 13, 14, 15, 16, 17, 18]);
+        let (live, ok) = jitter.take(2);
+        assert!(!ok);
+        assert_eq!(live, vec![11, 12, 13, 14]);
+        for _ in 0..8 {
+            jitter.push(&[7; 10_000]);
+        }
+        assert!(jitter.queued.len() <= jitter.cap());
     }
 
     #[test]
