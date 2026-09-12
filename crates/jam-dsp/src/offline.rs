@@ -86,6 +86,7 @@ pub fn estimate_grid(analysis: &SongAnalysis) -> Result<EstimatedGrid, String> {
         });
         start = end;
     }
+    cap_estimated_sections(&mut sections);
     Ok(EstimatedGrid {
         schema_version: 1,
         origin: "estimated-local".into(),
@@ -93,6 +94,39 @@ pub fn estimate_grid(analysis: &SongAnalysis) -> Result<EstimatedGrid, String> {
         beats,
         sections,
     })
+}
+
+const MAX_GRID_SECTIONS: usize = 64;
+
+fn cap_estimated_sections(sections: &mut Vec<EstimatedSection>) {
+    while sections.len() > MAX_GRID_SECTIONS {
+        let mut merge_at = 0;
+        let mut best = usize::MAX;
+        for i in 0..sections.len() - 1 {
+            let left = sections[i].end_bar - sections[i].start_bar;
+            let right = sections[i + 1].end_bar - sections[i + 1].start_bar;
+            let score = left.min(right);
+            if score < best {
+                best = score;
+                merge_at = i;
+            }
+        }
+        let next = sections.remove(merge_at + 1);
+        let left = &mut sections[merge_at];
+        if next.end_bar - next.start_bar > left.end_bar - left.start_bar {
+            left.label = next.label;
+        }
+        left.end_bar = next.end_bar;
+    }
+    for (i, section) in sections.iter_mut().enumerate() {
+        let slug: String = section
+            .label
+            .to_ascii_lowercase()
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .collect();
+        section.id = format!("{}-{}", slug.trim_matches('-'), i + 1);
+    }
 }
 
 /// How much of the guitar stem remains in the minus-guitar mix, in dB.
@@ -658,6 +692,46 @@ mod tests {
             ..analysis
         })
         .is_err());
+    }
+
+    #[test]
+    fn estimate_grid_caps_sections_at_sixty_four() {
+        // Chord-per-bar maps exceed Grid::validate's 64-section limit. Merge
+        // adjacent shorts so any estimated grid stays at or under 64 sections.
+        let bars = 70;
+        let beat = 0.5;
+        let analysis = SongAnalysis {
+            schema_version: 1,
+            analyzer: "local-chroma-v1".into(),
+            confidence: "low".into(),
+            seconds: bars as f64 * 2.0,
+            bpm: Some(120.0),
+            beats: (0..=bars * 4).map(|i| i as f64 * beat).collect(),
+            chords: (0..bars)
+                .map(|b| ChordEstimate {
+                    start: b as f64 * 2.0,
+                    end: (b + 1) as f64 * 2.0,
+                    chord: Some(NOTES[b % 12].into()),
+                })
+                .collect(),
+            key: Some("C major".into()),
+        };
+        let grid = estimate_grid(&analysis).unwrap();
+        assert!(
+            grid.sections.len() <= 64,
+            "estimated sections {} exceed Grid::validate cap",
+            grid.sections.len()
+        );
+        assert_eq!(grid.sections[0].start_bar, 1);
+        assert_eq!(grid.sections.last().unwrap().end_bar, bars + 1);
+        for pair in grid.sections.windows(2) {
+            assert_eq!(pair[0].end_bar, pair[1].start_bar);
+        }
+        let ids: Vec<_> = grid.sections.iter().map(|s| s.id.as_str()).collect();
+        let mut unique = ids.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), ids.len());
     }
 
     #[test]
