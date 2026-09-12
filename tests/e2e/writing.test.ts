@@ -237,6 +237,27 @@ it("a run of typing in the title, lyrics and notebook is one Undo step each, a p
   expect(writing().past).toHaveLength(5);
 });
 
+it("section renaming coalesces keystrokes into one undo step", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(Date.UTC(2026, 8, 5, 11));
+  const w = writing();
+  w.createSong();
+  w.edit((b) => {
+    b.chart.sections[0].bars[0][0].chord = "Dm";
+  });
+  expect(writing().past).toHaveLength(1);
+  for (const name of ["P", "Po", "Post-Chorus Breakdown 1"])
+    w.edit((b) => {
+      const s = b.chart.sections.find((section) => section.id === "verse");
+      if (s) s.name = name;
+    }, "section-name:verse");
+  expect(writing().past).toHaveLength(2);
+  expect(body().chart.sections[0].name).toBe("Post-Chorus Breakdown 1");
+  w.undo();
+  expect(body().chart.sections[0].name).toBe("Verse");
+  expect(body().chart.sections[0].bars[0][0].chord).toBe("Dm");
+});
+
 it("the bar editor and the harmony palette rewrite chords bar by bar; malformed bars and missing sections never reach the song", () => {
   const w = writing();
   w.createSong();
