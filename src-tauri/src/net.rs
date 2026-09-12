@@ -479,6 +479,20 @@ fn llm_tokens(body: &str) -> LlmTokens {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
         return LlmTokens::default();
     };
+    llm_tokens_from_value(&value)
+}
+
+fn llm_tokens_from_value(value: &serde_json::Value) -> LlmTokens {
+    if let Some(items) = value.as_array() {
+        return items
+            .iter()
+            .rev()
+            .map(llm_tokens_from_value)
+            .find(|tokens| {
+                tokens.prompt.is_some() || tokens.completion.is_some() || tokens.total.is_some()
+            })
+            .unwrap_or_default();
+    }
     if let Some(usage) = value.get("usageMetadata") {
         return LlmTokens {
             prompt: usage.get("promptTokenCount").and_then(|v| v.as_u64()),
@@ -583,6 +597,13 @@ mod tests {
         assert_eq!(chat.total, Some(10));
         assert_eq!(llm_tokens("not-json").total, None);
         assert_eq!(llm_tokens(r#"{"ok":true}"#).prompt, None);
+        let streamed = llm_tokens(
+            r#"[{"candidates":[]},{"candidates":[],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":20,"totalTokenCount":30}}]"#,
+        );
+        assert_eq!(
+            (streamed.prompt, streamed.completion, streamed.total),
+            (Some(10), Some(20), Some(30))
+        );
         let dir = std::env::temp_dir().join(format!("jam-token-cost-{}", std::process::id()));
         let log = CostLog::new(dir.join("usage.jsonl"));
         log.append(&CostEntry {
