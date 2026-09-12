@@ -26,7 +26,7 @@ import type {
 } from "../ipc/contract";
 import { transposeChart } from "../lib/chart/transpose";
 import { withNextStep } from "../lib/loudError";
-import type { Original } from "../lib/originals";
+import { type Original, useWriting } from "../lib/originals";
 import { savedTakeAnalysis } from "../lib/sessions/analysis";
 
 export type ScreenId =
@@ -570,17 +570,26 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const moved = transposeChart(current, semitones);
       const loaded = get().loadedOriginal;
       if (loaded) {
-        const document: Original = {
-          schemaVersion: 1,
-          id: loaded.id,
-          revision: 0,
-          versions: [],
-          body: { ...loaded.body, chart: moved },
-        };
+        const writing = useWriting.getState();
+        const source = writing.song?.id === loaded.id ? writing.song : null;
+        const document: Original = source
+          ? { ...source, body: { ...source.body, chart: moved } }
+          : {
+              schemaVersion: 1,
+              id: loaded.id,
+              revision: 0,
+              versions: [],
+              body: { ...loaded.body, chart: moved },
+            };
         const result = await command("The transpose song", () =>
           ipc.invoke("originals_load", { document, keepPlayback: true }),
         );
         if (result.ok) {
+          if (source) {
+            useWriting.getState().edit((body) => {
+              body.chart = moved;
+            });
+          }
           set({
             currentChart: moved,
             loadedOriginal: { id: loaded.id, body: document.body },
@@ -826,6 +835,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
         set((s) => ({
           engineStatus: status,
           settings: s.settings ? { ...s.settings, ...config } : s.settings,
+          toneOn: false,
+          tunerOn: false,
+          isRecording: false,
         }));
         if (status.last_error) get().notify("error", status.last_error);
         else
@@ -846,8 +858,14 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const status = await run("The restart audio", () =>
         ipc.invoke<EngineStatus>("engine_restart"),
       );
-      if (status) set({ engineStatus: status });
-      else await get().refreshEngineStatus();
+      if (status) {
+        set({
+          engineStatus: status,
+          toneOn: false,
+          tunerOn: false,
+          isRecording: false,
+        });
+      } else await get().refreshEngineStatus();
     },
 
     checkKey: async (provider) => {
@@ -892,7 +910,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
               ? "song"
               : state.lyriaStatus.phase !== "idle"
                 ? "lyria"
-                : state.telemetry.reference
+                : state.activeSource === "song"
                   ? "band"
                   : state.activeSource,
           }));
@@ -916,7 +934,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
         ipc.listen<MeterTelemetry>("input.meters", (input_level) => {
           set((state) => ({ telemetry: { ...state.telemetry, input_level } }));
         }),
-        ipc.listen<TunerTelemetry>("tuner.state", (tuner) => {
+        ipc.listen<TunerTelemetry | null>("tuner.state", (tuner) => {
           set((state) => ({ telemetry: { ...state.telemetry, tuner } }));
         }),
         ipc.listen<TransportTelemetry>("transport.state", (transport) => {
@@ -926,6 +944,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
           const trainer = get().tempoTrainer;
           const boundary =
             transport.bar === prev.bar + 1 ||
+            (transport.bar === 1 &&
+              prev.bar > 1 &&
+              transport.bar_progress < prev.bar_progress) ||
             (transport.loop_enabled &&
               prev.loop_enabled &&
               prev.bar === transport.loop_end_bar - 1 &&

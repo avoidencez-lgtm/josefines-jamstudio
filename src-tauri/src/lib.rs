@@ -1576,6 +1576,7 @@ pub fn configure<R: tauri::Runtime>(
                 let mut last_out: Option<jam_audio::engine::MeterTelemetry> = None;
                 let mut last_in: Option<jam_audio::engine::MeterTelemetry> = None;
                 let mut last_had_reference = false;
+                let mut last_tuner_active = false;
                 let mut last_busy = false;
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(if last_busy {
@@ -1655,9 +1656,13 @@ pub fn configure<R: tauri::Runtime>(
                         let _ = app_handle.emit("band:state", &tel.band);
                         last_band = Some(band);
                     }
+                    let tuner_active = tel.tuner.is_some();
                     if let Some(t) = &tel.tuner {
                         let _ = app_handle.emit("tuner:state", t);
+                    } else if last_tuner_active {
+                        let _ = app_handle.emit("tuner:state", serde_json::Value::Null);
                     }
+                    last_tuner_active = tuner_active;
                     if last_status.as_ref() != Some(&status) {
                         let _ = app_handle.emit("engine:status", &status);
                         last_status = Some(status);

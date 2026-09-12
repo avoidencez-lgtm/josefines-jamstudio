@@ -27,6 +27,7 @@ import type {
   TransportTelemetry,
 } from "../../src/ipc/contract";
 import type { PreviewEngine } from "../../src/ipc/preview";
+import { SHORTCUTS } from "../../src/lib/shortcuts";
 import { useEngineStore } from "../../src/store/engine";
 
 const PREVIEW_KEY = "__jamPreviewEngine";
@@ -96,6 +97,7 @@ describe("desktop startup against the preview engine", () => {
     // The engine is a singleton across tests: put it back where a fresh launch starts.
     await engine.invoke("transport_stop", {});
     await engine.invoke("tuner_set", { on: false });
+    await engine.invoke("tone_set", { on: false, hz: 440 });
     await engine.invoke("transport_set_loop", {
       startBar: 1,
       endBar: 5,
@@ -143,6 +145,35 @@ describe("desktop startup against the preview engine", () => {
     expect(store().engineStatus?.last_error).toBe(PREVIEW_LAST_ERROR);
     // In the preview the loud last_error is a banner, not a toast.
     expect(store().notices).toEqual([]);
+  });
+
+  it("clears tone, tuner and recording flags when the audio engine restarts", async () => {
+    await startDesktop();
+    await store().setTone(true, 440);
+    await store().setTuner(true);
+    useEngineStore.setState({ isRecording: true });
+    expect(store()).toMatchObject({
+      toneOn: true,
+      tunerOn: true,
+      isRecording: true,
+    });
+
+    await store().restartEngine();
+    expect(store()).toMatchObject({
+      toneOn: false,
+      tunerOn: false,
+      isRecording: false,
+    });
+
+    await store().setTone(true, 440);
+    await store().setTuner(true);
+    useEngineStore.setState({ isRecording: true });
+    await store().applyAudioConfig(BASELINE_CONFIG);
+    expect(store()).toMatchObject({
+      toneOn: false,
+      tunerOn: false,
+      isRecording: false,
+    });
   });
 
   it("fills the library with the bundled styles and charts and opens the standard 12-bar blues", async () => {
@@ -284,6 +315,20 @@ describe("desktop startup against the preview engine", () => {
     expect(store().activeSource).toBe("band");
   });
 
+  it("restores activeSource to band when reference.state is null while already unloaded", async () => {
+    const listen = vi.spyOn(ipc, "listen");
+    await startDesktop();
+    const onReference = listen.mock.calls.find(
+      ([event]) => event === "reference.state",
+    )?.[1] as ((reference: unknown) => void) | undefined;
+    expect(onReference).toBeDefined();
+    expect(store().telemetry.reference == null).toBe(true);
+    useEngineStore.setState({ activeSource: "song" });
+    onReference?.(null);
+    expect(store().telemetry.reference).toBeNull();
+    expect(store().activeSource).toBe("band");
+  });
+
   it("delivers live telemetry to the store only once the engine ticks", async () => {
     await startDesktop();
     // Nothing has ticked: the store still shows its own defaults, not the chart's.
@@ -317,6 +362,10 @@ describe("desktop startup against the preview engine", () => {
     expect(tuner?.confidence).toBe(0.9);
     expect(Math.abs((tuner?.hz ?? 0) - 440)).toBeLessThan(2);
     expect(Math.abs(tuner?.cents ?? 99)).toBeLessThanOrEqual(6);
+
+    await store().setTuner(false);
+    engine.tick(0);
+    expect(store().telemetry.tuner).toBeNull();
   });
 
   it("pressing play counts in, then the band walks the chart bar by bar until stop", async () => {
@@ -364,6 +413,103 @@ describe("desktop startup against the preview engine", () => {
     expect(transport.position_beats).toBe(0);
     expect(band.current_chord).toBe("A7");
     expect(output_level.peak_db).toBe(-180);
+  });
+
+  it("keeps TempoTrainer progress when Space resumes from pause", async () => {
+    await startDesktop();
+    await store().transportSetCountIn(0);
+    store().setTempoTrainer({
+      enabled: true,
+      startBpm: 240,
+      targetBpm: 280,
+      stepBpm: 10,
+      everyBars: 2,
+      playedBars: 0,
+    });
+    await store().transportPlay();
+    engine.tick(0.01);
+    expect(store().telemetry.transport).toMatchObject({
+      state: "playing",
+      bpm: 240,
+    });
+
+    // Two bar boundaries at 240 BPM step the tempo; the next bar leaves progress.
+    advance(engine, 2.05);
+    await Promise.resolve();
+    engine.tick(0);
+    expect(store().telemetry.transport.bpm).toBe(250);
+    expect(store().tempoTrainer.playedBars).toBe(0);
+    advance(engine, 1);
+    expect(store().tempoTrainer.playedBars).toBe(1);
+    expect(store().telemetry.transport.bpm).toBe(250);
+
+    await store().transportPause();
+    engine.tick(0);
+    expect(store().telemetry.transport.state).toBe("paused");
+
+    const space = SHORTCUTS.find((s) => s.keys === "Space");
+    await space?.run(store());
+    engine.tick(0);
+    expect(store().telemetry.transport).toMatchObject({
+      state: "playing",
+      bpm: 250,
+    });
+    expect(store().tempoTrainer.playedBars).toBe(1);
+  });
+
+  it("counts a chart form wrap as a TempoTrainer bar when no loop is armed", async () => {
+    await startDesktop();
+    expect(
+      await store().playChartInline({
+        schemaVersion: 1,
+        id: "four-bar-wrap",
+        name: "Four",
+        keyTonic: 9,
+        mode: "major",
+        timeSig: [4, 4],
+        defaultBpm: 240,
+        defaultStyleId: "blues-shuffle",
+        sections: [
+          {
+            id: "a",
+            name: "A",
+            bars: [
+              [{ chord: "A7", beats: 4 }],
+              [{ chord: "D7", beats: 4 }],
+              [{ chord: "A7", beats: 4 }],
+              [{ chord: "E7", beats: 4 }],
+            ],
+          },
+        ],
+        arrangement: [{ sectionId: "a", repeats: 1 }],
+      }),
+    ).toBe(true);
+    await store().transportSetCountIn(0);
+    await store().transportSetLoop(1, 5, false);
+    store().setTempoTrainer({
+      enabled: true,
+      startBpm: 240,
+      targetBpm: 280,
+      stepBpm: 10,
+      everyBars: 4,
+      playedBars: 0,
+    });
+    await store().transportPlay();
+    engine.tick(0.01);
+    expect(store().telemetry.transport).toMatchObject({
+      state: "playing",
+      bar: 1,
+      loop_enabled: false,
+      bpm: 240,
+    });
+
+    // Bars 1->2, 2->3, 3->4, then the form wrap 4->1.
+    advance(engine, 4.05);
+    await Promise.resolve();
+    engine.tick(0);
+    expect(store().telemetry.transport.bar).toBe(1);
+    expect(store().telemetry.transport.bpm).toBe(250);
+    expect(store().tempoTrainer.playedBars).toBe(0);
   });
 
   it("clamps count-in and tempo to the engine's range before they reach the store", async () => {

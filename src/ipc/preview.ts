@@ -212,6 +212,7 @@ export function createPreviewEngine(
     buffer_size: 256,
   };
   let tunerOn = false;
+  let lastTunerActive = false;
   let toneOn = false;
   let clickVolume = 0.7;
   let bandVolume = 0.8;
@@ -339,14 +340,17 @@ export function createPreviewEngine(
     band.active_cue = "none";
     band.pending_cue = "none";
     band.is_stopped = false;
-    seekBar(transport.loop_enabled ? transport.loop_start_bar : 1);
+    seekBar(1);
   }
 
-  function enterPlayback() {
+  function enterPlayback(fromCountIn = false) {
     transport.state = "playing";
     // position_beats holds the song seek; bar/beat temporarily show count-in clicks.
+    // After Stop the playhead is 0; come in at the loop start when a loop is
+    // armed, matching Timeline count-in completion (#134). Play without a
+    // count-in starts at bar 1 until the wrap.
     seekBar(
-      transport.position_beats === 0 && transport.loop_enabled
+      fromCountIn && transport.position_beats === 0 && transport.loop_enabled
         ? transport.loop_start_bar
         : Math.floor(transport.position_beats / beatsPerBar()) + 1,
     );
@@ -404,7 +408,7 @@ export function createPreviewEngine(
       transport.beat = (Math.floor(done) % beatsPerBar()) + 1;
       transport.bar_progress = (done % beatsPerBar()) / beatsPerBar();
       if (countInRemainingBeats <= 0) {
-        enterPlayback();
+        enterPlayback(true);
       }
     } else if (transport.state === "playing") {
       transport.position_beats += (dt * transport.bpm) / 60;
@@ -469,6 +473,8 @@ export function createPreviewEngine(
     emit("transport.state", { ...transport });
     emit("band.state", { ...band });
     if (tuner) emit("tuner.state", tuner);
+    else if (lastTunerActive) emit("tuner.state", null);
+    lastTunerActive = tuner != null;
     emit("engine.status", { ...status });
   }
 
@@ -715,7 +721,10 @@ export function createPreviewEngine(
       }
     },
     transport_pause: () => {
-      if (transport.state === "playing") {
+      if (
+        transport.state === "playing" ||
+        transport.state === "counting_in"
+      ) {
         transport.state = "paused";
         if (rig.sendClock) {
           rigSend([0xfc], "clock");
@@ -797,11 +806,9 @@ export function createPreviewEngine(
     band_set_style: (a) => {
       const s = styles.get(String(a.styleId));
       if (!s) throw new Error(`unknown style "${a.styleId}"`);
-      if (transport.state === "playing") band.pending_style_id = s.id;
-      else {
-        band.style_id = s.id;
-        band.style_name = s.name;
-      }
+      band.style_id = s.id;
+      band.style_name = s.name;
+      band.pending_style_id = null;
     },
     band_render_offline: () => {
       throw new Error(
@@ -813,10 +820,6 @@ export function createPreviewEngine(
     },
     band_cue: (a) => {
       band.pending_cue = String(a.cue) as Cue;
-      if (transport.state !== "playing") {
-        band.active_cue = band.pending_cue;
-        band.pending_cue = "none";
-      }
     },
     band_list_styles: () => bundledStyles(),
     band_list_charts: () =>
