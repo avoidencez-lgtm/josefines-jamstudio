@@ -46,6 +46,11 @@ pub struct RigOrchestrator {
     clock_running: bool,
     clock_paused: bool,
     next_pulse: u64,
+    /// Transport is playing even if Send Clock is currently off, so toggling
+    /// clock on mid-song can arm START/CONTINUE and ticks.
+    transport_playing: bool,
+    last_now: u64,
+    last_bpm: f64,
 }
 
 impl RigOrchestrator {
@@ -68,6 +73,9 @@ impl RigOrchestrator {
             clock_running: false,
             clock_paused: false,
             next_pulse: 0,
+            transport_playing: false,
+            last_now: 0,
+            last_bpm: 0.0,
         };
         me.reset_controls();
         me
@@ -295,6 +303,21 @@ impl RigOrchestrator {
             self.scheduler.clear();
         }
         self.send_clock = on;
+        if on && self.transport_playing && !self.clock_running {
+            let resume = self.clock_paused;
+            let status = if resume { CONTINUE } else { START };
+            self.clock_paused = false;
+            self.clock_running = true;
+            let now = self.last_now;
+            let bpm = if self.last_bpm > 0.0 {
+                self.last_bpm
+            } else {
+                120.0
+            };
+            let _ = self.send_clock_byte(status);
+            self.rebase_next_pulse(now, bpm, resume);
+            let _ = self.pump_clock(now, bpm);
+        }
     }
 
     pub fn set_dry_run(&mut self, on: bool) {
@@ -311,26 +334,27 @@ impl RigOrchestrator {
     }
 
     pub fn on_transport_play(&mut self, now_sample: u64, bpm: f64) -> Result<(), String> {
+        self.transport_playing = true;
+        self.last_now = now_sample;
+        self.last_bpm = bpm;
         if !self.send_clock {
             return Ok(());
+        }
+        if self.clock_running && !self.clock_paused {
+            self.rebase_next_pulse(now_sample, bpm, true);
+            return self.pump_clock(now_sample, bpm);
         }
         let resume = self.clock_paused;
         let status = if resume { CONTINUE } else { START };
         self.clock_paused = false;
         self.clock_running = true;
         self.send_clock_byte(status)?;
-        let beats = samples_to_beats(now_sample, bpm, 48_000);
-        self.next_pulse = (beats * f64::from(crate::PPQN)).ceil() as u64;
-        if resume && bpm > 0.0 {
-            while Self::pulse_sample(self.next_pulse, bpm) <= now_sample {
-                self.next_pulse += 1;
-            }
-            self.scheduler.clear();
-        }
+        self.rebase_next_pulse(now_sample, bpm, resume);
         self.pump_clock(now_sample, bpm)
     }
 
     pub fn on_transport_pause(&mut self) -> Result<(), String> {
+        self.transport_playing = false;
         if !self.send_clock || !self.clock_running {
             return Ok(());
         }
@@ -342,6 +366,7 @@ impl RigOrchestrator {
     }
 
     pub fn on_transport_stop(&mut self) -> Result<(), String> {
+        self.transport_playing = false;
         let was = self.clock_running || self.clock_paused;
         self.clock_running = false;
         self.clock_paused = false;
@@ -354,10 +379,41 @@ impl RigOrchestrator {
     }
 
     pub fn on_transport_tick(&mut self, now_sample: u64, bpm: f64) -> Result<(), String> {
+        let jumped_back = now_sample < self.last_now;
+        let tempo_changed = self.last_bpm > 0.0 && (self.last_bpm - bpm).abs() > 0.01;
+        if jumped_back || tempo_changed {
+            self.rebase_next_pulse(now_sample, bpm, false);
+        }
+        self.last_now = now_sample;
+        self.last_bpm = bpm;
         if !self.send_clock || !self.clock_running {
             return Ok(());
         }
         self.pump_clock(now_sample, bpm)
+    }
+
+    fn rebase_next_pulse(&mut self, now_sample: u64, bpm: f64, skip_at_or_before: bool) {
+        if bpm <= 0.0 {
+            return;
+        }
+        self.scheduler.clear();
+        let beats = samples_to_beats(now_sample, bpm, 48_000);
+        let mut pulse = (beats * f64::from(crate::PPQN)).ceil() as u64;
+        loop {
+            let at = Self::pulse_sample(pulse, bpm);
+            if skip_at_or_before && at <= now_sample {
+                pulse += 1;
+                continue;
+            }
+            if !skip_at_or_before && at < now_sample {
+                pulse += 1;
+                continue;
+            }
+            break;
+        }
+        self.next_pulse = pulse;
+        self.last_now = now_sample;
+        self.last_bpm = bpm;
     }
 
     fn pulse_sample(pulse: u64, bpm: f64) -> u64 {
@@ -371,7 +427,7 @@ impl RigOrchestrator {
         let horizon = now_sample + beats_to_samples(1.0, bpm, 48_000);
         while Self::pulse_sample(self.next_pulse, bpm) <= horizon {
             let at = Self::pulse_sample(self.next_pulse, bpm);
-            if at >= now_sample {
+            if at >= now_sample || (self.next_pulse == 0 && at == 0) {
                 self.scheduler.schedule_at(at, vec![CLOCK]);
             }
             self.next_pulse += 1;
@@ -625,15 +681,54 @@ mod tests {
         orch.on_transport_pause().unwrap();
         orch.clear_monitor();
         orch.on_transport_play(101, 120.0).unwrap();
-        let clocks = orch
-            .monitor()
-            .iter()
-            .filter(|m| m.bytes == [CLOCK])
-            .count();
+        let clocks = orch.monitor().iter().filter(|m| m.bytes == [CLOCK]).count();
         assert_eq!(
             clocks, 0,
             "pulse 1 at sample 100 must not fire again at 101"
         );
         assert_eq!(orch.monitor()[0].bytes, vec![CONTINUE]);
+    }
+
+    #[test]
+    fn clock_rebases_on_seek_and_tempo_and_set_clock_arms_while_running() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.set_clock(true);
+        orch.on_transport_play(0, 120.0).unwrap();
+        orch.on_transport_tick(96_000, 120.0).unwrap();
+        let after_run = orch.monitor().iter().filter(|m| m.bytes == [CLOCK]).count();
+        assert!(
+            after_run > 1,
+            "expected several clock pulses, got {after_run}"
+        );
+        orch.clear_monitor();
+        orch.on_transport_tick(0, 120.0).unwrap();
+        assert!(
+            orch.monitor().iter().any(|m| m.bytes == [CLOCK]),
+            "seek back to sample 0 must rebase next_pulse so clock resumes"
+        );
+        orch.clear_monitor();
+        orch.on_transport_tick(48_000, 60.0).unwrap();
+        let burst = orch.monitor().iter().filter(|m| m.bytes == [CLOCK]).count();
+        assert!(
+            burst < 30,
+            "tempo change must rebase instead of flushing a burst, got {burst}"
+        );
+
+        orch.clear_monitor();
+        orch.on_transport_play(48_000, 60.0).unwrap();
+        assert!(
+            orch.monitor().iter().all(|m| m.bytes[0] != START),
+            "Play while already running must not send a second START"
+        );
+
+        let mut late = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        late.on_transport_play(0, 120.0).unwrap();
+        assert!(late.monitor().is_empty());
+        late.set_clock(true);
+        assert_eq!(late.monitor()[0].bytes, vec![START]);
+        assert!(
+            late.monitor().iter().any(|m| m.bytes == [CLOCK]),
+            "Send Clock mid-song must arm ticks"
+        );
     }
 }

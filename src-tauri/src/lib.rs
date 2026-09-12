@@ -393,13 +393,27 @@ fn transport_stop(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+fn notify_rig_playhead(state: &AppState) -> Result<(), String> {
+    let eng = state.engine.lock();
+    let tel = eng.get_telemetry();
+    let now = beats_to_samples(
+        tel.transport.position_beats,
+        tel.transport.bpm,
+        eng.sample_rate(),
+    );
+    let bpm = tel.transport.bpm;
+    drop(eng);
+    state.rig.lock().on_transport_tick(now, bpm)
+}
+
 #[tauri::command]
 fn transport_seek_bar(bar: u32, state: State<'_, AppState>) -> Result<(), String> {
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.ensure_band_grid()?;
     eng.transport_seek_bar(bar);
-    Ok(())
+    drop(eng);
+    notify_rig_playhead(&*state)
 }
 
 #[tauri::command]
@@ -431,7 +445,8 @@ fn transport_set_tempo(bpm: f64, state: State<'_, AppState>) -> Result<(), Strin
     eng.ensure_timing_editable()?;
     eng.ensure_band_grid()?;
     eng.transport_set_tempo(bpm);
-    Ok(())
+    drop(eng);
+    notify_rig_playhead(&*state)
 }
 
 #[tauri::command]
