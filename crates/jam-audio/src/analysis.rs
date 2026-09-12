@@ -214,6 +214,19 @@ mod tests {
     }
 
     #[test]
+    fn silence_does_not_invent_timing_or_dynamics_floors() {
+        let analyzer = TakeAnalyzer::new(48_000);
+        let result = analyzer.analyze(&[0.0; 48_000], 120.0);
+        assert_eq!(result.detected_transients, 0);
+        assert_eq!(result.timing_accuracy_pct, 0.0);
+        assert_eq!(result.dynamic_consistency_pct, 0.0);
+        assert!(result.timing_accuracy_pct < 65.0);
+        assert!(result.dynamic_consistency_pct < 70.0);
+        assert!(result.mean_grid_distance_ms.is_none());
+        assert!(result.attack_level_cv_pct.is_none());
+    }
+
+    #[test]
     fn empty_and_silent_input_have_no_measurements_or_perfect_scores() {
         let analyzer = TakeAnalyzer::new(48_000);
         for samples in [vec![], vec![0.0; 48_000]] {
