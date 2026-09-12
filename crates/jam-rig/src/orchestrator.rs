@@ -314,12 +314,19 @@ impl RigOrchestrator {
         if !self.send_clock {
             return Ok(());
         }
-        let status = if self.clock_paused { CONTINUE } else { START };
+        let resume = self.clock_paused;
+        let status = if resume { CONTINUE } else { START };
         self.clock_paused = false;
         self.clock_running = true;
         self.send_clock_byte(status)?;
         let beats = samples_to_beats(now_sample, bpm, 48_000);
         self.next_pulse = (beats * f64::from(crate::PPQN)).ceil() as u64;
+        if resume && bpm > 0.0 {
+            while Self::pulse_sample(self.next_pulse, bpm) <= now_sample {
+                self.next_pulse += 1;
+            }
+            self.scheduler.clear();
+        }
         self.pump_clock(now_sample, bpm)
     }
 
@@ -353,13 +360,20 @@ impl RigOrchestrator {
         self.pump_clock(now_sample, bpm)
     }
 
+    fn pulse_sample(pulse: u64, bpm: f64) -> u64 {
+        beats_to_samples(pulse as f64 / f64::from(crate::PPQN), bpm, 48_000)
+    }
+
     fn pump_clock(&mut self, now_sample: u64, bpm: f64) -> Result<(), String> {
+        if bpm <= 0.0 {
+            return Ok(());
+        }
         let horizon = now_sample + beats_to_samples(1.0, bpm, 48_000);
-        while beats_to_samples(self.next_pulse as f64 / f64::from(crate::PPQN), bpm, 48_000)
-            <= horizon
-        {
-            let at = beats_to_samples(self.next_pulse as f64 / f64::from(crate::PPQN), bpm, 48_000);
-            self.scheduler.schedule_at(at, vec![CLOCK]);
+        while Self::pulse_sample(self.next_pulse, bpm) <= horizon {
+            let at = Self::pulse_sample(self.next_pulse, bpm);
+            if at >= now_sample {
+                self.scheduler.schedule_at(at, vec![CLOCK]);
+            }
             self.next_pulse += 1;
         }
         for (_, bytes) in self.scheduler.due(now_sample) {
@@ -600,5 +614,26 @@ mod tests {
         orch.clear_monitor();
         orch.on_transport_play(0, 120.0).unwrap();
         assert_eq!(orch.monitor()[0].bytes, vec![START]);
+    }
+
+    #[test]
+    fn resume_does_not_flush_a_clock_pulse_already_sent_before_pause() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.set_clock(true);
+        orch.on_transport_play(0, 120.0).unwrap();
+        orch.on_transport_tick(100, 120.0).unwrap();
+        orch.on_transport_pause().unwrap();
+        orch.clear_monitor();
+        orch.on_transport_play(101, 120.0).unwrap();
+        let clocks = orch
+            .monitor()
+            .iter()
+            .filter(|m| m.bytes == [CLOCK])
+            .count();
+        assert_eq!(
+            clocks, 0,
+            "pulse 1 at sample 100 must not fire again at 101"
+        );
+        assert_eq!(orch.monitor()[0].bytes, vec![CONTINUE]);
     }
 }
