@@ -297,6 +297,9 @@ impl Machine {
     }
 
     pub fn apply(&mut self, patch: Config) -> Result<(), String> {
+        if self.phase == "idle" {
+            return Err("Controls must wait for setupComplete".into());
+        }
         validate(&patch)?;
         let reset =
             (patch.bpm - self.config.bpm).abs() > f64::EPSILON || patch.scale != self.config.scale;
@@ -404,5 +407,26 @@ mod tests {
         machine.send(setup_message());
         machine.send(playback("PLAY"));
         assert!(machine.receive(&protocol()["setupReply"]).is_err());
+    }
+
+    #[test]
+    fn apply_before_setup_complete_is_refused() {
+        let mut machine = Machine::default();
+        machine.send(setup_message());
+        assert_eq!(
+            machine.apply(Config::default()).unwrap_err(),
+            "Controls must wait for setupComplete"
+        );
+        assert!(machine
+            .outbound
+            .iter()
+            .all(|m| m.get("playbackControl").is_none() && m.get("clientContent").is_none()));
+        machine.receive(&protocol()["setupReply"]).unwrap();
+        assert_eq!(machine.phase, "ready");
+        machine.apply(Config::default()).unwrap();
+        assert!(machine
+            .outbound
+            .iter()
+            .any(|m| m.get("clientContent").is_some()));
     }
 }
