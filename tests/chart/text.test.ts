@@ -264,6 +264,48 @@ arrangement: mix 2, chorus x2, verse 2
     expect(problems.length).toBeGreaterThan(0);
   });
 
+  it("serializes arrangement by section name so UUID ids round-trip (#327)", () => {
+    const verseId = "section-7c9b2e4a-1111-2222-3333-444444444444";
+    const chorusId = "section-8d0c3f5b-5555-6666-7777-888888888888";
+    const chart: Chart = {
+      schemaVersion: 1,
+      id: "named-form",
+      name: "named-form",
+      keyTonic: 0,
+      mode: "major",
+      timeSig: [4, 4],
+      defaultBpm: 120,
+      sections: [
+        {
+          id: verseId,
+          name: "Verse",
+          bars: [[{ chord: "Am", beats: 4 }]],
+        },
+        {
+          id: chorusId,
+          name: "Chorus",
+          bars: [[{ chord: "C", beats: 4 }]],
+        },
+      ],
+      arrangement: [
+        { sectionId: chorusId, repeats: 1 },
+        { sectionId: verseId, repeats: 2 },
+        { sectionId: chorusId, repeats: 1 },
+      ],
+    };
+    const text = chartToText(chart);
+    expect(text).toContain("arrangement: Chorus, Verse x2, Chorus");
+    expect(text).not.toContain(verseId);
+    expect(text).not.toContain(chorusId);
+    const { chart: parsed, problems } = parseChartText(text);
+    expect(problems).toEqual([]);
+    expect(parsed?.arrangement).toEqual([
+      { sectionId: "chorus", repeats: 1 },
+      { sectionId: "verse", repeats: 2 },
+      { sectionId: "chorus", repeats: 1 },
+    ]);
+  });
+
   it("round-trips every bundled chart through text", () => {
     const dir = path.resolve(process.cwd(), "charts");
     for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".json"))) {

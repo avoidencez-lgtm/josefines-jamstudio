@@ -438,9 +438,12 @@ export function chartToText(chart: Chart): string {
   if (!inOrder) {
     out.push(
       `arrangement: ${chart.arrangement
-        .map((a) =>
-          a.repeats > 1 ? `${a.sectionId} x${a.repeats}` : a.sectionId,
-        )
+        .map((a) => {
+          const name =
+            chart.sections.find((s) => s.id === a.sectionId)?.name ??
+            a.sectionId;
+          return a.repeats > 1 ? `${name} x${a.repeats}` : name;
+        })
         .join(", ")}`,
     );
   }
