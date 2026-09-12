@@ -1,4 +1,4 @@
-//! export: DAW multi-track export packaging (WAV stems + SMF Type 1 MIDI tempo map).
+//! export: DAW multi-track export packaging (WAV stems + SMF MIDI tempo map).
 
 use std::fs::File;
 use std::io::Write;
@@ -43,7 +43,7 @@ fn stem_key_ok(name: &str) -> bool {
 }
 
 impl DawExporter {
-    /// Generates Standard MIDI File (SMF Type 1) with tempo, time signature, and section markers.
+    /// Generates Standard MIDI File (SMF Type 0) with tempo, time signature, and section markers.
     pub fn build_tempo_map_midi(tempo: f64, sections: &[(&str, u32)]) -> std::io::Result<Vec<u8>> {
         Self::build_tempo_map_midi_with_meter(tempo, (4, 4), sections)
     }
@@ -56,7 +56,7 @@ impl DawExporter {
         let micros = midi_tempo(tempo, time_sig)?;
         let mut midi = Vec::new();
 
-        // SMF Header: 'MThd', length 6, format 1 (multi-track / tempo map), 1 track, 480 ticks/quarter
+        // SMF Header: 'MThd', length 6, format 0, 1 track, 480 ticks/quarter.
         midi.extend_from_slice(b"MThd");
         midi.extend_from_slice(&6u32.to_be_bytes());
         midi.extend_from_slice(&0u16.to_be_bytes()); // Format 0 (single track)
@@ -127,7 +127,7 @@ impl DawExporter {
     }
 
     /// Writes the bundle a DAW needs to reopen a take at bar 1: the recorded stems, an
-    /// SMF Type 1 tempo map with section markers, and a JSON sidecar describing both.
+    /// SMF tempo map with section markers, and a JSON sidecar describing both.
     pub fn export_take_bundle(
         output_dir: &Path,
         job: &ExportJob<'_>,
@@ -206,7 +206,7 @@ impl DawExporter {
             "sections": job.sections.iter().map(|(n, b)| serde_json::json!({"name": n, "bar": b})).collect::<Vec<_>>(),
             "stems": copied_stems,
             "tempoMap": midi_path.to_string_lossy(),
-            "format": "24-bit PCM WAV + SMF Type 1 MIDI",
+            "format": "WAV stems + SMF MIDI",
             "howTo": "Import the tempo map first so the DAW adopts the tempo and markers, then drop every stem at bar 1."
         });
         File::create(&json_path)?.write_all(serde_json::to_string_pretty(&info)?.as_bytes())?;
@@ -536,7 +536,7 @@ mod tests {
         assert_eq!(
             &midi[8..12],
             &[0, 0, 0, 1],
-            "single-track SMF must be Format 0"
+            "constant-tempo export uses Format 0"
         );
         assert!(
             midi.ends_with(&[0x8F, 0x00, 0xFF, 0x2F, 0x00]),

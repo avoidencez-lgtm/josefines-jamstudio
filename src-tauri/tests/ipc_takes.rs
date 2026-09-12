@@ -731,11 +731,16 @@ fn daw_export_writes_tempo_map_stems_info_and_reaper_script() {
         names,
         ["band", "guitar-di", "master"].map(|s| format!("{}-{s}.wav", take.id))
     );
-    for path in &copied {
-        assert_eq!(path.parent(), Some(dir.as_path()));
+    for (role, source) in [
+        ("band", &take.band),
+        ("guitar-di", &take.input),
+        ("master", &take.master),
+    ] {
+        let path = dir.join(format!("{}-{role}.wav", take.id));
+        assert!(copied.contains(&path));
         assert_eq!(
-            std::fs::metadata(path).unwrap().len(),
-            std::fs::metadata(&take.input).unwrap().len(),
+            std::fs::read(&path).unwrap(),
+            std::fs::read(source).unwrap(),
             "{} is a byte-for-byte copy",
             path.display()
         );
