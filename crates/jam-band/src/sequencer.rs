@@ -403,7 +403,10 @@ impl BandSequencer {
                         self.is_stopped = false;
                         self.is_playing_ending = false;
                         if !self.mute_drums {
-                            self.sampler.trigger("crash", 0.9);
+                            self.fire(SpanEventKind::Drum {
+                                instrument: "crash".into(),
+                                velocity: 0.9,
+                            });
                         }
                         self.is_playing_fill = false;
                         self.update_pattern_for_intensity();
@@ -411,14 +414,20 @@ impl BandSequencer {
                     Cue::Stop => {
                         // A break: everybody hits the downbeat, then drops out.
                         if !self.mute_drums {
-                            self.sampler.trigger("kick", 0.95);
-                            self.sampler.trigger("crash", 0.8);
+                            self.fire(SpanEventKind::Drum {
+                                instrument: "kick".into(),
+                                velocity: 0.95,
+                            });
+                            self.fire(SpanEventKind::Drum {
+                                instrument: "crash".into(),
+                                velocity: 0.8,
+                            });
                         }
                         self.is_stopped = true;
                         self.is_playing_fill = false;
                         self.is_playing_ending = false;
+                        self.release_pending_notes();
                         self.synth.all_notes_off();
-                        self.pending_note_offs.clear();
                         self.pending_note_ons.clear();
                     }
                     Cue::Ending => {
@@ -437,8 +446,8 @@ impl BandSequencer {
                             self.is_playing_ending = false;
                             self.is_stopped = true;
                             self.ending_complete = true;
+                            self.release_pending_notes();
                             self.synth.all_notes_off();
-                            self.pending_note_offs.clear();
                             self.pending_note_ons.clear();
                             self.update_pattern_for_intensity();
                         }
@@ -468,6 +477,7 @@ impl BandSequencer {
 
             TimelineEvent::LoopWrapped { .. } => {
                 self.release_pending_notes();
+                self.synth.all_notes_off();
                 self.pending_note_ons.clear();
                 self.update_pattern_for_intensity();
             }
@@ -666,7 +676,10 @@ impl BandSequencer {
 
     fn release_pending_notes(&mut self) {
         for n in std::mem::take(&mut self.pending_note_offs) {
-            self.synth.note_off(n.channel, n.key);
+            self.fire(SpanEventKind::NoteOff {
+                channel: n.channel,
+                key: n.key,
+            });
         }
     }
 
@@ -1621,6 +1634,72 @@ mod tests {
         });
         assert_eq!(seq.current_pattern.drums.hits[0].instrument, "snare");
         assert_eq!(seq.pending_intensity, None);
+    }
+
+    #[test]
+    fn exported_midi_includes_cue_hits_and_wrap_note_offs() {
+        let _lock = crate::kit::lock_test_env();
+        let style = style_with(
+            0.5,
+            vec![],
+            vec![BassNote {
+                degree: 1,
+                octave: 0,
+                at_beats: 0.0,
+                dur_beats: 4.0,
+                velocity: 0.9,
+            }],
+            vec![],
+        );
+        let mut seq = BandSequencer::new(style, 48_000, 1);
+        seq.cue(Cue::Crash);
+        seq.handle_timeline_event(&TimelineEvent::Bar {
+            bar: 1,
+            is_count_in: false,
+        });
+        assert!(
+            seq.note_events
+                .iter()
+                .any(|n| n.bytes[0] == 0x99 && n.bytes[1] == 49),
+            "Crash cue must reach the MIDI export, got {:?}",
+            seq.note_events
+        );
+
+        seq.note_events.clear();
+        let mut l = vec![0.0f32; 12_000];
+        let mut r = vec![0.0f32; 12_000];
+        seq.render_span(
+            &Span {
+                offset: 0,
+                frames: 12_000,
+                start_beats: 0.0,
+            },
+            24_000.0,
+            4.0,
+            &mut l,
+            &mut r,
+        );
+        let ons: Vec<_> = seq
+            .note_events
+            .iter()
+            .filter(|n| n.bytes[0] & 0xf0 == 0x90)
+            .cloned()
+            .collect();
+        assert!(!ons.is_empty());
+        seq.handle_timeline_event(&TimelineEvent::LoopWrapped {
+            from_sample: 96_000,
+            to_sample: 0,
+        });
+        for on in &ons {
+            let ch = on.bytes[0] & 0x0f;
+            assert!(
+                seq.note_events
+                    .iter()
+                    .any(|n| n.bytes[0] == 0x80 | ch && n.bytes[1] == on.bytes[1]),
+                "note-on {on:?} needs a wrap note-off, events {:?}",
+                seq.note_events
+            );
+        }
     }
 
     #[test]
