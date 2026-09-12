@@ -2,6 +2,8 @@
 mod common;
 use common::Studio;
 use serde_json::{json, Value};
+use std::sync::{Arc, Mutex};
+use tauri::Listener;
 
 #[test]
 fn lyria_start_is_not_configured_without_a_recorded_session() {
@@ -54,10 +56,23 @@ fn recorded_protocol_fixture_is_exclusive_and_does_not_drive_the_clock() {
     );
     assert_eq!(patched["requestedBpm"], 110.0);
     assert_eq!(patched["drivesClock"], false);
+    let seen: Arc<Mutex<Vec<Value>>> = Arc::default();
+    let sink = Arc::clone(&seen);
+    studio.app().listen_any("lyria:state", move |event| {
+        sink.lock()
+            .unwrap()
+            .push(serde_json::from_str(event.payload()).unwrap());
+    });
     studio.ok("transport_play", json!({}));
     let after_band = studio.ok("lyria_status", json!({}));
     assert_eq!(after_band["phase"], "idle");
     assert_eq!(after_band["drivesClock"], false);
+    let events = seen.lock().unwrap();
+    assert!(
+        events.iter().any(|status| status["phase"] == "idle"),
+        "transport_play must emit lyria:state idle, got {events:?}"
+    );
+    drop(events);
     studio.ok("transport_stop", json!({}));
     let again = studio.ok("lyria_start", json!({}));
     assert_eq!(again["phase"], "playing");

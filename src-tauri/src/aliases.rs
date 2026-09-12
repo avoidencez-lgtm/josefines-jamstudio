@@ -90,7 +90,7 @@ pub fn mixer_set_bus<R: Runtime>(
         {"id":"band","gainDb": 20.0 * band.max(1e-6).log10(), "muted": band == 0.0, "soloed": false},
         {"id":"click","gainDb": 20.0 * click.max(1e-6).log10(), "muted": click == 0.0, "soloed": false},
     ]);
-    let _ = app.emit("mixer.state", &buses);
+    let _ = app.emit("mixer:state", &buses);
     Ok(buses)
 }
 

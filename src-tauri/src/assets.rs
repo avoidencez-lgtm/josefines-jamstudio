@@ -326,7 +326,7 @@ pub async fn assets_ensure<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<Vec<PackStatus>, String> {
     let packs = ensure(&ids.unwrap_or_default()).await?;
-    let _ = app.emit("assets.state", &packs);
+    let _ = app.emit("assets:state", &packs);
     Ok(packs)
 }
 
