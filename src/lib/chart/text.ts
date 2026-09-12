@@ -487,6 +487,7 @@ export interface FlatBar {
   sectionId: string;
   sectionName: string;
   chords: BarChord[];
+  styleOverrideId?: string | null;
 }
 
 /** Expands the arrangement into the bar list the band actually plays (mirrors `Chart::resolve`). */
@@ -502,6 +503,7 @@ export function resolveChart(chart: Chart): FlatBar[] {
           sectionId: section.id,
           sectionName: section.name,
           chords: bar,
+          styleOverrideId: section.styleOverrideId ?? null,
         });
       }
     }

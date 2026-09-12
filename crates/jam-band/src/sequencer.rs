@@ -89,6 +89,8 @@ pub struct SectionBand {
 
 pub struct BandSequencer {
     pub section_bands: std::collections::BTreeMap<String, SectionBand>,
+    pub section_styles: std::collections::BTreeMap<String, Style>,
+    chart_default_style: Option<Style>,
     section_applied: String,
     part_gains: [f32; 3],
     pub part_audio: [Vec<f32>; 4],
@@ -136,6 +138,8 @@ impl BandSequencer {
 
         let mut seq = Self {
             section_bands: Default::default(),
+            section_styles: Default::default(),
+            chart_default_style: None,
             section_applied: String::new(),
             part_gains: [1.0; 3],
             part_audio: std::array::from_fn(|_| Vec::with_capacity(256)),
@@ -174,6 +178,8 @@ impl BandSequencer {
 
     pub fn clear_song(&mut self) {
         self.section_bands.clear();
+        self.section_styles.clear();
+        self.chart_default_style = None;
         self.section_applied.clear();
         self.part_gains = [1.0; 3];
         self.set_parts(false, false, false);
@@ -268,6 +274,7 @@ impl BandSequencer {
     }
 
     pub fn load_chart(&mut self, chart: ResolvedChart) {
+        self.chart_default_style = Some(self.style.clone());
         self.retarget_chart(chart, 1, 1);
     }
 
@@ -584,6 +591,16 @@ impl BandSequencer {
             self.intensity = 0.5;
             self.part_gains = settings.gains;
             self.set_parts(settings.muted[0], settings.muted[1], settings.muted[2]);
+            return;
+        }
+        if let Some(style) = self.section_styles.get(&id) {
+            if style.id != self.style.id {
+                self.set_style(style.clone());
+            }
+        } else if let Some(default) = &self.chart_default_style {
+            if default.id != self.style.id {
+                self.set_style(default.clone());
+            }
         }
     }
 
@@ -1123,6 +1140,7 @@ mod tests {
                         beats: 2.0,
                     },
                 ],
+                style_override_id: None,
             }],
         });
         let mut events = Vec::new();
@@ -1166,6 +1184,7 @@ mod tests {
                 chord: chord.into(),
                 beats: 4.0,
             }],
+            style_override_id: None,
         };
         let key_of = |chord: &str| {
             let mut seq = BandSequencer::new(style.clone(), 48_000, 1);
@@ -1220,6 +1239,7 @@ mod tests {
                 chord: chord.into(),
                 beats: 4.0,
             }],
+            style_override_id: None,
         };
         seq.load_chart(ResolvedChart {
             id: "nc".into(),

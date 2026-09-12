@@ -751,7 +751,9 @@ fn band_load_chart(
     } else {
         eng.validate_transport_meter(chart.time_sig)?;
     }
+    let section_styles = chart_section_styles(&state.library.lock(), &chart);
     eng.band_load_chart(chart.resolve());
+    eng.band_set_section_styles(section_styles);
     restore_rig_mappings(&state);
     Ok(chart)
 }
@@ -761,11 +763,13 @@ fn band_load_chart(
 fn band_load_chart_inline(chart: Chart, state: State<'_, AppState>) -> Result<(), String> {
     library::validate_chart(&chart)?;
     let style = state.library.lock().style_for_chart(&chart)?;
+    let section_styles = chart_section_styles(&state.library.lock(), &chart);
     let mut eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.band_set_style(style);
     apply_chart_timing(&eng, &chart);
     eng.band_load_chart(chart.resolve());
+    eng.band_set_section_styles(section_styles);
     restore_rig_mappings(&state);
     Ok(())
 }
@@ -775,6 +779,26 @@ fn apply_chart_timing(eng: &AudioEngine, chart: &Chart) {
     if chart.default_bpm > 0.0 {
         eng.transport_set_tempo(chart.default_bpm);
     }
+}
+
+fn chart_section_styles(
+    library: &Library,
+    chart: &Chart,
+) -> std::collections::BTreeMap<String, Style> {
+    let mut map = std::collections::BTreeMap::new();
+    for section in &chart.sections {
+        let Some(id) = section.style_override_id.as_deref() else {
+            continue;
+        };
+        let Ok(style) = library.style(id) else {
+            continue;
+        };
+        if style.feel.time_sig != chart.time_sig {
+            continue;
+        }
+        map.insert(section.id.clone(), style);
+    }
+    map
 }
 
 fn restore_rig_mappings(state: &AppState) {

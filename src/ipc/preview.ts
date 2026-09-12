@@ -315,6 +315,18 @@ export function createPreviewEngine(
     return { now, next, section: b.sectionName };
   }
 
+  let lastStyleSection = "";
+  function applySectionStyle(sectionId: string, override?: string | null) {
+    if (sectionId === lastStyleSection) return;
+    lastStyleSection = sectionId;
+    const id = override || chart.defaultStyleId;
+    if (!id) return;
+    const s = styles.get(id);
+    if (!s) return;
+    band.style_id = s.id;
+    band.style_name = s.name;
+  }
+
   function refreshBand() {
     const barIdx = Math.max(0, transport.bar - 1);
     const beatInBar = transport.position_beats - barIdx * beatsPerBar();
@@ -322,6 +334,8 @@ export function createPreviewEngine(
     band.current_chord = c.now;
     band.next_chord = c.next;
     band.current_section = c.section;
+    const resolved = bars[((barIdx % barCount()) + barCount()) % barCount()];
+    applySectionStyle(resolved?.sectionId ?? "", resolved?.styleOverrideId);
     if (transport.state === "playing" && c.section) rigOnSection(c.section);
   }
 
@@ -491,6 +505,7 @@ export function createPreviewEngine(
   function loadChart(next: Chart, follow: boolean) {
     chart = next;
     bars = resolveChart(chart);
+    lastStyleSection = "";
     if (follow) {
       transport.time_signature = chart.timeSig;
       if (chart.defaultBpm > 0) transport.bpm = chart.defaultBpm;

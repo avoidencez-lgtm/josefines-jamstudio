@@ -40,7 +40,9 @@ describe("chart text parser", () => {
   });
 
   it("accepts slash chords with a lowercase bass note (#350)", () => {
-    const { chart, problems } = parseChartText("[A]\n| C/e | G/b | D/f# | Am/g |");
+    const { chart, problems } = parseChartText(
+      "[A]\n| C/e | G/b | D/f# | Am/g |",
+    );
     expect(problems).toEqual([]);
     expect(chart?.sections[0].bars.map((b) => b[0].chord)).toEqual([
       "C/e",
@@ -195,6 +197,18 @@ arrangement: chorus, verse x2, chorus
       "verse",
       "chorus",
       "chorus",
+    ]);
+    expect(
+      resolveChart(chart as Chart).map((b) => b.styleOverrideId ?? null),
+    ).toEqual([
+      null,
+      null,
+      "rock-straight",
+      "rock-straight",
+      "rock-straight",
+      "rock-straight",
+      null,
+      null,
     ]);
   });
 
