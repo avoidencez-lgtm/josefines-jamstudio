@@ -58,9 +58,15 @@ fn is_zero_f32(value: &f32) -> bool {
 }
 
 impl RecorderSettings {
-    pub fn device_key(input: Option<&str>, output: Option<&str>, channel: u16) -> String {
+    pub fn device_key(
+        input: Option<&str>,
+        output: Option<&str>,
+        channel: u16,
+        sample_rate: u32,
+        buffer_size: u32,
+    ) -> String {
         format!(
-            "{}|{}|{channel}",
+            "{}|{}|{channel}|{sample_rate}|{buffer_size}",
             input.unwrap_or("default"),
             output.unwrap_or("default")
         )
