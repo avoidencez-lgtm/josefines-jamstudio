@@ -802,8 +802,9 @@ fn record_without_a_loaded_song_records_the_default_band() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let take_id = studio.ok("originals_record", json!({ "sessionId": "free-play" }));
-    wait_until("playback", || {
-        telemetry(&studio)["transport"]["state"] == "playing"
+    wait_until("one beat of recording", || {
+        let t = telemetry(&studio)["transport"].clone();
+        t["state"] == "playing" && t["position_beats"].as_f64() >= Some(1.0)
     });
     let take = studio.ok("recorder_stop", json!({}));
     assert_eq!(take["id"], take_id);
