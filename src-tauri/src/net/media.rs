@@ -490,8 +490,38 @@ pub fn download_url(m: &Model, uri: &str) -> Result<reqwest::Url, String> {
     }
     Ok(url)
 }
-pub async fn download(m: &Model, uri: &str, store: &dyn SecretStore) -> Result<Vec<u8>, String> {
+fn download_entry(
+    m: &Model,
+    path: &str,
+    status: u16,
+    duration_ms: u64,
+    bytes_in: u64,
+    error: Option<String>,
+) -> CostEntry {
+    CostEntry {
+        at_ms: super::now_ms(),
+        provider: m.provider.clone(),
+        method: "GET".into(),
+        path: super::strip_query(path),
+        status,
+        duration_ms,
+        bytes_out: 0,
+        bytes_in,
+        error,
+        model: Some(m.model.clone()),
+        estimated_cost_usd: None,
+        ..CostEntry::default()
+    }
+}
+
+pub async fn download(
+    m: &Model,
+    uri: &str,
+    store: &dyn SecretStore,
+    log: &CostLog,
+) -> Result<Vec<u8>, String> {
     let url = download_url(m, uri)?;
+    let path = super::strip_query(url.path());
     super::live_guard("a media download")?;
     let mut req = provider_client()
         .no_proxy()
@@ -506,17 +536,31 @@ pub async fn download(m: &Model, uri: &str, store: &dyn SecretStore) -> Result<V
         );
     }
     // Runway's signed CDN URL needs no API key. Never forward credentials or follow redirects.
-    let resp = req
-        .send()
-        .await
-        .map_err(|_| "Media download failed; refresh the job to retry.")?;
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Download HTTP {}. Refresh the job or import the dashboard download.",
-            resp.status().as_u16()
-        ));
+    let started = Instant::now();
+    let mut status = 0;
+    let result = async {
+        let resp = req
+            .send()
+            .await
+            .map_err(|_| "Media download failed; refresh the job to retry.".to_string())?;
+        status = resp.status().as_u16();
+        if !resp.status().is_success() {
+            return Err(format!(
+                "Download HTTP {status}. Refresh the job or import the dashboard download."
+            ));
+        }
+        read_bounded(resp, 128 * 1024 * 1024).await
     }
-    read_bounded(resp, 128 * 1024 * 1024).await
+    .await;
+    let _ = log.append(&download_entry(
+        m,
+        &path,
+        status,
+        started.elapsed().as_millis() as u64,
+        result.as_ref().map_or(0, |v| v.len() as u64),
+        result.as_ref().err().cloned(),
+    ));
+    result
 }
 
 pub async fn poll(
@@ -753,5 +797,31 @@ mod tests {
             .mime_str(audio_mime("wav").unwrap())
             .unwrap();
         drop(part);
+    }
+
+    #[test]
+    fn media_download_cost_entry_is_a_get_with_bytes() {
+        let m = catalog().into_iter().find(|m| m.id == "omni").unwrap();
+        let dir = std::env::temp_dir().join(format!("jam-download-cost-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        log.append(&download_entry(
+            &m,
+            "/v1beta/files/abc?alt=media",
+            200,
+            12,
+            50_000,
+            None,
+        ))
+        .unwrap();
+        let listed = log.list(1);
+        assert_eq!(listed[0].method, "GET");
+        assert_eq!(listed[0].bytes_in, 50_000);
+        assert_eq!(listed[0].path, "/v1beta/files/abc");
+        assert_eq!(listed[0].provider, m.provider);
+        assert_eq!(listed[0].model.as_deref(), Some(m.model.as_str()));
+        assert_eq!(listed[0].status, 200);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -1192,7 +1192,7 @@ async fn finish_job(
                 job,
             )?;
             (
-                api::download(m, &uri, state.secret_store.as_ref()).await?,
+                api::download(m, &uri, state.secret_store.as_ref(), &state.cost_log).await?,
                 e,
                 String::new(),
             )
