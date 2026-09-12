@@ -70,6 +70,15 @@ struct PendingNoteOff {
     key: u8,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PendingNoteOn {
+    at_beats: f64,
+    channel: u8,
+    key: u8,
+    velocity: f32,
+    off_at_beats: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MidiNote {
@@ -118,6 +127,7 @@ pub struct BandSequencer {
     is_playing_ending: bool,
     ending_complete: bool,
     pending_note_offs: Vec<PendingNoteOff>,
+    pending_note_ons: Vec<PendingNoteOn>,
     /// Position (absolute beats) up to which pattern events have been scheduled.
     cursor_beats: Option<f64>,
     sample_rate: u32,
@@ -165,6 +175,7 @@ impl BandSequencer {
             is_playing_ending: false,
             ending_complete: false,
             pending_note_offs: Vec::with_capacity(64),
+            pending_note_ons: Vec::with_capacity(16),
             cursor_beats: None,
             sample_rate,
         };
@@ -307,6 +318,7 @@ impl BandSequencer {
         self.sampler.all_off();
         self.synth.all_notes_off();
         self.pending_note_offs.clear();
+        self.pending_note_ons.clear();
         self.pending_cue = Cue::None;
         self.active_cue = Cue::None;
         self.is_stopped = false;
@@ -402,6 +414,7 @@ impl BandSequencer {
                         self.is_playing_ending = false;
                         self.synth.all_notes_off();
                         self.pending_note_offs.clear();
+                        self.pending_note_ons.clear();
                     }
                     Cue::Ending => {
                         self.is_stopped = false;
@@ -420,6 +433,7 @@ impl BandSequencer {
                             self.ending_complete = true;
                             self.synth.all_notes_off();
                             self.pending_note_offs.clear();
+                            self.pending_note_ons.clear();
                             self.update_pattern_for_intensity();
                         }
                     }
@@ -448,6 +462,7 @@ impl BandSequencer {
 
             TimelineEvent::LoopWrapped { .. } => {
                 self.release_pending_notes();
+                self.pending_note_ons.clear();
                 self.update_pattern_for_intensity();
             }
         }
@@ -480,6 +495,29 @@ impl BandSequencer {
         self.cursor_beats = Some(range_end);
 
         let mut events: Vec<SpanEvent> = Vec::with_capacity(32);
+
+        // Note-ons that spilled past a previous block (strum spread).
+        let mut i = 0;
+        while i < self.pending_note_ons.len() {
+            let n = self.pending_note_ons[i];
+            if n.at_beats < range_end {
+                let offset = ((n.at_beats - range_start).max(0.0) * samples_per_beat) as usize;
+                if offset < frames {
+                    events.push(SpanEvent {
+                        offset,
+                        kind: SpanEventKind::NoteOn {
+                            channel: n.channel,
+                            key: n.key,
+                            velocity: n.velocity,
+                            off_at_beats: n.off_at_beats,
+                        },
+                    });
+                    self.pending_note_ons.swap_remove(i);
+                    continue;
+                }
+            }
+            i += 1;
+        }
 
         // Note-offs that fall in (or before) this span.
         let mut i = 0;
@@ -835,15 +873,27 @@ impl BandSequencer {
                     let velocity = self.humanize_velocity(strum.velocity);
                     let dur = strum.dur_beats.max(0.05);
                     for (i, key) in notes.into_iter().enumerate() {
-                        events.push(SpanEvent {
-                            offset: (base_offset + i * spread).min(frames - 1),
-                            kind: SpanEventKind::NoteOn {
+                        let offset = base_offset + i * spread;
+                        let off_at_beats = t + dur * 0.9;
+                        if offset >= frames {
+                            self.pending_note_ons.push(PendingNoteOn {
+                                at_beats: start + offset as f64 / samples_per_beat,
                                 channel: CH_COMP,
                                 key,
                                 velocity,
-                                off_at_beats: t + dur * 0.9,
-                            },
-                        });
+                                off_at_beats,
+                            });
+                        } else {
+                            events.push(SpanEvent {
+                                offset,
+                                kind: SpanEventKind::NoteOn {
+                                    channel: CH_COMP,
+                                    key,
+                                    velocity,
+                                    off_at_beats,
+                                },
+                            });
+                        }
                     }
                 }
             }
@@ -1118,6 +1168,75 @@ mod tests {
         });
         assert_eq!(seq.pending_note_offs.len(), 0);
         assert_eq!(seq.synth.sustaining_voices(CH_BASS), 0);
+    }
+
+    #[test]
+    fn strum_spread_crosses_block_boundaries() {
+        let _lock = crate::kit::lock_test_env();
+        let mut style = style_with(
+            0.0,
+            vec![],
+            vec![],
+            vec![CompStrum {
+                at_beats: 0.0,
+                dur_beats: 2.0,
+                velocity: 0.8,
+                direction: "down".into(),
+            }],
+        );
+        style.patterns[0].comp.voicing = "drop2".into();
+        let mut seq = BandSequencer::new(style, 48_000, 1);
+        let spread = (STRUM_SPREAD_SECS * 48_000.0) as usize;
+        assert!(spread > 256, "spread must exceed a render block");
+        let mut l = vec![0.0f32; 256];
+        let mut r = vec![0.0f32; 256];
+        let span = Span {
+            offset: 0,
+            frames: 256,
+            start_beats: 0.0,
+        };
+        seq.render_span(&span, 24_000.0, 4.0, &mut l, &mut r);
+        let first_block_ons: Vec<u64> = seq
+            .note_events
+            .iter()
+            .filter(|n| n.bytes[0] == 0x91)
+            .map(|n| n.frame)
+            .collect();
+        assert_eq!(
+            first_block_ons.len(),
+            1,
+            "only the first string fits in a 256-frame block, got {first_block_ons:?}"
+        );
+        assert!(!seq.pending_note_ons.is_empty());
+        let mut frames = first_block_ons;
+        for block in 1..8 {
+            l.fill(0.0);
+            r.fill(0.0);
+            let span = Span {
+                offset: 0,
+                frames: 256,
+                start_beats: block as f64 * 256.0 / 24_000.0,
+            };
+            seq.render_span(&span, 24_000.0, 4.0, &mut l, &mut r);
+            frames.extend(
+                seq.note_events
+                    .iter()
+                    .filter(|n| n.bytes[0] == 0x91)
+                    .map(|n| n.frame),
+            );
+            frames.sort_unstable();
+            frames.dedup();
+        }
+        assert!(
+            frames.len() >= 4,
+            "drop2 strum must keep 4 staggered onsets, got {frames:?}"
+        );
+        for pair in frames.windows(2) {
+            assert!(
+                pair[1] > pair[0],
+                "strum notes must not collapse onto one sample: {frames:?}"
+            );
+        }
     }
 
     #[test]
