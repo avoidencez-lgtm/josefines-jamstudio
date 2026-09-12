@@ -141,17 +141,35 @@ fn allowed_pack_url(url: &str) -> bool {
 }
 
 fn replace_dir(src: &Path, dest: &Path) -> Result<(), String> {
-    if dest.exists() {
-        fs::remove_dir_all(dest).map_err(|e| format!("Cannot replace {}. {e}", dest.display()))?;
+    // Nonempty directories cannot be replaced by rename. Keep the old pack
+    // beside the destination until publication succeeds, including on Windows.
+    let previous = dest.with_extension("previous");
+    if previous.try_exists().map_err(|e| e.to_string())? {
+        return Err(format!(
+            "A previous sample pack was kept at {}. Move it aside before retrying the install.",
+            previous.display()
+        ));
     }
-    fs::rename(src, dest).map_err(|e| format!("Cannot publish {}. {e}", dest.display()))
-}
-
-fn replace_file(src: &Path, dest: &Path) -> Result<(), String> {
-    if dest.exists() {
-        fs::remove_file(dest).map_err(|e| e.to_string())?;
+    let had_dest = dest.try_exists().map_err(|e| e.to_string())?;
+    if had_dest {
+        fs::rename(dest, &previous)
+            .map_err(|e| format!("Cannot preserve {}. {e}", dest.display()))?;
     }
-    fs::rename(src, dest).map_err(|e| e.to_string())
+    if let Err(e) = fs::rename(src, dest) {
+        if had_dest {
+            if let Err(restore) = fs::rename(&previous, dest) {
+                return Err(format!(
+                    "Cannot publish {}. {e} Cannot restore the previous pack: {restore}. Its files are kept at {}.",
+                    dest.display(), previous.display()
+                ));
+            }
+        }
+        return Err(format!("Cannot publish {}. {e}", dest.display()));
+    }
+    if had_dest {
+        let _ = fs::remove_dir_all(&previous);
+    }
+    Ok(())
 }
 
 fn pack_mutexes() -> &'static tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>> {
@@ -464,7 +482,7 @@ async fn install(pack: &Pack, mut on_state: impl FnMut(&PackStatus)) -> Result<(
             return Err("JAM_ASSETS_LOCAL does not point at a zip.".into());
         }
         fs::create_dir_all(dest.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-        fs::copy(&local, &zip_path).map_err(|e| e.to_string())?;
+        fs::copy(&local, &part).map_err(|e| e.to_string())?;
         downloading.percent = 100;
         on_state(&downloading);
     } else {
@@ -474,25 +492,24 @@ async fn install(pack: &Pack, mut on_state: impl FnMut(&PackStatus)) -> Result<(
             on_state(&progress_status);
         })
         .await?;
-        replace_file(&part, &zip_path)?;
     }
     let mut verifying = status_for(pack);
     verifying.state = "verifying".into();
     verifying.percent = 100;
     verifying.message = "Verifying this sample pack.".into();
     on_state(&verifying);
-    let digest = sha256_file(&zip_path)?;
+    let digest = sha256_file(&part)?;
     if !sha256_eq(&digest, &pack.sha256) {
-        let _ = fs::remove_file(&zip_path);
+        let _ = fs::remove_file(&part);
         return Err(format!(
             "Sample pack checksum failed. Expected {}, got {digest}.",
             pack.sha256
         ));
     }
     if pack.bytes > 0 {
-        let len = zip_path.metadata().map_err(|e| e.to_string())?.len();
+        let len = part.metadata().map_err(|e| e.to_string())?.len();
         if len != pack.bytes {
-            let _ = fs::remove_file(&zip_path);
+            let _ = fs::remove_file(&part);
             return Err(format!(
                 "Sample pack size failed. Expected {} bytes, got {len}.",
                 pack.bytes
@@ -500,23 +517,22 @@ async fn install(pack: &Pack, mut on_state: impl FnMut(&PackStatus)) -> Result<(
         }
     }
     let staging = dest.with_file_name(format!("{}.unpacking", pack.id));
-    let _ = fs::remove_dir_all(&staging);
-    if let Err(e) = unpack_zip(&zip_path, &staging) {
-        let _ = fs::remove_dir_all(&staging);
-        let _ = fs::remove_dir_all(&dest);
-        return Err(e);
+    if staging.try_exists().map_err(|e| e.to_string())? {
+        fs::remove_dir_all(&staging).map_err(|e| e.to_string())?;
     }
-    write_stamp(&staging, &pack.sha256)?;
-    if !pack_ready(&staging, &pack.sha256) {
+    let result = (|| {
+        unpack_zip(&part, &staging)?;
+        write_stamp(&staging, &pack.sha256)?;
+        if !pack_ready(&staging, &pack.sha256) {
+            return Err("Sample-pack ZIP is missing kit.json or bass.sf2/comp.sf2.".into());
+        }
+        fs::rename(&part, &zip_path).map_err(|e| e.to_string())?;
+        replace_dir(&staging, &dest)
+    })();
+    if result.is_err() {
         let _ = fs::remove_dir_all(&staging);
-        let _ = fs::remove_dir_all(&dest);
-        return Err("Sample-pack ZIP is missing kit.json or bass.sf2/comp.sf2.".into());
     }
-    if let Err(e) = replace_dir(&staging, &dest) {
-        let _ = fs::remove_dir_all(&staging);
-        return Err(e);
-    }
-    Ok(())
+    result
 }
 
 #[tauri::command]
@@ -839,11 +855,21 @@ mod tests {
             fs::read_to_string(stamp_path(&dest)).unwrap().trim(),
             pack.sha256
         );
+        assert_eq!(
+            sha256_file(&dest.with_extension("zip")).unwrap(),
+            pack.sha256
+        );
+        assert!(!dest.with_extension("zip.part").exists());
     }
 
     #[test]
-    fn failed_unpack_wipes_dest_and_does_not_publish_staging() {
+    fn failed_unpack_preserves_the_previous_pack_and_archive() {
         let _root = test_root();
+        let dest = pack_dir("bad-kit");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("kit.json"), b"previous kit").unwrap();
+        fs::write(dest.join("kick.wav"), b"previous sample").unwrap();
+        fs::write(dest.with_extension("zip"), b"previous archive").unwrap();
         let zip = _root.dir.join("bad.zip");
         let mut writer = zip::ZipWriter::new(File::create(&zip).unwrap());
         let opts = zip::write::SimpleFileOptions::default();
@@ -856,18 +882,61 @@ mod tests {
         writer.finish().unwrap();
         let pack = kit_pack("bad-kit", &zip);
         std::env::set_var("JAM_ASSETS_LOCAL", &zip);
+        let mut mismatched = pack.clone();
+        mismatched.sha256 = EMPTY_SHA.into();
+        let err = tauri::async_runtime::block_on(install(&mismatched, |_| {})).unwrap_err();
+        assert!(err.contains("checksum failed"), "{err}");
+        assert_eq!(fs::read(dest.join("kit.json")).unwrap(), b"previous kit");
+        assert_eq!(
+            fs::read(dest.with_extension("zip")).unwrap(),
+            b"previous archive"
+        );
         let err = tauri::async_runtime::block_on(install(&pack, |_| {})).unwrap_err();
         assert!(
             err.contains("WAV files only") || err.contains("missing"),
             "{err}"
         );
-        let dest = pack_dir("bad-kit");
         assert!(!pack_ready(&dest, &pack.sha256));
-        assert!(!dest.join("kit.json").is_file());
+        assert_eq!(fs::read(dest.join("kit.json")).unwrap(), b"previous kit");
+        assert_eq!(fs::read(dest.join("kick.wav")).unwrap(), b"previous sample");
+        assert_eq!(
+            fs::read(dest.with_extension("zip")).unwrap(),
+            b"previous archive"
+        );
         assert!(!dest
             .with_file_name("bad-kit.unpacking")
             .join("kit.json")
             .is_file());
+    }
+
+    #[test]
+    fn replacing_a_pack_restores_it_on_failure_and_keeps_recovery_files() {
+        let root = test_root();
+        let dest = root.dir.join("kit");
+        let staging = root.dir.join("kit.unpacking");
+        let previous = dest.with_extension("previous");
+        fs::create_dir(&dest).unwrap();
+        fs::write(dest.join("kit.json"), b"old").unwrap();
+
+        // A missing source makes publication fail after the old pack was moved.
+        assert!(replace_dir(&staging, &dest).is_err());
+        assert_eq!(fs::read(dest.join("kit.json")).unwrap(), b"old");
+        assert!(!previous.exists());
+
+        fs::create_dir(&staging).unwrap();
+        fs::write(staging.join("kit.json"), b"new").unwrap();
+        fs::create_dir(&previous).unwrap();
+        fs::write(previous.join("kit.json"), b"recovery").unwrap();
+        assert!(replace_dir(&staging, &dest).is_err());
+        assert_eq!(fs::read(dest.join("kit.json")).unwrap(), b"old");
+        assert_eq!(fs::read(staging.join("kit.json")).unwrap(), b"new");
+        assert_eq!(fs::read(previous.join("kit.json")).unwrap(), b"recovery");
+
+        fs::rename(&previous, root.dir.join("recovered-kit")).unwrap();
+        replace_dir(&staging, &dest).unwrap();
+        assert_eq!(fs::read(dest.join("kit.json")).unwrap(), b"new");
+        assert!(!previous.exists());
+        assert!(!staging.exists());
     }
 
     #[test]
