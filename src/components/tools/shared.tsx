@@ -1,4 +1,5 @@
 import { type ReactElement, cloneElement, useId, useState } from "react";
+import { withNextStep } from "../../lib/loudError";
 import { useMedia } from "../../lib/media";
 import { useWriting } from "../../lib/originals";
 import { useRoomOperation } from "../../lib/roomActions";
@@ -33,7 +34,7 @@ export function useTool() {
     try {
       setMessage((await fn()) ?? "");
     } catch (e) {
-      setMessage(String(e).replace(/^Error: /, ""));
+      setMessage(withNextStep(String(e).replace(/^Error: /, "")));
     } finally {
       useRoomOperation.setState({ busy: false, blocking: false });
     }
@@ -69,12 +70,12 @@ export function SectionSelect({
 }: { value: string; onChange: (id: string) => void }) {
   const song = useWriting((s) => s.song);
   return (
-    <Field label="Source section">
+    <Field label="Choose a source section.">
       <select value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Choose a section</option>
+        <option value="">Choose a section.</option>
         {song?.body.chart.sections.map((s) => (
           <option key={s.id} value={s.id}>
-            {s.name} · {s.bars.length} bars
+            {s.name}. {s.bars.length} bars.
           </option>
         ))}
       </select>
@@ -90,10 +91,10 @@ export function TakeSelect({
   return (
     <Field label={label}>
       <select value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Choose a recording</option>
+        <option value="">Choose a recording.</option>
         {takes.map((t) => (
           <option key={t.id} value={t.id}>
-            {t.timestamp} · {t.durationSecs.toFixed(1)}s · {t.id.slice(-6)}
+            {t.timestamp}. {t.durationSecs.toFixed(1)} s. {t.id.slice(-6)}.
           </option>
         ))}
       </select>

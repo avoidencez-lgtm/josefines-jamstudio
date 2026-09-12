@@ -1,12 +1,121 @@
 import type { JoToolCall } from "./persona";
 
-export function parseNaturalIntent(text: string): {
+export function parseNaturalIntent(
+  text: string,
+  reference?: {
+    assetId: string;
+    speed: number;
+    sections?: Array<{ id: string; label: string }>;
+  },
+): {
   reply: string;
   toolCalls: JoToolCall[];
 } {
   const lower = text.toLowerCase().trim();
   const toolCalls: JoToolCall[] = [];
-  const reply = "Got it!";
+  const reply = "This is understood.";
+  const load = /^(?:load song|last(?: inn)? sang(?:en)?)\s+(.+)$/i.exec(
+    text.trim(),
+  );
+  if (load) {
+    const query = load[1].replace(/^["“](.*)["”]$/, "$1").trim();
+    return {
+      reply: "Looking for the song in your local library.",
+      toolCalls: [{ name: "load_song", arguments: { query } }],
+    };
+  }
+  // Do not let song titles in questions/negations become legacy style commands.
+  if (/\b(?:load song|last(?: inn)? sang(?:en)?)\b/i.test(text))
+    return {
+      reply:
+        "Use load song followed by its title, or last inn sangen followed by its title.",
+      toolCalls: [],
+    };
+  if (/\bramp\b/.test(lower)) {
+    const ramp =
+      /^ramp (?:fra )?(\d{2,3}) (?:to|til) (\d{2,3}) (?:by|med) (\d{1,2}) (?:every|hver) (\d{1,2}) (?:bars?|takt(?:er)?)[.!]?$/.exec(
+        lower,
+      );
+    const stop = /^(?:stop|stopp) ramp[.!]?$/.test(lower);
+    return reference && (ramp || stop)
+      ? {
+          reply: "Updating the reference practice ramp.",
+          toolCalls: [
+            {
+              name: "ramp",
+              arguments: stop
+                ? { assetId: reference.assetId, stop: true }
+                : {
+                    assetId: reference.assetId,
+                    startPercent: Number(ramp?.[1]),
+                    targetPercent: Number(ramp?.[2]),
+                    stepPercent: Number(ramp?.[3]),
+                    barsPerStep: Number(ramp?.[4]),
+                  },
+            },
+          ],
+        }
+      : {
+          reply:
+            "Load a reference and confirm its bars, then use ramp 75 to 100 by 5 every 4 bars, or stop ramp.",
+          toolCalls: [],
+        };
+  }
+  if (reference) {
+    const loop = /^(?:loop|gjenta)\s+(.+?)[.!]?$/.exec(lower);
+    if (loop) {
+      const matches =
+        reference.sections?.filter(
+          (s) =>
+            s.label.toLowerCase() === loop[1] || s.id.toLowerCase() === loop[1],
+        ) ?? [];
+      if (matches.length !== 1)
+        return {
+          reply:
+            "Choose one unique confirmed section in the reference player. Confirm and name its bars in Songs first if needed.",
+          toolCalls: [],
+        };
+      return {
+        reply: "Looping the confirmed reference section.",
+        toolCalls: [
+          {
+            name: "loop_reference_section",
+            arguments: { assetId: reference.assetId, sectionId: matches[0].id },
+          },
+        ],
+      };
+    }
+    const percent =
+      /^(?:(?:set|sett) )?(?:speed|hastighet)(?: to| til)?\s+(\d{1,3})\s*(?:%|percent|prosent)?[.!]?$/.exec(
+        lower,
+      );
+    const pitch =
+      /^(?:transpose|transponer)(?: to| til)?\s+([+-]?\d{1,2})\s*(?:semitones?|halvtoner?)?[.!]?$/.exec(
+        lower,
+      );
+    const faster = /^(?:a bit )?(faster|speed up|raskere)[.!]?$/.test(lower);
+    const slower = /^(?:a bit )?(slower|slow down|saktere)[.!]?$/.test(lower);
+    if (percent || pitch || faster || slower) {
+      const arguments_: Record<string, unknown> = {
+        assetId: reference.assetId,
+      };
+      if (pitch) arguments_.semitones = Number(pitch[1]);
+      else
+        arguments_.speedPercent = percent
+          ? Number(percent[1])
+          : Math.max(
+              50,
+              Math.min(
+                150,
+                Math.round(reference.speed * 100) + (faster ? 5 : -5),
+              ),
+            );
+      return {
+        reply: "Updating reference practice settings.",
+        toolCalls: [{ name: "set_reference_practice", arguments: arguments_ }],
+      };
+    }
+  }
   if (lower === "next section")
     return {
       reply: "Moving to the next section.",
@@ -79,7 +188,7 @@ export function parseNaturalIntent(text: string): {
     lower === "record"
   ) {
     toolCalls.push({ name: "record_take", arguments: { action: "start" } });
-    return { reply: "Recording take! Make it count.", toolCalls };
+    return { reply: "Recording the take.", toolCalls };
   }
   if (lower.includes("stop recording") || lower.includes("save take")) {
     toolCalls.push({ name: "record_take", arguments: { action: "stop" } });
@@ -99,7 +208,7 @@ export function parseNaturalIntent(text: string): {
   }
   if (lower.includes("funk") || lower.includes("funky")) {
     toolCalls.push({ name: "set_style", arguments: { styleId: "funk-16" } });
-    return { reply: "Locking in that 16th-note funk groove!", toolCalls };
+    return { reply: "Locking in the 16th-note funk groove.", toolCalls };
   }
   if (lower.includes("jazz") || lower.includes("swing")) {
     toolCalls.push({ name: "set_style", arguments: { styleId: "jazz-swing" } });
@@ -114,7 +223,7 @@ export function parseNaturalIntent(text: string): {
       name: "set_style",
       arguments: { styleId: "metal-gallop" },
     });
-    return { reply: "Locked in for heavy metal gallop!", toolCalls };
+    return { reply: "Locked in for a heavy metal gallop.", toolCalls };
   }
   if (lower.includes("ballad") || lower.includes("6/8")) {
     toolCalls.push({ name: "set_style", arguments: { styleId: "ballad-68" } });
@@ -125,17 +234,17 @@ export function parseNaturalIntent(text: string): {
       name: "set_style",
       arguments: { styleId: "rock-straight" },
     });
-    return { reply: "Driving straight 8th rock groove.", toolCalls };
+    return { reply: "This is driving a straight 8th rock groove.", toolCalls };
   }
 
   // 3. Cues
   if (lower.includes("fill") || lower.includes("drum fill")) {
     toolCalls.push({ name: "trigger_cue", arguments: { cue: "fill" } });
-    return { reply: "Drum fill coming up at the next bar!", toolCalls };
+    return { reply: "Drum fill coming up at the next bar.", toolCalls };
   }
   if (lower.includes("crash")) {
     toolCalls.push({ name: "trigger_cue", arguments: { cue: "crash" } });
-    return { reply: "Crashing at next bar downbeat!", toolCalls };
+    return { reply: "Crash on the next bar downbeat.", toolCalls };
   }
   if (
     lower.includes("ending") ||
@@ -165,11 +274,11 @@ export function parseNaturalIntent(text: string): {
     lower.includes("mute drums")
   ) {
     toolCalls.push({ name: "set_parts", arguments: { muteDrums: true } });
-    return { reply: "Muting drums.", toolCalls };
+    return { reply: "This is muting the drums.", toolCalls };
   }
   if (lower.includes("bring in drums") || lower.includes("unmute drums")) {
     toolCalls.push({ name: "set_parts", arguments: { muteDrums: false } });
-    return { reply: "Drums back in.", toolCalls };
+    return { reply: "This is bringing the drums back in.", toolCalls };
   }
 
   // 5. Energy Following
@@ -188,7 +297,60 @@ export function parseNaturalIntent(text: string): {
     };
   }
 
-  // 6. Tempo
+  // 6. Stage count-in, tap, seek, transpose, tuner
+  const countIn =
+    /^(?:count[- ]?in|opptelling)\s+(0|1|2)\s*(?:bars?|takter?)?[.!]?$/.exec(
+      lower,
+    );
+  if (countIn) {
+    toolCalls.push({
+      name: "set_count_in",
+      arguments: { bars: Number(countIn[1]) },
+    });
+    return { reply: "Setting the count-in.", toolCalls };
+  }
+  if (/^(?:tap(?: the)? tempo|slå inn tempoet)[.!]?$/.test(lower)) {
+    toolCalls.push({ name: "tap_tempo", arguments: {} });
+    return { reply: "This is tapping the tempo.", toolCalls };
+  }
+  const seekBar =
+    /^(?:(?:go|jump|seek) to|gå til)\s+(?:bar|takt)\s+(\d{1,3})[.!]?$/.exec(
+      lower,
+    );
+  if (seekBar) {
+    toolCalls.push({
+      name: "seek_bar",
+      arguments: { bar: Number(seekBar[1]) },
+    });
+    return { reply: `Jumping to bar ${seekBar[1]}.`, toolCalls };
+  }
+  const chartPitch =
+    /^(?:transpose|transponer)(?:\s+(up|down|opp|ned))?\s+([+-]?\d{1,2})\s*(?:semitones?|halvtoner?)?[.!]?$/.exec(
+      lower,
+    );
+  if (chartPitch) {
+    const n = Number(chartPitch[2]);
+    const dir = chartPitch[1];
+    const semitones =
+      dir === "down" || dir === "ned" ? -Math.abs(n) : n === 0 ? 0 : n;
+    if (semitones !== 0) {
+      toolCalls.push({
+        name: "transpose_chart",
+        arguments: { semitones },
+      });
+      return { reply: "Transposing the chart.", toolCalls };
+    }
+  }
+  if (/^(?:tuner on|stemmeapparat på)[.!]?$/.test(lower)) {
+    toolCalls.push({ name: "toggle_tuner", arguments: { enabled: true } });
+    return { reply: "The tuner is on.", toolCalls };
+  }
+  if (/^(?:tuner off|stemmeapparat av)[.!]?$/.test(lower)) {
+    toolCalls.push({ name: "toggle_tuner", arguments: { enabled: false } });
+    return { reply: "The tuner is off.", toolCalls };
+  }
+
+  // 7. Tempo
   const bpmMatch =
     lower.match(/(\d{2,3})\s*bpm/) ||
     lower.match(/tempo\s*(?:to|at)?\s*(\d{2,3})/);
@@ -214,7 +376,7 @@ export function parseNaturalIntent(text: string): {
     return { reply: "Pulling back the tempo by 5 BPM.", toolCalls };
   }
 
-  // 7. General Playback / Transport
+  // 8. General Playback / Transport
   if (
     lower.includes("play") ||
     lower.includes("start") ||
@@ -225,7 +387,7 @@ export function parseNaturalIntent(text: string): {
       name: "transport_control",
       arguments: { action: "play" },
     });
-    return { reply: "Let's roll! 1, 2, 3, 4...", toolCalls };
+    return { reply: "This is rolling.", toolCalls };
   }
   if (lower.includes("pause") || lower.includes("hold on")) {
     toolCalls.push({
@@ -239,7 +401,7 @@ export function parseNaturalIntent(text: string): {
       name: "transport_control",
       arguments: { action: "stop" },
     });
-    return { reply: "Stopping playback.", toolCalls };
+    return { reply: "This playback is stopping.", toolCalls };
   }
 
   return { reply, toolCalls };

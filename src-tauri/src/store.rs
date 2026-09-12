@@ -172,7 +172,7 @@ impl IndexStore {
             match r {
                 Ok(take) => takes.push(take),
                 Err(e) => skipped.push(format!(
-                    "Skipped unreadable take index row {}: {e}. Takes with a take.json on disk stay available; delete index.sqlite to rebuild the cache.",
+                    "Skipped unreadable take index row {}. {e}. Takes with a take.json on disk stay available; delete index.sqlite to rebuild the cache.",
                     i + 1
                 )),
             }

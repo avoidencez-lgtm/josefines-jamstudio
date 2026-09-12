@@ -7,15 +7,19 @@ import { generationBrief } from "../../lib/roomTools";
 import { Button } from "../Button";
 import { Field, SongRequired, Status, currentSong, useTool } from "./shared";
 
+const DIRECTIONS = [
+  "Faithful backing. Support the song's groove and leave the lead melody to the guitarist.",
+  "Stripped. Intimate, sparse percussion and bass; make the chorus wider without crowding the guitar.",
+  "Reimagine. A driving cinematic arrangement with strong section contrast and a quiet bridge.",
+] as const;
+
 export default function BriefTool() {
   const song = useWriting((s) => s.song);
   const m = useMedia(
     useShallow((s) => ({ busy: s.busy, project: s.project, edit: s.edit })),
   );
   const { run, message } = useTool();
-  const [direction, setDirection] = useState(
-    "Faithful backing: support the song's groove and leave the lead melody to the guitarist.",
-  );
+  const [direction, setDirection] = useState<string>(DIRECTIONS[0]);
   const [instrumental, setInstrumental] = useState(true);
   const [brief, setBrief] = useState("");
   const [base, setBase] = useState("");
@@ -24,17 +28,13 @@ export default function BriefTool() {
   return (
     <>
       <div className="room-tool-row">
-        {[
-          "Faithful backing: support the song's groove and leave the lead melody to the guitarist.",
-          "Stripped: intimate, sparse percussion and bass; make the chorus wider without crowding the guitar.",
-          "Reimagine: a driving cinematic arrangement with strong section contrast and a quiet bridge.",
-        ].map((value, i) => (
+        {DIRECTIONS.map((value, i) => (
           <Button key={value} onClick={() => setDirection(value)}>
             {["Faithful", "Stripped", "Reimagined"][i]}
           </Button>
         ))}
       </div>
-      <Field label="Editable musical direction">
+      <Field label="This musical direction is editable.">
         <textarea
           rows={2}
           maxLength={2000}
@@ -51,7 +51,7 @@ export default function BriefTool() {
             setBrief("");
           }}
         />{" "}
-        Instrumental brief
+        This brief is instrumental.
       </label>
       <Button
         onClick={() =>
@@ -65,11 +65,11 @@ export default function BriefTool() {
           })
         }
       >
-        Build arrangement brief
+        Build this arrangement brief.
       </Button>
       {brief && (
         <>
-          <Field label="Review and edit generation prompt">
+          <Field label="Review and edit the generation prompt.">
             <textarea
               rows={7}
               maxLength={4000}
@@ -102,7 +102,7 @@ export default function BriefTool() {
               })
             }
           >
-            Use prompt in AI Music
+            Use this prompt in AI Music.
           </Button>
         </>
       )}

@@ -26,11 +26,11 @@ export default function RigSnapshotTool() {
         song.body.rigSnapshot,
         e.availableProfiles,
       );
-      description = `${profile.name} · ${profile.scenes[snap.scene].name} · ${
+      description = `${profile.name}. ${profile.scenes[snap.scene].name}. ${
         Object.entries(snap.controls)
-          .map(([cc, value]) => `CC ${cc}: ${value}`)
-          .join(", ") || "scene defaults"
-      }`;
+          .map(([cc, value]) => `CC ${cc} is ${value}`)
+          .join(". ") || "These are the scene defaults"
+      }.`;
       valid = true;
     } catch {
       description =
@@ -61,7 +61,7 @@ export default function RigSnapshotTool() {
             })
           }
         >
-          Capture current tone
+          Capture this current tone.
         </Button>
         <Button
           disabled={!valid || isPreview}
@@ -72,7 +72,7 @@ export default function RigSnapshotTool() {
             })
           }
         >
-          Recall snapshot to rig
+          Recall this snapshot to the rig.
         </Button>
       </div>
       <Status text={message} />

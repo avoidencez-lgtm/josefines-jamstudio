@@ -4,7 +4,7 @@ Verification date: 2026-09-05. Scope: the implemented preview, all ten studio ro
 
 ## Delivered
 
-- Eighteen bilingual chapters, searchable in Help & guides, exported as [English](../guide/manual-en.md) and [Bokmål](../guide/manual-nb.md). Topics cover workflows, controls, shortcuts, data, backup, API/installed-agent setup, limits, troubleshooting and developer extension points.
+- Eighteen bilingual chapters, searchable in Open help and guides., exported as [English](../guide/manual-en.md) and [Bokmål](../guide/manual-nb.md). Topics cover workflows, controls, shortcuts, data, backup, API/installed-agent setup, limits, troubleshooting and developer extension points.
 - Write → Finish: document review, boundary rehearsal, isolated lock-respecting contrast variants and section comps from compatible original recordings. Apply preserves a version; Undo and stale-preview protection remain available.
 - No extra dependency, provider call or cloud deployment. [Primary-source research](../research/song-finishing.md) records inspiration and limits.
 

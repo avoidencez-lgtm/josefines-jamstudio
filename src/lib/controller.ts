@@ -4,15 +4,17 @@ import { useEngineStore } from "../store/engine";
 import { handleJoQuery } from "./jo/conversation";
 import { cancelVoice, toggleVoice, useVoice } from "./jo/voice";
 import { useWriting } from "./originals";
+import { toggleReferenceRamp } from "./referenceRamp";
 
 export const PEDAL_ACTIONS = {
-  keep: "Keep that riff",
-  record: "Record / save take",
-  play: "Play / stop",
-  loop: "Loop selected section",
-  next: "Next section loop",
-  version: "Keep a version",
-  voice: "Talk / send to Jo",
+  keep: "Keep this riff.",
+  record: "Record or save this take.",
+  play: "Play or stop this.",
+  loop: "Loop this selected section.",
+  next: "Loop this next section.",
+  version: "Keep this version.",
+  voice: "Talk or send this to Jo.",
+  ramp: "Toggle this reference practice ramp.",
 } as const;
 export type PedalAction = keyof typeof PEDAL_ACTIONS;
 export interface PedalPress {
@@ -44,7 +46,7 @@ export function assignPedal(
   };
 }
 export const describePress = (p: PedalPress) =>
-  `${p.kind.toUpperCase()} ${p.number} · channel ${p.channel}`;
+  `${p.kind.toUpperCase()} ${p.number} is on channel ${p.channel}.`;
 
 interface ControllerState {
   config: PedalConfig;
@@ -94,7 +96,7 @@ export const useController = create<ControllerState>((set, get) => ({
         port,
         message: port
           ? "Connected. Learn your pedals, then enable control."
-          : "Disconnected.",
+          : "This is disconnected.",
       });
     } catch (e) {
       set({ message: String(e) });
@@ -127,7 +129,10 @@ export const useController = create<ControllerState>((set, get) => ({
       const next = assignPedal(config, learning, press);
       try {
         await ipc.invoke("controller_save", { document: next });
-        set({ config: next, message: `Learned: ${PEDAL_ACTIONS[learning]}.` });
+        set({
+          config: next,
+          message: `This pedal is assigned to ${PEDAL_ACTIONS[learning]}`,
+        });
       } catch (e) {
         set({ message: String(e) });
       } finally {
@@ -142,6 +147,10 @@ export const useController = create<ControllerState>((set, get) => ({
     if (!action) return;
     if (action === "voice") {
       await toggleVoice(handleJoQuery);
+      return;
+    }
+    if (action === "ramp") {
+      await toggleReferenceRamp();
       return;
     }
     const w = useWriting.getState();

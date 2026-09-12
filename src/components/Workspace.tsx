@@ -14,7 +14,7 @@ export function WorkspaceHeader({
   children?: ReactNode;
 }) {
   const room = SCREENS.find((s) => s.id === screen);
-  if (!room) throw new Error(`Unknown studio room: ${screen}`);
+  if (!room) throw new Error(`The studio room ${screen} is unknown.`);
   const Icon = SCREEN_ICONS[room.iconName];
   return (
     <header className="workspace-heading">
@@ -44,7 +44,10 @@ export function WorkspaceViews({
   onChange: (value: string) => void;
 }) {
   return (
-    <fieldset className="workspace-views" aria-label="Workspace view">
+    <fieldset
+      className="workspace-views"
+      aria-label="These are the workspace views."
+    >
       {labels.map((label) => (
         <button
           type="button"

@@ -41,7 +41,7 @@ pub fn set<R: Runtime>(
         }
         app.global_shortcut()
             .unregister(parse(old)?)
-            .map_err(|e| format!("Could not disable voice shortcut: {e}"))?;
+            .map_err(|e| format!("Could not disable the voice shortcut. {e}"))?;
         *current = None;
     }
     if let Some(key) = key {

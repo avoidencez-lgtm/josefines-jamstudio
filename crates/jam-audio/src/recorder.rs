@@ -50,6 +50,7 @@ pub struct TakeRecorder {
     pub snapshot: serde_json::Value,
     pub midi: Vec<crate::workstation::MidiNote>,
     pub frames_written: u64,
+    pub(crate) reference_timing: Option<crate::reference_timing::ReferenceTiming>,
 }
 impl TakeRecorder {
     pub fn new(sample_rate: u32, base_dir: PathBuf) -> Self {
@@ -63,6 +64,7 @@ impl TakeRecorder {
             snapshot: serde_json::Value::Null,
             midi: Vec::new(),
             frames_written: 0,
+            reference_timing: None,
         }
     }
     pub fn set_latency_compensation(&mut self, samples: usize) {
@@ -95,7 +97,7 @@ impl TakeRecorder {
     pub(crate) fn interrupt(&mut self, reason: &str) {
         if self.is_recording() && self.failure.is_none() {
             self.failure = Some(format!(
-                "Recording interrupted: {reason} Save the partial take."
+                "Recording was interrupted. {reason} Save the partial take."
             ));
             self.sender = None;
         }
@@ -229,12 +231,17 @@ impl TakeRecorder {
         self.frames_written = 0;
         Ok(id)
     }
-    pub fn push_frames(&mut self, frames: Vec<Frame>, notes: Vec<crate::workstation::MidiNote>) {
+    pub(crate) fn push_frames(
+        &mut self,
+        frames: Vec<Frame>,
+        notes: Vec<crate::workstation::MidiNote>,
+        clocks: &[crate::reference_timing::Clock],
+    ) {
         if let Some(tx) = &self.sender {
             let count = frames.len() as u64;
             if let Err(e) = tx.try_send(frames) {
                 self.failure = Some(format!(
-                    "Recording interrupted: the disk writer stopped accepting audio ({e}). Save the partial take; partial WAVs remain on disk."
+                    "Recording was interrupted. The disk writer stopped accepting audio ({e}). Save the partial take; partial WAVs remain on disk."
                 ));
                 self.sender = None;
             } else {
@@ -244,6 +251,17 @@ impl TakeRecorder {
                     n
                 }));
                 self.frames_written += count;
+                if let Some(timing) = &mut self.reference_timing {
+                    let result = if clocks.len() as u64 != count {
+                        timing.error = Some("Missing reference frame clocks.".into());
+                        Err(timing.error.clone().unwrap())
+                    } else {
+                        timing.capture(base, clocks, self.sample_rate)
+                    };
+                    if let Err(error) = result {
+                        self.interrupt(&error);
+                    }
+                }
             }
         }
     }
@@ -265,6 +283,12 @@ impl TakeRecorder {
             .join()
             .map_err(|_| "Recording writer failed; partial WAVs kept")??;
         meta.midi = std::mem::take(&mut self.midi);
+        if let Some(timing) = self.reference_timing.take() {
+            meta.extra.insert(
+                "referenceTiming".into(),
+                serde_json::to_value(timing).map_err(|e| e.to_string())?,
+            );
+        }
         if let Some(e) = self.failure.take() {
             meta.notes = e;
             save_manifest(&meta)?;
@@ -294,21 +318,21 @@ pub fn save_manifest(meta: &TakeMetadata) -> Result<(), String> {
         .write(true)
         .create_new(true)
         .open(&temp)
-        .map_err(|e| format!("Cannot create {}: {e}", temp.display()))?;
+        .map_err(|e| format!("Cannot create {}. {e}", temp.display()))?;
     let result = file.write_all(&bytes).and_then(|()| file.sync_all());
     drop(file);
     let result = result.and_then(|()| fs::rename(&temp, dir.join("take.json")));
     if result.is_err() {
         let _ = fs::remove_file(&temp);
     }
-    result.map_err(|e| format!("Cannot save {}: {e}", dir.join("take.json").display()))
+    result.map_err(|e| format!("Cannot save {}. {e}", dir.join("take.json").display()))
 }
 
 /// Reads a WAV file back as mono f32 in -1..1 (channels are averaged), together with its
 /// sample rate. Used by take analysis so it looks at what was actually recorded.
 pub fn read_wav_mono(path: &Path) -> Result<(Vec<f32>, u32), String> {
     let mut reader =
-        hound::WavReader::open(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+        hound::WavReader::open(path).map_err(|e| format!("Cannot open {}. {e}", path.display()))?;
     let spec = reader.spec();
     let channels = spec.channels.max(1) as usize;
     let interleaved: Vec<f32> = match spec.sample_format {
@@ -351,10 +375,21 @@ mod tests {
             path_input: root.join("guitar-di.wav").to_string_lossy().into_owned(),
             ..Default::default()
         };
-        assert!(save_manifest(&take).unwrap_err().contains("Cannot create"));
+        assert!(save_manifest(&take)
+            .unwrap_err()
+            .starts_with("Cannot create "));
         assert_eq!(fs::read(&victim).unwrap(), b"keep this file");
         assert!(!root.join("take.json").exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn missing_wav_names_the_path() {
+        let err = read_wav_mono(Path::new("no-such.wav")).unwrap_err();
+        assert!(
+            err.starts_with("Cannot open ") && err.contains("no-such.wav"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -387,21 +422,59 @@ mod tests {
     }
 
     #[test]
+    fn recorded_impulse_and_click_align_within_one_sample_after_the_offset() {
+        let root = std::env::temp_dir().join(format!("jam-align-{}", std::process::id()));
+        let mut r = TakeRecorder::new(48_000, root.clone());
+        let delay = 480usize;
+        let click_at = 24_000usize;
+        r.set_latency_compensation(delay);
+        r.start_take("align".into(), "rock".into(), "verse".into(), 120.0)
+            .unwrap();
+        let mut frames = vec![[0.0f32; 9]; click_at + delay + 64];
+        frames[click_at + delay][0] = 1.0;
+        frames[click_at][5] = 1.0;
+        frames[click_at][6] = 1.0;
+        r.push_capture(&frames).unwrap();
+        let t = r.stop_and_save().unwrap();
+        let guitar = read_wav_mono(Path::new(&t.path_input)).unwrap().0;
+        let drums = read_wav_mono(Path::new(&t.stems["drums"])).unwrap().0;
+        let guitar_at = guitar.iter().position(|s| s.abs() > 0.5).unwrap();
+        let click_pos = drums.iter().position(|s| s.abs() > 0.5).unwrap();
+        assert!(
+            guitar_at.abs_diff(click_pos) <= 1,
+            "guitar {guitar_at} click {click_pos}"
+        );
+        assert_eq!(click_pos, click_at);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn rejected_audio_does_not_advance_the_recording() {
         let mut r = TakeRecorder::new(48_000, PathBuf::new());
         let (tx, _rx) = mpsc::sync_channel(1);
         r.sender = Some(tx);
         r.writer = Some(thread::spawn(|| Ok(TakeMetadata::default())));
+        r.reference_timing = Some(
+            serde_json::from_str(include_str!(
+                "../../../tests/invariants/reference-timing.json"
+            ))
+            .unwrap(),
+        );
+        r.reference_timing.as_mut().unwrap().segments.clear();
+        let clocks = [crate::reference_timing::Clock {
+            position: 0.0,
+            speed: 0.0,
+        }; 4];
         let note = crate::workstation::MidiNote {
             frame: 1,
             bytes: [0x90, 60, 100],
         };
-        r.push_frames(vec![[0.1; 9]; 4], vec![note.clone()]);
+        r.push_frames(vec![[0.1; 9]; 4], vec![note.clone()], &clocks);
         assert_eq!(r.frames_written, 4);
         assert_eq!(r.midi.len(), 1);
         assert_eq!(r.midi[0].frame, 1);
         for _ in 0..3 {
-            r.push_frames(vec![[0.1; 9]; 4], vec![note.clone()]);
+            r.push_frames(vec![[0.1; 9]; 4], vec![note.clone()], &clocks);
             assert!(r.error().unwrap().contains("interrupted"));
             assert!(
                 r.is_recording(),
@@ -410,6 +483,7 @@ mod tests {
             assert!(r.sender.is_none(), "capture stopped");
             assert_eq!(r.frames_written, 4, "rejected frames are not recorded");
             assert_eq!(r.midi.len(), 1, "no MIDI from rejected or later blocks");
+            assert_eq!(r.reference_timing.as_ref().unwrap().segments.len(), 1);
         }
         r.writer.take().unwrap().join().unwrap().unwrap();
         assert!(r.error().is_none());
@@ -430,7 +504,7 @@ mod tests {
             .unwrap();
         r.push_capture(&vec![[0.1; 9]; 64]).unwrap();
         r.failure =
-            Some("Recording interrupted by disk backpressure: full. Partial WAVs kept.".into());
+            Some("Recording was interrupted by disk backpressure. The disk is full. Partial WAVs were kept.".into());
         let t = r
             .stop_and_save()
             .expect("saved take stays visible after backpressure");

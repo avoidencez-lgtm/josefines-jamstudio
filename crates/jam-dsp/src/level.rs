@@ -61,6 +61,26 @@ mod tests {
     }
 
     #[test]
+    fn minus_twenty_dbfs_sine_rms_and_peak() {
+        // ARCHITECTURE §9.1: -20.0 dBFS 1 kHz sine, 1 s.
+        let sample_rate = 48_000;
+        let amp = 0.1 * std::f32::consts::SQRT_2; // RMS = 0.1 = -20 dBFS
+        let samples: Vec<f32> = (0..sample_rate)
+            .map(|i| {
+                amp * (2.0 * std::f32::consts::PI * 1000.0 * i as f32 / sample_rate as f32).sin()
+            })
+            .collect();
+        let res = calculate_level(&samples);
+        assert!((res.rms_db - (-20.0)).abs() <= 0.10, "rms {}", res.rms_db);
+        let peak_db = 20.0 * amp.log10();
+        assert!(
+            (res.peak_db - peak_db).abs() <= 0.01,
+            "peak {} expected {peak_db}",
+            res.peak_db
+        );
+    }
+
+    #[test]
     fn test_full_scale_sine() {
         let sample_rate = 48000;
         let freq = 1000.0;

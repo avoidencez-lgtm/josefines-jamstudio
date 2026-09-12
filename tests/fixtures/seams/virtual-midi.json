@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "virtual-midi-monitor",
+  "name": "Virtual MIDI monitor",
+  "ownerGate": "v2",
+  "claimsHardware": false
+}

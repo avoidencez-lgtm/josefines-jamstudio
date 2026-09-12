@@ -53,8 +53,8 @@ without executing it. Enable pedal actions when ready. Reassigning a press remov
 its old action; **Clear** removes a binding. Bindings survive restart, while the
 connection and enable switch require deliberate activation each session.
 
-Actions include Keep that riff, Record/save take, Play/stop, Loop selected section,
-Next section loop and Keep a version (also saves the song). Capture must already be
+Actions include Keep this riff. Record or save this take. Play or stop this. Loop this selected section.
+Loop this next section. and Keep this version. (also saves the song). Capture must already be
 armed for Keep. CC pedals trigger on a rising value of at least 64; note pedals on
 note-on. Releases and held values do not repeat actions. Program Change duplicates
 inside 250 ms are ignored. Incoming messages matching a live rig message the app

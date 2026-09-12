@@ -11,7 +11,7 @@ afterEach(() => {
   useLibraryDraft.setState({ dirty: false });
   useMedia.setState({ dirty: false, busy: "" });
   useRoomOperation.setState({ busy: false, blocking: false });
-  useEngineStore.setState({ isRecording: false });
+  useEngineStore.setState({ isRecording: false, calibrating: false });
 });
 
 it("refuses to close during blocking work, asks about unsaved drafts, otherwise lets the window go (#35)", () => {
@@ -28,6 +28,9 @@ it("refuses to close during blocking work, asks about unsaved drafts, otherwise 
   useEngineStore.setState({ isRecording: true });
   expect(closeDecision()).toBe("refuse");
   useEngineStore.setState({ isRecording: false });
+  useEngineStore.setState({ calibrating: true });
+  expect(closeDecision()).toBe("refuse");
+  useEngineStore.setState({ calibrating: false });
   useLibraryDraft.setState({ dirty: true });
   expect(closeDecision()).toBe("ask");
   useLibraryDraft.setState({ dirty: false });

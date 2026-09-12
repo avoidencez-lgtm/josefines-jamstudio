@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "sample-packs",
+  "name": "Sample pack manifest",
+  "origin": "assets/manifest.json",
+  "live": false,
+  "sha256": "afb6b9c5239d65f0630e5bab7770750db72aa146d4ea7c32a156ad0d5085cf75",
+  "bytes": 334392,
+  "commands": ["assets_status", "assets_ensure"],
+  "liveRequires": ["JAM_LIVE=1"]
+}

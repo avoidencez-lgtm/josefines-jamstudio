@@ -85,7 +85,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
           <h1>Write</h1>
           {song && (
             <label className="song-title">
-              Song name
+              Name this song.
               <input
                 value={song.body.chart.name}
                 maxLength={120}
@@ -101,9 +101,9 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
         </div>
         <div className="song-actions">
           <label>
-            Open song
+            Open a saved song.
             <select
-              aria-label="Open song"
+              aria-label="Open a saved song."
               value={song?.revision ? song.id : ""}
               disabled={w.busy || isRecording}
               onChange={(e) => {
@@ -111,7 +111,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                 if (s) w.openSong(s);
               }}
             >
-              <option value="">Choose a saved song</option>
+              <option value="">Choose a saved song.</option>
               {w.saved.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.body.chart.name}
@@ -120,7 +120,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
             </select>
           </label>
           <Button onClick={w.createSong} disabled={w.busy || isRecording}>
-            New song
+            Create this new song.
           </Button>
         </div>
       </header>
@@ -131,27 +131,27 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
       )}
       {!song ? (
         <section className="song-empty">
-          <h2>Start with your own idea</h2>
+          <h2>Start with your own idea.</h2>
           <p>
-            Create a song, then use Record & layers to capture a riff. You can
-            add a recorded idea whenever you are ready.
+            Create this new song, then use Record & layers to capture a riff.
+            You can add a recorded idea whenever you are ready.
           </p>
           <Button variant="primary" onClick={w.createSong}>
-            Create a song
+            Create this new song.
           </Button>
         </section>
       ) : (
         <>
           <div className="song-toolbar">
             <span className="song-save-state">
-              {w.dirty ? "Unsaved changes" : "Saved"}
+              {w.dirty ? "These are unsaved changes." : "This is saved."}
             </span>
             <Button
               disabled={w.busy || isRecording}
               hidden={w.view !== "versions"}
               onClick={() => run(w.saveCopy)}
             >
-              Save copy
+              Save this copy.
             </Button>
             <Button
               disabled={!w.past.length || w.busy || isRecording}
@@ -169,28 +169,28 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
               disabled={w.busy || isRecording}
               onClick={() => run(w.save)}
             >
-              Save song
+              Save this song.
             </Button>
             <Button
               variant="primary"
               disabled={w.busy || isRecording || isPreview}
-              title="Load the current song edits and play from the beginning"
+              title="This loads the current song edits and plays from the beginning."
               onClick={() => run(w.play)}
             >
-              Play song
+              Play this song.
             </Button>
             <Button
               disabled={w.busy || isRecording || isPreview}
               onClick={() => run(() => w.rehearse())}
             >
-              Loop section
+              Loop this section.
             </Button>
             <Button
               disabled={w.busy || isRecording || isPreview}
               hidden={w.view !== "record"}
               onClick={() => run(() => w.rehearse(true))}
             >
-              Next section
+              Loop this next section.
             </Button>
             <Button
               disabled={w.busy || isRecording}
@@ -201,34 +201,38 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
             <Button
               variant={isRecording ? "danger" : "secondary"}
               disabled={w.busy || isPreview}
-              title="Starts at bar 1, playing guitar layers while recording a new take"
+              title="This starts at bar 1 and records a new take while guitar layers play."
               onClick={() => run(w.record)}
             >
               {recordingError
                 ? "Save partial take"
                 : isRecording
-                  ? "Save take"
-                  : "Record"}
+                  ? "Save this take."
+                  : "Record this take."}
             </Button>
           </div>
           <output className="song-loaded-state">
             <span>
-              <strong>Loaded in band: </strong>
-              {currentChart?.name ?? "No arrangement"}
+              {currentChart
+                ? `${currentChart.name} is loaded in the band`
+                : "No arrangement is loaded in the band"}
               {draftLoaded
                 ? ". This draft is loaded."
-                : ". Play song loads your current draft; Space resumes the loaded arrangement."}
+                : ". Play this song loads your current draft; Space resumes the loaded arrangement."}
             </span>
             <button
               type="button"
               onClick={() => onHelp("write.song-map-and-linked-sections")}
-              aria-label="Help with loaded arrangement"
+              aria-label="Help with this loaded arrangement."
             >
               ?
             </button>
           </output>
           <div className="write-navigation">
-            <nav className="write-views" aria-label="Writing views">
+            <nav
+              className="write-views"
+              aria-label="These are the writing views."
+            >
               {(
                 [
                   ["compose", "Compose"],
@@ -249,7 +253,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
               ))}
             </nav>
             <Button onClick={() => onHelp(WRITING_HELP[w.view].topic)}>
-              Help with {WRITING_HELP[w.view].label}
+              Open help for {WRITING_HELP[w.view].label}.
             </Button>
             <fieldset
               title="Key transposes chords. Mode changes only the harmony palette. Recorded guitar retains pitch and speed."
@@ -257,7 +261,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
               disabled={w.busy || isRecording}
             >
               <NumberField
-                label="Tempo (BPM)"
+                label="Tempo is in BPM."
                 value={song.body.chart.defaultBpm}
                 min={40}
                 max={240}
@@ -269,7 +273,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                 }
               />
               <label>
-                Key
+                Choose the key.
                 <select
                   value={song.body.chart.keyTonic}
                   onChange={(e) =>
@@ -302,7 +306,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                 </select>
               </label>
               <label>
-                Mode
+                Choose the mode.
                 <select
                   value={song.body.chart.mode}
                   onChange={(e) =>
@@ -318,7 +322,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
             </fieldset>
           </div>
           <fieldset disabled={w.busy || isRecording} className="song-workspace">
-            <legend className="sr-only">Song settings</legend>
+            <legend className="sr-only">These are the song settings.</legend>
             <ArrangementDesk />
             <div hidden={w.view !== "finish"}>
               <FinishingDesk key={song.id} />
@@ -336,9 +340,9 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
               >
                 <summary>Band, groove and section settings</summary>
                 <div className="song-section-heading">
-                  <h2>Edit section</h2>
+                  <h2>Edit this section.</h2>
                   <label>
-                    Section name
+                    Name this section.
                     <input
                       value={section.name}
                       maxLength={80}
@@ -367,20 +371,20 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                         })
                       }
                     />
-                    Let this song change my rig tones
+                    Let this song change my rig tones.
                   </label>
                   <span className="song-help">
                     {song.body.toneProfileId ||
                       rigState?.currentProfile.name ||
-                      "Choose a rig profile"}{" "}
-                    · MIDI output is selected in Rig.
+                      "Choose a rig profile"}
+                    . MIDI output is selected in Rig.
                   </span>
                 </div>
                 {song.body.toneProfileId && (
                   <label>
-                    Tone on section entry
+                    Choose the tone on section entry.
                     <select
-                      aria-label="Tone on section entry"
+                      aria-label="Choose the tone on section entry."
                       disabled={
                         song.body.toneProfileId !== rigState?.currentProfile.id
                       }
@@ -394,7 +398,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                         })
                       }
                     >
-                      <option value="">Keep current tone</option>
+                      <option value="">Keep the current tone.</option>
                       {rigState?.currentProfile.scenes.map((s, i) => (
                         <option key={s.name} value={i}>
                           {s.name}
@@ -406,9 +410,9 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                 <EnergyDesk />
                 <div className="song-controls">
                   <label>
-                    Try a groove
+                    Choose a groove to try.
                     <select
-                      aria-label="Try a groove for unlocked parts"
+                      aria-label="Choose a groove to try."
                       value=""
                       onChange={(e) => {
                         if (e.target.value)
@@ -420,7 +424,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                           });
                       }}
                     >
-                      <option value="">Change unlocked parts</option>
+                      <option value="">Change unlocked parts.</option>
                       {styles
                         .filter(
                           (s) =>
@@ -434,7 +438,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     </select>
                   </label>
                   <NumberField
-                    label="Swing (%)"
+                    label="Swing is a percent."
                     value={Math.round(band.swing * 100)}
                     min={50}
                     max={75}
@@ -452,7 +456,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                       <div className="song-part" key={name}>
                         <strong>{name}</strong>
                         <label>
-                          Groove
+                          Choose the groove.
                           <select
                             value={p.styleId}
                             onChange={(e) =>
@@ -476,7 +480,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                           </select>
                         </label>
                         <label>
-                          Intensity {Math.round(p.intensity * 100)}%
+                          Intensity is {Math.round(p.intensity * 100)}%.
                           <input
                             type="range"
                             min={0}
@@ -491,7 +495,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                           />
                         </label>
                         <label>
-                          Volume {Math.round(p.gain * 100)}%
+                          Volume is {Math.round(p.gain * 100)}%.
                           <input
                             type="range"
                             min={0}
@@ -516,7 +520,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                               })
                             }
                           />
-                          Mute
+                          Mute this part.
                         </label>
                         <label className="song-check">
                           <input
@@ -529,7 +533,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                               })
                             }
                           />
-                          Lock groove
+                          Lock this groove.
                         </label>
                       </div>
                     );
@@ -545,21 +549,21 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
             <div hidden={w.view !== "record"}>
               <section
                 className="capture-strip"
-                aria-label="Retrospective capture"
+                aria-label="This is the retrospective capture."
               >
                 <div>
-                  <strong>Keep what you just played</strong>
+                  <strong>Keep what you just played.</strong>
                   <p>
                     {w.captureSeconds
-                      ? `Capture armed: last ${w.captureSeconds} seconds. Audio stays on this computer.`
-                      : "Arm capture before playing. Nothing is retained while it is off."}
+                      ? `Capture is armed for the last ${w.captureSeconds} seconds. Audio stays on this computer.`
+                      : "Arm this capture before playing. Nothing is retained while it is off."}
                   </p>
                 </div>
                 <div className="song-actions">
                   <label>
-                    History
+                    Choose the capture length.
                     <select
-                      aria-label="Capture length"
+                      aria-label="Choose the capture length."
                       disabled={w.captureSeconds > 0 || w.busy}
                       value={captureLength}
                       onChange={(e) => setCaptureLength(Number(e.target.value))}
@@ -575,14 +579,16 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                       run(() => w.arm(w.captureSeconds ? 0 : captureLength))
                     }
                   >
-                    {w.captureSeconds ? "Disarm capture" : "Arm capture"}
+                    {w.captureSeconds
+                      ? "Disarm this capture."
+                      : "Arm this capture."}
                   </Button>
                   <Button
                     variant="primary"
                     disabled={!w.captureSeconds || w.busy || isPreview}
                     onClick={() => run(w.keep)}
                   >
-                    Keep that (H)
+                    Keep that take. H is the shortcut.
                   </Button>
                 </div>
               </section>
@@ -590,9 +596,9 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
             </div>
             <section hidden={w.view !== "record"}>
               <div className="song-section-heading">
-                <h2>Guitar layers</h2>
+                <h2>These are the guitar layers.</h2>
                 <NumberField
-                  label="Bars in trimmed riff"
+                  label="How many bars are in the trimmed riff."
                   value={fitBars}
                   min={1}
                   max={32}
@@ -608,7 +614,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
               {song.body.clips.map((c, i) => (
                 <div className="song-clip" key={`${c.takeId}-${i}`}>
                   <label>
-                    Layer name
+                    Name this layer.
                     <input
                       value={c.label}
                       onChange={(e) =>
@@ -619,7 +625,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     />
                   </label>
                   <NumberField
-                    label="Trim start (s)"
+                    label="Trim start is in seconds."
                     value={c.trimStart}
                     min={0}
                     max={c.trimEnd}
@@ -631,7 +637,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     }
                   />
                   <NumberField
-                    label="Trim end (s)"
+                    label="Trim end is in seconds."
                     value={c.trimEnd}
                     min={0.001}
                     max={
@@ -646,7 +652,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     }
                   />
                   <NumberField
-                    label="First bar"
+                    label="This layer starts at this bar."
                     value={c.startBar}
                     min={1}
                     max={256}
@@ -657,7 +663,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     }
                   />
                   <NumberField
-                    label="Repeats"
+                    label="How many times this layer repeats."
                     value={c.repeats}
                     min={1}
                     max={64}
@@ -668,7 +674,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     }
                   />
                   <NumberField
-                    label="Volume (%)"
+                    label="Layer volume is a percent."
                     value={Math.round(c.gain * 100)}
                     min={0}
                     max={200}
@@ -688,7 +694,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                         })
                       }
                     />
-                    Mute
+                    Mute this layer.
                   </label>
                   <Button
                     onClick={() =>
@@ -700,7 +706,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                       })
                     }
                   >
-                    Fit tempo to riff
+                    Fit the tempo to this riff.
                   </Button>
                   <Button
                     disabled={isPreview}
@@ -710,7 +716,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                       })
                     }
                   >
-                    Listen to trim
+                    Listen to this trim.
                   </Button>
                   <Button
                     onClick={() =>
@@ -719,7 +725,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                       })
                     }
                   >
-                    Remove layer
+                    Remove this layer.
                   </Button>
                 </div>
               ))}
@@ -731,14 +737,14 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
             </section>
             <section hidden={w.view !== "versions"}>
               <div className="song-section-heading">
-                <h2>Versions</h2>
+                <h2>These are the saved versions.</h2>
                 <div className="song-actions">
                   <label>
-                    Version name
+                    Name this version.
                     <input
                       value={versionName}
                       onChange={(e) => setVersionName(e.target.value)}
-                      placeholder="Chorus with space"
+                      placeholder="A chorus with space."
                       maxLength={80}
                     />
                   </label>
@@ -748,7 +754,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                       setVersionName("");
                     }}
                   >
-                    Keep version
+                    Keep this version.
                   </Button>
                 </div>
               </div>
@@ -774,13 +780,13 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                         })
                       }
                     >
-                      Remove version
+                      Remove this version.
                     </Button>
                   </div>
                 ))}
               </div>
               <label>
-                Song notes
+                Write the song notes.
                 <textarea
                   rows={3}
                   value={song.body.notes}
@@ -804,15 +810,16 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
         hidden={Boolean(song) && w.view !== "record"}
       >
         <div className="song-section-heading">
-          <h2>Takes and ideas</h2>
+          <h2>These are the takes and ideas.</h2>
           <Button disabled={w.busy} onClick={() => run(loadTakes)}>
-            Refresh takes
+            Refresh these takes.
           </Button>
         </div>
         <p className="song-help">
-          Export for Logic or REAPER. REAPER gets a session builder with aligned
-          tracks, section markers and editable band MIDI. Read
-          REAPER-START-HERE.txt in the export folder; REAPER is installed
+          Export for Logic or REAPER. The folder includes README.txt with Logic
+          steps (File → Open the tempo-map MIDI, keep tempo, drag WAVs to bar
+          1). Opening the project in Logic stays a V2 owner gate. REAPER gets a
+          session builder; read REAPER-START-HERE.txt. REAPER is installed
           separately.
         </p>
         {!takes.length && (
@@ -825,13 +832,13 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
             <div>
               <strong>
                 {t.sessionId === song?.id
-                  ? "This song"
+                  ? "This is from this song."
                   : t.styleId === "captured-idea"
-                    ? "Captured idea"
-                    : "Take"}
+                    ? "This is a captured idea."
+                    : "This is a take."}
               </strong>
               <span>
-                {t.durationSecs.toFixed(1)} s · {t.tempo.toFixed(1)} BPM
+                {t.durationSecs.toFixed(1)} s. {t.tempo.toFixed(1)} BPM.
               </span>
               <small>{t.id}</small>
             </div>
@@ -843,7 +850,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     await ipc.invoke("clip_audition", {
                       spec: {
                         takeId: t.id,
-                        label: "Preview",
+                        label: "This is a preview.",
                         trimStart: 0,
                         trimEnd: t.durationSecs,
                         startBar: 1,
@@ -855,13 +862,13 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                   })
                 }
               >
-                Listen to guitar
+                Listen to the guitar.
               </Button>
               <Button
                 disabled={w.busy || isPreview}
                 onClick={() => run(() => favourite(t.id, !t.favourite))}
               >
-                {t.favourite ? "Favourite" : "Mark favourite"}
+                {t.favourite ? "This is a favourite." : "Mark this favourite."}
               </Button>
               <Button
                 disabled={
@@ -869,7 +876,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                 }
                 onClick={() => w.attach(t)}
               >
-                Add guitar layer
+                Add a guitar layer.
               </Button>
               <Button
                 disabled={w.busy || isPreview}
@@ -879,8 +886,8 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     if (r)
                       useWriting.setState({
                         message: r.missingStems.length
-                          ? `Export incomplete: ${r.missingStems.length} stems missing. Check ${r.dir}.`
-                          : `Exported to ${r.dir}.${r.reaperScript ? " For REAPER, follow REAPER-START-HERE.txt in that folder." : ""}`,
+                          ? `Export is incomplete. ${r.missingStems.length} stems are missing. Check ${r.dir}.`
+                          : `Exported to ${r.dir}. Open README.txt for Logic steps.${r.reaperScript ? " For REAPER, follow REAPER-START-HERE.txt." : ""}`,
                       });
                   })
                 }

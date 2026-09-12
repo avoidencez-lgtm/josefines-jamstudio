@@ -10,9 +10,338 @@ mod common;
 use common::{unique, user_dir, Studio};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::{Duration, Instant};
 use tauri::Manager;
 
-const NO_PORT: &str = "no MIDI port open (messages are only logged)";
+const NO_PORT: &str = "No MIDI port is open. Messages are only logged.";
+
+#[test]
+fn generated_audio_refresh_analyzes_saved_output_and_recovers_without_network_or_duplicate_assets()
+{
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let job_id = unique("generated-analysis");
+    let raw = media_root().join("assets").join(format!("{job_id}.wav"));
+    std::fs::create_dir_all(raw.parent().unwrap()).unwrap();
+    let mut wav = hound::WavWriter::create(
+        &raw,
+        hound::WavSpec {
+            channels: 1,
+            sample_rate: 48000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for i in 0..144000 {
+        wav.write_sample(
+            (4000.0 * (i as f64 * std::f64::consts::TAU * 440.0 / 48000.0).sin()) as i16,
+        )
+        .unwrap();
+    }
+    wav.finalize().unwrap();
+    let receipt = json!({"schemaVersion":1,"id":job_id,"status":"download","rawPath":raw,"future":{"keep":true},"request":{
+        "catalogId":"minimax-music","model":"music-3.0","prompt":"Synthetic fixture, never sent","seconds":3,"ratio":"16:9","instrumental":true
+    }});
+    let file = media_root().join("jobs").join(format!("{job_id}.json"));
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, serde_json::to_vec(&receipt).unwrap()).unwrap();
+    let ready = studio.ok("media_refresh", json!({"jobId":job_id}));
+    assert_eq!(ready["status"], "ready");
+    assert_eq!(ready["message"], "");
+    assert!(ready.get("targetAssetId").is_none());
+    let asset_id = ready["assetId"].as_str().unwrap();
+    let folder = user_dir().join("songs").join(asset_id);
+    let manifest = folder.join("song.json");
+    let saved = read_json(&manifest);
+    assert_eq!(saved["analysisStatus"]["state"], "ready");
+    assert_eq!(saved["songAnalysis"]["sourceHash"], saved["sourceHash"]);
+    let source = folder.join("source.wav");
+    let bytes = std::fs::read(&source).unwrap();
+    assert_eq!(
+        std::fs::read(folder.join("original.wav")).unwrap(),
+        std::fs::read(&raw).unwrap()
+    );
+    // Restore an unfinished receipt and remove the raw duplicate: use the existing song.
+    let mut resumed = read_json(&file);
+    resumed["status"] = json!("analysis");
+    std::fs::write(&file, serde_json::to_vec(&resumed).unwrap()).unwrap();
+    std::fs::remove_file(&raw).unwrap();
+    let mut damaged = bytes.clone();
+    damaged[..4].copy_from_slice(b"BAD!");
+    std::fs::write(&source, &damaged).unwrap();
+    let failed = studio.ok("media_refresh", json!({"jobId":job_id}));
+    assert_eq!(failed["status"], "analysis");
+    assert!(failed["message"]
+        .as_str()
+        .unwrap()
+        .contains("analysis did not finish"));
+    let failed_song = read_json(&manifest);
+    assert_eq!(failed_song["analysisStatus"]["state"], "failed");
+    assert_eq!(failed_song["songAnalysis"], saved["songAnalysis"]);
+    std::fs::write(&source, &bytes).unwrap();
+    let retried = studio.ok("media_refresh", json!({"jobId":job_id}));
+    assert_eq!(retried["status"], "ready");
+    assert_eq!(retried["assetId"], asset_id);
+    assert_eq!(read_json(&file)["future"], json!({"keep":true}));
+    assert_eq!(std::fs::read(&source).unwrap(), bytes);
+    let library = studio.ok("media_list", json!({}));
+    assert_eq!(
+        library["assets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|a| a["id"] == asset_id)
+            .count(),
+        1
+    );
+    studio.ok("media_reference_load", json!({"assetId":asset_id}));
+    let reference = studio.ok("audio_get_telemetry", json!({}))["reference"].clone();
+    assert!(reference["analysis"].is_object());
+    assert_eq!(reference["state"], "stopped");
+    assert_eq!(reference["position"], 0.0);
+    studio.ok("media_reference_unload", json!({}));
+    // A future receipt is never rewritten by retry.
+    let mut future = read_json(&file);
+    future["schemaVersion"] = json!(2);
+    std::fs::write(&file, serde_json::to_vec(&future).unwrap()).unwrap();
+    let before = std::fs::read(&file).unwrap();
+    assert!(studio
+        .err("media_refresh", json!({"jobId":job_id}))
+        .contains("Unsupported"));
+    assert_eq!(std::fs::read(&file).unwrap(), before);
+    std::fs::remove_file(file).unwrap();
+    std::fs::remove_dir_all(folder).unwrap();
+}
+
+#[test]
+fn native_song_import_normalizes_preserves_and_loads_audio_without_external_tools() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    assert!(studio.err("song_pick_file", json!({})).contains("headless"));
+    let source = user_dir().join(format!("{}.wav", unique("mono-import")));
+    let mut wav = hound::WavWriter::create(
+        &source,
+        hound::WavSpec {
+            channels: 1,
+            sample_rate: 44100,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for _ in 0..44100 {
+        wav.write_sample(4096i16).unwrap();
+    }
+    wav.finalize().unwrap();
+    let before = std::fs::read(&source).unwrap();
+    let invalid_id = unique("invalid-duration");
+    let invalid = media_root()
+        .join("assets")
+        .join(format!("{invalid_id}.json"));
+    std::fs::create_dir_all(invalid.parent().unwrap()).unwrap();
+    let legacy_source = invalid.with_extension("wav");
+    std::fs::copy(&source, &legacy_source).unwrap();
+    std::fs::write(&invalid, serde_json::to_vec(&json!({"schemaVersion":1,"id":invalid_id,"kind":"audio","path":legacy_source,"seconds":0.0,"label":"Invalid duration"})).unwrap()).unwrap();
+    assert_eq!(
+        studio.err("media_store_song", json!({"assetId":invalid_id})),
+        "Choose an audio reference up to twenty minutes."
+    );
+    std::fs::remove_file(invalid).unwrap();
+    std::fs::remove_file(legacy_source).unwrap();
+    let asset = studio.ok("media_import", json!({"path":source,"kind":"audio"}));
+    assert_eq!(asset["seconds"], 1.0);
+    let saved = Path::new(asset["path"].as_str().unwrap());
+    let folder = saved.parent().unwrap();
+    assert_eq!(saved.file_name().unwrap(), "source.wav");
+    assert_eq!(std::fs::read(folder.join("original.wav")).unwrap(), before);
+    assert_eq!(std::fs::read(&source).unwrap(), before);
+    let normalized = hound::WavReader::open(saved).unwrap();
+    assert_eq!(normalized.spec().sample_rate, 48000);
+    assert_eq!(normalized.spec().channels, 2);
+    assert_eq!(normalized.duration(), 48000);
+    let doc = read_json(&folder.join("song.json"));
+    assert_eq!(doc["durationMs"], 1000.0);
+    assert_eq!(doc["sourceHash"].as_str().unwrap().len(), 64);
+    assert_eq!(doc["analysisStatus"]["state"], "unavailable");
+    studio.ok("media_reference_load", json!({"assetId":asset["id"]}));
+    assert_eq!(
+        studio.ok("audio_get_telemetry", json!({}))["reference"]["asset_id"],
+        asset["id"]
+    );
+    let state = studio.app().state::<app_lib::AppState>();
+    state
+        .engine
+        .lock()
+        .recorder_start("import-guard".into())
+        .unwrap();
+    assert!(studio
+        .err("media_import", json!({"path":source,"kind":"audio"}))
+        .contains("Save the take"));
+    state.engine.lock().recorder_stop().unwrap();
+    studio.ok("media_reference_unload", json!({}));
+    std::fs::remove_dir_all(folder).unwrap();
+    std::fs::remove_file(source).unwrap();
+}
+
+#[test]
+fn reference_sections_use_native_downbeats_and_record_the_confirmed_grid() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let state = studio.app().state::<app_lib::AppState>();
+    let grid: jam_audio::song::grid::Grid = serde_json::from_str(include_str!(
+        "../../tests/fixtures/seams/reference-grid.json"
+    ))
+    .unwrap();
+    let mut song = jam_audio::song::ReferenceSong::new(
+        "grid-fixture".into(),
+        "Fixture".into(),
+        vec![0.1; 480_000],
+    )
+    .unwrap();
+    song.set_grid(grid).unwrap();
+    state.engine.lock().load_reference(song).unwrap();
+    studio.err(
+        "media_reference_loop_section",
+        json!({"assetId":"stale","sectionId":"chorus"}),
+    );
+    studio.err(
+        "media_reference_loop_section",
+        json!({"assetId":"grid-fixture","sectionId":"missing"}),
+    );
+    studio.ok(
+        "media_reference_loop_section",
+        json!({"assetId":"grid-fixture","sectionId":"chorus"}),
+    );
+    let before = studio.ok("audio_get_telemetry", json!({}));
+    assert_eq!(before["reference"]["loop_start"], 2.2);
+    assert_eq!(before["reference"]["loop_end"], 4.6);
+    assert_eq!(before["reference"]["grid"]["bars"], 2);
+    assert_eq!(
+        before["reference"]["grid"]["position"]["section_id"],
+        "chorus"
+    );
+    let ramp: Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/seams/reference-ramp.json"
+    ))
+    .unwrap();
+    assert!(studio
+        .err(
+            "media_reference_ramp",
+            json!({"assetId":"stale","config":ramp})
+        )
+        .contains("changed"));
+    let armed = studio.ok(
+        "media_reference_ramp",
+        json!({"assetId":"grid-fixture","config":ramp}),
+    );
+    assert_eq!(armed["speed_percent"], 50);
+    assert_eq!(armed["completed_bars"], 0);
+    state
+        .engine
+        .lock()
+        .recorder_start("grid-fixture".into())
+        .unwrap();
+    studio.err(
+        "media_reference_loop_section",
+        json!({"assetId":"grid-fixture","sectionId":"verse"}),
+    );
+    assert!(studio
+        .err(
+            "media_reference_ramp",
+            json!({"assetId":"grid-fixture","config":null})
+        )
+        .contains("Save the take"));
+    let take = state.engine.lock().recorder_stop().unwrap();
+    assert_eq!(take.snapshot["beatGrid"]["origin"], "confirmed-local");
+    assert_eq!(take.snapshot["beatGrid"]["beats"][4], 2.2);
+    assert_eq!(take.snapshot["beatGrid"]["sections"][1]["label"], "Chorus");
+    assert_eq!(take.snapshot["reference"]["ramp"]["config"], ramp);
+    assert_eq!(
+        studio.ok(
+            "media_reference_ramp",
+            json!({"assetId":"grid-fixture","config":ramp,"toggle":true})
+        ),
+        Value::Null
+    );
+    studio.ok("media_reference_unload", json!({}));
+    studio.err("media_reference_grid_save",json!({"assetId":"missing","confirmation":{"sourceHash":"stale","expectedBeats":[],"firstDownbeat":0,"beatsPerBar":4,"sections":[],"confirmed":false}}));
+}
+
+#[test]
+fn reference_processing_preserves_partial_settings_metadata_and_rejects_stale_sources() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let id = unique("reference-practice");
+    let folder = app_lib::media::root().join("assets");
+    std::fs::create_dir_all(&folder).unwrap();
+    let source = folder.join(format!("{id}.wav"));
+    let manifest = folder.join(format!("{id}.json"));
+    // The decoded source comes through the native test seam; FFmpeg reload is
+    // covered separately by the opt-in media scenario.
+    std::fs::write(&source, b"source must stay unchanged").unwrap();
+    std::fs::write(&manifest, serde_json::to_vec(&json!({"schemaVersion":1,"id":id,"kind":"audio","path":source.to_string_lossy(),"seconds":1.0,"label":"Synthetic reference","future":42,"referencePractice":{"schemaVersion":1,"future":true}})).unwrap()).unwrap();
+    let state = studio.app().state::<app_lib::AppState>();
+    state
+        .engine
+        .lock()
+        .load_reference(
+            jam_audio::song::ReferenceSong::new(id.clone(), "Test".into(), vec![0.1; 96_000])
+                .unwrap(),
+        )
+        .unwrap();
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/seams/reference-practice.json"
+    ))
+    .unwrap();
+    let speed = fixture["speed"]["arguments"]["speedPercent"]
+        .as_f64()
+        .unwrap()
+        / 100.0;
+    assert_eq!(
+        studio.ok(
+            "media_reference_processing",
+            json!({"assetId":id,"speed":speed})
+        ),
+        json!({"speed":0.75,"semitones":0})
+    );
+    assert_eq!(
+        studio.ok(
+            "media_reference_processing",
+            json!({"assetId":id,"semitones":2})
+        ),
+        fixture["applied"]
+    );
+    let saved: Value = serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    assert_eq!(saved["future"], 42);
+    assert_eq!(saved["referencePractice"]["future"], true);
+    assert_eq!(saved["referencePractice"]["speed"], 0.75);
+    assert_eq!(saved["referencePractice"]["semitones"], 2);
+    for args in [
+        json!({"assetId":"stale","speed":1}),
+        json!({"assetId":id}),
+        json!({"assetId":id,"speed":0.49}),
+        json!({"assetId":id,"semitones":13}),
+    ] {
+        studio.err("media_reference_processing", args);
+        assert_eq!(
+            serde_json::from_slice::<Value>(&std::fs::read(&manifest).unwrap()).unwrap(),
+            saved
+        );
+    }
+    assert_eq!(
+        std::fs::read(&source).unwrap(),
+        b"source must stay unchanged"
+    );
+    assert_eq!(
+        studio.ok("audio_get_telemetry", json!({}))["reference"]["speed"],
+        0.75
+    );
+    studio.ok("media_reference_unload", json!({}));
+    std::fs::remove_file(manifest).unwrap();
+    std::fs::remove_file(source).unwrap();
+}
 
 #[test]
 fn native_reference_uses_shared_transport_and_refuses_unanalysed_grid_edits() {
@@ -108,6 +437,12 @@ fn native_reference_uses_shared_transport_and_refuses_unanalysed_grid_edits() {
 fn practice_copy_validates_parameters_and_source_before_running_tools() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
+    assert!(studio
+        .err("media_analyze", json!({"assetId":"../outside"}))
+        .contains("Invalid media ID"));
+    assert!(studio
+        .err("media_analyze", json!({"assetId":"missing"}))
+        .contains("Cannot read media document"));
     for (speed, semitones) in [(0.49, 0), (1.51, 0), (1.0, 13)] {
         assert!(studio
             .err(
@@ -642,6 +977,81 @@ fn program_changes_name_the_declared_program_and_are_logged_without_a_port() {
 }
 
 #[test]
+fn rig_panic_sends_all_notes_off_and_reset_controllers() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok(
+        "rig_select_profile",
+        json!({"profileId": "headrush-pedalboard"}),
+    );
+    studio.ok("rig_clear_monitor", json!({}));
+    let state = studio.ok("rig_panic", json!({}));
+    let mon = state["monitor"].as_array().unwrap();
+    assert_eq!(mon[0]["bytes"], json!([0xB0, 123, 0]));
+    assert_eq!(mon[1]["bytes"], json!([0xB0, 121, 0]));
+    assert_eq!(mon[0]["reason"], "panic");
+}
+
+#[test]
+fn rig_clock_follows_transport_play_pause_and_stop() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok("transport_set_count_in", json!({"bars": 0}));
+    studio.ok("transport_set_tempo", json!({"bpm": 240.0}));
+    studio.ok("rig_clear_monitor", json!({}));
+    studio.ok("transport_play", json!({}));
+    thread::sleep(Duration::from_millis(80));
+    studio.ok("audio_get_telemetry", json!({}));
+    assert!(
+        studio.ok("rig_get_state", json!({}))["monitor"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "clock stays silent until enabled"
+    );
+    studio.ok("transport_stop", json!({}));
+
+    let on = studio.ok("rig_set_clock", json!({"on": true}));
+    assert_eq!(on["sendClock"], true);
+    studio.ok("rig_dry_run", json!({"on": true}));
+    assert_eq!(studio.ok("rig_get_state", json!({}))["dryRun"], true);
+    studio.ok("rig_clear_monitor", json!({}));
+    studio.ok("transport_play", json!({}));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let playing = loop {
+        studio.ok("audio_get_telemetry", json!({}));
+        let mon = studio.ok("rig_get_state", json!({}))["monitor"]
+            .as_array()
+            .cloned()
+            .unwrap();
+        let kinds: Vec<u64> = mon.iter().filter_map(|m| m["bytes"][0].as_u64()).collect();
+        if kinds.contains(&0xFA) && kinds.contains(&0xF8) {
+            break mon;
+        }
+        assert!(Instant::now() < deadline, "no start/ticks: {mon:?}");
+        thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(playing[0]["bytes"][0], 0xFA);
+
+    studio.ok("rig_clear_monitor", json!({}));
+    studio.ok("transport_pause", json!({}));
+    assert_eq!(
+        studio.ok("rig_get_state", json!({}))["monitor"][0]["bytes"][0],
+        0xFC
+    );
+    studio.ok("rig_clear_monitor", json!({}));
+    studio.ok("transport_play", json!({}));
+    assert_eq!(
+        studio.ok("rig_get_state", json!({}))["monitor"][0]["bytes"][0],
+        0xFB
+    );
+    studio.ok("transport_stop", json!({}));
+    let state = studio.ok("rig_get_state", json!({}));
+    let stop = state["monitor"].as_array().unwrap().last().unwrap();
+    assert_eq!(stop["bytes"][0], 0xFC);
+}
+
+#[test]
 fn rig_send_program_refuses_a_program_above_127() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
@@ -1032,7 +1442,7 @@ fn media_save_enforces_revisions_and_project_rules() {
         })}),
     );
     assert!(
-        err.starts_with("Video project:") && err.contains("title"),
+        err.starts_with("The video project is invalid.") && err.contains("title"),
         "{err}"
     );
 
@@ -1069,6 +1479,10 @@ fn media_import_refuses_missing_files_wrong_kinds_and_unknown_extensions_without
     let studio = Studio::boot();
     let assets = media_root().join("assets");
     let before = json_files(&assets);
+    assert_eq!(
+        studio.err("media_store_song", json!({"assetId":"../escape"})),
+        "Invalid media ID"
+    );
     let local = "Choose a local audio/video file up to 512 MB.";
 
     let missing = user_dir().join(format!("{}.wav", unique("missing")));
@@ -1088,7 +1502,7 @@ fn media_import_refuses_missing_files_wrong_kinds_and_unknown_extensions_without
     );
     assert_eq!(
         studio.err("media_import", json!({"path": text, "kind": "audio"})),
-        "Choose MP4/MOV/WebM/MKV video or WAV/MP3/FLAC/M4A/AAC/OGG audio."
+        "Choose MP4/MOV/WebM/MKV video or WAV/MP3/FLAC/M4A/AAC/AIFF/OGG audio."
     );
     assert_eq!(
         studio.err(
@@ -1166,7 +1580,7 @@ fn media_refresh_cancel_and_render_fail_safely_with_nothing_running() {
     assert_eq!(studio.ok("media_cancel", json!({})), Value::Null);
     let err = studio.err("media_render", json!({"document": {"schemaVersion": 1}}));
     assert!(
-        err.starts_with("Video project:") && err.contains("missing field"),
+        err.starts_with("The video project is invalid.") && err.contains("missing field"),
         "{err}"
     );
     let render_id = unique("render");

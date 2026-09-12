@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "song",
+  "title": "Fixture",
+  "sourcePath": "source.wav",
+  "sourceHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "durationMs": 4000.0,
+  "future": {
+    "kept": true
+  },
+  "songAnalysis": {
+    "future": 42
+  }
+}

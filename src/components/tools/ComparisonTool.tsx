@@ -26,7 +26,7 @@ export default function ComparisonTool() {
       await ipc.invoke("clip_audition", {
         spec: {
           takeId: id,
-          label: "Blind comparison",
+          label: "This is a blind comparison.",
           trimStart: pair.start,
           trimEnd: pair.end,
           startBar: 1,
@@ -47,13 +47,17 @@ export default function ComparisonTool() {
       {!pair && (
         <>
           <div className="room-tool-row">
-            <TakeSelect label="First take" value={first} onChange={setFirst} />
             <TakeSelect
-              label="Second take"
+              label="Choose the first take."
+              value={first}
+              onChange={setFirst}
+            />
+            <TakeSelect
+              label="Choose the second take."
               value={second}
               onChange={setSecond}
             />
-            <Field label="Excerpt start (seconds)">
+            <Field label="Excerpt start is in seconds.">
               <input
                 type="number"
                 min="0"
@@ -62,7 +66,7 @@ export default function ComparisonTool() {
                 onChange={(e) => setStart(e.target.valueAsNumber)}
               />
             </Field>
-            <Field label="Excerpt length (seconds)">
+            <Field label="Excerpt length is in seconds.">
               <input
                 type="number"
                 min="0.1"
@@ -104,7 +108,7 @@ export default function ComparisonTool() {
               })
             }
           >
-            Start blind comparison
+            Start this blind comparison.
           </Button>
         </>
       )}
@@ -113,12 +117,12 @@ export default function ComparisonTool() {
           <div className="room-tool-row">
             {pair.ids.map((id, i) => (
               <section key={id}>
-                <h3>Take {i === 0 ? "A" : "B"}</h3>
+                <h3>This is take {i === 0 ? "A" : "B"}.</h3>
                 {pair.revealed && (
                   <p>
                     {e.takes.find((t) => t.id === id)?.timestamp ??
-                      "Recording unavailable"}{" "}
-                    · {id}
+                      "The recording is unavailable"}
+                    . {id}.
                   </p>
                 )}
                 <Button disabled={isPreview} onClick={() => void audition(id)}>
@@ -147,18 +151,18 @@ export default function ComparisonTool() {
           </div>
           <div className="room-tool-row">
             <Button onClick={() => setPair({ ...pair, revealed: true })}>
-              Reveal identities
+              Reveal these identities.
             </Button>
             <Button
               onClick={() =>
                 void run(async () => {
                   if (!isPreview) await ipc.invoke("transport_stop");
                   setPair(null);
-                  return "Ready for another comparison.";
+                  return "Comparison cleared. Choose two takes and start again.";
                 })
               }
             >
-              New comparison
+              Start this new comparison.
             </Button>
           </div>
         </>

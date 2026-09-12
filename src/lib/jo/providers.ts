@@ -58,7 +58,7 @@ const finalReply = (reply: string, toolCalls: JoToolCall[]): BrainReply => {
   for (const call of toolCalls) validateToolCall(call);
   if (!reply.trim() && !toolCalls.length)
     throw new Error("The provider returned no usable answer.");
-  return { reply: reply.trim() || "On it.", toolCalls };
+  return { reply: reply.trim() || "This is underway.", toolCalls };
 };
 export function readOpenAI(raw: unknown): BrainReply {
   const r = raw as WireReply;

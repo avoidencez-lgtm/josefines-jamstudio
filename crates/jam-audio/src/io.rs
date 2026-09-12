@@ -306,7 +306,7 @@ fn named_or_default_device(name: Option<&str>, input: bool) -> Result<cpal::Devi
         } else {
             host.output_devices()
         }
-        .map_err(|e| format!("cannot enumerate {kind} devices: {e}"))?;
+        .map_err(|e| format!("Cannot enumerate {kind} devices. {e}"))?;
         for d in list {
             if d.name().ok().as_deref() == Some(n) {
                 return Ok(d);
@@ -318,10 +318,10 @@ fn named_or_default_device(name: Option<&str>, input: bool) -> Result<cpal::Devi
     }
     if input {
         host.default_input_device()
-            .ok_or_else(|| format!("no default {kind} device"))
+            .ok_or_else(|| format!("No default {kind} device."))
     } else {
         host.default_output_device()
-            .ok_or_else(|| format!("no default {kind} device"))
+            .ok_or_else(|| format!("No default {kind} device."))
     }
 }
 
@@ -407,7 +407,7 @@ impl StreamWorker {
         let handle = thread::spawn(move || match open() {
             Ok((stream, info)) => {
                 if let Err(e) = stream.play() {
-                    let _ = tx.send(Err(format!("cannot start stream: {e}")));
+                    let _ = tx.send(Err(format!("Cannot start the audio stream. {e}")));
                     return;
                 }
                 let _ = tx.send(Ok(info));
@@ -530,7 +530,7 @@ where
             },
             None,
         )
-        .map_err(|e| format!("cannot open output stream: {e}"))
+        .map_err(|e| format!("Cannot open the output stream. {e}"))
 }
 
 impl AudioOutput for CpalOutput {
@@ -545,7 +545,7 @@ impl AudioOutput for CpalOutput {
             let name = device.name().unwrap_or_else(|_| "unknown".into());
             let default = device
                 .default_output_config()
-                .map_err(|e| format!("{name}: no default output config: {e}"))?;
+                .map_err(|e| format!("{name} has no default output config. {e}"))?;
             let ranges: Vec<_> = device
                 .supported_output_configs()
                 .map(|it| it.collect())
@@ -561,7 +561,9 @@ impl AudioOutput for CpalOutput {
                 SampleFormat::I16 => build_output::<i16>(&device, &cfg, callback, errors),
                 SampleFormat::U16 => build_output::<u16>(&device, &cfg, callback, errors),
                 SampleFormat::I32 => build_output::<i32>(&device, &cfg, callback, errors),
-                other => Err(format!("unsupported output sample format: {other:?}")),
+                other => Err(format!(
+                    "The output sample format {other:?} is not supported."
+                )),
             }?;
             let buffer_frames = match cfg.buffer_size {
                 BufferSize::Fixed(n) => Some(n),
@@ -648,7 +650,7 @@ where
             },
             None,
         )
-        .map_err(|e| format!("cannot open input stream: {e}"))
+        .map_err(|e| format!("Cannot open the input stream. {e}"))
 }
 
 impl AudioInput for CpalInput {
@@ -664,7 +666,7 @@ impl AudioInput for CpalInput {
             let name = device.name().unwrap_or_else(|_| "unknown".into());
             let default = device
                 .default_input_config()
-                .map_err(|e| format!("{name}: no default input config: {e}"))?;
+                .map_err(|e| format!("{name} has no default input config. {e}"))?;
             let ranges: Vec<_> = device
                 .supported_input_configs()
                 .map(|it| it.collect())
@@ -688,7 +690,9 @@ impl AudioInput for CpalInput {
                 SampleFormat::I16 => build_input::<i16>(&device, &cfg, channel, callback, errors),
                 SampleFormat::U16 => build_input::<u16>(&device, &cfg, channel, callback, errors),
                 SampleFormat::I32 => build_input::<i32>(&device, &cfg, channel, callback, errors),
-                other => Err(format!("unsupported input sample format: {other:?}")),
+                other => Err(format!(
+                    "The input sample format {other:?} is not supported."
+                )),
             }?;
             let buffer_frames = match cfg.buffer_size {
                 BufferSize::Fixed(n) => Some(n),

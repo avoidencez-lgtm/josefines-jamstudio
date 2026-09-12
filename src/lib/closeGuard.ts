@@ -17,6 +17,7 @@ export const hasUnsavedWork = () =>
 export const hasActiveWork = () =>
   useRoomOperation.getState().blocking ||
   useEngineStore.getState().isRecording ||
+  useEngineStore.getState().calibrating ||
   useWriting.getState().busy ||
   Boolean(useMedia.getState().busy);
 

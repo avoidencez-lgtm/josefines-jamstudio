@@ -10,10 +10,14 @@ use std::{
     sync::atomic::{AtomicBool, AtomicU64, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tauri::State;
+use tauri::{AppHandle, Runtime, State};
+mod analysis;
+pub mod grid;
+pub mod songs;
+pub mod stems;
 
 const MEDIA_EXTENSIONS: &[&str] = &[
-    "mp4", "mov", "webm", "mkv", "wav", "mp3", "flac", "m4a", "aac", "ogg",
+    "mp4", "mov", "webm", "mkv", "wav", "mp3", "flac", "m4a", "aac", "ogg", "aiff", "aif",
 ];
 
 // ponytail: one media operation at a time for this single-user desktop studio.
@@ -63,19 +67,19 @@ fn media_extension(ext: &str) -> Result<&str, String> {
 }
 fn read(path: &Path) -> Result<Value, String> {
     if fs::metadata(path)
-        .map_err(|e| format!("Cannot read media document {}: {e}", path.display()))?
+        .map_err(|e| format!("Cannot read media document {}. {e}", path.display()))?
         .len()
         > 2_000_000
     {
         return Err(format!("Media document {} exceeds 2 MB", path.display()));
     }
     let bytes = fs::read(path)
-        .map_err(|e| format!("Cannot read media document {}: {e}", path.display()))?;
+        .map_err(|e| format!("Cannot read media document {}. {e}", path.display()))?;
     jam_core::json::from_slice(&bytes)
-        .map_err(|e| format!("Invalid media document {}: {e}", path.display()))
+        .map_err(|e| format!("Invalid media document {}. {e}", path.display()))
 }
 fn write_err(path: &Path, e: impl std::fmt::Display) -> String {
-    format!("Cannot write media document {}: {e}", path.display())
+    format!("Cannot write media document {}. {e}", path.display())
 }
 
 fn write(path: &Path, value: &Value) -> Result<(), String> {
@@ -132,8 +136,8 @@ struct Project {
     shots: Vec<Shot>,
 }
 fn project(v: &Value) -> Result<Project, String> {
-    let p: Project =
-        serde_json::from_value(v.clone()).map_err(|e| format!("Video project: {e}"))?;
+    let p: Project = serde_json::from_value(v.clone())
+        .map_err(|e| format!("The video project is invalid. {e}"))?;
     valid_id(&p.id)?;
     if p.schema_version != 1
         || p.title.trim().is_empty()
@@ -225,24 +229,53 @@ fn list_media(base: &Path) -> Result<Value, String> {
                 Err(e) => result["warnings"]
                     .as_array_mut()
                     .unwrap()
-                    .push(json!(format!("{}: {e} File left intact.", p.display()))),
+                    .push(json!(format!(
+                        "The file {} is invalid. {e} File left intact.",
+                        p.display()
+                    ))),
             }
         }
     }
+    songs::append_list(base, &mut result)?;
     Ok(result)
 }
 
 fn asset(base: &Path, id: &str) -> Result<Asset, String> {
     valid_id(id)?;
+    if songs::folder(base, id)?.exists() {
+        return songs::load(base, id);
+    }
     let a: Asset = serde_json::from_value(read(&base.join("assets").join(format!("{id}.json")))?)
         .map_err(|e| e.to_string())?;
-    let path = fs::canonicalize(&a.path).map_err(|_| "Media file moved or missing")?;
-    let allowed = fs::canonicalize(base.join("assets")).map_err(|e| e.to_string())?;
-    if !path.starts_with(allowed) || !path.is_file() {
-        return Err("Asset is outside the media library".into());
-    }
+    library_audio_path(base, Path::new(&a.path))?;
     Ok(a)
 }
+fn library_audio_path(base: &Path, path: &Path) -> Result<PathBuf, String> {
+    let file = path
+        .canonicalize()
+        .map_err(|_| "Media file moved or missing")?;
+    let roots = [base.join("assets"), songs::library(base)?];
+    if !file.is_file()
+        || !roots
+            .iter()
+            .any(|root| root.canonicalize().is_ok_and(|root| file.starts_with(root)))
+    {
+        return Err("Asset is outside the media library".into());
+    }
+    Ok(file)
+}
+fn save_asset(base: &Path, a: &Asset) -> Result<(), String> {
+    valid_id(&a.id)?;
+    if songs::folder(base, &a.id)?.exists() {
+        songs::save(base, a)
+    } else {
+        write(
+            &base.join("assets").join(format!("{}.json", a.id)),
+            &serde_json::to_value(a).map_err(|e| e.to_string())?,
+        )
+    }
+}
+
 async fn run(executable: &Path, args: &[String], seconds: u64) -> Result<Vec<u8>, String> {
     use tokio::io::AsyncReadExt;
     let mut child = platform::command(executable)
@@ -251,7 +284,7 @@ async fn run(executable: &Path, args: &[String], seconds: u64) -> Result<Vec<u8>
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Media tool could not start: {e}"))?;
+        .map_err(|e| format!("The media tool could not start. {e}"))?;
     let stdout = child.stdout.take().ok_or("Missing media tool output")?;
     let stderr = child
         .stderr
@@ -273,7 +306,7 @@ async fn run(executable: &Path, args: &[String], seconds: u64) -> Result<Vec<u8>
         }
         if !status.success() {
             return Err(format!(
-                "Media tool failed: {}",
+                "The media tool failed. {}",
                 String::from_utf8_lossy(&err)
                     .chars()
                     .take(1800)
@@ -322,6 +355,17 @@ async fn probe(path: &Path, kind: &str) -> Result<f64, String> {
     Ok(duration)
 }
 async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Asset, String> {
+    import_as(base, path, kind, label, &id()).await
+}
+
+async fn import_as(
+    base: &Path,
+    path: &Path,
+    kind: &str,
+    label: &str,
+    asset_id: &str,
+) -> Result<Asset, String> {
+    valid_id(asset_id)?;
     if !path.is_absolute()
         || !path.is_file()
         || !["audio", "video"].contains(&kind)
@@ -335,10 +379,31 @@ async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Ass
         .unwrap_or("")
         .to_ascii_lowercase();
     if !MEDIA_EXTENSIONS.contains(&ext.as_str()) {
-        return Err("Choose MP4/MOV/WebM/MKV video or WAV/MP3/FLAC/M4A/AAC/OGG audio.".into());
+        return Err("Choose MP4/MOV/WebM/MKV video or WAV/MP3/FLAC/M4A/AAC/AIFF/OGG audio.".into());
+    }
+    let id = asset_id.to_string();
+    if kind == "audio" {
+        let saved = songs::store(
+            base,
+            Asset {
+                schema_version: 1,
+                id,
+                kind: kind.into(),
+                path: path.to_string_lossy().into_owned(),
+                seconds: 0.0, // New imports derive their duration from decoded audio.
+                label: label.chars().take(160).collect(),
+                extra: BTreeMap::from([("analysisStatus".into(), json!({"schemaVersion":1,"state":"pending","analyzer":"local-chroma-v1","message":"Audio saved. Local analysis has not finished; retry in Songs."}))]),
+            },
+        )
+        .await?;
+        return analysis::prepare(base, &saved.id).await.map_err(|e| {
+            format!(
+                "Song {} was imported and kept. Preparation failed. {e}",
+                saved.id
+            )
+        });
     }
     let seconds = probe(path, kind).await?;
-    let id = id();
     let dest = base.join("assets").join(format!("{id}.{ext}"));
     fs::create_dir_all(dest.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::copy(path, &dest).map_err(|e| e.to_string())?;
@@ -358,7 +423,14 @@ async fn import(base: &Path, path: &Path, kind: &str, label: &str) -> Result<Ass
     Ok(a)
 }
 #[tauri::command]
-pub async fn media_import(path: String, kind: String) -> Result<Asset, String> {
+pub async fn media_import(
+    path: String,
+    kind: String,
+    state: State<'_, AppState>,
+) -> Result<Asset, String> {
+    if kind == "audio" {
+        state.engine.lock().ensure_timing_editable()?;
+    }
     let _gate = GATE
         .try_lock()
         .map_err(|_| "Another media operation is running")?;
@@ -496,9 +568,9 @@ async fn practice_copy(
     fs::create_dir_all(work.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::create_dir(&work).map_err(|e| e.to_string())?;
     let decoded = work.join("decoded.wav");
-    let output = base.join("assets").join(format!("{new_id}.wav"));
+    let output = work.join("practice.wav");
     let result = async {
-        decode_audio(&source.path, &decoded, "600.2").await?;
+        decode_audio(&source.path, &decoded, 600.2).await?;
         let input = decoded.clone();
         let target = output.clone();
         let seconds = tauri::async_runtime::spawn_blocking(move || jam_audio::practice::render(&input, &target, speed, semitones, &CANCEL))
@@ -509,73 +581,160 @@ async fn practice_copy(
             extra: BTreeMap::from([("practice".into(), json!({"sourceAssetId": source.id, "speed": speed, "semitones": semitones, "processor": "signalsmith-stretch-1.3.2"}))]),
         };
         let saved = if CANCEL.load(Ordering::Relaxed) { Err("Practice copy canceled.".into()) }
-            else { write(&base.join("assets").join(format!("{new_id}.json")), &serde_json::to_value(&prepared).map_err(|e| e.to_string())?) };
-        if let Err(error) = saved { let _ = fs::remove_file(&output); return Err(error); }
-        Ok(prepared)
+            else { songs::store(base, prepared).await };
+        let _ = fs::remove_file(&output);
+        saved
     }.await;
     let _ = fs::remove_file(&decoded);
     let _ = fs::remove_dir(&work);
     result
 }
 
-async fn decode_audio(source: &str, decoded: &Path, seconds: &str) -> Result<(), String> {
-    let exe = platform::find_agent("ffmpeg", "")
-        .map_err(|_| "Install FFmpeg and restart Jamstudio to prepare audio.")?;
-    let args = [
-        "-nostdin",
-        "-n",
-        "-v",
-        "error",
-        "-protocol_whitelist",
-        "file,pipe",
-        "-i",
-    ]
-    .map(String::from)
-    .into_iter()
-    .chain([source.into()])
-    .chain(
-        [
-            "-map",
-            "0:a:0",
-            "-vn",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
-            "-c:a",
-            "pcm_f32le",
-            "-t",
-            seconds,
-        ]
-        .map(String::from),
-    )
-    .chain([decoded.to_string_lossy().into_owned()])
-    .collect::<Vec<_>>();
-    run(&exe, &args, 120).await.map(|_| ())
+async fn decode_audio(source: &str, decoded: &Path, seconds: f64) -> Result<(), String> {
+    let input = PathBuf::from(source);
+    let output = decoded.to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        jam_audio::import::normalize(&input, &output, (seconds * 48000.0) as usize, &CANCEL)
+    })
+    .await
+    .map_err(|_| "Audio decoding worker stopped")??;
+    Ok(())
+}
+
+fn reference_asset(base: &Path, asset_id: &str) -> Result<Asset, String> {
+    let source = asset(base, asset_id)?;
+    if source.schema_version != 1
+        || source.id != asset_id
+        || source.kind != "audio"
+        || !source.seconds.is_finite()
+        || !(0.1..=1200.2).contains(&source.seconds)
+    {
+        return Err("Choose an audio reference up to twenty minutes.".into());
+    }
+    Ok(source)
+}
+
+fn minus_guitar_mix(base: &Path, source: &Asset) -> Result<PathBuf, String> {
+    let saved = source.extra.get("minusGuitar").ok_or(MINUS_GUITAR_LOAD)?;
+    if saved["schemaVersion"] != 1 || saved["pass"] != true {
+        return Err(MINUS_GUITAR_LOAD.into());
+    }
+    let path = songs::folder(base, &source.id)?.join("minus-guitar.wav");
+    if !path.is_file() {
+        return Err(MINUS_GUITAR_MISSING.into());
+    }
+    Ok(path)
 }
 
 async fn reference_source(
     base: &Path,
     asset_id: &str,
+    use_stems: bool,
 ) -> Result<jam_audio::song::ReferenceSong, String> {
-    let source = asset(base, asset_id)?;
-    if source.kind != "audio"
-        || !source.seconds.is_finite()
-        || !(0.1..=1200.2).contains(&source.seconds)
-    {
-        return Err("Choose an audio reference up to twenty minutes.".into());
+    load_reference_source(base, asset_id, use_stems, false).await
+}
+
+async fn load_reference_source(
+    base: &Path,
+    asset_id: &str,
+    use_stems: bool,
+    use_minus_guitar: bool,
+) -> Result<jam_audio::song::ReferenceSong, String> {
+    let mut source = reference_asset(base, asset_id)?;
+    if use_minus_guitar || !use_stems {
+        source.extra.remove("stemSet");
+        source.extra.remove("referencePractice");
     }
     let work = base.join("work").join(id());
     fs::create_dir_all(work.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::create_dir(&work).map_err(|e| e.to_string())?;
     let decoded = work.join("decoded.wav");
     let result = async {
-        decode_audio(&source.path, &decoded, "1200.3").await?;
-        let path = decoded.clone();
+        let original = PathBuf::from(&source.path);
+        let before =
+            if source.extra.contains_key("songAnalysis") || source.extra.contains_key("stemSet") || source.extra.contains_key("referenceGrid") || source.extra.contains_key("estimatedGrid") || source.extra.contains_key("providerAnalysis") || source.extra.contains_key("sourceHash") {
+                let path = original.clone();
+                Some(
+                    tauri::async_runtime::spawn_blocking(move || source_hash(&path))
+                        .await
+                        .map_err(|_| "Source hashing worker stopped.")??,
+                )
+            } else {
+                None
+            };
+        let mut song = if use_minus_guitar {
+            let mix = minus_guitar_mix(base, &source)?;
+            let id = source.id.clone();
+            let label = source.label.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let (samples, _) =
+                    jam_audio::practice::read_stereo(&mix, 48_000 * 600 + 9600, &CANCEL)?;
+                jam_audio::song::ReferenceSong::new(id, label, samples)
+            })
+            .await
+            .map_err(|_| "Reference loading worker stopped.")??
+        } else if source.extra.contains_key("stemSet") {
+            stems::load(base, &source, before.as_deref().unwrap()).await?
+        } else {
+            decode_audio(&source.path, &decoded, 1200.3).await?;
+            let path = decoded.clone();
+            let id = source.id.clone();
+            let label = source.label.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let (samples, _) =
+                    jam_audio::practice::read_stereo(&path, 48_000 * 1200 + 9600, &CANCEL)?;
+                jam_audio::song::ReferenceSong::new(id, label, samples)
+            })
+            .await
+            .map_err(|_| "Reference loading worker stopped.")??
+        };
         tauri::async_runtime::spawn_blocking(move || {
-            let (samples, _) =
-                jam_audio::practice::read_stereo(&path, 48_000 * 1200 + 9600, &CANCEL)?;
-            jam_audio::song::ReferenceSong::new(source.id, source.label, samples)
+            if let Some(saved) = source.extra.get("referencePractice") {
+                let error = "Saved practice settings are invalid. Load this original mix then apply valid speed and transpose settings.";
+                if saved["schemaVersion"] != 1 { return Err(error.into()); }
+                let speed = saved["speed"].as_f64().ok_or(error)?;
+                let semitones = saved["semitones"].as_i64().and_then(|v| i32::try_from(v).ok()).ok_or(error)?;
+                song.set_processing(speed, semitones).map_err(|_| error)?;
+            }
+            let after = if before.is_some() {
+                Some(source_hash(&original)?)
+            } else {
+                None
+            };
+            if let Some(expected) = source.extra.get("sourceHash") {
+                if expected.as_str() != after.as_deref() { return Err("Stored song audio changed. Import the source again as a new song.".into()); }
+            }
+            if before != after {
+                return Err("Audio changed while loading. Load the reference again.".into());
+            }
+            if let Some(value) = source.extra.get("songAnalysis") {
+                let analysis = if value["sourceHash"].as_str() == after.as_deref() {
+                    serde_json::from_value(value.clone())
+                        .map_err(|_| {
+                            "Saved analysis is unreadable. Analyze it again in Songs.".to_string()
+                        })
+                        .and_then(|a| song.set_analysis(a))
+                } else {
+                    Err("Audio has changed since analysis. Analyze it again in Songs.".into())
+                };
+                song.info.analysis_error = analysis.err();
+            }
+            if let Some(value) = source.extra.get("referenceGrid") {
+                let result = if value["sourceHash"].as_str() == after.as_deref() {
+                    serde_json::from_value(value.clone()).map_err(|_| "Saved reference grid is unreadable. Confirm it again in Songs.".to_string()).and_then(|grid| song.set_grid(grid))
+                } else {
+                    Err("Audio has changed since grid confirmation. Confirm the map again in Songs.".into())
+                };
+                song.info.grid_error = result.err();
+            } else if let Some(value) = source.extra.get("estimatedGrid") {
+                let result = if value["sourceHash"].as_str() == after.as_deref() {
+                    serde_json::from_value(value.clone()).map_err(|_| "Saved estimated grid is unreadable. Analyze the song again.".to_string()).and_then(|grid| song.set_grid(grid))
+                } else {
+                    Err("Audio has changed since the estimated grid. Analyze the song again.".into())
+                };
+                song.info.grid_error = result.err();
+            }
+            Ok(song)
         })
         .await
         .map_err(|_| "Reference loading worker stopped.")?
@@ -586,17 +745,289 @@ async fn reference_source(
     result
 }
 
+fn source_hash(path: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+    if file.metadata().map_err(|e| e.to_string())?.len() > 512 * 1024 * 1024 {
+        return Err("Analysis source exceeds 512 MB.".into());
+    }
+    let mut hash = Sha256::new();
+    let mut buffer = [0u8; 65536];
+    let mut bytes = 0usize;
+    loop {
+        if CANCEL.load(Ordering::Relaxed) {
+            return Err("Song analysis canceled.".into());
+        }
+        let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        bytes += n;
+        if bytes > 512 * 1024 * 1024 {
+            return Err("Analysis source exceeds 512 MB.".into());
+        }
+        hash.update(&buffer[..n]);
+    }
+    Ok(format!("{:x}", hash.finalize()))
+}
+
+async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
+    let mut source = asset(base, source_id)?;
+    if source.schema_version != 1
+        || source.id != source_id
+        || source.kind != "audio"
+        || !source.seconds.is_finite()
+        || !(2.0..=1200.0).contains(&source.seconds)
+    {
+        return Err("Choose an audio source between 2 seconds and 20 minutes.".into());
+    }
+    let path = PathBuf::from(&source.path);
+    let source_hash = tauri::async_runtime::spawn_blocking(move || source_hash(&path))
+        .await
+        .map_err(|_| "Source hashing worker stopped.")??;
+    if source
+        .extra
+        .get("sourceHash")
+        .is_some_and(|saved| saved.as_str() != Some(&source_hash))
+    {
+        return Err("Stored song audio changed. Import the source again as a new song.".into());
+    }
+    let work = base.join("work").join(id());
+    fs::create_dir_all(work.parent().unwrap()).map_err(|e| e.to_string())?;
+    fs::create_dir(&work).map_err(|e| e.to_string())?;
+    let decoded = work.join("decoded.wav");
+    let result = async {
+        decode_audio(&source.path, &decoded, 1200.1).await?;
+        let path = decoded.clone();
+        let original = PathBuf::from(&source.path);
+        let analysis_hash = source_hash.clone();
+        let analysis = tauri::async_runtime::spawn_blocking(move || {
+            let (samples, _) = jam_audio::practice::read_stereo(&path, 48_000 * 1200, &CANCEL)?;
+            let result = jam_audio::offline::analyze(&samples, &CANCEL)?;
+            if self::source_hash(&original)? != source_hash {
+                return Err("Audio changed during analysis. Analyze it again.".into());
+            }
+            let mut value = serde_json::to_value(result).map_err(|e| e.to_string())?;
+            value["sourceHash"] = json!(source_hash);
+            Ok::<_, String>(value)
+        })
+        .await
+        .map_err(|_| "Song analysis worker stopped.")??;
+        if CANCEL.load(Ordering::Relaxed) {
+            return Err("Song analysis canceled.".into());
+        }
+        // Reload metadata so unknown fields survive a successful reanalysis.
+        let current = asset(base, source_id)?;
+        if current.schema_version != source.schema_version
+            || current.id != source.id
+            || current.path != source.path
+        {
+            return Err("Audio asset changed during analysis. Analyze it again.".into());
+        }
+        source = current;
+        source.extra.insert("songAnalysis".into(), analysis.clone());
+        if let Ok(parsed) = serde_json::from_value::<jam_audio::offline::SongAnalysis>(analysis) {
+            if let Ok(grid) = jam_audio::offline::estimate_grid(&parsed) {
+                let mut value = serde_json::to_value(grid).map_err(|e| e.to_string())?;
+                value["sourceHash"] = json!(analysis_hash);
+                if let Some(old) = source.extra.get("estimatedGrid") {
+                    if old["schemaVersion"] == 1 {
+                        if let Some(fields) = old.as_object() {
+                            for (key, kept) in fields {
+                                value
+                                    .as_object_mut()
+                                    .unwrap()
+                                    .entry(key.clone())
+                                    .or_insert(kept.clone());
+                            }
+                        }
+                    }
+                }
+                source.extra.insert("estimatedGrid".into(), value);
+            }
+        }
+        save_asset(base, &source)?;
+        Ok(source)
+    }
+    .await;
+    let _ = fs::remove_file(&decoded);
+    let _ = fs::remove_dir(&work);
+    result
+}
+
 #[tauri::command]
-pub async fn media_reference_load(
+pub async fn analysis_start(
+    asset_id: String,
+    kinds: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Asset, String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    crate::net::musicai::kinds_ok(&kinds)?;
+    valid_id(&asset_id)?;
+    state.engine.lock().ensure_timing_editable()?;
+    CANCEL.store(false, Ordering::Relaxed);
+    persist_provider_analysis(&root(), &asset_id)
+}
+
+fn persist_provider_analysis(base: &Path, asset_id: &str) -> Result<Asset, String> {
+    let mut analysis = crate::net::musicai::recorded_for_persist()?;
+    let mut source = reference_asset(base, asset_id)?;
+    let grid_before = source.extra.get("referenceGrid").cloned();
+    let hash = source
+        .extra
+        .get("sourceHash")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    analysis.source_hash = hash.clone();
+    analysis.drives_grid = false;
+    let saved = source
+        .extra
+        .entry("providerAnalysis".into())
+        .or_insert(json!({"schemaVersion":1}));
+    if saved["schemaVersion"] != 1 {
+        return Err("Unsupported saved Music.ai analysis version. Song left intact.".into());
+    }
+    let mut next = serde_json::to_value(&analysis).map_err(|e| e.to_string())?;
+    if let Some(fields) = saved.as_object() {
+        for (key, value) in fields {
+            next.as_object_mut()
+                .unwrap()
+                .entry(key.clone())
+                .or_insert(value.clone());
+        }
+    }
+    source.extra.insert("providerAnalysis".into(), next);
+    if source.extra.get("referenceGrid") != grid_before.as_ref() {
+        return Err("Music.ai estimates must not change the confirmed grid.".into());
+    }
+    if CANCEL.load(Ordering::Relaxed) {
+        return Err("Music.ai estimate save canceled.".into());
+    }
+    save_asset(base, &source)?;
+    Ok(source)
+}
+
+#[tauri::command]
+pub fn analysis_cancel() {
+    media_cancel();
+}
+
+const GUITAR_RESIDUAL: &str = "Guitar-removal acceptance is not configured. Import or separate stems, mark the guitar track in Songs, then run this check. Real-song residual at or below -6 dB is not claimed without those stems.";
+const MINUS_GUITAR_LOAD: &str = "Minus-guitar mix is not configured. Import or separate stems, mark the guitar track, then Check this guitar residual, then Load this mix only after that check passes. Real-song residual at or below -6 dB is not claimed.";
+const MINUS_GUITAR_MISSING: &str = "minus-guitar.wav is missing. Run Check this guitar residual again after the check has passed. Real-song residual at or below -6 dB is not claimed.";
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuitarResidual {
+    pub db: f64,
+    pub pass: bool,
+    pub mix_path: String,
+}
+
+#[tauri::command]
+pub async fn media_guitar_residual(
     asset_id: String,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<GuitarResidual, String> {
     let _gate = GATE
         .try_lock()
         .map_err(|_| "Another media operation is running")?;
     state.engine.lock().ensure_timing_editable()?;
     CANCEL.store(false, Ordering::Relaxed);
-    let song = reference_source(&root(), &asset_id).await?;
+    let source = reference_asset(&root(), &asset_id)?;
+    let stems = source
+        .extra
+        .get("stemSet")
+        .and_then(|set| set["stems"].as_array())
+        .ok_or(GUITAR_RESIDUAL)?;
+    let guitar = stems
+        .iter()
+        .find(|stem| stem["guitar"] == true)
+        .ok_or(GUITAR_RESIDUAL)?;
+    let guitar_path = PathBuf::from(guitar["path"].as_str().ok_or(GUITAR_RESIDUAL)?);
+    let others: Vec<PathBuf> = stems
+        .iter()
+        .filter(|stem| stem["guitar"] != true)
+        .map(|stem| PathBuf::from(stem["path"].as_str().unwrap_or("")))
+        .collect();
+    if others.is_empty() {
+        return Err(GUITAR_RESIDUAL.into());
+    }
+    let mix_path = songs::folder(&root(), &asset_id)?.join("minus-guitar.wav");
+    let written = mix_path.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<GuitarResidual, String> {
+        let (guitar, _) = jam_audio::practice::read_stereo(&guitar_path, 48_000 * 600, &CANCEL)?;
+        let mut backing = vec![0.0; guitar.len()];
+        for path in others {
+            let (samples, _) = jam_audio::practice::read_stereo(&path, 48_000 * 600, &CANCEL)?;
+            if samples.len() != backing.len() {
+                return Err("Stem tracks have different lengths. Export aligned tracks.".into());
+            }
+            for (dst, src) in backing.iter_mut().zip(samples) {
+                *dst += src;
+            }
+        }
+        let db = jam_audio::offline::guitar_residual_db(&backing, &guitar)?;
+        jam_audio::practice::write_stereo(&written, &backing, &CANCEL)?;
+        Ok(GuitarResidual {
+            pass: db <= -6.0,
+            db,
+            mix_path: written.to_string_lossy().into_owned(),
+        })
+    })
+    .await
+    .map_err(|_| "Guitar residual worker stopped.")??;
+    let mut saved = reference_asset(&root(), &asset_id)?;
+    saved.extra.insert(
+        "minusGuitar".into(),
+        json!({
+            "schemaVersion": 1,
+            "path": "minus-guitar.wav",
+            "db": result.db,
+            "pass": result.pass,
+        }),
+    );
+    save_asset(&root(), &saved)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn media_analyze(asset_id: String, state: State<'_, AppState>) -> Result<Asset, String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    state.engine.lock().ensure_timing_editable()?;
+    CANCEL.store(false, Ordering::Relaxed);
+    let source = analysis::prepare(&root(), &asset_id).await?;
+    if source.extra["analysisStatus"]["state"] != "ready" {
+        return Err(analysis::message(&source).into());
+    }
+    Ok(source)
+}
+
+#[tauri::command]
+pub async fn media_reference_load<R: Runtime>(
+    asset_id: String,
+    use_stems: Option<bool>,
+    use_minus_guitar: Option<bool>,
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    crate::lyria::stop_and_emit(&app, &state);
+    state.engine.lock().ensure_timing_editable()?;
+    CANCEL.store(false, Ordering::Relaxed);
+    let use_minus = use_minus_guitar.unwrap_or(false);
+    let song = if use_minus {
+        load_reference_source(&root(), &asset_id, false, true).await?
+    } else {
+        reference_source(&root(), &asset_id, use_stems.unwrap_or(true)).await?
+    };
     if CANCEL.load(Ordering::Relaxed) {
         return Err("Reference loading canceled.".into());
     }
@@ -621,6 +1052,73 @@ pub fn media_reference_loop(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     state.engine.lock().reference_loop(start, end, enabled)
+}
+
+fn save_reference_processing(
+    base: &Path,
+    asset_id: &str,
+    speed: f64,
+    semitones: i32,
+) -> Result<(), String> {
+    jam_audio::practice::validate(speed, semitones as f64)?;
+    let mut source = reference_asset(base, asset_id)?;
+    let practice = source
+        .extra
+        .entry("referencePractice".into())
+        .or_insert(json!({"schemaVersion":1}));
+    if practice["schemaVersion"] != 1 {
+        return Err("Unsupported saved practice settings version.".into());
+    }
+    practice["speed"] = json!(speed);
+    practice["semitones"] = json!(semitones);
+    save_asset(base, &source)
+}
+
+#[tauri::command]
+pub async fn media_reference_ramp(
+    asset_id: String,
+    config: Option<jam_audio::song::ramp::Config>,
+    toggle: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<Option<jam_audio::song::ramp::State>, String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    state
+        .engine
+        .lock()
+        .reference_ramp(&asset_id, config, toggle.unwrap_or(false))
+}
+
+#[tauri::command]
+pub async fn media_reference_processing(
+    asset_id: String,
+    speed: Option<f64>,
+    semitones: Option<i32>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    if speed.is_none() && semitones.is_none() {
+        return Err("Choose speed or transposition.".into());
+    }
+    let engine = state.engine.lock();
+    engine.ensure_timing_editable()?;
+    let loaded = engine
+        .get_telemetry()
+        .reference
+        .ok_or("Load the reference first.")?;
+    if loaded.asset_id != asset_id {
+        return Err("The loaded reference changed.".into());
+    }
+    let speed = speed.unwrap_or(loaded.speed);
+    let semitones = semitones.unwrap_or(loaded.semitones);
+    jam_audio::practice::validate(speed, semitones as f64)?;
+    // The control lock keeps recording/source replacement outside save + apply.
+    save_reference_processing(&root(), &asset_id, speed, semitones)?;
+    engine.reference_processing(&asset_id, speed, semitones)?;
+    Ok(json!({"speed":speed,"semitones":semitones}))
 }
 
 #[tauri::command]
@@ -684,8 +1182,61 @@ async fn finish_job(
         &base.join("jobs").join(format!("{}.json", job_id(job)?)),
         job,
     )?;
-    let a = import(base, &raw, &m.kind, &m.name).await?;
-    job["assetId"] = json!(a.id);
+    finish_import(base, job, m).await
+}
+
+/// Persist the destination before publishing audio so recovery never creates a duplicate.
+async fn finish_import(base: &Path, job: &mut Value, model: &api::Model) -> Result<(), String> {
+    let file = base.join("jobs").join(format!("{}.json", job_id(job)?));
+    let asset_id = match job.get("targetAssetId").or_else(|| job.get("assetId")) {
+        Some(value) => value
+            .as_str()
+            .ok_or("Invalid generated asset ID")?
+            .to_string(),
+        None => id(),
+    };
+    valid_id(&asset_id)?;
+    job["targetAssetId"] = json!(asset_id);
+    job["status"] = json!("importing");
+    write(&file, job)?;
+    let existing = songs::folder(base, &asset_id)?.exists()
+        || base
+            .join("assets")
+            .join(format!("{asset_id}.json"))
+            .exists();
+    let source = if existing {
+        let source = asset(base, &asset_id)?;
+        if source.id != asset_id || source.kind != model.kind {
+            return Err(
+                "Generated asset identity changed. Restore the matching job and song.".into(),
+            );
+        }
+        if source.kind == "audio" {
+            analysis::prepare(base, &asset_id).await?
+        } else {
+            source
+        }
+    } else {
+        let raw = job["rawPath"]
+            .as_str()
+            .ok_or("Missing saved generation output")?;
+        let path = fs::canonicalize(raw).map_err(|e| e.to_string())?;
+        if !path.starts_with(fs::canonicalize(base.join("assets")).map_err(|e| e.to_string())?) {
+            return Err("Raw media outside library".into());
+        }
+        import_as(base, &path, &model.kind, &model.name, &asset_id).await?
+    };
+    job["assetId"] = json!(source.id);
+    if source.kind == "audio"
+        && !["ready", "unavailable"].contains(
+            &source.extra["analysisStatus"]["state"]
+                .as_str()
+                .unwrap_or(""),
+        )
+    {
+        job["status"] = json!("analysis");
+        return Err(analysis::message(&source).into());
+    }
     job["status"] = json!("ready");
     Ok(())
 }
@@ -702,8 +1253,10 @@ pub async fn media_generate(
     if !api::configured(&m, state.secret_store.as_ref())? {
         return Err(format!("Add a {} API key in Settings.", m.provider));
     }
-    platform::find_agent("ffprobe", "")
-        .map_err(|_| "Install FFmpeg with ffprobe before generating media.")?;
+    if m.kind == "video" {
+        platform::find_agent("ffprobe", "")
+            .map_err(|_| "Install FFmpeg with ffprobe before generating video.")?;
+    }
     m.model = request.model.clone();
     let base = root();
     let id = id();
@@ -729,6 +1282,7 @@ pub async fn media_generate(
 fn public_job(mut job: Value) -> Value {
     if let Some(o) = job.as_object_mut() {
         o.remove("downloadUri");
+        o.remove("targetAssetId");
     }
     job
 }
@@ -742,6 +1296,9 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
     let base = root();
     let file = base.join("jobs").join(format!("{job_id}.json"));
     let mut job = read(&file)?;
+    if job["schemaVersion"] != 1 || job["id"] != job_id {
+        return Err("Unsupported or mismatched media job. File left intact.".into());
+    }
     let request: api::Generate =
         serde_json::from_value(job["request"].clone()).map_err(|e| e.to_string())?;
     let (mut m, _, _) = api::request(&request)?;
@@ -750,10 +1307,8 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
         return Ok(public_job(job));
     }
     let result=async {
-        if let Some(raw)=job["rawPath"].as_str() {
-            let path=fs::canonicalize(raw).map_err(|e|e.to_string())?;
-            if !path.starts_with(fs::canonicalize(base.join("assets")).map_err(|e|e.to_string())?) {return Err("Raw media outside library".into());}
-            let a=import(&base,&path,&m.kind,&m.name).await?;job["assetId"]=json!(a.id);job["status"]=json!("ready");return Ok(());
+        if job.get("rawPath").is_some() || job.get("assetId").is_some() || job.get("targetAssetId").is_some() {
+            return finish_import(&base, &mut job, &m).await;
         }
         let output=if let Some(task)=job["taskId"].as_str() {
             api::poll(&m,&request,task,state.secret_store.as_ref(),&state.cost_log).await?
@@ -893,7 +1448,11 @@ pub fn media_cancel() {
 }
 fn playable_file(base: &Path, path: &Path) -> Result<PathBuf, String> {
     let file = fs::canonicalize(path).map_err(|e| e.to_string())?;
-    if !file.starts_with(fs::canonicalize(base).map_err(|e| e.to_string())?)
+    let song_root = songs::library(base)?;
+    let allowed = [base.to_path_buf(), song_root]
+        .iter()
+        .any(|root| root.canonicalize().is_ok_and(|root| file.starts_with(root)));
+    if !allowed
         || !file.is_file()
         || !MEDIA_EXTENSIONS.contains(&file.extension().and_then(|s| s.to_str()).unwrap_or(""))
     {
@@ -908,6 +1467,139 @@ pub async fn media_open(path: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    fn synthetic_audio(path: &Path, seconds: usize) {
+        let mut wav = hound::WavWriter::create(
+            path,
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: 48000,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .unwrap();
+        for i in 0..48000 * seconds {
+            wav.write_sample(
+                (4000.0 * (i as f64 * 440.0 * std::f64::consts::TAU / 48000.0).sin()) as i16,
+            )
+            .unwrap();
+        }
+        wav.finalize().unwrap();
+    }
+
+    #[tokio::test]
+    async fn imported_audio_is_analyzed_and_interrupted_generation_resumes_the_same_song() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        let home = std::env::temp_dir().join(format!("jam-auto-analysis-{}", id()));
+        let base = home.join("music-videos");
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let raw = base.join("assets/generated-source.wav");
+        synthetic_audio(&raw, 3);
+        let original = fs::read(&raw).unwrap();
+        let imported = import(&base, &raw, "audio", "Synthetic import")
+            .await
+            .unwrap();
+        assert_eq!(imported.extra["analysisStatus"]["state"], "ready");
+        assert_eq!(
+            imported.extra["songAnalysis"]["analyzer"],
+            "local-chroma-v1"
+        );
+        assert_eq!(
+            imported.extra["songAnalysis"]["sourceHash"],
+            imported.extra["sourceHash"]
+        );
+        assert!(
+            imported.extra["songAnalysis"]["bpm"].is_null(),
+            "a sine has no pulse"
+        );
+        let model = api::catalog()
+            .into_iter()
+            .find(|m| m.id == "lyria")
+            .unwrap();
+        let mut job =
+            json!({"schemaVersion":1,"id":"synthetic-job","rawPath":raw,"future":{"keep":true}});
+        finish_import(&base, &mut job, &model).await.unwrap();
+        assert_eq!(job["status"], "ready");
+        let song_id = job["assetId"].as_str().unwrap().to_string();
+        let saved = asset(&base, &song_id).unwrap();
+        let bytes = fs::read(&saved.path).unwrap();
+        // Crash after preparing the song but before the caller's final ready write.
+        let file = base.join("jobs/synthetic-job.json");
+        let mut resumed = read(&file).unwrap();
+        assert_eq!(resumed["targetAssetId"], song_id);
+        assert!(
+            resumed.get("assetId").is_none(),
+            "a reserved ID is not yet a public asset"
+        );
+        assert_ne!(resumed["status"], "ready");
+        fs::remove_file(&raw).unwrap();
+        finish_import(&base, &mut resumed, &model).await.unwrap();
+        assert_eq!(resumed["assetId"], song_id);
+        assert_eq!(resumed["status"], "ready");
+        assert_eq!(resumed["future"], json!({"keep":true}));
+        assert_eq!(
+            list_media(&base).unwrap()["assets"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(fs::read(&saved.path).unwrap(), bytes);
+        assert_eq!(
+            fs::read(songs::folder(&base, &song_id).unwrap().join("original.wav")).unwrap(),
+            original
+        );
+        CANCEL.store(true, Ordering::Relaxed);
+        assert!(finish_import(&base, &mut resumed, &model).await.is_err());
+        assert_eq!(resumed["status"], "analysis");
+        let canceled = asset(&base, &song_id).unwrap();
+        assert_eq!(canceled.extra["analysisStatus"]["state"], "canceled");
+        assert_eq!(canceled.extra["songAnalysis"], saved.extra["songAnalysis"]);
+        CANCEL.store(false, Ordering::Relaxed);
+        finish_import(&base, &mut resumed, &model).await.unwrap();
+        assert_eq!(resumed["status"], "ready");
+        assert_eq!(fs::read(&saved.path).unwrap(), bytes);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn automatic_analysis_preserves_short_audio_and_refuses_future_status_versions() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        let home = std::env::temp_dir().join(format!("jam-short-analysis-{}", id()));
+        let base = home.join("music-videos");
+        fs::create_dir_all(&base).unwrap();
+        let raw = base.join("short.wav");
+        synthetic_audio(&raw, 1);
+        let mut imported = import(&base, &raw, "audio", "Short sound").await.unwrap();
+        assert_eq!(imported.extra["analysisStatus"]["state"], "unavailable");
+        assert!(!imported.extra.contains_key("songAnalysis"));
+        imported.extra.insert(
+            "analysisStatus".into(),
+            serde_json::from_str(include_str!(
+                "../../tests/fixtures/seams/analysis-status.json"
+            ))
+            .unwrap(),
+        );
+        save_asset(&base, &imported).unwrap();
+        imported = analysis::prepare(&base, &imported.id).await.unwrap();
+        assert_eq!(imported.extra["analysisStatus"]["state"], "unavailable");
+        assert_eq!(imported.extra["analysisStatus"]["futureField"], "preserve");
+        imported.extra.insert(
+            "analysisStatus".into(),
+            json!({"schemaVersion":2,"state":"future","unknown":"keep"}),
+        );
+        save_asset(&base, &imported).unwrap();
+        let manifest = songs::folder(&base, &imported.id)
+            .unwrap()
+            .join("song.json");
+        let before = fs::read(&manifest).unwrap();
+        assert!(analysis::prepare(&base, &imported.id).await.is_err());
+        assert_eq!(fs::read(&manifest).unwrap(), before);
+        fs::remove_dir_all(home).unwrap();
+    }
+
     #[test]
     fn media_scan_keeps_good_documents_and_clean_mix_excludes_monitor() {
         let root = std::env::temp_dir().join(format!("jam-media-scan-{}", super::id()));
@@ -936,12 +1628,28 @@ mod tests {
 
     use super::*;
     #[tokio::test]
+    async fn analysis_refuses_unknown_asset_versions_without_rewriting_metadata() {
+        let base = std::env::temp_dir().join(format!("jam-analysis-version-{}", id()));
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let path = base.join("assets/source.wav");
+        fs::write(&path, []).unwrap();
+        let manifest = base.join("assets/source.json");
+        write(&manifest, &json!({"schemaVersion":2,"id":"source","kind":"audio","path":path,"seconds":4,"label":"Future","songAnalysis":{"keep":true}})).unwrap();
+        let before = fs::read(&manifest).unwrap();
+        assert!(analyze_source(&base, "source").await.is_err());
+        assert_eq!(fs::read(&manifest).unwrap(), before);
+        assert!(!base.join("work").exists());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[tokio::test]
     #[ignore = "requires user-installed FFmpeg and ffprobe; run with JAM_MEDIA_TEST=1"]
     async fn local_practice_copy_decodes_stretches_and_persists_without_touching_source() {
         assert_eq!(std::env::var("JAM_MEDIA_TEST").as_deref(), Ok("1"));
         let _gate = GATE.lock().await;
         CANCEL.store(false, Ordering::Relaxed);
-        let base = std::env::temp_dir().join(format!("jam-practice-media-{}", id()));
+        let home = std::env::temp_dir().join(format!("jam-practice-media-{}", id()));
+        let base = home.join("music-videos");
         fs::create_dir_all(&base).unwrap();
         let exe = platform::find_agent("ffmpeg", "").unwrap();
         let input = base.join("source.wav");
@@ -981,7 +1689,7 @@ mod tests {
         assert_eq!(rate, 48000);
         assert_eq!(audio.len(), 192000);
         assert!(audio.iter().any(|s| s.abs() > 0.05));
-        let mut reference = reference_source(&base, &copy.id).await.unwrap();
+        let mut reference = reference_source(&base, &copy.id, true).await.unwrap();
         assert_eq!(reference.info.seconds, 4.0);
         reference.play();
         let mut left = vec![0.0; 48000];
@@ -997,7 +1705,57 @@ mod tests {
             2
         );
         assert!(fs::read_dir(base.join("work")).unwrap().next().is_none());
-        fs::remove_dir_all(base).unwrap();
+        let mut original = asset(&base, &original.id).unwrap();
+        original
+            .extra
+            .insert("futureField".into(), json!({"kept": true}));
+        let manifest = songs::folder(&base, &original.id)
+            .unwrap()
+            .join("song.json");
+        save_asset(&base, &original).unwrap();
+        let before = fs::read(&original.path).unwrap();
+        let analyzed = analyze_source(&base, &original.id).await.unwrap();
+        let saved = asset(&base, &original.id).unwrap();
+        assert_eq!(saved.extra["songAnalysis"], analyzed.extra["songAnalysis"]);
+        assert_eq!(saved.extra["futureField"], json!({"kept": true}));
+        assert_eq!(
+            saved.extra["songAnalysis"]["sourceHash"],
+            source_hash(Path::new(&original.path)).unwrap()
+        );
+        assert_eq!(
+            saved.extra["songAnalysis"]["bpm"],
+            Value::Null,
+            "a continuous tone has no pulse"
+        );
+        assert_eq!(fs::read(&original.path).unwrap(), before);
+        let reference = reference_source(&base, &original.id, true).await.unwrap();
+        assert!(reference.info.analysis_error.is_none());
+        let mut engine =
+            jam_audio::engine::AudioEngine::new(jam_audio::devices::AudioConfig::default());
+        engine.load_reference(reference).unwrap();
+        assert!(engine.get_telemetry().reference.unwrap().analysis.is_some());
+        // Wrong source identity never produces apparently synchronized chords.
+        let mut stale = read(&manifest).unwrap();
+        stale["songAnalysis"]["sourceHash"] = json!("0".repeat(64));
+        write(&manifest, &stale).unwrap();
+        let reference = reference_source(&base, &original.id, true).await.unwrap();
+        assert!(reference
+            .info
+            .analysis_error
+            .unwrap()
+            .contains("changed since analysis"));
+        save_asset(&base, &saved).unwrap();
+        let previous = fs::read(&manifest).unwrap();
+        CANCEL.store(true, Ordering::Relaxed);
+        assert!(analyze_source(&base, &original.id)
+            .await
+            .err()
+            .unwrap()
+            .contains("canceled"));
+        CANCEL.store(false, Ordering::Relaxed);
+        assert_eq!(fs::read(&manifest).unwrap(), previous);
+        assert!(fs::read_dir(base.join("work")).unwrap().next().is_none());
+        fs::remove_dir_all(home).unwrap();
     }
     #[test]
     fn player_accepts_import_formats_but_not_outside_files_or_programs() {
@@ -1124,7 +1882,8 @@ mod tests {
     #[ignore = "requires user-installed FFmpeg and ffprobe; run with JAM_MEDIA_TEST=1"]
     async fn local_video_render_keeps_song_timing() {
         assert_eq!(std::env::var("JAM_MEDIA_TEST").as_deref(), Ok("1"));
-        let base = std::env::temp_dir().join(format!("jam-video-{}", id()));
+        let home = std::env::temp_dir().join(format!("jam-video-{}", id()));
+        let base = home.join("music-videos");
         fs::create_dir_all(&base).unwrap();
         let exe = platform::find_agent("ffmpeg", "").unwrap();
         CANCEL.store(false, Ordering::Relaxed);
@@ -1152,39 +1911,58 @@ mod tests {
         let file = render(&base, &doc).await.unwrap();
         assert!((probe(Path::new(&file), "video").await.unwrap() - 3.0).abs() < 0.05);
         assert!((probe(Path::new(&file), "audio").await.unwrap() - 3.0).abs() < 0.05);
-        let pcm = run(
+        let decoded = base.join("film-decoded.wav");
+        run(
             &exe,
             &[
-                "-v", "error", "-i", &file, "-vn", "-ac", "1", "-ar", "48000", "-f", "f32le",
-                "pipe:1",
+                "-nostdin",
+                "-n",
+                "-v",
+                "error",
+                "-i",
+                &file,
+                "-vn",
+                "-ac",
+                "2",
+                "-ar",
+                "48000",
+                "-c:a",
+                "pcm_f32le",
+                &decoded.to_string_lossy(),
             ]
             .map(String::from),
             30,
         )
         .await
         .unwrap();
-        let samples: Vec<f32> = pcm
-            .chunks(4)
-            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
-            .collect();
-        // AAC introduces lossy error, but must retain the original frequency, phase and amplitude.
+        let (samples, _) = jam_audio::practice::read_stereo(&decoded, 48_000 * 4, &CANCEL).unwrap();
+        // Native mono import duplicates at unity. Inspect each encoded channel:
+        // FFmpeg's default stereo-to-mono rematrix adds 3 dB for identical channels.
+        // AAC must retain the original per-channel frequency, phase and amplitude.
+        assert!(samples.len() >= 144000 * 2);
         let mse = samples
+            .as_chunks::<2>()
+            .0
             .iter()
             .take(143000)
             .enumerate()
             .skip(1000)
-            .map(|(i, s)| {
+            .map(|(i, frame)| {
                 let expected =
                     0.125 * (2.0 * std::f64::consts::PI * 440.0 * i as f64 / 48000.0).sin();
-                (*s as f64 - expected).powi(2)
+                frame
+                    .iter()
+                    .map(|s| (*s as f64 - expected).powi(2))
+                    .sum::<f64>()
             })
             .sum::<f64>()
-            / 142000.0;
+            / (142000.0 * 2.0);
+        println!("Stereo Film AAC phase/amplitude RMSE {}", mse.sqrt());
         assert!(
             mse.sqrt() < 0.015,
             "Audio RMSE {} exceeds AAC tolerance",
             mse.sqrt()
         );
-        fs::remove_dir_all(base).unwrap();
+        fs::remove_dir_all(home).unwrap();
     }
 }

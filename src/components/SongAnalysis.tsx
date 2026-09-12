@@ -1,0 +1,99 @@
+import { useState } from "react";
+import {
+  chordPassages,
+  readAnalysisStatus,
+  readSongAnalysis,
+} from "../lib/songAnalysis";
+import { Button } from "./Button";
+
+export function SongAnalysis({
+  value,
+  status,
+}: { value: unknown; status?: unknown }) {
+  const [page, setPage] = useState(0);
+  const analysis = readSongAnalysis(value);
+  const preparation = readAnalysisStatus(status);
+  const notice = status ? (
+    <output className="workspace-note">
+      {preparation?.state === "failed"
+        ? `Analysis failed. ${preparation.message} Retry from Songs.`
+        : (preparation?.message ??
+          "Saved analysis status is unreadable. Update the app before retrying.")}
+      {analysis &&
+        preparation &&
+        !["ready", "unavailable"].includes(preparation.state) &&
+        " The previous estimates are still shown below."}
+    </output>
+  ) : null;
+  if (!analysis)
+    return (
+      <>
+        {notice}
+        {value ? (
+          <p className="workspace-note">
+            {
+              "Saved analysis is unreadable or from another version. Analyze again to replace it."
+            }
+          </p>
+        ) : null}
+      </>
+    );
+  const passages = chordPassages(analysis);
+  const current = Math.min(
+    page,
+    Math.max(0, Math.ceil(passages.length / 16) - 1),
+  );
+  return (
+    <section
+      className="workspace-stack"
+      aria-label="This is the estimated harmony."
+    >
+      {notice}
+      <h3>This is the estimated harmony.</h3>
+      <p className="workspace-note">
+        {analysis.bpm === null
+          ? "Tempo was not found."
+          : `Tempo is ${analysis.bpm.toFixed(1)} BPM.`}{" "}
+        {analysis.key
+          ? `The key is ${analysis.key}.`
+          : "The key was not found."}{" "}
+        This is a local estimate with low confidence.
+      </p>
+      <p className="workspace-note">
+        Check these estimates by ear. Steady tempo and major/minor triads only;
+        half/double tempo is possible. Downbeats, sections and stems have not
+        been detected.
+      </p>
+      <ol
+        aria-label="These are the estimated chord passages."
+        className="grid grid-cols-2 gap-2"
+      >
+        {passages.slice(current * 16, (current + 1) * 16).map((part) => (
+          <li key={part.start} className="border-b border-[var(--line)] py-2">
+            <strong>{part.chord ?? "This chord is unknown."}</strong>
+            <span className="text-sm text-[var(--fg-2)] ml-3 font-mono">
+              {part.start.toFixed(1)}–{part.end.toFixed(1)} s
+            </span>
+          </li>
+        ))}
+      </ol>
+      {passages.length > 16 && (
+        <div className="workspace-actions">
+          <Button disabled={current === 0} onClick={() => setPage(current - 1)}>
+            Show these previous passages.
+          </Button>
+          <span className="workspace-note">
+            {current * 16 + 1}–{Math.min((current + 1) * 16, passages.length)}{" "}
+            of {passages.length}
+          </span>
+          <Button
+            disabled={(current + 1) * 16 >= passages.length}
+            onClick={() => setPage(current + 1)}
+          >
+            Show these next passages.
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}

@@ -61,34 +61,37 @@ export const Jo: React.FC = () => {
       >
         <StatusPill
           status={busy ? "live" : "idle"}
-          label={busy ? "Thinking" : "Ready"}
+          label={busy ? "Jo is thinking." : "This is ready."}
         />
-        <Button onClick={openAiSettings}>Choose AI & model</Button>
+        <Button onClick={openAiSettings}>Choose this AI and model.</Button>
       </WorkspaceHeader>
       <div className="workspace-summary">
         <span>
           <strong>
             {keyError
-              ? "Keychain unavailable"
+              ? "The keychain is unavailable."
               : useLlm
                 ? BRAINS[preferences.selected].name
-                : "Offline commands"}
+                : "These are offline commands."}
           </strong>
           {keyError
-            ? "Open AI settings to check key access"
+            ? "Open these AI settings. This checks key access."
             : useLlm
               ? preferences.models[preferences.selected].model
-              : "Tempo, cues, styles & recording"}
+              : "These cover tempo, cues, styles and recording."}
         </span>
-        {lastBrain && <span>Last reply: {lastBrain}</span>}
-        <span>Text commands and optional ElevenLabs voice</span>
+        {lastBrain && <span>Last reply used {lastBrain}.</span>}
+        <span>These are text commands and optional ElevenLabs voice.</span>
       </div>
-      <div className="jo-suggestions" aria-label="Suggested prompts">
+      <div
+        className="jo-suggestions"
+        aria-label="These are the suggested prompts."
+      >
         {[
-          "Set tempo to 100",
-          "Drop the bass",
-          "Play a fill",
-          ...(useLlm ? ["Suggest a stronger chorus for my song"] : []),
+          "Set tempo to 100.",
+          "Drop the bass.",
+          "Play a fill.",
+          ...(useLlm ? ["Suggest a stronger chorus for my song."] : []),
         ].map((prompt) => (
           <Button
             key={prompt}
@@ -103,6 +106,12 @@ export const Jo: React.FC = () => {
       {/* Main Chat & Action History Panel */}
       <Panel className="jo-chat flex-1 flex flex-col min-h-0 p-4">
         <div className="flex-1 min-h-32 overflow-y-auto space-y-4 pr-2">
+          {!messages.length && (
+            <p className="workspace-note">
+              Type a command or tap a suggestion. Live PTT is not configured.
+              Offline tempo, cues and recording stay available.
+            </p>
+          )}
           {messages.map((m) => (
             <div
               key={m.id}
@@ -132,13 +141,13 @@ export const Jo: React.FC = () => {
                         title={
                           m.toolResults?.[idx] ?? JSON.stringify(tc.arguments)
                         }
-                        className="px-1.5 py-0.5 rounded bg-[var(--bg-1)] border border-[var(--accent)] text-[10px] text-[var(--accent)] font-mono"
+                        className="px-1.5 py-0.5 rounded-[var(--radius-m)] bg-[var(--bg-1)] border border-[var(--accent)] text-[10px] text-[var(--accent)] font-mono"
                       >
                         {tc.name.replaceAll("_", " ")}
                         {m.toolResults?.[idx] && (
                           <span className="text-[var(--fg-2)]">
                             {" "}
-                            · {m.toolResults[idx]}
+                            {m.toolResults[idx]}.
                           </span>
                         )}
                       </span>
@@ -154,9 +163,9 @@ export const Jo: React.FC = () => {
         {pending && (
           <section
             className="workspace-stack py-4"
-            aria-label="Proposed studio edits"
+            aria-label="Review these studio changes."
           >
-            <h2>Review studio changes</h2>
+            <h2>Review these studio changes.</h2>
             <p className="workspace-note">
               Apply or dismiss below, or send a new message to replace this
               proposal.
@@ -199,7 +208,7 @@ export const Jo: React.FC = () => {
                         id: crypto.randomUUID(),
                         sender: "jo",
                         text: result,
-                        timestamp: "Applied",
+                        timestamp: "This is applied.",
                       },
                     ]);
                     useJoConversation.setState({ pending: null });
@@ -210,12 +219,12 @@ export const Jo: React.FC = () => {
                   }
                 }}
               >
-                Apply proposed edits
+                Apply these proposed edits.
               </Button>
               <Button
                 onClick={() => useJoConversation.setState({ pending: null })}
               >
-                Dismiss proposal
+                Dismiss this proposal.
               </Button>
             </div>
           </section>
@@ -232,12 +241,12 @@ export const Jo: React.FC = () => {
           >
             <input
               type="text"
-              aria-label="Message Jo"
+              aria-label="Type a message for Jo."
               disabled={busy}
-              placeholder="Type a command (e.g. 'faster', 'drop the bass', 'record a take')..."
+              placeholder="Type a command. Examples are faster, drop the bass, or record a take."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              className="flex-1 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-3 py-2 rounded-[var(--radius-m)] text-xs font-mono focus:outline-none focus:border-[var(--accent)]"
+              className="flex-1 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-3 py-2 rounded-[var(--radius-m)] text-xs font-mono focus:border-[var(--accent)]"
             />
             <Button
               type="submit"

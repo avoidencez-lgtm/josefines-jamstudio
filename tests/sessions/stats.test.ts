@@ -3,6 +3,7 @@ import {
   drillFor,
   formatJamTime,
   practiceStreakDays,
+  sessionProgress,
   takeMeasurements,
 } from "../../src/lib/sessions/stats";
 
@@ -51,6 +52,114 @@ describe("practice streak", () => {
   });
 });
 
+describe("session progress", () => {
+  const now = new Date(2026, 8, 11, 18, 0, 0);
+  const take = (
+    id: string,
+    offset: number,
+    extras: Partial<{
+      sessionId: string;
+      durationSecs: number;
+      chartId: string;
+      tempo: number;
+    }> = {},
+  ) => ({
+    id,
+    sessionId: extras.sessionId ?? `session-${id}`,
+    timestamp: day(offset, now).toISOString(),
+    durationSecs: extras.durationSecs ?? 60,
+    chartId: extras.chartId ?? "blues-12-bar",
+    tempo: extras.tempo ?? 120,
+  });
+
+  it("is empty with no takes", () => {
+    const p = sessionProgress([], {}, now);
+    expect(p.sessionsThisWeek).toBe(0);
+    expect(p.minutesThisWeek).toBe(0);
+    expect(p.minutesAll).toBe(0);
+    expect(p.tempoRecords).toEqual([]);
+    expect(p.trendTakes).toBe(0);
+    expect(p.meanTimingMs).toBeNull();
+    expect(p.meanCents).toBeNull();
+  });
+
+  it("counts unique sessions and minutes in the last seven local days", () => {
+    const p = sessionProgress(
+      [
+        take("a", 0, { sessionId: "s1", durationSecs: 120 }),
+        take("b", 0, { sessionId: "s1", durationSecs: 60 }),
+        take("c", 3, { sessionId: "s2", durationSecs: 180 }),
+        take("old", 8, { sessionId: "s3", durationSecs: 600 }),
+      ],
+      {},
+      now,
+    );
+    expect(p.sessionsThisWeek).toBe(2);
+    expect(p.minutesThisWeek).toBe(6);
+    expect(p.minutesAll).toBe(16);
+  });
+
+  it("keeps the highest tempo per chart from every take file", () => {
+    const p = sessionProgress(
+      [
+        take("fast", 0, { chartId: "blues-12-bar", tempo: 140 }),
+        take("slow", 1, { chartId: "blues-12-bar", tempo: 90 }),
+        take("other", 1, { chartId: "ballad", tempo: 70 }),
+      ],
+      {},
+      now,
+    );
+    expect(p.tempoRecords).toEqual([
+      { chartId: "blues-12-bar", tempo: 140 },
+      { chartId: "ballad", tempo: 70 },
+    ]);
+  });
+
+  it("averages timing and pitch on analyzed takes among the last 20", () => {
+    const older = Array.from({ length: 20 }, (_, i) =>
+      take(`pad-${i}`, i + 1, { chartId: "pad", tempo: 100 }),
+    );
+    const takes = [
+      take("fast", 0, { chartId: "blues-12-bar", tempo: 140 }),
+      ...older,
+      take("stale", 30, { chartId: "blues-12-bar", tempo: 200 }),
+    ];
+    const analysis = {
+      fast: {
+        timingAccuracyPct: 80,
+        dynamicConsistencyPct: 80,
+        intonationAccuracyPct: 80,
+        detectedTransients: 20,
+        summary: "",
+        meanGridDistanceMs: 10,
+        meanAbsCents: 8,
+      },
+      "pad-0": {
+        timingAccuracyPct: 80,
+        dynamicConsistencyPct: 80,
+        intonationAccuracyPct: 80,
+        detectedTransients: 20,
+        summary: "",
+        meanGridDistanceMs: 20,
+        meanAbsCents: 4,
+      },
+      stale: {
+        timingAccuracyPct: 80,
+        dynamicConsistencyPct: 80,
+        intonationAccuracyPct: 80,
+        detectedTransients: 20,
+        summary: "",
+        meanGridDistanceMs: 99,
+        meanAbsCents: 40,
+      },
+    };
+    const p = sessionProgress(takes, analysis, now);
+    expect(p.trendTakes).toBe(2);
+    expect(p.meanTimingMs).toBe(15);
+    expect(p.meanCents).toBe(6);
+  });
+});
+
 describe("jam time", () => {
   it("formats seconds, minutes and hours", () => {
     expect(formatJamTime(42)).toBe("42 s");
@@ -95,12 +204,15 @@ describe("drill suggestion", () => {
       meanAbsCents: null,
       pitchedFrames: 0,
     });
-    expect(rows).toContainEqual(["Quarter-note grid distance", "0.0 ms"]);
     expect(rows).toContainEqual([
-      "Grid bias (+ late / − early)",
-      "Not enough evidence",
+      "Distance",
+      "Quarter-note grid distance is 0.0 ms.",
     ]);
-    expect(rows).toContainEqual(["Pitched frames", "0"]);
+    expect(rows).toContainEqual([
+      "Bias",
+      "Grid bias does not have enough evidence.",
+    ]);
+    expect(rows).toContainEqual(["Frames", "Pitched frames are 0."]);
     expect(drillFor({ ...base, meanGridDistanceMs: undefined }, 120)).toMatch(
       /again/,
     );

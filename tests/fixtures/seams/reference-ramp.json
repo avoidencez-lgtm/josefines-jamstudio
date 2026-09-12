@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "startPercent": 50,
+  "stepPercent": 25,
+  "targetPercent": 125,
+  "barsPerStep": 1
+}
