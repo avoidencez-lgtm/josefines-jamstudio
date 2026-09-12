@@ -1045,7 +1045,7 @@ fn a_cached_take_whose_folder_is_gone_can_still_be_deleted() {
 }
 
 #[test]
-fn invalid_midi_export_keeps_the_previous_bundle_and_take_unchanged() {
+fn invalid_timing_or_layers_keep_the_previous_bundle_and_take_unchanged() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let take = synthetic_take(0.5, "1800000000.003");
@@ -1057,14 +1057,22 @@ fn invalid_midi_export_keeps_the_previous_bundle_and_take_unchanged() {
         .join(format!("{}-info.json", take.id));
     let before = (std::fs::read(&midi).unwrap(), std::fs::read(&info).unwrap());
     let original = manifest(&take.dir);
-    for case in 0..5 {
+    for case in 0..8 {
         let mut damaged = original.clone();
         match case {
             0 => damaged["snapshot"]["timeSignature"] = json!([4, 6]),
             1 => damaged["snapshot"]["timeSignature"] = json!([4, 256]),
             2 => damaged["tempo"] = json!(999.0),
             3 => damaged["midi"] = json!([{"frame": 1, "bytes": [240, 60, 100]}]),
-            _ => damaged["midi"] = json!([{"frame": take.frames + 1, "bytes": [144, 60, 100]}]),
+            4 => damaged["midi"] = json!([{"frame": take.frames + 1, "bytes": [144, 60, 100]}]),
+            5 => damaged["snapshot"]["body"] = json!({"clips": null}),
+            6 => damaged["snapshot"]["body"] = json!({"clips": [{"takeId": take.id}]}),
+            _ => {
+                damaged["snapshot"]["body"] = json!({"clips": vec![json!({
+                "takeId": take.id, "trimStart": 0.0, "trimEnd": 0.5,
+                "startBar": 1, "repeats": 1, "gain": 1.0, "muted": false
+            }); 17]})
+            }
         }
         let bytes = serde_json::to_vec_pretty(&damaged).unwrap();
         std::fs::write(take.dir.join("take.json"), &bytes).unwrap();
@@ -1073,17 +1081,30 @@ fn invalid_midi_export_keeps_the_previous_bundle_and_take_unchanged() {
         assert_eq!(std::fs::read(&midi).unwrap(), before.0);
         assert_eq!(std::fs::read(&info).unwrap(), before.1);
         assert_eq!(std::fs::read(take.dir.join("take.json")).unwrap(), bytes);
+        assert!(!midi
+            .parent()
+            .unwrap()
+            .with_file_name(format!("{}-2", take.id))
+            .exists());
     }
     // Legacy manifests recover their missing rate from WAV before MIDI encoding.
     let mut legacy = original;
     legacy.as_object_mut().unwrap().remove("sampleRate");
     legacy["midi"] = json!([{"frame": 12000, "bytes": [144, 60, 100]}]);
+    legacy["snapshot"]["body"] = json!({"clips": vec![json!({
+        "takeId": take.id, "trimStart": 0.0, "trimEnd": 0.5,
+        "startBar": 1, "repeats": 1, "gain": 1.0, "muted": false
+    }); 16]});
     std::fs::write(
         take.dir.join("take.json"),
         serde_json::to_vec(&legacy).unwrap(),
     )
     .unwrap();
     let report = studio.ok("takes_export_daw", json!({"takeId": take.id}));
+    assert_eq!(report["copiedStems"].as_array().unwrap().len(), 19);
+    assert!(Path::new(report["dir"].as_str().unwrap())
+        .join("guitar-layer-16.wav")
+        .is_file());
     assert!(Path::new(report["dir"].as_str().unwrap())
         .join("band-notes.mid")
         .is_file());

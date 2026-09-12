@@ -657,6 +657,8 @@ Every export reserves a fresh folder with `create_dir`; repeats use numbered
 suffixes. Earlier bundles and DAW projects saved inside them are never overwritten.
 On failure, only the newly reserved folder is removed; a cleanup error names the
 partial folder. Both `takes_export_daw` and `export_logic` return the new location.
+Unreadable guitar-layer metadata or more than 16 layers stops export before any
+files are written. Layers are never silently dropped on a deserialization error.
 
 ## Implemented text providers and Song Lab (2026-09-04)
 

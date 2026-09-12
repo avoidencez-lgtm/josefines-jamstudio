@@ -1426,6 +1426,15 @@ async fn takes_export_daw(
     } else {
         jam_audio::recorder::wav_sample_rate(std::path::Path::new(&take.path_master))?
     };
+    let clips: Vec<jam_audio::workstation::ClipSpec> = take.snapshot["body"]
+        .get("clips")
+        .map(|value| serde_json::from_value(value.clone()))
+        .transpose()
+        .map_err(|_| "Invalid recorded guitar layers. Repair the take snapshot before exporting.")?
+        .unwrap_or_default();
+    if clips.len() > 16 {
+        return Err("Too many guitar layers. Keep at most 16 before exporting.".into());
+    }
 
     // Old take manifests may need the rate recovered from the WAV.
     take.sample_rate = sample_rate;
@@ -1510,27 +1519,23 @@ async fn takes_export_daw(
             serde_json::to_vec_pretty(&take.snapshot).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
-        if let Ok(clips) = serde_json::from_value::<Vec<jam_audio::workstation::ClipSpec>>(
-            take.snapshot["body"]["clips"].clone(),
-        ) {
-            for (i, spec) in clips.into_iter().enumerate() {
-                if spec.muted {
-                    continue;
-                }
-                let clip = originals::read_clip(spec, &state, &takes)?;
-                let path = export_path.join(format!("guitar-layer-{}.wav", i + 1));
-                jam_audio::export::write_clip_stem(
-                    &path,
-                    &clip,
-                    take.sample_count,
-                    sample_rate,
-                    take.tempo,
-                )
-                .map_err(|e| e.to_string())?;
-                report
-                    .copied_stems
-                    .push(path.to_string_lossy().into_owned());
+        for (i, spec) in clips.into_iter().enumerate() {
+            if spec.muted {
+                continue;
             }
+            let clip = originals::read_clip(spec, &state, &takes)?;
+            let path = export_path.join(format!("guitar-layer-{}.wav", i + 1));
+            jam_audio::export::write_clip_stem(
+                &path,
+                &clip,
+                take.sample_count,
+                sample_rate,
+                take.tempo,
+            )
+            .map_err(|e| e.to_string())?;
+            report
+                .copied_stems
+                .push(path.to_string_lossy().into_owned());
         }
         let info_path = export_path.join(format!("{}-info.json", take.id));
         if report.missing_stems.is_empty() {
