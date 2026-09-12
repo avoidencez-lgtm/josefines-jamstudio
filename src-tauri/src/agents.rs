@@ -186,7 +186,9 @@ impl AgentRunner {
             let path = platform::find_agent(name, executable)?;
             let mut command = platform::command(&path);
             command.arg("--version").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true);
-            let status = tokio::time::timeout(Duration::from_secs(5), command.status()).await
+            let mut child = command.spawn().map_err(|_| "Agent could not start.".to_string())?;
+            let _tree = platform::KillTree::bind(&child);
+            let status = tokio::time::timeout(Duration::from_secs(5), child.wait()).await
                 .map_err(|_| "Agent detection timed out.".to_string())?.map_err(|_| "Agent could not start.".to_string())?;
             if !status.success() { return Err("Agent --version failed. Check the executable path.".into()); }
             Ok::<_, String>(format!("{name} detected. Uses its own saved login; account access is checked when you send a request."))
@@ -355,9 +357,14 @@ mod tests {
         assert!(unsuccessful_agent_message("codex", b"").contains("Check login"));
         assert!(unsuccessful_agent_message("claude", b"not signed in\n").contains("not signed in"));
         let src = include_str!("agents.rs");
+        let status = src
+            .split("pub async fn status")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn run").next())
+            .unwrap_or("");
         assert!(
-            src.contains("KillTree::bind"),
-            "cancel must kill the Windows process tree, not only cmd.exe"
+            status.contains("KillTree::bind"),
+            "timed-out detection must kill the Windows process tree, not only cmd.exe"
         );
     }
     #[tokio::test]
