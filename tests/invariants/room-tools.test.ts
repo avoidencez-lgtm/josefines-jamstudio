@@ -16,7 +16,11 @@ import {
 import { validateToolCall } from "../../src/lib/jo/tools";
 import { newShot } from "../../src/lib/media";
 import { newOriginal, useWriting } from "../../src/lib/originals";
-import { applySongIdea, saveRoomPreference } from "../../src/lib/roomActions";
+import {
+  applySongIdea,
+  saveRoomPreference,
+  useRoomOperation,
+} from "../../src/lib/roomActions";
 import {
   audioProfileSchema,
   captureRig,
@@ -29,6 +33,8 @@ import {
   parseBlueprint,
   parseMelody,
   referenceForm,
+  roomToolsDisabled,
+  roomToolsStatus,
   setlistCue,
   setlistSchema,
   snapCuts,
@@ -41,8 +47,49 @@ import { useEngineStore } from "../../src/store/engine";
 const originalIpc = { ...ipc };
 afterEach(() => {
   __setIpcForTests(originalIpc);
-  useEngineStore.setState({ isRecording: false });
+  useEngineStore.setState({ isRecording: false, calibrating: false });
   useWriting.setState({ busy: false });
+  useRoomOperation.setState({ busy: false, blocking: false, cancel: null });
+});
+
+const idleGate = {
+  blocking: false,
+  busy: false,
+  recording: false,
+  writingBusy: false,
+  mediaBusy: false,
+  calibrating: false,
+};
+
+it("names status for every disable reason and leaves Cancel reachable during coach work", () => {
+  expect(roomToolsDisabled(idleGate)).toBe(false);
+  expect(roomToolsStatus(idleGate)).toBeNull();
+  expect(roomToolsDisabled({ ...idleGate, writingBusy: true })).toBe(true);
+  expect(roomToolsStatus({ ...idleGate, writingBusy: true })).toBe(
+    "Finish saving the original to use this tool.",
+  );
+  expect(roomToolsDisabled({ ...idleGate, mediaBusy: true })).toBe(true);
+  expect(roomToolsStatus({ ...idleGate, mediaBusy: true })).toBe(
+    "Finish the current media work to use this tool.",
+  );
+  expect(roomToolsDisabled({ ...idleGate, calibrating: true })).toBe(true);
+  expect(roomToolsStatus({ ...idleGate, calibrating: true })).toBe(
+    "Finish measuring the loopback to use this tool.",
+  );
+  expect(roomToolsDisabled({ ...idleGate, recording: true })).toBe(true);
+  expect(roomToolsStatus({ ...idleGate, recording: true })).toBe(
+    "Finish the recording to use this tool.",
+  );
+  expect(roomToolsDisabled({ ...idleGate, blocking: true })).toBe(true);
+  expect(roomToolsStatus({ ...idleGate, blocking: true })).toBe("Working…");
+  // Non-blocking coach work greys nothing so Cancel stays clickable.
+  expect(roomToolsDisabled({ ...idleGate, busy: true })).toBe(false);
+  expect(roomToolsStatus({ ...idleGate, busy: true })).toBe("Working…");
+  const source = fs.readFileSync("src/components/RoomTools.tsx", "utf8");
+  const fieldsetClose = source.lastIndexOf("</fieldset>");
+  expect(source.indexOf("Cancel", fieldsetClose)).toBeGreaterThan(
+    fieldsetClose,
+  );
 });
 
 it("registers one named capability for every room", () => {

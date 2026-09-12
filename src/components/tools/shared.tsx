@@ -13,12 +13,19 @@ export function useTool() {
    */
   const run = async (
     fn: () => Promise<string | undefined> | string | undefined,
-    { blocking = true }: { blocking?: boolean } = {},
+    {
+      blocking = true,
+      cancel = null,
+    }: { blocking?: boolean; cancel?: (() => void) | null } = {},
   ) => {
     if (useRoomOperation.getState().busy) {
       setMessage(
         "Another room tool is still working. Wait for it or cancel it.",
       );
+      return;
+    }
+    if (useEngineStore.getState().calibrating) {
+      setMessage("Finish measuring the loopback first.");
       return;
     }
     if (
@@ -29,14 +36,18 @@ export function useTool() {
       setMessage("Finish the current operation or recording first.");
       return;
     }
-    useRoomOperation.setState({ busy: true, blocking });
+    useRoomOperation.setState({ busy: true, blocking, cancel });
     setMessage("");
     try {
       setMessage((await fn()) ?? "");
     } catch (e) {
       setMessage(withNextStep(String(e).replace(/^Error: /, "")));
     } finally {
-      useRoomOperation.setState({ busy: false, blocking: false });
+      useRoomOperation.setState({
+        busy: false,
+        blocking: false,
+        cancel: null,
+      });
     }
   };
   return { run, message };

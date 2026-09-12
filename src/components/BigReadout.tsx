@@ -6,6 +6,13 @@ export const CHORD_MAX_PX = 160;
 export const CHORD_VW = 10;
 export const TEMPO_BAR_PX = 48;
 
+/** Whole cents for the tuner; never "-0". */
+export function formatCents(cents: number): string {
+  const rounded = Math.round(cents);
+  if (rounded === 0) return "0";
+  return rounded > 0 ? `+${rounded}` : `${rounded}`;
+}
+
 export function chordSizePx(viewportWidth: number): number {
   return Math.min(
     CHORD_MAX_PX,
@@ -74,7 +81,7 @@ export const BigReadout: React.FC<BigReadoutProps> = ({
                 : "text-[var(--fg-1)]"
           }`}
         >
-          {cents > 0 ? `+${cents.toFixed(0)}` : cents.toFixed(0)} ¢
+          {formatCents(cents)} ¢
         </span>
       )}
     </div>

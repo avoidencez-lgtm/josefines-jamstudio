@@ -14,10 +14,14 @@ pub struct PitchResult {
     pub confidence: f32,
 }
 
+/// Cents away from the locked MIDI note required before the displayed name switches.
+const NOTE_LOCK_CENTS: f32 = 60.0;
+
 pub struct PitchTracker {
     detector: McLeodDetector<f32>,
     window_size: usize,
     sample_rate: u32,
+    locked_midi: Option<i32>,
 }
 
 impl PitchTracker {
@@ -35,6 +39,7 @@ impl PitchTracker {
             .with_clarity_threshold(0.7),
             window_size,
             sample_rate,
+            locked_midi: None,
         }
     }
 
@@ -57,8 +62,7 @@ impl PitchTracker {
 
         // MIDI note calculation: A4 = 440 Hz = MIDI 69
         let midi_exact = 69.0 + 12.0 * (hz / 440.0).log2();
-        let midi_rounded = midi_exact.round() as i32;
-        let cents = (midi_exact - midi_rounded as f32) * 100.0;
+        let (midi_rounded, cents) = lock_note(midi_exact, &mut self.locked_midi);
 
         let note_idx = (midi_rounded.rem_euclid(12)) as usize;
         let octave = (midi_rounded / 12) - 1;
@@ -71,6 +75,17 @@ impl PitchTracker {
             confidence,
         })
     }
+}
+
+/// Hold the displayed note until the pitch moves `NOTE_LOCK_CENTS` away from it.
+fn lock_note(midi_exact: f32, locked_midi: &mut Option<i32>) -> (i32, f32) {
+    let midi_rounded = match *locked_midi {
+        Some(locked) if ((midi_exact - locked as f32) * 100.0).abs() < NOTE_LOCK_CENTS => locked,
+        _ => midi_exact.round() as i32,
+    };
+    *locked_midi = Some(midi_rounded);
+    let cents = (midi_exact - midi_rounded as f32) * 100.0;
+    (midi_rounded, cents)
 }
 
 #[cfg(test)]
@@ -228,5 +243,22 @@ mod tests {
         assert!((res.hz - 82.41).abs() < 1.0);
         assert_eq!(res.note, "E2");
         assert!(res.cents.abs() < 5.0);
+    }
+
+    #[test]
+    fn note_lock_hysteresis_holds_across_the_semitone_boundary() {
+        let mut lock = None;
+        let (midi, cents) = lock_note(40.49, &mut lock);
+        assert_eq!(midi, 40);
+        assert!((cents - 49.0).abs() < 0.01);
+        // Crossing the ±50-cent rounding boundary must not flip E2 to F2.
+        let (midi, cents) = lock_note(40.55, &mut lock);
+        assert_eq!(midi, 40);
+        assert!((cents - 55.0).abs() < 0.01);
+        let (midi, cents) = lock_note(40.61, &mut lock);
+        assert_eq!(midi, 41);
+        assert!((cents + 39.0).abs() < 0.01);
+        let (midi, _) = lock_note(40.45, &mut lock);
+        assert_eq!(midi, 41);
     }
 }
