@@ -25,6 +25,26 @@ static GATE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 static SAVE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 static CANCEL: AtomicBool = AtomicBool::new(false);
 static SERIAL: AtomicU64 = AtomicU64::new(0);
+
+fn nested_version_ok(extra: &BTreeMap<String, Value>, key: &str) -> Result<(), String> {
+    if extra.get(key).is_some_and(|old| old["schemaVersion"] != 1) {
+        return Err(format!(
+            "Unsupported saved {key} version. Song left intact."
+        ));
+    }
+    Ok(())
+}
+
+fn merge_unknown_v1(old: Option<&Value>, mut next: Value) -> Value {
+    if let Some(old) = old.filter(|value| value["schemaVersion"] == 1) {
+        if let (Some(fields), Some(obj)) = (old.as_object(), next.as_object_mut()) {
+            for (key, kept) in fields {
+                obj.entry(key.clone()).or_insert(kept.clone());
+            }
+        }
+    }
+    next
+}
 pub fn root() -> PathBuf {
     Library::default_user_root().join("music-videos")
 }
@@ -826,24 +846,16 @@ async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
             return Err("Audio asset changed during analysis. Analyze it again.".into());
         }
         source = current;
+        nested_version_ok(&source.extra, "songAnalysis")?;
+        nested_version_ok(&source.extra, "estimatedGrid")?;
+        let previous_analysis = source.extra.get("songAnalysis").cloned();
+        let analysis = merge_unknown_v1(previous_analysis.as_ref(), analysis);
         source.extra.insert("songAnalysis".into(), analysis.clone());
         if let Ok(parsed) = serde_json::from_value::<jam_audio::offline::SongAnalysis>(analysis) {
             if let Ok(grid) = jam_audio::offline::estimate_grid(&parsed) {
                 let mut value = serde_json::to_value(grid).map_err(|e| e.to_string())?;
                 value["sourceHash"] = json!(analysis_hash);
-                if let Some(old) = source.extra.get("estimatedGrid") {
-                    if old["schemaVersion"] == 1 {
-                        if let Some(fields) = old.as_object() {
-                            for (key, kept) in fields {
-                                value
-                                    .as_object_mut()
-                                    .unwrap()
-                                    .entry(key.clone())
-                                    .or_insert(kept.clone());
-                            }
-                        }
-                    }
-                }
+                let value = merge_unknown_v1(source.extra.get("estimatedGrid"), value);
                 source.extra.insert("estimatedGrid".into(), value);
             }
         }
@@ -1627,6 +1639,37 @@ mod tests {
     }
 
     use super::*;
+
+    #[tokio::test]
+    async fn reanalysis_refuses_nested_future_grid_without_rewriting() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        let home = std::env::temp_dir().join(format!("jam-nested-grid-{}", id()));
+        let base = home.join("music-videos");
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let raw = base.join("assets/generated-source.wav");
+        synthetic_audio(&raw, 3);
+        let mut imported = import(&base, &raw, "audio", "Synthetic import")
+            .await
+            .unwrap();
+        imported.extra.insert(
+            "estimatedGrid".into(),
+            json!({"schemaVersion":2,"beats":[0.0,0.5],"future":"keep"}),
+        );
+        save_asset(&base, &imported).unwrap();
+        let manifest = songs::folder(&base, &imported.id)
+            .unwrap()
+            .join("song.json");
+        let before = fs::read(&manifest).unwrap();
+        let err = analyze_source(&base, &imported.id).await.unwrap_err();
+        assert!(
+            err.contains("estimatedGrid") || err.contains("Unsupported"),
+            "{err}"
+        );
+        assert_eq!(fs::read(&manifest).unwrap(), before);
+        fs::remove_dir_all(home).unwrap();
+    }
+
     #[tokio::test]
     async fn analysis_refuses_unknown_asset_versions_without_rewriting_metadata() {
         let base = std::env::temp_dir().join(format!("jam-analysis-version-{}", id()));
