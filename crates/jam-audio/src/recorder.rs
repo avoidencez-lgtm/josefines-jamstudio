@@ -170,7 +170,11 @@ impl TakeRecorder {
             let mut checkpoint = 0usize;
             let mut peak = 0.0f32;
             let mut peaks = Vec::new();
+            let mut write_error = None;
             for block in rx {
+                if write_error.is_some() {
+                    continue;
+                }
                 for frame in block {
                     for (channels, writer) in &mut writers {
                         if channels == &[0] && frames < offset {
@@ -179,14 +183,21 @@ impl TakeRecorder {
                         for &ch in channels.iter() {
                             let v = frame[ch];
                             if !v.is_finite() {
-                                return Err(
-                                    "Non-finite audio; partial WAVs kept for recovery.".into()
+                                write_error = Some(
+                                    "Non-finite audio; partial WAVs kept for recovery.".into(),
                                 );
+                                break;
                             }
-                            writer
-                                .write_sample((v.clamp(-1.0, 1.0) * 8_388_607.0) as i32)
-                                .map_err(|e| e.to_string())?;
+                            if let Err(e) =
+                                writer.write_sample((v.clamp(-1.0, 1.0) * 8_388_607.0) as i32)
+                            {
+                                write_error = Some(e.to_string());
+                                break;
+                            }
                         }
+                    }
+                    if write_error.is_some() {
+                        break;
                     }
                     peak = peak.max(frame[0].abs()).max(frame[3].abs());
                     frames += 1;
@@ -196,22 +207,27 @@ impl TakeRecorder {
                     }
                     if frames - checkpoint >= rate as usize {
                         for (_, writer) in &mut writers {
-                            writer.flush().map_err(|e| e.to_string())?;
+                            if let Err(e) = writer.flush() {
+                                write_error = Some(e.to_string());
+                                break;
+                            }
                         }
                         checkpoint = frames;
                     }
                 }
             }
             // Pad the shifted input so every exported stem retains a common duration.
-            for (channels, writer) in &mut writers {
-                if channels == &[0] {
-                    for _ in 0..offset.min(frames) {
-                        writer.write_sample(0i32).map_err(|e| e.to_string())?;
+            if write_error.is_none() {
+                for (channels, writer) in &mut writers {
+                    if channels == &[0] {
+                        for _ in 0..offset.min(frames) {
+                            writer.write_sample(0i32).map_err(|e| e.to_string())?;
+                        }
                     }
                 }
             }
             for (_, writer) in writers {
-                writer.finalize().map_err(|e| e.to_string())?;
+                let _ = writer.finalize();
             }
             if peaks.is_empty() {
                 peaks.push(peak);
@@ -222,6 +238,9 @@ impl TakeRecorder {
                 .collect();
             meta.sample_count = frames;
             meta.duration_secs = frames as f64 / rate as f64;
+            if let Some(e) = write_error {
+                meta.notes = e;
+            }
             Ok(meta)
         });
         self.sender = Some(tx);
@@ -311,9 +330,14 @@ pub fn save_manifest(meta: &TakeMetadata) -> Result<(), String> {
     let dir = Path::new(&meta.path_input)
         .parent()
         .ok_or("Take directory missing")?;
-    let temp = dir.join("take.json.tmp");
+    let dest = dir.join("take.json");
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let temp = dir.join(format!("take.json.tmp.{}.{}", std::process::id(), nanos));
     let bytes = serde_json::to_vec_pretty(meta).map_err(|e| e.to_string())?;
-    // Never follow or overwrite a pre-existing temporary file/link.
+    // Unique suffix so a leftover take.json.tmp cannot lock out later saves.
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -321,11 +345,21 @@ pub fn save_manifest(meta: &TakeMetadata) -> Result<(), String> {
         .map_err(|e| format!("Cannot create {}. {e}", temp.display()))?;
     let result = file.write_all(&bytes).and_then(|()| file.sync_all());
     drop(file);
-    let result = result.and_then(|()| fs::rename(&temp, dir.join("take.json")));
+    let result = result.and_then(|()| replace_file(&temp, &dest));
     if result.is_err() {
         let _ = fs::remove_file(&temp);
     }
-    result.map_err(|e| format!("Cannot save {}. {e}", dir.join("take.json").display()))
+    result.map_err(|e| format!("Cannot save {}. {e}", dest.display()))
+}
+
+fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
+    match fs::rename(from, to) {
+        Err(_) if to.exists() => {
+            fs::remove_file(to)?;
+            fs::rename(from, to)
+        }
+        other => other,
+    }
 }
 
 /// Reads a WAV file back as mono f32 in -1..1 (channels are averaged), together with its
@@ -373,14 +407,43 @@ mod tests {
         fs::hard_link(&victim, root.join("take.json.tmp")).unwrap();
         let take = TakeMetadata {
             path_input: root.join("guitar-di.wav").to_string_lossy().into_owned(),
+            id: "take-stale".into(),
             ..Default::default()
         };
-        assert!(save_manifest(&take)
-            .unwrap_err()
-            .starts_with("Cannot create "));
+        save_manifest(&take).expect("stale take.json.tmp must not lock out later saves");
         assert_eq!(fs::read(&victim).unwrap(), b"keep this file");
-        assert!(!root.join("take.json").exists());
+        assert!(root.join("take.json").exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn writer_error_still_writes_take_json_with_notes() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-recording-nan-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut r = TakeRecorder::new(1000, root.clone());
+        r.start_take("song".into(), "rock".into(), "verse".into(), 100.0)
+            .unwrap();
+        r.push_capture(&[[f32::NAN; 9]; 1]).unwrap();
+        let t = r
+            .stop_and_save()
+            .expect("partial take stays listed after a writer error");
+        assert!(
+            t.notes.contains("finite") || t.notes.contains("Non-finite"),
+            "{}",
+            t.notes
+        );
+        assert!(Path::new(&t.path_input)
+            .parent()
+            .unwrap()
+            .join("take.json")
+            .exists());
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

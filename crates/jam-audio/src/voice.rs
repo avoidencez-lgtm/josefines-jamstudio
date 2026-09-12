@@ -146,9 +146,13 @@ impl VoiceBus {
     }
     pub fn stop(&mut self) {
         self.speech = None;
+        self.gain = 1.0;
     }
     pub fn speaking(&self) -> bool {
         self.speech.is_some()
+    }
+    pub fn recovering(&self) -> bool {
+        (self.gain - 1.0).abs() > 1e-4
     }
 
     /// Render worker only. Speech shares the existing clip interpolation and
@@ -231,8 +235,10 @@ mod tests {
         assert!((gains[7199] - target).abs() < 0.0002);
         assert!(gains.windows(2).all(|g| g[1] <= g[0]));
         bus.stop();
+        assert!(!bus.recovering());
+        assert!((bus.gain - 1.0).abs() < 1e-6);
         bus.render(48_000, &mut speech, &mut gains);
-        assert!((gains[7199] - 1.0).abs() < 0.0002);
+        assert!((gains[0] - 1.0).abs() < 0.0002);
         assert!(!bus.speaking());
         assert!(bus.play(&[1], -9.0).is_err());
         assert!(bus.play(&[0, 0], f32::NAN).is_err());

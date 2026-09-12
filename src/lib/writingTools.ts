@@ -55,6 +55,17 @@ export function checkWritingForm(body: SongBody): void {
     );
   const missing = c.sections.find((s) => !body.sections?.[s.id]);
   if (missing) throw new Error(`Missing band settings for ${missing.name}`);
+  if (
+    body.clips.some(
+      (clip) =>
+        !Number.isFinite(clip.trimStart) ||
+        !Number.isFinite(clip.trimEnd) ||
+        clip.trimEnd <= clip.trimStart,
+    )
+  )
+    throw new Error(
+      "Each guitar layer needs a trim end after its trim start.",
+    );
 }
 
 /** Distinct sentence names so chartToText/parseChartText can round-trip additions. */

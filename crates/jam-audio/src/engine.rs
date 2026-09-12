@@ -24,7 +24,7 @@ use parking_lot::Mutex;
 use rtrb::RingBuffer;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle, Thread};
 use std::time::{Duration, Instant};
@@ -36,7 +36,7 @@ const RENDER_BLOCK: usize = 256;
 const RENDER_AHEAD_BLOCKS: usize = 6;
 /// Metronome click length.
 const CLICK_SECS: f32 = 0.012;
-/// Window for the tuner's pitch detector.
+/// Window for the tuner's pitch detector at 48 kHz; scaled with the stream rate.
 const TUNER_WINDOW: usize = 2048;
 
 /// Reference stems travel through the same queue as playback. The callback adds
@@ -78,6 +78,8 @@ struct OutputTap {
     lost: Arc<AtomicBool>,
     /// Worker sets false while parked idle so silence is not an underrun.
     filling: Arc<AtomicBool>,
+    input_monitor: Arc<AtomicU32>,
+    reference_serial: Arc<AtomicU32>,
     recording: bool,
     reference_position: Arc<AtomicU64>,
 }
@@ -90,6 +92,16 @@ impl OutputTap {
             let input = self.input.pop().ok();
             match self.playback.pop() {
                 Ok(mut frame) => {
+                    let serial = (frame.reference_position >> 32) as u32;
+                    let current = self.reference_serial.load(Ordering::Acquire);
+                    if serial != current {
+                        stereo.fill(0.0);
+                        self.recording = frame.take != 0 && !frame.synthetic;
+                        if self.recorded.push(frame).is_err() {
+                            self.lost.store(true, Ordering::Release);
+                        }
+                        continue;
+                    }
                     reference_position = Some(frame.reference_position);
                     // FileInput samples travel with their rendered frame;
                     // timer scheduling gaps do not lose synthetic samples.
@@ -99,9 +111,9 @@ impl OutputTap {
                         if input.is_none() && frame.take != 0 {
                             self.lost.store(true, Ordering::Release);
                         }
-                        // Master already contains the rendered DI at unity gain.
                         let input = input.unwrap_or(0.0);
-                        let change = input - frame.stems[0];
+                        let monitor = f32::from_bits(self.input_monitor.load(Ordering::Relaxed));
+                        let change = (input - frame.stems[0]) * monitor;
                         frame.stems[0] = input;
                         frame.stems[3] += change;
                         frame.stems[4] += change;
@@ -334,6 +346,8 @@ pub struct AudioEngine {
     pub voice: Arc<Mutex<crate::voice::VoiceBus>>,
     reference: Arc<Mutex<Option<crate::song::ReferenceSong>>>,
     reference_position: Arc<AtomicU64>,
+    reference_serial: Arc<AtomicU32>,
+    input_monitor: Arc<AtomicU32>,
     config: AudioConfig,
     running: Arc<AtomicBool>,
     tone_active: Arc<AtomicBool>,
@@ -495,7 +509,13 @@ fn render_ahead_needed(
     {
         return true;
     }
-    voice.lock().speaking() || audition.lock().is_some() || calib.lock().is_some()
+    {
+        let voice = voice.lock();
+        if voice.speaking() || voice.recovering() {
+            return true;
+        }
+    }
+    audition.lock().is_some() || calib.lock().is_some()
 }
 
 impl AudioEngine {
@@ -516,6 +536,8 @@ impl AudioEngine {
             voice: Arc::new(Mutex::new(crate::voice::VoiceBus::default())),
             reference: Arc::new(Mutex::new(None)),
             reference_position: Arc::new(AtomicU64::new(0)),
+            reference_serial: Arc::new(AtomicU32::new(0)),
+            input_monitor: Arc::new(AtomicU32::new(0.0f32.to_bits())),
             config: config.clone(),
             running: Arc::new(AtomicBool::new(false)),
             tone_active: Arc::new(AtomicBool::new(false)),
@@ -602,7 +624,9 @@ impl AudioEngine {
     /// Gain for passing the guitar input to the output (0 = off; the guitarist
     /// normally monitors through the amp/modeler, not through us).
     pub fn set_input_monitor(&self, gain: f32) {
-        self.mix.lock().input_monitor = gain.clamp(0.0, 1.0);
+        let gain = gain.clamp(0.0, 1.0);
+        self.mix.lock().input_monitor = gain;
+        self.input_monitor.store(gain.to_bits(), Ordering::Release);
         if gain > 0.0 {
             self.wake_render();
         }
@@ -664,6 +688,34 @@ impl AudioEngine {
         self.sequencer.lock().reset();
     }
 
+    /// Locate the active timeline: the reference when one is loaded, otherwise the band grid.
+    pub fn locate(&self, beats: f64) -> Result<(), String> {
+        if self.reference.lock().is_some() {
+            let seconds = {
+                let song = self.reference.lock();
+                let song = song.as_ref().unwrap();
+                if let Some(grid) = &song.grid {
+                    let i = beats.max(0.0) as usize;
+                    let frac = beats.max(0.0) - i as f64;
+                    if i + 1 < grid.beats.len() {
+                        grid.beats[i] + frac * (grid.beats[i + 1] - grid.beats[i])
+                    } else if let Some(&last) = grid.beats.last() {
+                        last.min(song.info.seconds)
+                    } else {
+                        beats.max(0.0) * 60.0 / 120.0
+                    }
+                } else {
+                    let bpm = song.analysis_bpm().unwrap_or(120.0).max(1.0);
+                    beats.max(0.0) * 60.0 / bpm
+                }
+            };
+            self.reference_seek(seconds)
+        } else {
+            self.transport_locate(beats);
+            Ok(())
+        }
+    }
+
     pub fn transport_set_loop(&self, start_bar: u32, end_bar: u32, enabled: bool) {
         self.timeline.lock().set_loop(start_bar, end_bar, enabled);
     }
@@ -697,6 +749,8 @@ impl AudioEngine {
         self.stop_transport_under_render_gate();
         self.clips.lock().clear();
         self.song_snapshot = serde_json::json!({"reference": song.info, "beatGrid": song.grid.as_ref().map(|g| serde_json::json!(g)).unwrap_or(serde_json::json!("unanalysed"))});
+        self.reference_serial
+            .store(song.source_serial(), Ordering::Release);
         *self.reference.lock() = Some(song);
         Ok(())
     }
@@ -706,6 +760,7 @@ impl AudioEngine {
         let _gate = self.render_gate.lock();
         self.stop_transport_under_render_gate();
         self.reference.lock().take();
+        self.reference_serial.store(0, Ordering::Release);
         self.song_snapshot = serde_json::Value::Null;
         Ok(())
     }
@@ -900,7 +955,7 @@ impl AudioEngine {
         if from_start {
             if let Some(bpm) = self.song_snapshot["body"]["chart"]["defaultBpm"].as_f64() {
                 tempo = bpm;
-                meter = (4, 4);
+                meter = chart_time_signature(&self.song_snapshot, meter);
             }
         }
         let mut recorder = {
@@ -976,11 +1031,9 @@ impl AudioEngine {
         self.transport_set_count_in(0);
         if let Some(bpm) = self.song_snapshot["body"]["chart"]["defaultBpm"].as_f64() {
             self.transport_set_tempo(bpm);
-            let time_sig = self.song_snapshot["body"]["chart"]["timeSig"]
-                .as_array()
-                .and_then(|a| Some((a.first()?.as_u64()? as u8, a.get(1)?.as_u64()? as u8)))
-                .unwrap_or((4, 4));
-            self.transport_set_time_signature(time_sig);
+            let meter =
+                chart_time_signature(&self.song_snapshot, self.timeline.lock().time_signature);
+            self.transport_set_time_signature(meter);
             let chart_bars = self
                 .sequencer
                 .lock()
@@ -1315,6 +1368,8 @@ impl AudioEngine {
         let lost = Arc::clone(&self.recording_clock.lost);
         let filling = Arc::clone(&self.filling);
         let reference_position = Arc::clone(&self.reference_position);
+        let reference_serial = Arc::clone(&self.reference_serial);
+        let input_monitor = Arc::clone(&self.input_monitor);
         let make_output = move || {
             let (prod, playback) = RingBuffer::new(ring_capacity / 2);
             let (input_prod, input) = RingBuffer::new(ring_capacity);
@@ -1328,6 +1383,8 @@ impl AudioEngine {
                 filling: Arc::clone(&filling),
                 recording: false,
                 reference_position: Arc::clone(&reference_position),
+                reference_serial: Arc::clone(&reference_serial),
+                input_monitor: Arc::clone(&input_monitor),
             };
             let cb: crate::io::OutputCallback = Box::new(move |buffer| tap.render(buffer));
             (prod, cb, input_prod, captured)
@@ -1745,7 +1802,7 @@ impl AudioEngine {
                             }
                             notes.clear();
                         }
-                        let input_gain = 1.0 - mix.lock().input_monitor;
+                        let input_gain = mix.lock().input_monitor;
                         let frames: Vec<crate::workstation::Frame> = (0..block_len)
                             .map(|i| {
                                 [
@@ -1798,7 +1855,7 @@ impl AudioEngine {
                         rendered = true;
                         blocks_filled.fetch_add(1, Ordering::Relaxed);
 
-                        let out_lvl = calculate_level(&ctx.out_left);
+                        let out_lvl = output_meter(&ctx.out_left, &ctx.out_right);
                         let in_lvl = calculate_level(&ctx.in_block);
                         {
                             let mut tel = telemetry.lock();
@@ -1807,10 +1864,7 @@ impl AudioEngine {
                                 peak_db: in_lvl.peak_db,
                                 rms_db: in_lvl.rms_db,
                             };
-                            tel.output_level = MeterTelemetry {
-                                peak_db: out_lvl.peak_db,
-                                rms_db: out_lvl.rms_db,
-                            };
+                            tel.output_level = out_lvl;
                             tel.tuner = ctx.tuner_latest.clone();
                             tel.transport = transport_telem;
                             tel.band = band_telem;
@@ -1904,6 +1958,7 @@ struct RenderContext {
     tone_phase: f32,
     click: Option<ClickVoice>,
     click_len: usize,
+    tuner_window: usize,
     pitch_tracker: PitchTracker,
     energy_follower: EnergyFollower,
     tuner_buf: Vec<f32>,
@@ -1955,6 +2010,7 @@ impl RenderContext {
     }
 
     fn new(sample_rate: u32) -> Self {
+        let window = tuner_window(sample_rate);
         Self {
             sample_rate,
             reference_positions: vec![0; RENDER_BLOCK],
@@ -1971,9 +2027,10 @@ impl RenderContext {
             tone_phase: 0.0,
             click: None,
             click_len: (sample_rate as f32 * CLICK_SECS) as usize,
-            pitch_tracker: PitchTracker::new(TUNER_WINDOW, sample_rate),
+            tuner_window: window,
+            pitch_tracker: PitchTracker::new(window, sample_rate),
             energy_follower: EnergyFollower::new(sample_rate),
-            tuner_buf: Vec::with_capacity(TUNER_WINDOW * 2),
+            tuner_buf: Vec::with_capacity(window * 2),
             tuner_latest: None,
             tuner_misses: 0,
         }
@@ -1993,7 +2050,7 @@ impl RenderContext {
         let energy = self.energy_follower.process_block(&self.in_block);
         if tuner_on {
             self.tuner_buf.extend_from_slice(&self.in_block);
-            if self.tuner_buf.len() >= TUNER_WINDOW {
+            if self.tuner_buf.len() >= self.tuner_window {
                 match self.pitch_tracker.detect(&self.tuner_buf) {
                     Some(p) => {
                         self.tuner_latest = Some(TunerTelemetry {
@@ -2011,7 +2068,7 @@ impl RenderContext {
                         }
                     }
                 }
-                let keep = TUNER_WINDOW / 2;
+                let keep = self.tuner_window / 2;
                 let excess = self.tuner_buf.len() - keep;
                 self.tuner_buf.drain(..excess);
             }
@@ -2128,6 +2185,33 @@ impl RenderContext {
 
         (transport, band)
     }
+}
+
+fn chart_time_signature(snapshot: &serde_json::Value, fallback: (u8, u8)) -> (u8, u8) {
+    snapshot["body"]["chart"]["timeSig"]
+        .as_array()
+        .and_then(|a| {
+            let num = a.first()?.as_u64()? as u8;
+            let den = a.get(1)?.as_u64()? as u8;
+            matches!(den, 2 | 4 | 8 | 16)
+                .then_some((num, den))
+                .filter(|(n, _)| *n > 0)
+        })
+        .unwrap_or(fallback)
+}
+
+fn output_meter(left: &[f32], right: &[f32]) -> MeterTelemetry {
+    let l = calculate_level(left);
+    let r = calculate_level(right);
+    MeterTelemetry {
+        peak_db: l.peak_db.max(r.peak_db),
+        rms_db: jam_dsp::amp_to_db(((l.rms * l.rms + r.rms * r.rms) * 0.5).sqrt()),
+    }
+}
+
+fn tuner_window(sample_rate: u32) -> usize {
+    ((TUNER_WINDOW as u64 * u64::from(sample_rate.max(1))) / 48_000).max(TUNER_WINDOW as u64)
+        as usize
 }
 
 fn dirs_base() -> std::path::PathBuf {
@@ -2498,6 +2582,8 @@ mod tests {
                     filling: Arc::new(AtomicBool::new(true)),
                     recording: false,
                     reference_position: Arc::clone(&position),
+                    reference_serial: Arc::new(AtomicU32::new(song.source_serial())),
+                    input_monitor: Arc::new(AtomicU32::new(0.0f32.to_bits())),
                 };
                 let mut rendered = 0usize;
                 let mut consumed = 0usize;
@@ -2582,6 +2668,8 @@ mod tests {
             filling: Arc::new(AtomicBool::new(true)),
             recording: false,
             reference_position: Arc::new(AtomicU64::new(0)),
+            reference_serial: Arc::new(AtomicU32::new(23)),
+            input_monitor: Arc::new(AtomicU32::new(1.0f32.to_bits())),
         };
         // Render a long way ahead. Actual DI arrives only at each output callback.
         for index in 0..10_000 {
@@ -2658,6 +2746,7 @@ mod tests {
                 synthetic: true,
                 take: 8,
                 stems: [0.25; 9],
+                reference_position: 23 << 32,
                 ..Default::default()
             })
             .unwrap();
@@ -2667,6 +2756,22 @@ mod tests {
         assert!(
             !lost.load(Ordering::Acquire),
             "synthetic timer gaps do not lose FileInput samples"
+        );
+        playback
+            .push(OutputFrame {
+                output: [0.9; 2],
+                reference_position: (99 << 32) | 1,
+                synthetic: true,
+                ..Default::default()
+            })
+            .unwrap();
+        let mut leftover = [1.0f32; 2];
+        tap.render(&mut leftover);
+        assert_eq!(leftover, [0.0, 0.0], "mismatched source serial is silence");
+        assert_eq!(
+            tap.reference_position.load(Ordering::Acquire),
+            23 << 32,
+            "stale serial must not publish its stamp"
         );
     }
 
@@ -2681,6 +2786,56 @@ mod tests {
         assert!(engine.validate_style_meter(&ballad).is_ok());
         engine.band_set_style(ballad);
         assert!(engine.validate_transport_meter((6, 8)).is_ok());
+    }
+
+    #[test]
+    fn output_meter_uses_the_louder_channel() {
+        let left = [0.0f32; 64];
+        let mut right = [0.0f32; 64];
+        right[0] = 1.0;
+        let meter = output_meter(&left, &right);
+        assert!((meter.peak_db - 0.0).abs() < 0.05, "{}", meter.peak_db);
+        assert!(meter.rms_db > -40.0, "{}", meter.rms_db);
+        assert_eq!(output_meter(&left, &left).peak_db, -180.0);
+    }
+
+    #[test]
+    fn tuner_window_grows_with_sample_rate_so_55hz_fits_at_96k() {
+        assert_eq!(tuner_window(48_000), 2048);
+        assert_eq!(tuner_window(96_000), 4096);
+        let window = tuner_window(96_000);
+        let mut tracker = PitchTracker::new(window, 96_000);
+        let samples: Vec<f32> = (0..window)
+            .map(|i| (2.0 * std::f32::consts::PI * 55.0 * i as f32 / 96_000.0).sin())
+            .collect();
+        let pitch = tracker.detect(&samples).expect("55 Hz at 96 kHz");
+        assert!((pitch.hz - 55.0).abs() < 1.0, "{}", pitch.hz);
+    }
+
+    #[test]
+    fn chart_time_signature_reads_time_sig_instead_of_hardcoding_4_4() {
+        let snap = serde_json::json!({"body":{"chart":{"timeSig":[6,8],"defaultBpm":90.0}}});
+        assert_eq!(chart_time_signature(&snap, (4, 4)), (6, 8));
+        assert_eq!(chart_time_signature(&serde_json::json!({}), (3, 4)), (3, 4));
+    }
+
+    #[test]
+    fn locate_seeks_a_loaded_reference_without_a_band_chart() {
+        let mut engine = headless_engine();
+        let mut song =
+            crate::song::ReferenceSong::new("ref".into(), "Song".into(), vec![0.0; 192_000])
+                .unwrap();
+        song.set_grid(crate::song::grid::Grid {
+            schema_version: 1,
+            origin: "confirmed-local".into(),
+            beats_per_bar: 4,
+            beats: vec![0.0, 0.5, 1.0, 1.5, 2.0],
+            sections: vec![],
+        })
+        .unwrap();
+        engine.load_reference(song).unwrap();
+        engine.locate(2.0).unwrap();
+        assert!((engine.get_telemetry().reference.unwrap().position - 1.0).abs() < 1e-6);
     }
 
     fn headless_engine() -> AudioEngine {

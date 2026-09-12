@@ -86,7 +86,7 @@ fn timing(moov: &[u8], track_id: u32, rate: u32, total: u64) -> Result<Window, S
     let track = selected.ok_or(ERROR)?;
     let mdhd = required(required(track, b"mdia")?, b"mdhd")?;
     let media_scale = u32_at(mdhd, time_offset(mdhd)?)?;
-    if media_scale != rate {
+    if media_scale == 0 {
         return Err(ERROR.into());
     }
     let mut window = Window {
@@ -238,7 +238,9 @@ mod tests {
                 (2112, 44100, 11025)
             );
             assert!(timing(&plain, 8, 44100, 46212).is_err());
-            assert!(timing(&plain, 7, 48000, 46212).is_err());
+            let scaled = timing(&plain, 7, 48000, 52_000).unwrap();
+            assert_eq!(scaled.start, scale(2112, 48000, 44100).unwrap());
+            assert_eq!(scaled.frames, scale(1000, 48000, 1000).unwrap());
             assert!(timing(&plain, 7, 44100, 46000).is_err());
             for edits in [
                 vec![(1000, 0, 32768)],

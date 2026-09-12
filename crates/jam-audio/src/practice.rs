@@ -46,11 +46,18 @@ pub fn write_stereo(output: &Path, samples: &[f32], cancel: &AtomicBool) -> Resu
         bits_per_sample: 32,
         sample_format: hound::SampleFormat::Float,
     };
+    let temp = output.with_file_name(format!(
+        "{}.tmp.{}",
+        output
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("Invalid output path.")?,
+        std::process::id()
+    ));
     let file = std::fs::OpenOptions::new()
         .write(true)
-        .create(true)
-        .truncate(true)
-        .open(output)
+        .create_new(true)
+        .open(&temp)
         .map_err(|e| e.to_string())?;
     let result = (|| {
         let mut writer =
@@ -66,15 +73,22 @@ pub fn write_stereo(output: &Path, samples: &[f32], cancel: &AtomicBool) -> Resu
         writer.finalize().map_err(|e| e.to_string())?;
         std::fs::OpenOptions::new()
             .write(true)
-            .open(output)
+            .open(&temp)
             .and_then(|f| f.sync_all())
             .map_err(|e| e.to_string())?;
         Ok(())
     })();
     if result.is_err() {
-        let _ = std::fs::remove_file(output);
+        let _ = std::fs::remove_file(&temp);
+        return result;
     }
-    result
+    match std::fs::rename(&temp, output) {
+        Err(_) if output.exists() => {
+            std::fs::remove_file(output).map_err(|e| e.to_string())?;
+            std::fs::rename(&temp, output).map_err(|e| e.to_string())
+        }
+        other => other.map_err(|e| e.to_string()),
+    }
 }
 
 pub fn render(
@@ -166,6 +180,12 @@ mod tests {
         )
         .is_err());
         assert!(!root.join("cancelled.wav").exists());
+        let mix = root.join("minus-guitar.wav");
+        std::fs::copy(&output, &mix).unwrap();
+        let previous = std::fs::read(&mix).unwrap();
+        let samples = vec![0.1; 9600];
+        assert!(write_stereo(&mix, &samples, &AtomicBool::new(true)).is_err());
+        assert_eq!(std::fs::read(&mix).unwrap(), previous);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

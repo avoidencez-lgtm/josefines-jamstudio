@@ -49,8 +49,8 @@ pub(super) fn aligned(grid: &Grid, seconds: f64) -> bool {
     grid.beats
         .iter()
         .step_by(grid.beats_per_bar)
-        // Only float roundoff is allowed: an early cut must not skip the counted boundary.
-        .any(|b| (b - seconds).abs() <= 1e-11)
+        // JSON/IPC round-trips leave ~1e-9..1e-7 s; a whole sample early must not pass.
+        .any(|b| (b - seconds).abs() <= 1e-6)
 }
 
 /// Skip a partial first bar. The cached boundary makes per-frame work constant time.
@@ -69,6 +69,36 @@ pub(super) fn next_end(grid: &Grid, frames: f64) -> Option<usize> {
 mod tests {
     use super::*;
     use crate::song::{grid::Grid, ReferenceSong};
+
+    #[test]
+    fn aligned_accepts_downbeats_from_bpm_division_roundoff() {
+        let beat = 60.0 / 133.33;
+        // JSON/IPC round-trips routinely leave 1e-9..1e-7 s on a counted downbeat.
+        let beats: Vec<f64> = (0..21usize)
+            .map(|i| {
+                let t = i as f64 * beat;
+                if i > 0 && i.is_multiple_of(4) {
+                    t + 1e-9
+                } else {
+                    t
+                }
+            })
+            .collect();
+        let grid = Grid {
+            schema_version: 1,
+            origin: "confirmed-local".into(),
+            beats_per_bar: 4,
+            beats,
+            sections: vec![],
+        };
+        let seconds = 4.0 * beat;
+        let error = (grid.beats[4] - seconds).abs();
+        assert!(error > 1e-11 && error < 1.0 / 48_000.0, "error {error}");
+        assert!(
+            aligned(&grid, seconds),
+            "bar-5 downbeat from 133.33 BPM must count as aligned"
+        );
+    }
 
     #[test]
     fn ramp_waits_multiple_bars_survives_pause_clamps_target_and_cancels_on_manual_edits() {

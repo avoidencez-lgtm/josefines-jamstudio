@@ -152,15 +152,21 @@ impl FileInput {
         let mut reader = hound::WavReader::open(path).map_err(|e| e.to_string())?;
         let spec = reader.spec();
 
+        if !(8_000..=192_000).contains(&spec.sample_rate) {
+            return Err("WAV sample rate must be between 8 and 192 kHz.".into());
+        }
+
         let raw_samples: Vec<f32> = match spec.sample_format {
-            hound::SampleFormat::Float => reader.samples::<f32>().filter_map(Result::ok).collect(),
+            hound::SampleFormat::Float => reader
+                .samples::<f32>()
+                .collect::<Result<_, _>>()
+                .map_err(|e| format!("WAV sample is unreadable. {e}"))?,
             hound::SampleFormat::Int => {
                 let max_val = (1i64 << (spec.bits_per_sample - 1)) as f32;
                 reader
                     .samples::<i32>()
-                    .filter_map(Result::ok)
-                    .map(|s| s as f32 / max_val)
-                    .collect()
+                    .map(|s| s.map(|v| v as f32 / max_val).map_err(|e| e.to_string()))
+                    .collect::<Result<_, _>>()?
             }
         };
 
@@ -170,6 +176,9 @@ impl FileInput {
 
         // Downmix to mono if multi-channel
         let channels = spec.channels as usize;
+        if channels == 0 || !raw_samples.len().is_multiple_of(channels) {
+            return Err("WAV channel count does not match the sample data.".into());
+        }
         let mono_samples = if channels > 1 {
             raw_samples
                 .chunks_exact(channels)
@@ -259,9 +268,12 @@ impl AudioInput for FileInput {
                 callback(&buffer);
 
                 next_tick += block_duration;
-                let now = Instant::now();
-                if next_tick > now {
-                    thread::sleep(next_tick - now);
+                while running.load(Ordering::SeqCst) {
+                    let now = Instant::now();
+                    if next_tick <= now {
+                        break;
+                    }
+                    thread::sleep((next_tick - now).min(Duration::from_millis(10)));
                 }
             }
         });
@@ -485,8 +497,10 @@ fn convert_output<T: SizedSample + FromSample<f32>>(
             .zip(tmp.as_chunks::<2>().0.iter())
         {
             frame.fill(T::from_sample(0.0_f32));
-            frame[0] = T::from_sample(stereo[0]);
-            if channels > 1 {
+            if channels == 1 {
+                frame[0] = T::from_sample(0.5 * (stereo[0] + stereo[1]));
+            } else {
+                frame[0] = T::from_sample(stereo[0]);
                 frame[1] = T::from_sample(stereo[1]);
             }
         }
@@ -762,6 +776,73 @@ mod tests {
     }
 
     #[test]
+    fn from_wav_file_rejects_unreadable_samples_and_illegal_rates() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-fileinput-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let ok = root.join("ok.wav");
+        let mut writer = hound::WavWriter::create(
+            &ok,
+            hound::WavSpec {
+                channels: 2,
+                sample_rate: 48_000,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .unwrap();
+        writer.write_sample(1000_i16).unwrap();
+        writer.write_sample(-1000_i16).unwrap();
+        writer.finalize().unwrap();
+        assert!(FileInput::from_wav_file(ok.to_str().unwrap(), 256).is_ok());
+
+        let truncated = root.join("truncated.wav");
+        let mut bytes = std::fs::read(&ok).unwrap();
+        bytes.truncate(bytes.len().saturating_sub(2));
+        std::fs::write(&truncated, &bytes).unwrap();
+        match FileInput::from_wav_file(truncated.to_str().unwrap(), 256) {
+            Err(err) => assert!(
+                err.contains("unreadable")
+                    || err.contains("WAV")
+                    || err.contains("channel")
+                    || err.contains("bytes")
+                    || err.contains("sample"),
+                "{err}"
+            ),
+            Ok(_) => panic!("truncated stereo WAV must fail loud"),
+        }
+
+        let zero = root.join("zero-rate.wav");
+        let mut header = std::fs::read(&ok).unwrap();
+        header[24..28].copy_from_slice(&0u32.to_le_bytes());
+        header[28..32].copy_from_slice(&0u32.to_le_bytes());
+        std::fs::write(&zero, &header).unwrap();
+        match FileInput::from_wav_file(zero.to_str().unwrap(), 256) {
+            Err(err) => assert!(err.contains("8") && err.contains("192"), "{err}"),
+            Ok(_) => panic!("0 Hz WAV must fail loud"),
+        }
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn file_input_stop_returns_without_waiting_out_a_long_block() {
+        let mut input = FileInput::from_samples_at(vec![0.1; 8], 256, 1);
+        input.start(Box::new(|_| {})).unwrap();
+        let started = Instant::now();
+        input.stop().unwrap();
+        assert!(
+            started.elapsed() < Duration::from_millis(200),
+            "stop() must interrupt the block sleep"
+        );
+    }
+
+    #[test]
     fn file_input_loops_samples() {
         let mut input = FileInput::from_samples(vec![0.25, -0.5], 2);
         let collected = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -830,5 +911,16 @@ mod conversion_tests {
         let mut mono = [0_i16; 1];
         super::convert_output(&mut mono, 1, &mut |block| block.fill(0.5));
         assert!(mono[0] > 16_000);
+        let mut panned = [0_i16; 1];
+        super::convert_output(&mut panned, 1, &mut |block| {
+            for frame in block.as_chunks_mut::<2>().0 {
+                frame[0] = 0.0;
+                frame[1] = 1.0;
+            }
+        });
+        assert!(
+            panned[0] > 16_000,
+            "mono output must downmix 0.5*(L+R) so a right-panned signal is heard"
+        );
     }
 }

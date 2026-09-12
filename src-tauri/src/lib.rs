@@ -27,7 +27,7 @@ use keys::{KeyringStore, MemoryStore, SecretStore};
 use library::Library;
 use parking_lot::Mutex;
 use settings::{load_settings, save_settings, AppSettings};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -214,12 +214,19 @@ async fn audio_set_config(
         settings.input_device.as_deref(),
         settings.output_device.as_deref(),
         settings.input_channel,
+        settings.sample_rate,
+        settings.buffer_size,
     );
     if let Some(stored) = settings.recorder.latency_by_device.get(&key).cloned() {
         settings.recorder.latency_samples = stored.round_trip_frames;
         settings.recorder.latency_estimated = stored.estimated;
         settings.recorder.latency_confidence = stored.confidence;
         eng.recorder_set_latency_compensation(stored.round_trip_frames as usize);
+    } else {
+        settings.recorder.latency_samples = 0;
+        settings.recorder.latency_estimated = false;
+        settings.recorder.latency_confidence = 0.0;
+        eng.recorder_set_latency_compensation(0);
     }
     if status.last_error.is_none() {
         save_settings(&settings)?;
@@ -648,6 +655,8 @@ fn recorder_set_latency(samples: u32, state: State<'_, AppState>) -> Result<u32,
             settings.input_device.as_deref(),
             settings.output_device.as_deref(),
             settings.input_channel,
+            settings.sample_rate,
+            settings.buffer_size,
         ),
         samples,
         false,
@@ -690,6 +699,8 @@ fn audio_calibrate_latency(state: State<'_, AppState>) -> Result<LatencyCalibrat
                 settings.input_device.as_deref(),
                 settings.output_device.as_deref(),
                 settings.input_channel,
+                settings.sample_rate,
+                settings.buffer_size,
             ),
             result.round_trip_frames,
             result.estimated,
@@ -1473,6 +1484,7 @@ async fn takes_export_daw(
         sample_rate,
         sections: if reference { &[] } else { &sections },
         stems: &stems,
+        take_dir: Path::new(&take.path_input).parent(),
     };
     let mut report = jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
         .map_err(|e| e.to_string())?;

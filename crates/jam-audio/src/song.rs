@@ -380,6 +380,14 @@ impl ReferenceSong {
         Ok(())
     }
 
+    pub(crate) fn source_serial(&self) -> u32 {
+        self.serial
+    }
+
+    pub(crate) fn analysis_bpm(&self) -> Option<f64> {
+        self.analysis.as_ref().and_then(|a| a.bpm)
+    }
+
     /// One atomic word identifies both the decoded source and its 48 kHz frame.
     /// The source cap is under 58 million frames, comfortably within u32.
     fn stamp(&self) -> u64 {
@@ -426,7 +434,7 @@ impl ReferenceSong {
                 .chords
                 .iter()
                 .skip(index)
-                .find(|c| c.start > state.position && c.chord != chord)
+                .find(|c| c.start > state.position && c.chord.is_some() && c.chord != chord)
                 .and_then(|c| c.chord.clone());
             let beat = a.beats.partition_point(|b| *b <= state.position);
             ReferenceAnalysisState {
@@ -682,6 +690,52 @@ impl ReferenceSong {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn next_chord_skips_unclassified_rests() {
+        let mut song =
+            ReferenceSong::new("chords".into(), "Fixture".into(), vec![0.0; 192_000]).unwrap();
+        song.set_analysis(jam_dsp::offline::SongAnalysis {
+            schema_version: 1,
+            analyzer: "local-chroma-v1".into(),
+            confidence: "low".into(),
+            seconds: 2.0,
+            bpm: Some(120.0),
+            beats: vec![0.0, 0.5, 1.0, 1.5],
+            key: Some("A minor".into()),
+            chords: vec![
+                jam_dsp::offline::ChordEstimate {
+                    start: 0.0,
+                    end: 1.0,
+                    chord: Some("Am".into()),
+                },
+                jam_dsp::offline::ChordEstimate {
+                    start: 1.0,
+                    end: 1.2,
+                    chord: None,
+                },
+                jam_dsp::offline::ChordEstimate {
+                    start: 1.2,
+                    end: 2.0,
+                    chord: Some("F".into()),
+                },
+            ],
+        })
+        .unwrap();
+        song.play();
+        song.seek(0.5).unwrap();
+        let mut left = vec![0.0; 256];
+        let mut right = left.clone();
+        let mut stamps = vec![0; 256];
+        song.render_timed(48_000, &mut left, &mut right, &mut stamps, &mut []);
+        let analysis = song.played_state(stamps[0]).analysis.unwrap();
+        assert_eq!(analysis.chord.as_deref(), Some("Am"));
+        assert_eq!(
+            analysis.next_chord.as_deref(),
+            Some("F"),
+            "rest windows must not blank the upcoming chord"
+        );
+    }
+
     #[test]
     fn queued_positions_cannot_override_stop_or_paused_edits() {
         let mut song =
