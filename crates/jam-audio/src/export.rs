@@ -149,6 +149,7 @@ impl DawExporter {
             "howTo": "Import the tempo map first so the DAW adopts the tempo and markers, then drop every stem at bar 1."
         });
         File::create(&json_path)?.write_all(serde_json::to_string_pretty(&info)?.as_bytes())?;
+        std::fs::write(output_dir.join("README.txt"), LOGIC_README)?;
 
         Ok(ExportReport {
             dir: output_dir.to_string_lossy().to_string(),
@@ -159,6 +160,9 @@ impl DawExporter {
         })
     }
 }
+
+/// Handoff steps for Logic. Opening the project and measuring drift stay V2.
+const LOGIC_README: &str = "Logic Pro import (not proven on this machine)\n\n1. File > Open the tempo-map MIDI file in this folder (*-tempo-map.mid). Keep the tempo and time signature when asked.\n2. Drag every WAV stem onto bar 1. Do not change speed or pitch.\n3. Mute band and master reference mixes while mixing the individual instruments.\n4. Keep this whole folder together.\n\nOpening the project in Logic Pro and measuring drift stays a V2 owner gate. This file is the handoff, not a claim that Logic opened.\n\nREAPER users: see REAPER-START-HERE.txt when the session builder is present.\n";
 
 /// Quote data as Lua, never as executable text (JSON's Unicode escapes are not Lua).
 fn lua_string(value: &str) -> String {
@@ -679,6 +683,25 @@ mod tests {
     }
 
     #[test]
+    fn five_minute_tempo_map_stays_within_one_millisecond() {
+        // 150 bars of 4/4 at 120 bpm is 300 s. Owner Logic import stays V2.
+        let midi = DawExporter::build_tempo_map_midi(120.0, &[("End", 151)]).unwrap();
+        let micros = u32::from_be_bytes([0, midi[34], midi[35], midi[36]]);
+        let mut tick = 0_u32;
+        for byte in &midi[37..] {
+            tick = (tick << 7) | u32::from(byte & 127);
+            if byte & 128 == 0 {
+                break;
+            }
+        }
+        let seconds = tick as f64 / 480.0 * f64::from(micros) / 1_000_000.0;
+        assert!(
+            (seconds - 300.0).abs() < 0.001,
+            "SMF marker drift {seconds} s"
+        );
+    }
+
+    #[test]
     fn bundle_copies_present_stems_and_reports_missing_ones() {
         let dir = std::env::temp_dir().join(format!("jam-export-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -705,6 +728,10 @@ mod tests {
         assert!(dir.join("out").join("take-1-input.wav").exists());
         let info = std::fs::read_to_string(dir.join("out").join("take-1-info.json")).unwrap();
         assert!(info.contains("\"sampleRate\": 44100"));
+        let readme = std::fs::read_to_string(dir.join("out").join("README.txt")).unwrap();
+        assert!(readme.contains("File > Open"), "{readme}");
+        assert!(readme.contains("bar 1"), "{readme}");
+        assert!(readme.contains("V2"), "{readme}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

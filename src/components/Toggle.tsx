@@ -26,7 +26,7 @@ export const Toggle: React.FC<ToggleProps> = ({
         aria-label={label}
         disabled={disabled}
         onClick={() => !disabled && onChange(!checked)}
-        className={`w-11 h-6 rounded-full transition-colors relative border border-[var(--line)] cursor-pointer ${
+        className={`w-11 h-6 rounded-full relative border border-[var(--line)] cursor-pointer ${
           checked ? "bg-[var(--accent)]" : "bg-[var(--bg-2)]"
         }`}
       >

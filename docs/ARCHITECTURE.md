@@ -31,7 +31,7 @@ TTS uses 24 kHz PCM and existing interpolation into 48 kHz output. A separate
 voice bus attenuates the generated band over 150 ms; guitar and recorder stems
 are unaffected. Hardware output is required; headless fallback is refused.
 Cancelled requests may still incur provider cost. The existing render-ahead queue
-bounds interruption responsiveness. Live latency acceptance is pending; see [S5 evidence](spikes/S5-jo-voice.md).
+bounds interruption responsiveness. Live PTT latency is not configured: `voice_live_latency` needs `JAM_LIVE=1`, an ElevenLabs key, hardware audio, and ten talk turns with median release→first audio ≤ 2.5 s. See [S5 evidence](spikes/S5-jo-voice.md). Do not treat a fixture as that pass.
 
 ## 1. The governing rule
 
@@ -70,20 +70,15 @@ josefines-jamstudio/
   crates/
     jam-core/    types, timeline, chart, style, rig profile, control map, schema versions, registries (pure, serde)
     jam-dsp/     pure DSP: level, pitch, energy
-    jam-audio/   cpal devices and streams, io traits, engine (ring buffers, callback, render worker), transport, mixer, click, recorder, song player (stretch remains roadmap work)
+    jam-audio/   cpal devices and streams, io traits, engine (ring buffers, callback, render worker), transport, mixer, click, recorder, song player (offline + live stretch in jam-dsp)
     jam-band/    sequencer, instruments (Sampler, Sf2Synth), voicing, bass, comp, cues, offline render
     jam-rig/     MidiSink/MidirSink/MemorySink, profiles, scenes, scheduler, clock, input
   src-tauri/
-    src/main.rs, lib.rs
-    src/ipc/      one file per domain (audio, transport, mixer, band, recorder, tuner, song, analysis, voice, lyria, rig, keys, settings, assets, export, app) + mod.rs (domain list, IPC_VERSION)
-    src/net/      registry.rs (provider table), gemini.rs, elevenlabs.rs, lyria.rs, gemini_music.rs, musicai.rs, fetch_proxy.rs
-    src/keys/     SecretStore trait, KeyringStore, MemoryStore
-    src/store/    rusqlite index, rebuild from files
-    src/settings/ settings.json load/save/migrate
-    src/analysis/ pipeline: AnalysisKind steps, local fallback wiring
-    src/assets/   manifest, downloader, checksum
-    src/export/   logic.rs (stems + SMF)
-    src/platform/ anything OS-specific (paths, priorities)
+    src/main.rs, lib.rs (command table; IPC_VERSION lives in src/ipc/contract.ts)
+    src/assets.rs, keys.rs, settings.rs, store.rs, library.rs, voice.rs, lyria.rs, aliases.rs
+    src/media.rs + media/{songs,stems,analysis,grid}.rs
+    src/net.rs + net/{lyria,musicai,review,voice,media}.rs
+    src/platform/ OS-specific (paths, CPU sample, voice shortcut)
     tauri.conf.json, capabilities/
   src/
     app/          App shell, router, theme, global shortcuts
@@ -157,7 +152,7 @@ WASAPI shared mode; the HeadRush most likely exposes stereo only, so channel 3 (
 2. Every domain has exactly one `<domain>.state` event carrying its whole (small) state, emitted on any change from any source (UI or Jo). No diffs, no desync.
 3. High-rate telemetry (`meters`, `transport.state`, `tuner.state`) is emitted at a fixed rate (30 Hz, 30 Hz, 20 Hz).
 4. No PCM crosses IPC on the happy path. `Channel<InvokeResponseBody::Raw>` and raw request bodies exist only for waveform peaks, exports and the Lyria Fallback A.
-5. `IPC_VERSION` in `src/ipc/contract.ts` and `src-tauri/src/ipc/mod.rs`; changes are additive; a removed field is a version bump and an ADR.
+5. `IPC_VERSION` in `src/ipc/contract.ts`; changes are additive; a removed field is a version bump and an ADR.
 6. Every command returns the domain state after the change or an `AppError { code, message, detail?, fatal }`. Errors are also emitted as `app.error`.
 
 ### 5.2 Contract (TypeScript is the source of truth; Rust mirrors with serde and a round-trip test)
@@ -195,7 +190,8 @@ export type TransportState = {
   source: 'none'|'band'|'song'|'lyria';
 };
 // transport_play({ fromBeats?, countInBars? }) · transport_stop() · transport_locate(beats) · transport_set_loop(loop|null)
-// transport_set_tempo(bpm, when) · transport_set_time_sig(num, den, when) · transport_tap_tempo() -> { tempoBpm, taps }
+// transport_set_tempo(bpm, when)  // engine clamp 20–300; charts/Write/setlist stay 40–240
+// transport_set_time_sig(num, den, when) · transport_tap_tempo() -> { tempoBpm, taps }
 // event 'transport.state' @30 Hz
 
 // mixer and meters
@@ -217,7 +213,7 @@ export type BandState = { chartId: Uuid|null; styleId: string|null; intensity: n
   parts: { drums: boolean; bass: boolean; comp: boolean }; followEnergy: boolean; energy: number; seed: number;
   bar: number; chordNow: ChordSym|null; chordNext: ChordSym|null; pendingAtNextBar: string[] };
 // band_load_chart(chart: ResolvedChart, when) · band_set(patch: Partial<BandState>, when) · band_cue(kind: 'fill'|'crash'|'stop'|'ending')
-// band_render_offline({ chart, styleId, seed, bars, tempoBpm, outPath }) -> { path, frames } · event 'band.state'
+// band_render_offline({ chart, styleId, seed, bars, tempoBpm, outPath }) -> { path, frames, drumsRmsDb, bassRmsDb, compRmsDb, onsets } · event 'band.state'
 
 // recorder and takes
 export type TrackKind = 'guitar_di'|'guitar_amp'|'mic'|'drums'|'bass'|'comp'|'ai'|'song'|'mix';
@@ -252,6 +248,7 @@ export type LyriaState = { active: boolean; buffering: boolean; bufferMs: number
 // settings_get() -> Settings · settings_set(settings) -> Settings · event 'settings.state'
 // assets_ensure(ids) · event 'assets.state' -> { packs: { id, state: 'missing'|'downloading'|'verifying'|'ready'|'error', percent }[] }
 // export_logic(takeId) -> { folder } · event 'export.state'
+// takes_review(takeId) · rig_virtual_check()
 // provider_fetch({ provider, path, method, headers, body }) -> { status, headers, body }   (the only way TS reaches a provider)
 // event 'app.error' -> { code: string; message: string; detail?: string; fatal: boolean } · event 'cost.state' -> CostState
 ```
@@ -286,7 +283,7 @@ pub trait Analysis { async fn analyse(&self, wav: &Path, kinds: &[AnalysisKind],
 
 `registry.rs` holds the table; the settings hold `providers.<id>.enabled`. Keys come from `SecretStore` by provider id at call time and are never stored in the struct. Every call logs `provider, kind, model, ms, bytes_in, bytes_out, est_usd` to `cost.state`.
 
-### 6.2 LLM (TypeScript, `src/ai/llm/`)
+### 6.2 LLM (TypeScript, `src/lib/jo/providers.ts`)
 
 Vercel AI SDK `generateText` with `@ai-sdk/google` (`gemini-3.8-flash` by default), `maxSteps` from settings, tools from the registry, and a `fetch` shim that turns a request into `provider_fetch` and rebuilds a `Response`. Streaming is not used in v1 (tool loops with `generateText` are simpler and debuggable). Adding a provider is one `provider_fetch` target and one AI SDK provider package ([EXTENDING.md](EXTENDING.md)).
 
@@ -298,19 +295,29 @@ PTT down ─► Rust buffers mic (16 kHz mono) ─► PTT up ─► Stt::transcr
    ─► TS: voice_speak(reply) ─► Tts::synthesize ─► voice bus (duck band) ─► 'voice.state' speaking → idle
 ```
 
-Barge-in: a new PTT press during `speaking` stops the voice bus. Latency budget: STT ≤ 1.0 s, LLM ≤ 1.0 s, TTS first byte ≤ 0.5 s; median ≤ 2.5 s is the acceptance number. The persona lives in `src/ai/jo/persona.md`; the state summary given to the LLM is built from the `<domain>.state` snapshots (chart, key, tempo, style, source, last take analysis when present). Full-duplex (ElevenLabs Agents, Gemini Live) is a second `VoiceSession` implementation, backlog.
+Barge-in: a new PTT press during `speaking` stops the voice bus. Latency budget: STT ≤ 1.0 s, LLM ≤ 1.0 s, TTS first byte ≤ 0.5 s; median ≤ 2.5 s is the acceptance number and stays unproven until `voice_live_latency` succeeds. The persona lives in `src/lib/jo/persona.ts`; the state summary given to the LLM is built from the `<domain>.state` snapshots (chart, key, tempo, style, source, last take analysis when present). Full-duplex (ElevenLabs Agents, Gemini Live) is a second `VoiceSession` implementation, backlog.
 
 ### 6.4 Lyria RealTime (`net/lyria.rs`)
 
-WebSocket session per S4; audio chunks decoded to 48 kHz stereo into a jitter buffer feeding the `ai` bus (prefill 1 s, target 500 ms; underrun → 250 ms fade and `buffering: true`). Reconnect before the session cap with a 250 ms crossfade. `bpm` or `scale` change: the transport plays a one-bar count-in click, then `reset_context`. Band and Lyria are mutually exclusive: starting one stops the other. Cost guard: per-session minute cap and monthly cap from settings, a confirm dialog before start, spend meter from elapsed minutes at the configured estimate.
+Documented protocol encode/decode and a jitter/state machine live in
+`src-tauri/src/net/lyria.rs`. Commands `lyria_start`, `lyria_set`,
+`lyria_stop`, `lyria_status` and event `lyria.state` are registered.
+Rust owns bytes and time; the WebView never plays audio. Band and Lyria
+are mutually exclusive: starting one stops the other. BPM is a request,
+not the band or transport clock. A bpm/scale patch records
+`RESET_CONTEXT`; it does not retune the click. Without a Gemini key,
+`JAM_LIVE=1` and a recorded provider session the command is explicitly
+not configured and opens no WebSocket. `JAM_LYRIA_FIXTURE=1` walks the
+synthetic specimen only and never feeds the output bus. Live 10-minute
+stream, reconnect, count-in click and spend meter remain unfinished.
 
 ### 6.5 Track generation and analysis
 
 `generate_track` runs a `TrackGenerator` (Lyria 3 or ElevenLabs Music), writes the result into `songs/<slug>/`, then runs the analysis pipeline (§6.6) so the track opens in Song mode analysed.
 
-### 6.6 Analysis pipeline (`src-tauri/src/analysis/`)
+### 6.6 Analysis pipeline (`src-tauri/src/media/analysis.rs`, `net/musicai.rs`)
 
-One step per `AnalysisKind`; each step picks the enabled provider (Music.ai for beats, chords, key, sections; ElevenLabs or Music.ai for stems) and falls back to `jam-dsp::offline` (onset autocorrelation tempo, chroma-template chords per beat, Krumhansl key) flagged `confidence: 'low'`. Results are written into `song.json`; SQLite is re-indexed from the file.
+Local estimates run through `media_analyze`. Provider jobs use `analysis_start` and stay not configured without a key, `JAM_LIVE=1` and a recorded SUCCEEDED job. Local fallback is `jam-dsp::offline` (onset autocorrelation tempo, chroma-template chords, Krumhansl key), flagged `confidence: 'low'`. Results write into `song.json`. A live Music.ai SUCCEEDED job is not claimed.
 
 ## 7. Data model and files on disk
 
@@ -330,8 +337,14 @@ the retained raw output into that reserved destination. It never resubmits
 generation. Failed estimates leave job status `analysis` for local retry; old
 ready receipts remain untouched. AI Music routes completed generated/recovered
 audio to the native reference player with playback stopped. Film keeps its
-soundtrack selection. This is local fallback orchestration, not the remaining
-Music.ai provider pipeline or automatic downbeat/section detection.
+soundtrack selection. Music.ai is on the net allow-list. Recorded public
+module JSON parses to unverified beats, chords, key and sections.
+`analysis_start` persists them to `song.json` as `providerAnalysis`
+(`drivesGrid: false`) when `JAM_MUSICAI_FIXTURE=1`; otherwise it stays
+not configured. Local analysis also writes `estimatedGrid` (4/4, first
+beat as downbeat). Confirmed `referenceGrid` still wins; ramps require
+it. `media_guitar_residual` is not configured without a marked guitar
+stem.
 
 Songs uses `song_pick_file()` (native Tauri dialog returning `string | null`),
 WebView path-only drop events, or a pasted path. All route to the existing
@@ -485,15 +498,15 @@ A seam is a definition (trait or schema), one registry, and consumers. There is 
 | Styles | `Style` schema (`jam-core`, zod mirror) | `jam-core::registry::styles` (bundled `styles/` via `include_dir` + `~/JosefinesJamstudio/styles/`) | band sequencer, Stage picker, Jo `set_style` |
 | Charts | `Chart` schema | `jam-core::registry::charts` + TS parser for text charts | band, Stage, Jo `load_chart` |
 | Rig profiles | `RigProfile` schema | `jam-core::registry::rigs` | `jam-rig`, Rig screen |
-| Control maps | `ControlMap` schema | `jam-core::registry::controls` | `src/lib/controls/` dispatcher, `jam-rig::input` |
+| Control maps | `ControlMap` schema | `jam-core::registry::controls` | `src/lib/controls.ts`, `jam-rig::input` |
 | Jo tools | `JoAction { declaration, run }`, `StudioTool { declaration, edit }`; shared argument validation | `JO_ACTIONS` / `JO_TOOLS` in `src/lib/jo/tools.ts`, document edits in `STUDIO_TOOLS`; legacy actions remain in `dispatcher.ts` | provider declarations, conversation/voice dispatch; planned control-map export remains separate |
 | Providers | traits in §6.1 | `src-tauri/src/net/registry.rs` | analysis pipeline, voice, music, `provider_fetch` |
 | Instruments | `Instrument` trait (`note_on`, `note_off`, `render(&mut [f32])`) | `jam-band::instruments::factory` | sequencer |
 | Audio I/O | `AudioInput` / `AudioOutput` | `jam-audio::io::select(config, env)` | engine |
 | MIDI sinks | `MidiSink` | `jam-rig::sink::select` | scheduler |
-| Analysis kinds | `AnalysisKind` + `AnalysisStep` | `src-tauri/src/analysis/steps.rs` | pipeline |
+| Analysis kinds | local `media_analyze` + `analysis_start` (Music.ai, loud not-configured without live job) | `src-tauri/src/media/analysis.rs`, `src-tauri/src/net/musicai.rs` | Songs |
 | Screens | React component + nav entry | `src/screens/registry.ts` | router, nav |
-| IPC domains | one Rust file + one TS file | `src-tauri/src/ipc/mod.rs`, `src/ipc/index.ts` | everything |
+| IPC domains | commands in `src-tauri/src/lib.rs` plus domain files; types in `src/ipc/contract.ts` | `src/ipc/client.ts`, `src/ipc/preview.ts` | everything |
 
 Current verification: `tests/invariants/seams.test.ts` checks bundled manifest fields; `crates/jam-core/tests/seams.rs` loads bundled styles, charts and controls and checks representative IDs. They do not automatically register every `tests/fixtures/seams/*` fixture or check changed-file scope. An extension PR must demonstrate its fixture through the relevant registry and show that core consumers need no changes. Recipes and verification limits are in [EXTENDING.md](EXTENDING.md).
 
@@ -579,7 +592,7 @@ Explorer is a handoff: successful process creation does not confirm the target
 application opened, and the UI does not announce success. OS launch behavior is
 separate from the mocked IPC and shell-exit regression checks.
 
-`AppError { code, message, detail?, fatal }` with codes in `src-tauri/src/ipc/errors.rs` mirrored in `src/ipc/errors.ts`; every code has a user-facing message and a next step in the UI. Logs via `tauri-plugin-log` to `~/JosefinesJamstudio/logs/` with rotation; levels info by default, debug with `JAM_LOG=debug`; never bodies, never keys, never raw audio.
+Commands return `Result<T, String>`. Failures also emit `app.error` as a string; the store shows it in the notice rail with a next step. There is no `AppError` code table. Logs via `tauri-plugin-log` to `~/JosefinesJamstudio/logs/` with rotation; levels info by default, debug with `JAM_LOG=debug`; never bodies, never keys, never raw audio.
 # Implemented songwriting workflow
 
 The Write screen adds a file-backed original-song document (`schemaVersion: 1`),
@@ -748,7 +761,8 @@ through a bounded ring back to the worker. The callback does not allocate, lock,
 write files or emit IPC. The worker matches MIDI to the completed frame index and
 updates retrospective capture. Queue loss or a hardware input/output gap interrupts
 the take rather than silently compressing its timeline. Device round-trip latency
-remains a separate manual guitar offset; no physical calibration is claimed.
+is measured by `audio_calibrate_latency` (three clicks on a cable loopback) or
+typed as a manual guitar offset; synthetic FileInput never applies an estimate.
 
 Files and their writer are prepared in a separate idle recorder before acquiring
 the render gate. Installing it and starting the song timeline share that gate,
@@ -843,6 +857,17 @@ Rust snapshots the estimate into each request's existing log entry; editing a
 rate never rewrites history. STT uses seconds / 3600 and TTS uses characters / 1000.
 `cost:state` refreshes the existing Settings usage view. Unknown entries are counted
 separately from the known estimate subtotal. No account budget or invoice is implied.
+
+Provider `generateContent` / Responses / Messages replies may include token counts.
+`provider_fetch` copies `promptTokens`, `completionTokens` and `totalTokens` from
+the response JSON into the usage line and does not store the body. Speech and
+media calls leave those fields empty. Older JSONL lines stay readable.
+
+Release-to-first-audio is the time from `voice_ptt` release to `voice` bus
+`play()`. `voice_live_latency` is the M2 gate: it refuses unless `JAM_LIVE=1`,
+then requires ten stored samples and a median ≤ 2500 ms. Headless and browser
+preview stay on the explicit not-configured path. The friend's headset session
+remains V2.
 
 ### Local reference practice copies (2026-09-06)
 
@@ -1179,8 +1204,9 @@ retained meter, original audio speed and the existing failure cleanup.
 
 ### Reference state after playback commands
 
-Reference telemetry uses consumed output stamps only while playing. While paused
-or stopped, the commanded cursor and prepared speed/key/ramp drive position,
-chord and grid readouts. A late queued buffer cannot undo Stop or a paused seek.
+Reference telemetry uses consumed output stamps only while playing, including
+the published `speed` and `semitones` fields (not only grid BPM and ramp
+counters). While paused or stopped, the commanded cursor and prepared
+speed/key/ramp drive position, chord and grid readouts. A late queued buffer cannot undo Stop or a paused seek.
 The deterministic `queued_positions_cannot_override_stop_or_paused_edits` test
 covers both commanded edits and unchanged consumed-frame behavior during Play.

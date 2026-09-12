@@ -97,7 +97,7 @@ impl TakeRecorder {
     pub(crate) fn interrupt(&mut self, reason: &str) {
         if self.is_recording() && self.failure.is_none() {
             self.failure = Some(format!(
-                "Recording interrupted: {reason} Save the partial take."
+                "Recording was interrupted. {reason} Save the partial take."
             ));
             self.sender = None;
         }
@@ -241,7 +241,7 @@ impl TakeRecorder {
             let count = frames.len() as u64;
             if let Err(e) = tx.try_send(frames) {
                 self.failure = Some(format!(
-                    "Recording interrupted: the disk writer stopped accepting audio ({e}). Save the partial take; partial WAVs remain on disk."
+                    "Recording was interrupted. The disk writer stopped accepting audio ({e}). Save the partial take; partial WAVs remain on disk."
                 ));
                 self.sender = None;
             } else {
@@ -318,21 +318,21 @@ pub fn save_manifest(meta: &TakeMetadata) -> Result<(), String> {
         .write(true)
         .create_new(true)
         .open(&temp)
-        .map_err(|e| format!("Cannot create {}: {e}", temp.display()))?;
+        .map_err(|e| format!("Cannot create {}. {e}", temp.display()))?;
     let result = file.write_all(&bytes).and_then(|()| file.sync_all());
     drop(file);
     let result = result.and_then(|()| fs::rename(&temp, dir.join("take.json")));
     if result.is_err() {
         let _ = fs::remove_file(&temp);
     }
-    result.map_err(|e| format!("Cannot save {}: {e}", dir.join("take.json").display()))
+    result.map_err(|e| format!("Cannot save {}. {e}", dir.join("take.json").display()))
 }
 
 /// Reads a WAV file back as mono f32 in -1..1 (channels are averaged), together with its
 /// sample rate. Used by take analysis so it looks at what was actually recorded.
 pub fn read_wav_mono(path: &Path) -> Result<(Vec<f32>, u32), String> {
     let mut reader =
-        hound::WavReader::open(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+        hound::WavReader::open(path).map_err(|e| format!("Cannot open {}. {e}", path.display()))?;
     let spec = reader.spec();
     let channels = spec.channels.max(1) as usize;
     let interleaved: Vec<f32> = match spec.sample_format {
@@ -375,10 +375,21 @@ mod tests {
             path_input: root.join("guitar-di.wav").to_string_lossy().into_owned(),
             ..Default::default()
         };
-        assert!(save_manifest(&take).unwrap_err().contains("Cannot create"));
+        assert!(save_manifest(&take)
+            .unwrap_err()
+            .starts_with("Cannot create "));
         assert_eq!(fs::read(&victim).unwrap(), b"keep this file");
         assert!(!root.join("take.json").exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn missing_wav_names_the_path() {
+        let err = read_wav_mono(Path::new("no-such.wav")).unwrap_err();
+        assert!(
+            err.starts_with("Cannot open ") && err.contains("no-such.wav"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -407,6 +418,33 @@ mod tests {
             .unwrap()
             .join("take.json")
             .exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recorded_impulse_and_click_align_within_one_sample_after_the_offset() {
+        let root = std::env::temp_dir().join(format!("jam-align-{}", std::process::id()));
+        let mut r = TakeRecorder::new(48_000, root.clone());
+        let delay = 480usize;
+        let click_at = 24_000usize;
+        r.set_latency_compensation(delay);
+        r.start_take("align".into(), "rock".into(), "verse".into(), 120.0)
+            .unwrap();
+        let mut frames = vec![[0.0f32; 9]; click_at + delay + 64];
+        frames[click_at + delay][0] = 1.0;
+        frames[click_at][5] = 1.0;
+        frames[click_at][6] = 1.0;
+        r.push_capture(&frames).unwrap();
+        let t = r.stop_and_save().unwrap();
+        let guitar = read_wav_mono(Path::new(&t.path_input)).unwrap().0;
+        let drums = read_wav_mono(Path::new(&t.stems["drums"])).unwrap().0;
+        let guitar_at = guitar.iter().position(|s| s.abs() > 0.5).unwrap();
+        let click_pos = drums.iter().position(|s| s.abs() > 0.5).unwrap();
+        assert!(
+            guitar_at.abs_diff(click_pos) <= 1,
+            "guitar {guitar_at} click {click_pos}"
+        );
+        assert_eq!(click_pos, click_at);
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -466,7 +504,7 @@ mod tests {
             .unwrap();
         r.push_capture(&vec![[0.1; 9]; 64]).unwrap();
         r.failure =
-            Some("Recording interrupted by disk backpressure: full. Partial WAVs kept.".into());
+            Some("Recording was interrupted by disk backpressure. The disk is full. Partial WAVs were kept.".into());
         let t = r
             .stop_and_save()
             .expect("saved take stays visible after backpressure");

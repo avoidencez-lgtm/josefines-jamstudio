@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-rig",
+  "name": "Fixture rig",
+  "kind": "rig",
+  "midiChannel": 0,
+  "programs": [{ "number": 3, "name": "Fixture clean" }],
+  "controls": [
+    { "cc": 7, "name": "Volume", "min": 0, "max": 127, "default": 90 }
+  ],
+  "scenes": [
+    {
+      "name": "Clean",
+      "commands": [{ "type": "programChange", "program": 3 }]
+    }
+  ]
+}

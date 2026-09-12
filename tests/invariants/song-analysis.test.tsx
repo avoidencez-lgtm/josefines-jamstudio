@@ -85,7 +85,7 @@ it("validates saved local measurements, groups passages without rewriting eviden
   expect(html).toContain("90.0 BPM");
   expect(html).toContain("C major");
   expect(html).toContain("low confidence");
-  expect(html).toContain("Unknown chord");
+  expect(html).toContain("This chord is unknown.");
   for (const patch of [
     { schemaVersion: 2 },
     { beats: [1, 0] },
@@ -99,8 +99,8 @@ it("validates saved local measurements, groups passages without rewriting eviden
         value: { ...analysis, bpm: null, key: null },
       }),
     ),
-  ).toContain("Tempo not found");
+  ).toContain("Tempo was not found.");
   expect(
     renderToStaticMarkup(createElement(SongAnalysis, { value: {} })),
-  ).toContain("Analyze again");
+  ).toContain("Analyze again to replace it.");
 });

@@ -331,7 +331,7 @@ pub async fn media_separate_stems(
             .write(true)
             .create_new(true)
             .open(&raw)
-            .map_err(|e| format!("Could not save paid stem ZIP: {e}"))?;
+            .map_err(|e| format!("Could not save the paid stem ZIP. {e}"))?;
         file.write_all(&bytes)
             .and_then(|_| file.sync_all())
             .map_err(|e| e.to_string())?;
@@ -344,9 +344,13 @@ pub async fn media_separate_stems(
     .await;
     receipt["status"] = json!(if result.is_ok() { "ready" } else { "failed" });
     receipt["error"] = json!(result.as_ref().err());
-    write(&receipt_path, &receipt)
-        .map_err(|e| format!("{e}. Stem recovery folder: {}", receipt_dir.display()))?;
-    result.map_err(|e| format!("{e} Stem recovery folder: {}. Import stems.zip locally if it was downloaded; check provider history before any paid retry.", receipt_dir.display()))?;
+    write(&receipt_path, &receipt).map_err(|e| {
+        format!(
+            "{e}. The stem recovery folder is {}.",
+            receipt_dir.display()
+        )
+    })?;
+    result.map_err(|e| format!("{e} The stem recovery folder is {}. Import stems.zip locally if it was downloaded; check provider history before any paid retry.", receipt_dir.display()))?;
     Ok(receipt)
 }
 

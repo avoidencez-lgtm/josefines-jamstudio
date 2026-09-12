@@ -79,7 +79,7 @@ Sources: https://ai.google.dev/gemini-api/docs/pricing ✅ · https://developers
 | `symphonia` 0.6.x | decode wav/mp3/flac/aac/aiff | MPL-2.0 | record the MPL exception in `deny.toml` with a comment; alternative `hound` (wav only) + `minimp3`-class crates if MPL is refused |
 | `hound` | WAV write | Apache-2.0 | recorder |
 | `rubato` | resampling | MIT | device edge, 16 kHz STT feed |
-| `oxisynth` | SF2 synth | MIT | bass and comp; alternative `rustysynth` (MIT) |
+| `oxisynth` | SF2 synth | LGPL-2.1 | banned; do not add. Use `rustysynth` (MIT) |
 | `signalsmith-stretch` / `ssstretch` | time-stretch and pitch-shift (Signalsmith Stretch, MIT, cxx) | MIT | **S3** decides which binding builds on both |
 | `midir` | MIDI I/O | MIT | `jam-rig` |
 | `midly` | Standard MIDI File write/read | MIT ❓ verify | Logic export |
@@ -135,9 +135,11 @@ themselves establish an exact complete beat/downbeat response schema. The
 official [Python SDK](https://github.com/weAreMusicAI/python-sdk) documents job
 submission/download, not a verified downbeat fixture for this app.
 
-No provider request or credential access was made. Recorded response fixtures,
-workflow output contracts and real-song acceptance remain open before a provider
-adapter can claim to drive the transport. The confirmed-local grid implementation
+No provider request or credential access was made. Documented public shapes
+are now recorded under `tests/fixtures/providers/musicai/` and parsed as
+unverified estimates. A live SUCCEEDED job fixture, workflow output
+contracts and real-song acceptance remain open before a provider adapter
+can claim to drive the transport. The confirmed-local grid implementation
 is explicitly user-authored beat grouping/sections over existing estimates, not
 a replacement for automatic Music.ai analysis or proof of its quality.
 

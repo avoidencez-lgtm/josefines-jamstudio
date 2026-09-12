@@ -1,5 +1,6 @@
 //! Native child-process behavior is isolated from the agent protocol.
 use std::path::PathBuf;
+pub mod cpu;
 pub mod song_dialog;
 pub mod voice_shortcut;
 
@@ -17,6 +18,7 @@ const ALLOWED_HOSTS: &[&str] = &[
     "docs.dev.runwayml.com",
     "github.com",
     "elevenlabs.io",
+    "music.ai",
 ];
 
 /// `https://` and an allowlisted host only. Rejects other schemes, credentials and hosts.
@@ -30,7 +32,7 @@ pub fn allowed_https_url(url: &str) -> Result<&str, String> {
     let host = rest.split(['/', '?', '#']).next().unwrap_or("");
     if !ALLOWED_HOSTS.contains(&host) {
         return Err(format!(
-            "This host is not on the open-in-browser list: {host}"
+            "This host is not on the open-in-browser list. {host}"
         ));
     }
     Ok(url)
@@ -164,8 +166,12 @@ mod url_tests {
     fn https_allowlist_accepts_docs_and_rejects_the_rest() {
         assert!(super::allowed_https_url("https://ffmpeg.org/download.html").is_ok());
         assert!(super::allowed_https_url("https://ai.google.dev/gemini-api/docs/pricing").is_ok());
+        assert!(super::allowed_https_url("https://music.ai/docs/api/reference/").is_ok());
         assert!(super::allowed_https_url("http://ffmpeg.org/download.html").is_err());
-        assert!(super::allowed_https_url("https://evil.example/ffmpeg.org").is_err());
+        assert_eq!(
+            super::allowed_https_url("https://evil.example/ffmpeg.org").unwrap_err(),
+            "This host is not on the open-in-browser list. evil.example"
+        );
         assert!(super::allowed_https_url("https://ffmpeg.org.evil.example/").is_err());
         assert!(super::allowed_https_url("https://user:pass@ffmpeg.org/").is_err());
         assert!(super::allowed_https_url("file:///etc/passwd").is_err());

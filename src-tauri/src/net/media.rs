@@ -620,7 +620,7 @@ mod tests {
             separate_stems(&request, vec![1], "wav", &cancel, &store, &log)
                 .await
                 .unwrap_err()
-                .contains("no API key")
+                .contains("No API key")
         );
         store.set("elevenlabs", "synthetic-test-value").unwrap();
         assert!(

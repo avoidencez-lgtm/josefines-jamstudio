@@ -7,6 +7,7 @@ pub const SAMPLE_RATE: u32 = 48_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct TempoPoint {
+    pub at_beats: f64,
     pub bpm: f64,
     pub time_signature: (u8, u8),
 }
@@ -14,6 +15,7 @@ pub struct TempoPoint {
 impl Default for TempoPoint {
     fn default() -> Self {
         Self {
+            at_beats: 0.0,
             bpm: 120.0,
             time_signature: (4, 4),
         }
@@ -146,8 +148,11 @@ impl Timeline {
     }
 
     pub fn set_loop(&mut self, start_bar: u32, end_bar: u32, enabled: bool) {
-        self.loop_start_bar = start_bar.max(1);
-        self.loop_end_bar = end_bar.max(self.loop_start_bar + 1);
+        // start + 1 must stay in u32: startBar = u32::MAX from IPC used to
+        // overflow (debug panic, release wraps and disables the loop).
+        let start = start_bar.clamp(1, u32::MAX - 1);
+        self.loop_start_bar = start;
+        self.loop_end_bar = end_bar.max(start.saturating_add(1));
         self.loop_enabled = enabled;
     }
 
@@ -413,6 +418,59 @@ impl Timeline {
     }
 }
 
+/// Piecewise seconds for `beats` on a tempo map (points sorted by `at_beats`).
+pub fn map_beats_to_seconds(beats: f64, map: &[TempoPoint]) -> f64 {
+    let beats = beats.max(0.0);
+    let mut seconds = 0.0;
+    let mut start = 0.0;
+    let mut bpm = map.first().map(|p| p.bpm).unwrap_or(120.0);
+    for point in map {
+        if point.at_beats > start {
+            let end = point.at_beats.min(beats);
+            if end > start {
+                seconds += (end - start) * 60.0 / bpm;
+            }
+            if beats <= point.at_beats {
+                return seconds;
+            }
+            start = point.at_beats;
+        }
+        bpm = point.bpm;
+    }
+    seconds + (beats - start) * 60.0 / bpm
+}
+
+/// Inverse of [`map_beats_to_seconds`].
+pub fn map_seconds_to_beats(seconds: f64, map: &[TempoPoint]) -> f64 {
+    let seconds = seconds.max(0.0);
+    let mut elapsed = 0.0;
+    let mut start = 0.0;
+    let mut bpm = map.first().map(|p| p.bpm).unwrap_or(120.0);
+    for point in map {
+        if point.at_beats > start {
+            let seg = (point.at_beats - start) * 60.0 / bpm;
+            if elapsed + seg >= seconds {
+                return start + (seconds - elapsed) * bpm / 60.0;
+            }
+            elapsed += seg;
+            start = point.at_beats;
+        }
+        bpm = point.bpm;
+    }
+    start + (seconds - elapsed) * bpm / 60.0
+}
+
+pub fn map_beats_to_samples(beats: f64, map: &[TempoPoint], sample_rate: u32) -> f64 {
+    map_beats_to_seconds(beats, map) * f64::from(sample_rate)
+}
+
+pub fn map_samples_to_beats(samples: f64, map: &[TempoPoint], sample_rate: u32) -> f64 {
+    if sample_rate == 0 {
+        return 0.0;
+    }
+    map_seconds_to_beats(samples / f64::from(sample_rate), map)
+}
+
 pub fn beats_to_samples(beats: f64, bpm: f64, sample_rate: u32) -> u64 {
     if bpm <= 0.0 {
         return 0;
@@ -458,6 +516,44 @@ mod tests {
         assert_eq!(samples, 96_000); // 4 beats @ 120 bpm = 2.0s = 96,000 samples
         let calc_beats = samples_to_beats(samples, bpm, rate);
         assert!((calc_beats - beats).abs() < 1e-6);
+    }
+
+    #[test]
+    fn tempo_map_three_changes_round_trip_ten_thousand_beats() {
+        // ARCHITECTURE §9.1: 3 tempo changes, 10 000 random beats, error < 1e-9.
+        let map = [
+            TempoPoint {
+                at_beats: 0.0,
+                bpm: 120.0,
+                time_signature: (4, 4),
+            },
+            TempoPoint {
+                at_beats: 16.0,
+                bpm: 90.0,
+                time_signature: (4, 4),
+            },
+            TempoPoint {
+                at_beats: 32.0,
+                bpm: 140.0,
+                time_signature: (3, 4),
+            },
+            TempoPoint {
+                at_beats: 64.0,
+                bpm: 100.0,
+                time_signature: (4, 4),
+            },
+        ];
+        let rate = 48_000u32;
+        let mut rng = 0xC0FFEE_u64;
+        let mut worst = 0.0f64;
+        for _ in 0..10_000 {
+            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let beats = (rng >> 11) as f64 / (1u64 << 53) as f64 * 128.0;
+            let samples = map_beats_to_samples(beats, &map, rate);
+            let back = map_samples_to_beats(samples, &map, rate);
+            worst = worst.max((back - beats).abs());
+        }
+        assert!(worst < 1e-9, "round-trip error {worst} beats");
     }
 
     #[test]
@@ -800,5 +896,17 @@ mod tests {
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].start_beats, 0.0);
         assert_eq!(tl.current_sample, 256);
+    }
+
+    #[test]
+    fn set_loop_clamps_a_max_start_bar_instead_of_overflowing() {
+        let mut tl = Timeline::new(48_000, 120.0, (4, 4));
+        tl.set_loop(u32::MAX, u32::MAX, true);
+        assert_eq!(tl.loop_start_bar, u32::MAX - 1);
+        assert_eq!(tl.loop_end_bar, u32::MAX);
+        assert!(tl.loop_enabled);
+        tl.set_loop(5, 3, true);
+        assert_eq!(tl.loop_start_bar, 5);
+        assert_eq!(tl.loop_end_bar, 6);
     }
 }

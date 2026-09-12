@@ -16,54 +16,54 @@ export const ROOM_TOOLS: Record<
 > = {
   originals: {
     component: lazy(() => import("./tools/MelodyTool")),
-    title: "Melody → harmony",
+    title: "This turns melody into harmony.",
     description: "Turn a single-note idea into an editable chord variation.",
   },
   stage: {
     component: lazy(() => import("./tools/SetlistTool")),
-    title: "Rehearsal setlist",
+    title: "This is the rehearsal setlist.",
     description: "Queue charts with their own tempo and count-in.",
   },
   library: {
     component: lazy(() => import("./tools/DiscoveryTool")),
-    title: "Harmonic discovery",
+    title: "This is harmonic discovery.",
     description: "Find familiar chord movements in a different key.",
   },
   jo: {
     component: lazy(() => import("./tools/CoachTool")),
-    title: "Three perspectives",
+    title: "These are three perspectives.",
     description:
       "Ask a composition, arrangement and performance coach in one request.",
   },
   songs: {
     component: lazy(() => import("./tools/BlueprintTool")),
-    title: "Reference blueprint",
+    title: "This is a reference blueprint.",
     description: "Borrow a song's shape, then develop it with your own chords.",
   },
   "ai-music": {
     component: lazy(() => import("./tools/BriefTool")),
-    title: "Arrangement brief",
+    title: "This is an arrangement brief.",
     description: "Give the generator your song's structure and musical intent.",
   },
   "music-video": {
     component: lazy(() => import("./tools/BeatCutsTool")),
-    title: "Beat-grid cuts",
+    title: "These are beat-grid cuts.",
     description:
       "Align cuts to the music while preserving the film's duration.",
   },
   sessions: {
     component: lazy(() => import("./tools/ComparisonTool")),
-    title: "Blind take comparison",
+    title: "This is a blind take comparison.",
     description: "Choose with your ears before revealing the recording names.",
   },
   rig: {
     component: lazy(() => import("./tools/RigSnapshotTool")),
-    title: "Song tone snapshot",
+    title: "This is a song tone snapshot.",
     description: "Keep a rig scene and its controls with your original.",
   },
   settings: {
     component: lazy(() => import("./tools/AudioProfilesTool")),
-    title: "Audio setup profiles",
+    title: "These are the audio setup profiles.",
     description:
       "Recall the input, output and guitar channel for each place you play.",
   },

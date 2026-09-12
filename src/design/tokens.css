@@ -18,7 +18,9 @@
 
   /* semantic */
   --record: #e0534e;
+  --record-soft: rgba(224, 83, 78, 0.16);
   --ok: #58b585;
+  --ok-soft: rgba(88, 181, 133, 0.16);
 
   /* typography */
   --font-ui: "Geist", "Segoe UI", system-ui, sans-serif;
@@ -55,4 +57,22 @@ body {
   user-select: none;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(.allow-motion) *,
+  html:not(.allow-motion) *::before,
+  html:not(.allow-motion) *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }

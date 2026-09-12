@@ -24,11 +24,12 @@ export default function DiscoveryTool() {
     : [];
   return (
     <>
-      <Field label="Find movements related to">
+      <Field label="Find movements related to this source.">
         <select value={sourceId} onChange={(e) => setSource(e.target.value)}>
           <option value="original">
-            Current original
-            {song ? ` · ${song.body.chart.name}` : " · open one in Write"}
+            {song
+              ? `This current original is ${song.body.chart.name}.`
+              : "This is the current original. Open one in Write."}
           </option>
           {e.charts.map((c) => (
             <option key={c.id} value={c.id}>
@@ -60,11 +61,11 @@ export default function DiscoveryTool() {
                     countIn: 1,
                   });
                   e.setScreen("stage");
-                  return "Related chart cued in Stage.";
+                  return "Related chart cued in Stage. Press Play when ready.";
                 })
               }
             >
-              Study in Stage
+              Study this in Stage.
             </Button>
           </li>
         ))}

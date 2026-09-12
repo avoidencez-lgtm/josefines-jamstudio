@@ -52,7 +52,7 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
 
   if (!suggestion) {
     return (
-      <Panel title="Soloing Helper">
+      <Panel title="This is the soloing helper.">
         <p className="text-xs font-mono text-[var(--fg-2)]">
           Waiting for a chord{chord ? ` (cannot read "${chord}")` : ""}.
         </p>
@@ -74,25 +74,25 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
     scale.chromas.forEach((c, i) => chromaToName.set(c, scale.notes[i]));
 
   return (
-    <Panel title="Soloing Helper">
+    <Panel title="This is the soloing helper.">
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start gap-6">
           <div>
             <div className="text-[10px] uppercase tracking-wider text-[var(--fg-2)] font-mono mb-1">
-              Chord tones
+              These are the chord tones.
             </div>
             <div className="flex gap-1.5">
               {suggestion.chordTones.map((n) => (
                 <span
                   key={n}
-                  className={`px-2 py-0.5 rounded font-mono text-sm border ${
+                  className={`px-2 py-0.5 rounded-[var(--radius-m)] font-mono text-sm border ${
                     guideSet.has(n)
                       ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--fg-0)]"
                       : "bg-[var(--bg-2)] border-[var(--line)] text-[var(--fg-0)]"
                   }`}
                   title={
                     guideSet.has(n)
-                      ? "Guide tone: defines the chord's colour"
+                      ? "This guide tone defines the chord's colour."
                       : ""
                   }
                 >
@@ -101,20 +101,21 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
               ))}
             </div>
             <div className="text-[10px] text-[var(--fg-2)] font-mono mt-1">
-              Highlighted: guide tones (
-              {suggestion.guideTones.join(", ") || "—"}). Land on these.
+              {suggestion.guideTones.length
+                ? `Guide tones are highlighted (${suggestion.guideTones.join(", ")}). Land on these.`
+                : "No guide tones."}
             </div>
           </div>
           {suggestion.avoidNotes.length > 0 && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-[var(--fg-2)] font-mono mb-1">
-                Handle with care
+                Handle these with care.
               </div>
               <div className="flex gap-1.5">
                 {suggestion.avoidNotes.map((n) => (
                   <span
                     key={n}
-                    className="px-2 py-0.5 rounded font-mono text-sm border border-dashed border-[var(--line)] text-[var(--fg-2)]"
+                    className="px-2 py-0.5 rounded-[var(--radius-m)] font-mono text-sm border border-dashed border-[var(--line)] text-[var(--fg-2)]"
                   >
                     {n}
                   </span>
@@ -128,13 +129,13 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
           {nextSuggestion && nextChord && nextChord !== chord && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-[var(--fg-2)] font-mono mb-1">
-                Aim for (next: {nextChord})
+                Aim for {nextChord} next.
               </div>
               <div className="flex gap-1.5">
                 {nextSuggestion.guideTones.map((n) => (
                   <span
                     key={n}
-                    className="px-2 py-0.5 rounded font-mono text-sm border border-[var(--line)] text-[var(--fg-1)]"
+                    className="px-2 py-0.5 rounded-[var(--radius-m)] font-mono text-sm border border-[var(--line)] text-[var(--fg-1)]"
                   >
                     {n}
                   </span>
@@ -149,7 +150,7 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
 
         <div>
           <div className="text-[10px] uppercase tracking-wider text-[var(--fg-2)] font-mono mb-1.5">
-            Scales that fit
+            These scales fit.
           </div>
           <div className="flex flex-wrap gap-1.5">
             {suggestion.scales.map((s, i) => (
@@ -160,7 +161,7 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
                   setScaleIdx(i);
                   setUseKeyScale(false);
                 }}
-                className={`px-2.5 py-1 rounded text-xs font-mono border cursor-pointer transition-colors ${
+                className={`px-2.5 py-1 rounded-[var(--radius-m)] text-xs font-mono border cursor-pointer ${
                   !useKeyScale && i === scaleIdx
                     ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--fg-0)]"
                     : "bg-[var(--bg-2)] border-[var(--line)] text-[var(--fg-1)] hover:text-[var(--fg-0)]"
@@ -174,14 +175,14 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
               <button
                 type="button"
                 onClick={() => setUseKeyScale(true)}
-                className={`px-2.5 py-1 rounded text-xs font-mono border cursor-pointer transition-colors ${
+                className={`px-2.5 py-1 rounded-[var(--radius-m)] text-xs font-mono border cursor-pointer ${
                   useKeyScale
                     ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--fg-0)]"
                     : "bg-[var(--bg-2)] border-dashed border-[var(--line)] text-[var(--fg-1)] hover:text-[var(--fg-0)]"
                 }`}
                 title={suggestion.keyScale.why}
               >
-                Whole tune: {suggestion.keyScale.name}
+                {suggestion.keyScale.name} for the whole tune.
               </button>
             )}
           </div>
@@ -190,7 +191,7 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
               <span className="text-[var(--fg-0)]">
                 {scale.notes.join("  ")}
               </span>
-              <span className="text-[var(--fg-2)]"> — {scale.why}</span>
+              <span className="text-[var(--fg-2)]"> ({scale.why})</span>
             </p>
           )}
         </div>
@@ -227,19 +228,19 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
             <div className="flex gap-4 text-[10px] font-mono text-[var(--fg-2)] mt-2">
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded-full bg-[var(--accent)] inline-block" />{" "}
-                root
+                This is the root.
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded-full bg-[var(--ok)] inline-block" />{" "}
-                guide tone
+                This is a guide tone.
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded-full bg-[var(--fg-1)] inline-block" />{" "}
-                chord tone
+                This is a chord tone.
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded-full border border-[var(--fg-2)] inline-block" />{" "}
-                scale note
+                This is a scale note.
               </span>
             </div>
           </div>

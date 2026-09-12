@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ipc } from "../../src/ipc/client";
 import { dispatchJoToolCall } from "../../src/lib/jo/dispatcher";
@@ -160,5 +161,15 @@ describe("Jo reports accepted actions", () => {
     expect(useMedia.getState().project).toBe(project);
     expect(useMedia.getState().undo).toEqual([]);
     expect(useMedia.getState().renderPath).toBe("movie.mp4");
+  });
+
+  it("action acks are sentences, not JSON dumps", async () => {
+    const text = readFileSync("src/lib/jo/dispatcher.ts", "utf8");
+    expect(text).not.toContain("JSON.stringify(analysis)");
+    expect(text).not.toContain("JSON.stringify(review)");
+    expect(text).not.toMatch(/return "Started playback";/);
+    expect(text).not.toContain("Queued cue:");
+    expect(text).not.toContain("Recording started:");
+    expect(text).not.toContain("awaiting your review");
   });
 });

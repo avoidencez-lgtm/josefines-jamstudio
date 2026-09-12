@@ -514,7 +514,13 @@ fn tempo_change_while_playing_keeps_the_musical_position() {
     studio.ok("transport_set_tempo", json!({"bpm": 1000}));
     let clamped = wait_for(&studio, "300 bpm", |t| t["transport"]["bpm"] == 300.0);
     assert_eq!(clamped["transport"]["state"], "playing");
-    assert!(beats(&clamped) >= b1);
+    // set_bpm remaps current_sample with round(); one sample at 48 kHz / 300 BPM.
+    const ONE_SAMPLE_BEATS: f64 = 300.0 / (48_000.0 * 60.0);
+    let c1 = beats(&clamped);
+    assert!(
+        c1 + ONE_SAMPLE_BEATS >= b1,
+        "the position jumped backwards after the clamp: {b1} -> {c1}"
+    );
     studio.ok("transport_stop", json!({}));
 }
 
@@ -526,11 +532,11 @@ fn stop_cue_breaks_the_band_at_the_next_bar_and_a_fill_brings_it_back() {
     arm(&studio, 240.0);
     assert_eq!(
         studio.err("band_cue", json!({"cue": "bogus"})),
-        "Unknown cue: bogus"
+        "The cue bogus is unknown."
     );
     assert_eq!(
         studio.err("band_cue", json!({"cue": "Stop"})),
-        "Unknown cue: Stop",
+        "The cue Stop is unknown.",
         "cue names are lower-case"
     );
     studio.ok("transport_play", json!({}));

@@ -8,9 +8,11 @@ license.workspace = true
 [dependencies]
 jam-core.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 rand.workspace = true
 rand_pcg.workspace = true
+hound.workspace = true
+rustysynth.workspace = true
 
 [dev-dependencies]
 jam-dsp.workspace = true
-serde_json.workspace = true

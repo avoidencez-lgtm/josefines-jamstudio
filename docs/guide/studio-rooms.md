@@ -8,7 +8,7 @@ also explains the task; on compact windows the labels remain. The transport and
 | --- | --- | --- |
 | Write — pencil | Original songs, chords, lyrics and guitar layers | Create or open a song |
 | Stage — stage microphone | Playing with the band | Play; use Practice to loop a section |
-| Library — folder | Chord charts and band grooves | Search, open a chart, edit and Play this |
+| Library — folder | Chord charts and band grooves | Search, open a chart, edit and Play this chart. |
 | Jo AI — conversation | Direct band commands and reviewed song edits | Type a request, then review any song edits |
 | Songs — record | Finished mixes, references and generated songs | Import a local audio file or select an existing one |
 | AI Music — waveform | Generate a musical idea | Choose a model, edit a prompt, then Generate |
@@ -20,11 +20,11 @@ also explains the task; on compact windows the labels remain. The transport and
 ## A useful route through a song
 
 1. Compose in Write. Rehearse the band chart on Stage; Practice can loop an entire
-   arranged section, including its repeats. Exit loop returns to the full form.
+   arranged section, including its repeats. Exit this loop returns to the full form.
 2. Record in Write or Sessions. Review the take in Sessions, mark a keeper, or
    attach its guitar to the open Write song. Listen to guitar uses the native
    audition engine and stops the band first; the transport Stop button stops it.
-3. Import a finished mix into Songs. Listen opens your system player. Use in Film
+3. Import a finished mix into Songs. Listen opens your system player. Use this in Film.
    selects that asset for the current project; save the project to retain it.
 4. Film's Storyboard edits shots, Soundtrack selects/imports audio and Render &
    jobs finishes the MP4. Project settings and Creative direction unfold when

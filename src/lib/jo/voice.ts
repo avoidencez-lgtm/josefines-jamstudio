@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { ipc, isPreview } from "../../ipc/client";
+import { withNextStep } from "../loudError";
 import { useJoConversation } from "./conversation";
 
 export type VoicePhase =
@@ -21,7 +22,14 @@ export const useVoice = create<{
   error: string | null;
   seconds: number;
   shortcut: string | null;
-}>(() => ({ phase: "idle", error: null, seconds: 0, shortcut: null }));
+  lastReleaseToFirstAudioMs: number | null;
+}>(() => ({
+  phase: "idle",
+  error: null,
+  seconds: 0,
+  shortcut: null,
+  lastReleaseToFirstAudioMs: null,
+}));
 let epoch = 0;
 let opening: Promise<Turn> | null = null;
 let cancellation: Promise<void> | null = null;
@@ -95,7 +103,11 @@ export async function cancelVoice() {
       await opening?.catch(() => undefined);
       await ipc.invoke("voice_cancel");
     } catch (e) {
-      useVoice.setState({ error: `Could not stop voice: ${String(e)}` });
+      useVoice.setState({
+        error: withNextStep(
+          `Could not stop voice. ${String(e).replace(/^Error:\s*/, "")}`,
+        ),
+      });
     } finally {
       useVoice.setState({ phase: "idle" });
       cancellation = null;
@@ -121,7 +133,8 @@ export async function startVoice(query: VoiceQuery) {
     useVoice.setState({ phase: "listening" });
     deadline = setTimeout(() => void releaseVoice(query), 20_000);
   } catch (e) {
-    if (turn === epoch) useVoice.setState({ phase: "idle", error: String(e) });
+    if (turn === epoch)
+      useVoice.setState({ phase: "idle", error: withNextStep(String(e)) });
   } finally {
     if (opening === pending) opening = null;
   }
@@ -161,9 +174,17 @@ export async function releaseVoice(query: VoiceQuery) {
     useVoice.setState({ phase: "speaking" });
     poll = setInterval(() => {
       void ipc
-        .invoke<{ phase: VoicePhase; generation: number }>("voice_status")
+        .invoke<{
+          phase: VoicePhase;
+          generation: number;
+          lastReleaseToFirstAudioMs?: number | null;
+        }>("voice_status")
         .then((state) => {
           if (!current()) return;
+          if (state.lastReleaseToFirstAudioMs != null)
+            useVoice.setState({
+              lastReleaseToFirstAudioMs: state.lastReleaseToFirstAudioMs,
+            });
           if (
             state.generation !== captured.generation ||
             state.phase === "idle"
@@ -175,12 +196,12 @@ export async function releaseVoice(query: VoiceQuery) {
         .catch(async (e) => {
           if (!current()) return;
           await cancelVoice();
-          useVoice.setState({ error: String(e) });
+          useVoice.setState({ error: withNextStep(String(e)) });
         });
     }, 250);
   } catch (e) {
     if (!current()) return;
     await cancelVoice();
-    useVoice.setState({ error: String(e) });
+    useVoice.setState({ error: withNextStep(String(e)) });
   }
 }

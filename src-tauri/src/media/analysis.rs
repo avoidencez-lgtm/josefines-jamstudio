@@ -44,14 +44,14 @@ pub(super) async fn prepare(base: &Path, asset_id: &str) -> Result<Asset, String
                     } else {
                         "failed"
                     },
-                    format!("Audio kept; analysis did not finish: {error} Retry in Songs."),
+                    format!("Audio kept; analysis did not finish. {error} Retry in Songs."),
                 )
             }
         }
     };
     status(&mut source, state, &message)?;
     save_asset(base, &source).map_err(|e| {
-        format!("Song {asset_id} is saved, but analysis status could not be saved: {e}")
+        format!("Song {asset_id} is saved, but analysis status could not be saved. {e}")
     })?;
     Ok(source)
 }

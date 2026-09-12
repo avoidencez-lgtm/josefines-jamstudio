@@ -1,11 +1,13 @@
 # Quickstart
 
 Full instructions: [English](guide/manual-en.md) · [Norsk bokmål](guide/manual-nb.md).
-The same searchable manual is available through **Help & guides** inside the app.
+First-run cabling and the unsigned-installer note: [setup.md](guide/setup.md).
+The same searchable manual is available through **Open help and guides.** inside the app.
 
 This preview supports writing originals, playing the virtual band, recording guitar
-and exporting stems. It does not yet provide native voice, automatic calibration,
-stem separation, automatic song analysis, time-stretch or Lyria RealTime.
+and exporting stems. Native voice and loopback calibration exist; live voice
+acceptance, stem separation, automatic song analysis, time-stretch and Lyria
+RealTime remain unfinished.
 
 1. Install the Windows or Mac preview bundle. Bundles are unsigned; signing and
    notarisation remain pending. See the [build closeout](reviews/build-closeout.md).
@@ -21,8 +23,9 @@ stem separation, automatic song analysis, time-stretch or Lyria RealTime.
    microphone or speaker path is used.
 6. Review takes in Sessions. Export stems writes WAVs, a tempo map, recorded band
    MIDI when present, and a REAPER import script. Import into Logic or REAPER at
-   bar 1. Latency compensation is a manual sample offset, not an automatic test.
-7. Import a mix into Songs, then Use in Film. AI Music and Film require separately
+   bar 1. In Settings → Audio devices, Measure loopback with a cable from output
+   to the guitar input; without a loopback the app shows a 2× buffer estimate.
+7. Import a mix into Songs, then Use this in Film. AI Music and Film require separately
    configured providers or a local model workflow. FFmpeg/ffprobe are required for
    local media import and rendering; provider calls may use API credits.
 8. In Rig, select a MIDI port explicitly and verify scene mappings with the real

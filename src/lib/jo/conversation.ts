@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useEngineStore } from "../../store/engine";
+import { withNextStep } from "../loudError";
 import { useMedia } from "../media";
 import { useWriting } from "../originals";
 import { dispatchJoToolCall } from "./dispatcher";
@@ -36,7 +37,7 @@ export const useJoConversation = create<{
       id: "welcome",
       sender: "jo",
       text: "Tell me what the band should do. Live commands run when you send them; changes to your original song are proposed for review.",
-      timestamp: "Jo",
+      timestamp: "This is Jo.",
     },
   ],
   inputValue: "",
@@ -64,7 +65,7 @@ export function discardPendingProposal(reason: string): boolean {
       id: crypto.randomUUID(),
       sender: "jo",
       text: reason,
-      timestamp: "Review",
+      timestamp: "This is a review.",
     },
   ]);
   return true;
@@ -176,7 +177,7 @@ const think = async (
 export const handleJoQuery = async (query: string, current = () => true) => {
   if (!query.trim() || useJoConversation.getState().busy) return;
   discardPendingProposal(
-    "Proposal set aside: your new message replaces it. Nothing was applied.",
+    "The proposal was set aside. Your new message replaces it. Nothing was applied.",
   );
   useJoConversation.setState({ busy: true });
   try {
@@ -205,7 +206,7 @@ export const handleJoQuery = async (query: string, current = () => true) => {
       useJoConversation.setState({
         pending: { calls: toolCalls, expected: expectedSong },
       });
-      results.push("Proposed song edits · awaiting your review below");
+      results.push("Proposed song edits. Review them below.");
     } else
       for (const call of toolCalls) {
         if (!current()) {
@@ -217,7 +218,7 @@ export const handleJoQuery = async (query: string, current = () => true) => {
         try {
           results.push(await dispatchJoToolCall(call));
         } catch (e) {
-          results.push(`${call.name} failed: ${String(e)}`);
+          results.push(withNextStep(String(e).replace(/^Error:\s*/, "")));
           if (call !== toolCalls.at(-1))
             results.push(
               "Remaining commands were not applied. Ask again after resolving the failure.",

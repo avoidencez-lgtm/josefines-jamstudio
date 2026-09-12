@@ -58,13 +58,13 @@ export function ChordShapes({
       )}
       {shapes.length > 1 && (
         <fieldset className="chord-shape-picker">
-          <legend className="sr-only">Shapes for {now}</legend>
+          <legend className="sr-only">These are shapes for {now}.</legend>
           {shapes.map((shape, i) => (
             <button
               type="button"
               key={shape.shape}
               aria-pressed={i === chosen}
-              aria-label={`Shape ${i + 1}: ${shape.shape}`}
+              aria-label={`Shape ${i + 1} is ${shape.shape}.`}
               onClick={() => setIndex(i)}
             >
               {i + 1}
