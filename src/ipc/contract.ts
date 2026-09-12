@@ -170,6 +170,7 @@ export interface LibraryInfo {
   /** Ids of charts that come from the user folder (deletable, editable in place). */
   userChartIds: string[];
   loadErrors: string[];
+  controlMaps: string[];
 }
 
 export interface BandPatch {

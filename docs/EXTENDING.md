@@ -190,8 +190,8 @@ Ask Jo to author one: the `create_style` tool (backlog) writes the same JSON.
 ## Add a control map (pedal, keyboard, MIDI controller)
 
 1. Write `controls/<id>.json`: bindings from `key`, `midi_pc` or `midi_cc` sources to action ids. Action ids are the Jo tool names plus `ptt`; arguments are the tool's arguments.
-2. `pnpm test -- controls` validates every binding against the tool registry (unknown action ids fail).
-3. Select it in Settings → Controls.
+2. `pnpm vitest run tests/invariants/controls.test.ts` validates every bundled binding against the tool registry (unknown action ids fail). Pedal learning still lives in `controller.json` / `PEDAL_ACTIONS`; those bindings win over a control map.
+3. MIDI PC/CC bindings are dispatched by `matchControlMidi` from the foot-controller listener. Settings → diagnostics names every loaded map.
 
 ## Add a Jo tool
 

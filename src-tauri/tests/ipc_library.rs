@@ -562,6 +562,11 @@ fn saving_a_chart_writes_a_user_file_that_is_listed_and_survives_a_reload() {
     assert_eq!(find_chart(&after, &id)["name"], "Saved Chart");
 
     let info = studio.ok("library_reload", json!({}));
+    let maps = info["controlMaps"].as_array().unwrap();
+    assert!(
+        maps.iter().any(|id| id == "default") && maps.iter().any(|id| id == "black-spirit-200"),
+        "{maps:?}"
+    );
     assert_eq!(
         PathBuf::from(info["chartsDir"].as_str().unwrap()),
         user_dir().join("charts")

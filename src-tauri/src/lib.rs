@@ -824,6 +824,7 @@ struct LibraryInfo {
     charts_dir: String,
     user_chart_ids: Vec<String>,
     load_errors: Vec<String>,
+    control_maps: Vec<String>,
 }
 
 #[tauri::command]
@@ -835,6 +836,7 @@ fn library_reload(state: State<'_, AppState>) -> LibraryInfo {
         charts_dir: lib.charts_dir().to_string_lossy().into_owned(),
         user_chart_ids: lib.user_chart_ids().to_vec(),
         load_errors: lib.load_errors().to_vec(),
+        control_maps: lib.control_maps().into_iter().map(|m| m.id).collect(),
     }
 }
 

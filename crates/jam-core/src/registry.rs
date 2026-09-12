@@ -1,4 +1,5 @@
 //! registry: Seam definitions and loaders for styles, charts, rigs, and control maps.
+//! Control maps are loaded by the library and dispatched from `src/lib/controls.ts`.
 
 use include_dir::{include_dir, Dir};
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,8 @@ pub struct ControlMapManifest {
     pub schema_version: u32,
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub bindings: Vec<serde_json::Value>,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }

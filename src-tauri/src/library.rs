@@ -4,7 +4,10 @@
 //! style or chart never requires touching Rust.
 
 use jam_core::chart::Chart;
-use jam_core::registry::{SeamRegistry, BUNDLED_CHARTS, BUNDLED_RIGS, BUNDLED_STYLES};
+use jam_core::registry::{
+    ControlMapManifest, SeamRegistry, BUNDLED_CHARTS, BUNDLED_CONTROLS, BUNDLED_RIGS,
+    BUNDLED_STYLES,
+};
 use jam_core::style::Style;
 use jam_rig::RigProfile;
 use std::path::{Path, PathBuf};
@@ -13,6 +16,7 @@ pub struct Library {
     styles: SeamRegistry<Style>,
     charts: SeamRegistry<Chart>,
     rigs: SeamRegistry<RigProfile>,
+    controls: SeamRegistry<ControlMapManifest>,
     user_root: PathBuf,
     load_errors: Vec<String>,
     user_chart_ids: Vec<String>,
@@ -38,6 +42,7 @@ impl Library {
             styles: SeamRegistry::new(),
             charts: SeamRegistry::new(),
             rigs: SeamRegistry::new(),
+            controls: SeamRegistry::new(),
             user_root,
             load_errors: Vec::new(),
             user_chart_ids: Vec::new(),
@@ -51,6 +56,7 @@ impl Library {
         self.styles = SeamRegistry::new();
         self.charts = SeamRegistry::new();
         self.rigs = SeamRegistry::new();
+        self.controls = SeamRegistry::new();
         self.load_errors.clear();
         self.user_chart_ids.clear();
 
@@ -66,9 +72,15 @@ impl Library {
             self.load_errors
                 .push(format!("The bundled rigs could not load. {e}"));
         }
+        if let Err(e) = self.controls.load_from_dir(&BUNDLED_CONTROLS) {
+            self.load_errors
+                .push(format!("The bundled control maps could not load. {e}"));
+        }
         let (_, errs) = self.styles.load_from_fs_dir(self.styles_dir());
         self.load_errors.extend(errs);
         let (_, errs) = self.rigs.load_from_fs_dir(self.rigs_dir());
+        self.load_errors.extend(errs);
+        let (_, errs) = self.controls.load_from_fs_dir(self.controls_dir());
         self.load_errors.extend(errs);
         for rig in self.rigs.list() {
             if let Err(e) = rig.validate() {
@@ -111,6 +123,14 @@ impl Library {
 
     pub fn rigs_dir(&self) -> PathBuf {
         self.user_root.join("rigs")
+    }
+
+    pub fn controls_dir(&self) -> PathBuf {
+        self.user_root.join("controls")
+    }
+
+    pub fn control_maps(&self) -> Vec<ControlMapManifest> {
+        self.controls.list().into_iter().cloned().collect()
     }
 
     pub fn rig(&self, id: &str) -> Result<RigProfile, String> {

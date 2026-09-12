@@ -15,6 +15,7 @@ import type {
   EngineStatus,
   IdleCpuSample,
 } from "../ipc/contract";
+import { bundledControlMaps } from "../lib/controls";
 import { withNextStep } from "../lib/loudError";
 import { lastMeterFps, lastPlayheadFps } from "../lib/meterFps";
 import {
@@ -369,8 +370,10 @@ export const Settings: React.FC = () => {
                 Control map
               </dt>
               <dd className="text-[var(--fg-0)]">
-                Default Stage map (controls/default.json). Bindings are Jo tools
-                plus push-to-talk.
+                {bundledControlMaps()
+                  .map((map) => `${map.name} (${map.id})`)
+                  .join(". ")}
+                . Bindings are Jo tools plus push-to-talk.
               </dd>
             </div>
             <div className="contents">

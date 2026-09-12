@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import {
   bundledControlMap,
+  bundledControlMaps,
+  matchControlMidi,
   stageActionBinding,
   validateControlMap,
 } from "../../src/lib/controls";
@@ -15,6 +17,16 @@ it("validates bundled control maps against Jo tools", () => {
   validateControlMap(map);
   const disk = JSON.parse(readFileSync("controls/default.json", "utf8"));
   expect(disk.bindings).toHaveLength(map.bindings.length);
+  const maps = bundledControlMaps();
+  expect(maps.map((m) => m.id).sort()).toEqual(["black-spirit-200", "default"]);
+  for (const bundled of maps) {
+    validateControlMap(bundled);
+    expect(bundled.bindings.length).toBeGreaterThan(0);
+  }
+  expect(matchControlMidi({ kind: "cc", number: 14 })?.action).toBe(
+    "transport_control",
+  );
+  expect(matchControlMidi({ kind: "program", number: 1 })?.action).toBe("ptt");
 });
 
 it("keeps every Stage action on a shortcut, Jo tool and default control-map binding", () => {

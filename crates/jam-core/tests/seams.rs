@@ -26,4 +26,19 @@ fn test_bundled_registries_load() {
         .expect("controls load");
     assert!(control_count > 0, "Expected at least 1 bundled control map");
     assert!(control_reg.get("black-spirit-200").is_some());
+    assert!(control_reg.get("default").is_some());
+    for map in control_reg.list() {
+        assert!(
+            !map.bindings.is_empty(),
+            "{} must declare bindings the app dispatches",
+            map.id
+        );
+        for binding in &map.bindings {
+            assert!(
+                binding.get("action").and_then(|a| a.as_str()).is_some(),
+                "{} binding needs an action",
+                map.id
+            );
+        }
+    }
 }

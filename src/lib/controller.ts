@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import { ipc, isPreview } from "../ipc/client";
 import { useEngineStore } from "../store/engine";
+import { bindingArgs, matchControlMidi } from "./controls";
 import { handleJoQuery } from "./jo/conversation";
+import { dispatchJoToolCall } from "./jo/dispatcher";
 import { cancelVoice, toggleVoice, useVoice } from "./jo/voice";
 import { useWriting } from "./originals";
 import { toggleReferenceRamp } from "./referenceRamp";
@@ -144,7 +146,19 @@ export const useController = create<ControllerState>((set, get) => ({
     const action = config.bindings.find((b) =>
       samePress(b.press, press),
     )?.action;
-    if (!action) return;
+    if (!action) {
+      const mapped = matchControlMidi(press);
+      if (!mapped) return;
+      if (mapped.action === "ptt") {
+        await toggleVoice(handleJoQuery);
+        return;
+      }
+      await dispatchJoToolCall({
+        name: mapped.action,
+        arguments: bindingArgs(mapped),
+      });
+      return;
+    }
     if (action === "voice") {
       await toggleVoice(handleJoQuery);
       return;
