@@ -208,6 +208,34 @@ describe("Jo reports accepted actions", () => {
     expect(useMedia.getState().renderPath).toBe("movie.mp4");
   });
 
+  it("does not claim count-in, seek, tuner or transpose succeeded when the engine refused", async () => {
+    vi.spyOn(ipc, "invoke").mockRejectedValue(
+      "Save the take before changing the band.",
+    );
+    for (const call of [
+      { name: "set_count_in", arguments: { bars: 1 } },
+      { name: "seek_bar", arguments: { bar: 8 } },
+      { name: "toggle_tuner", arguments: { enabled: true } },
+    ] as JoToolCall[]) {
+      await expect(dispatchJoToolCall(call)).rejects.toThrow(
+        "Save the take before changing the band.",
+      );
+    }
+    await expect(
+      dispatchJoToolCall({
+        name: "transpose_chart",
+        arguments: { semitones: 2 },
+      }),
+    ).rejects.toThrow("Load a chart first.");
+    useEngineStore.setState({ currentChart: newOriginal().body.chart });
+    await expect(
+      dispatchJoToolCall({
+        name: "transpose_chart",
+        arguments: { semitones: 2 },
+      }),
+    ).rejects.toThrow("Save the take before changing the band.");
+  });
+
   it("says the section loop is playing because rehearse starts transport", async () => {
     const song = newOriginal();
     useWriting.setState({ song, selected: "verse", busy: false });

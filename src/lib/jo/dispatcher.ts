@@ -324,7 +324,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       if (bars !== 0 && bars !== 1 && bars !== 2) {
         throw new Error("Count-in is 0, 1 or 2 bars.");
       }
-      await store.transportSetCountIn(bars);
+      requireCommand(await store.transportSetCountIn(bars));
       return bars === 0
         ? "The count-in is off."
         : `Count-in is ${bars} bar${bars === 1 ? "" : "s"}.`;
@@ -342,7 +342,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       if (!Number.isInteger(bar) || bar < 1) {
         throw new Error("Jump to a bar number starting at 1.");
       }
-      await store.transportSeekBar(bar);
+      requireCommand(await store.transportSeekBar(bar));
       return `Jumped to bar ${bar}.`;
     }
 
@@ -351,7 +351,8 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       if (!Number.isInteger(semitones) || semitones === 0) {
         throw new Error("Transpose by a whole number of semitones.");
       }
-      await store.transposeCurrentChart(semitones);
+      if (!store.currentChart) throw new Error("Load a chart first.");
+      requireCommand(await store.transposeCurrentChart(semitones));
       return semitones > 0
         ? `Transposed up ${semitones} semitones.`
         : `Transposed down ${-semitones} semitones.`;
@@ -362,7 +363,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         typeof call.arguments.enabled === "boolean"
           ? call.arguments.enabled
           : !store.tunerOn;
-      await store.setTuner(enabled);
+      requireCommand(await store.setTuner(enabled));
       return enabled ? "The tuner is on." : "The tuner is off.";
     }
   }
