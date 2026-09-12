@@ -40,7 +40,7 @@ export function applySongIdea(body: SongBody, base: string, label: string) {
   w.version(`This is before ${label}.`);
   w.edit((b) => Object.assign(b, structuredClone(body)));
   useWriting.setState({
-    message: `${label} applied. Undo and Versions preserve the previous song. Save to keep it on disk.`,
+    message: `${label} applied. Undo and This is Versions. preserve the previous song. Save to keep it on disk.`,
   });
 }
 

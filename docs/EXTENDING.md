@@ -132,7 +132,7 @@ reports the bundled synthetic kit only and never writes files. After unpack,
 MIT `rustysynth` (`oxisynth` is LGPL and is not used). A missing or invalid
 pack stays on the synthetic kit or sine voices and says so on
 `band.state.kit_message` / `bass_message`. Goldens set `JAM_SYNTHETIC_KIT=1`.
-Settings → First run names the next step. Fixture:
+Settings → This is First run. names the next step. Fixture:
 `tests/fixtures/seams/assets.json`. Tests: `tests/invariants/assets.test.ts`
 and `cargo test -p src-tauri --test ipc_assets`.
 
@@ -425,7 +425,7 @@ The recipe below describes implemented paths; older planning recipes later in th
 
 The existing `docs/guide/manual.json` is the English/Bokmål help source. Each section has a unique stable `id` such as `write.song-map-and-linked-sections`; preserve it when editing or translating its title. The help pane uses it for keyboard-focusable topic links. Add both translations and run `node scripts/export-manual.mjs` after changing text, then `pnpm test` to validate IDs and exported manuals.
 
-Help opens beside the current room, or beneath it at compact widths. It is nonmodal: room controls and the global transport stay available. Escape with focus inside help closes it and returns focus to the opener. Music shortcuts are suppressed inside help; room-focused shortcuts and transport buttons remain usable. Write’s Compose, Lyrics, Record, Finish and Versions views launch their topic through `WRITING_HELP` in `src/lib/help.ts`. Each launch resets the pane to that topic, including repeated requests. Extend this map with an existing manual section ID; the invariant test checks every target. Chapter selection retains native select focus so keyboard users can continue choosing; topic links move focus to their heading.
+Help opens beside the current room, or beneath it at compact widths. It is nonmodal: room controls and the global transport stay available. Escape with focus inside help closes it and returns focus to the opener. Music shortcuts are suppressed inside help; room-focused shortcuts and transport buttons remain usable. Write’s This is Compose., This is Lyrics., This is Record & layers., This is Finish. and This is Versions. views launch their topic through `WRITING_HELP` in `src/lib/help.ts`. Each launch resets the pane to that topic, including repeated requests. Extend this map with an existing manual section ID; the invariant test checks every target. Chapter selection retains native select focus so keyboard users can continue choosing; topic links move focus to their heading.
 
 ## Native speech
 

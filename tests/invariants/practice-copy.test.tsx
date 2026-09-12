@@ -130,7 +130,7 @@ it("requires explicit grid confirmation and displays only the native consumed se
       },
     }),
   );
-  expect(player).toContain("Bar 2 · beat 1.5 · 75.0 BPM · Chorus");
+  expect(player).toContain("Bar 2 · beat 1.5 · 75.0 BPM. · Chorus");
   expect(player).toContain("Loop Chorus");
   expect(player).not.toContain("beat-grid loops are not available yet");
   expect(player).not.toContain("<audio");

@@ -17,7 +17,7 @@ export function FootControls() {
       </summary>
       <p className="song-help">
         Keep playing while a pedal saves the idea, starts a take or loops a
-        section. Select a MIDI input, click Learn, then press the pedal. Each
+        section. Select a MIDI input, click Learn this, then press the pedal. Each
         press has one action. This uses one press to start listening and another
         to send. A press while waiting cancels. Open the voice setup in Jo AI.
         Provider charges apply. The microphone stops after 20 seconds.
@@ -79,13 +79,13 @@ export function FootControls() {
                   })
                 }
               >
-                {c.learning === action ? "Cancel learning" : "Learn"}
+                {c.learning === action ? "Cancel this learning." : "Learn this."}
               </Button>
               <Button
                 disabled={!binding || c.busy}
                 onClick={() => void c.remove(action)}
               >
-                Clear
+                Clear this.
               </Button>
             </div>
           );

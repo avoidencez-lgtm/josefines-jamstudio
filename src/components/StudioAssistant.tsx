@@ -169,7 +169,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
         }
       >
         <ChatCircleDots size={18} aria-hidden="true" />
-        {open ? "Hide assistant" : "Assistant"}
+        {open ? "Hide this assistant." : "Show this assistant."}
         {busy ? " This is working." : ""}
       </button>
       {open && (
@@ -318,7 +318,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
                 type="submit"
                 disabled={!ready || busy || !query.trim() || engine.isRecording}
               >
-                {busy ? "Working…" : "Send"}
+                {busy ? "This is working." : "Send this."}
               </Button>
               {busy && (
                 <Button
@@ -334,7 +334,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
                         .catch((e) => setMessage(String(e)));
                   }}
                 >
-                  Cancel request
+                  Cancel this request.
                 </Button>
               )}
               <Button

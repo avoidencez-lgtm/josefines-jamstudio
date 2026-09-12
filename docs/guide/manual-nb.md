@@ -1,78 +1,78 @@
 # Josefines Jamstudio — brukerhåndbok
 
-## Start her
+## This is Start her.
 
-### Hva Jamstudio gjør
+### This is Hva Jamstudio gjør.
 
 Jamstudio hjelper deg å gjøre gitarideer til egne låter: skriv akkorder og tekst, arranger et lokalt kompband, ta opp gitar, sammenlign versjoner, sett sammen opptak og eksporter til en DAW. Film gir deg storyboard og lokal videoeksport. Appen er et supplement til utstyret og musikkprogrammet ditt, med et innebygd syntetisk tromme-, bass- og kompband.
 
-### Skrivebordsapp eller nettleservisning?
+### This is Skrivebordsapp eller nettleservisning?
 
 Bruk skrivebordsappen for lyd, filer, MIDI, nøkler, agenter og mediegenerering. Banneret i nettleseren betyr at redigeringen er simulert: ingen lyd, ingen faktisk fillagring og ingen leverandørtilgang. Lastes forhåndsvisningen på nytt, tømmes økten. En bevegelig avspillingsmarkør beviser ikke at et lydkort er koblet til.
 
-### Din første komplette økt
+### This is Din første komplette økt.
 
-1. Åpne Settings → Audio devices. Velg samme lydkort for inn og ut, og deretter riktig gitarkanal. Kontroller nivåmålerne mens du spiller.
+1. Åpne Settings → This is Audio devices. Velg samme lydkort for inn og ut, og deretter riktig gitarkanal. Kontroller nivåmålerne mens du spiller.
 
 2. Åpne Write → Create this new song. Gi låten et navn, rediger vers og refreng, og trykk Save this song. Play this song laster dette utkastet inn i bandet.
 
-3. Bruk Record & layers til å fange et riff, eller Record this take for å spille inn et nytt lag fra takt 1. Avslutt med Save this take.
+3. Bruk This is Record & layers. til å fange et riff, eller Record this take for å spille inn et nytt lag fra takt 1. Avslutt med Save this take.
 
-4. Åpne Finish for å gjennomgå arrangementet og sammenligne seksjonsopptak. Behold en versjon før eksperimenter, og lagre resultatet.
+4. Åpne This is Finish. for å gjennomgå arrangementet og sammenligne seksjonsopptak. Behold en versjon før eksperimenter, og lagre resultatet.
 
 5. Eksporter et favorittopptak til Logic / REAPER fra Sessions. Gjør ferdig miksen der; importer miksen i Songs hvis du vil lage video.
 
-### Språk og navigasjon
+### This is Språk og navigasjon.
 
 Sidepanelet viser navn og formål for hvert rom. Open help and guides åpner denne søkbare håndboken uten å forkaste rommet du jobbet i. Velg English eller Norsk bokmål. Redigeringskontrollene beholder engelske navn, og den norske veiledningen bruker de samme knappetekstene. Escape lukker hjelpen. Hurtigtaster for transport er satt på pause mens du leser hjelp. Språkvalget lagres sammen med appinnstillingene og brukes neste gang du åpner hjelpen, også etter en omstart. Uten treff sier hjelpen Ingen treff. Prøv et annet søkeord, og Tøm dette søket tømmer søket.
 
-## Write: akkorder og arrangement
+## This is Write. akkorder og arrangement
 
-### Låtkart og koblede seksjoner
+### This is Låtkart og koblede seksjoner.
 
 This is the song map viser avspillingsrekkefølgen med taktintervaller, repetisjoner og bandintensitet. Velg en seksjon for å redigere. En gjentatt seksjon deler akkorder, tekst og bandinnstillinger overalt der den brukes. Make this variation lager en uavhengig seksjon. Add this section kopierer de valgte akkordene med standard bandinnstillinger. Edit the order and repeats flytter, fjerner eller gjentar ledd i formen; selve seksjonen slettes ikke. Delete this section fjerner en seksjon som ikke lenger er i formen, med tekst og bandinnstillinger; en versjon beholdes først, og Undo gjenoppretter den.
 
 {name} is loaded in the band viser arrangementet som sist ble lastet inn uten feil. This draft is loaded betyr at hele utkastet samsvarer med denne kopien, inkludert bandinnstillinger og gitarlag. Redigering eller åpning av en annen låt erstatter den ikke. Play this song laster det gjeldende utkastet; Space fortsetter med det innlastede arrangementet. Save this song lagrer til disk uten å endre avspillingen. Loop this section og Record laster også inn utkastet. Forhåndslytting til et opptak er separat fra bandet; statusen sier ikke at bandet spiller akkurat nå. Spørsmålstegnet ved statusen åpner denne hjelpen.
 
-### Rediger akkorder og harmonikk
+### This is Rediger akkorder og harmonikk.
 
 Klikk på en akkordrute. Taktfeltet godtar Am:3 G:1 for tre slag Am og ett slag G, eller Dm G for lik fordeling. Enter eller å forlate feltet bruker endringen; Escape avbryter. Ugyldig tekst lar den gamle takten stå. Add this bar kopierer valgt takt; Remove this bar beholder minst én. Transform this phrase roterer, snur eller gjentar taktene. Undo gjenoppretter forrige tilstand.
 
 Find the next colour foreslår akkorder i tonearten, lånte akkorder fra parallelltonearten og sekundærdominanter. Shared teller felles toneklasser med forrige akkord; det er ingen kvalitetsvurdering eller garanti for et bestemt gitargrep. Inspektøren viser også ett spillbart grep for valgt akkord; nummerknappene blar gjennom alternativene.
 
-### Bandstemmer, låser og energi
+### This is Bandstemmer, låser og energi.
 
 Utvid Band, groove and section settings. Drums, Bass og Comp har hver sin groove, intensitet, volum, mute og lås. Intensiteten velger mellom stilmønstre; den er ikke en lydnivåmåler. Section energy endrer ulåste intensiteter samlet. Choose a groove to try. Låste stemmer beholdes. Direkte endringer på én stemme regnes fortsatt som bevisste valg. Swing deles av seksjonen.
 
 Key transponerer bandets akkorder; Mode endrer harmonipaletten. Innspilt gitar beholder tonehøyde og hastighet. Play this song laster utkastet på nytt; vanlige redigeringer skriver ikke om fremføringen som allerede spiller.
 
-### Grenser og tidsplassering
+### This is Grenser og tidsplassering.
 
 Write støtter 4/4, 40–240 BPM, inntil 256 arrangerte takter, 64 seksjoner, 128 formledd, 16 gitarlag, 20 navngitte versjoner og 50 angretrinn. Gitarlag blir stående på faste taktnumre når formen endres. Kontroller plasseringen når du flytter seksjoner, endrer tempo eller bytter akkorder.
 
 ### Dette gjør melodi om til harmonier.
 
-Åpne Dette gjør melodi om til harmonier øverst i Write. Velg et isolert opptak av nynning eller enkelttoner på gitar, et startpunkt og 0,1–60 sekunder, og trykk Extract these notes i skrivebordsappen. Kildefilen kan være høyst to minutter og 64 MB. Rett notelisten: én linje per tone, for eksempel A4 0 0.5 (tone, start i sekunder fra det valgte utdraget, varighet i sekunder; bruk punktum som desimalskilletegn). Manuell innskriving fungerer også i nettleseren. Velg en seksjon på 1–32 takter i en egen låt i 4/4 ved 40–240 BPM og forhåndsvis akkordvalgene. Forslagene sorteres etter hvor lenge melodien ligger på akkordtoner; dette er teorihjelp, ikke en kvalitetskarakter. Takter uten toner beholder den første eksisterende akkorden. Keep this as a section variation lager en idé utenfor låtformen og bevarer arrangementet og gitarens tidslinje. Legg variasjonen inn i formen i Compose for å høre den. Undo og en navngitt versjon bevarer låten før endringen; Save lagrer på disk. Analysefunksjonen skisserer utholdte enkelttoner; akkorder, effekter og gjentatte anslag på samme tone kan gi feil.
+Åpne Dette gjør melodi om til harmonier øverst i Write. Velg et isolert opptak av nynning eller enkelttoner på gitar, et startpunkt og 0,1–60 sekunder, og trykk Extract these notes i skrivebordsappen. Kildefilen kan være høyst to minutter og 64 MB. Rett notelisten: én linje per tone, for eksempel A4 0 0.5 (tone, start i sekunder fra det valgte utdraget, varighet i sekunder; bruk punktum som desimalskilletegn). Manuell innskriving fungerer også i nettleseren. Velg en seksjon på 1–32 takter i en egen låt i 4/4 ved 40–240 BPM og forhåndsvis akkordvalgene. Forslagene sorteres etter hvor lenge melodien ligger på akkordtoner; dette er teorihjelp, ikke en kvalitetskarakter. Takter uten toner beholder den første eksisterende akkorden. Keep this as a section variation lager en idé utenfor låtformen og bevarer arrangementet og gitarens tidslinje. Legg variasjonen inn i formen i This is Compose. for å høre den. Undo og en navngitt versjon bevarer låten før endringen; Save lagrer på disk. Analysefunksjonen skisserer utholdte enkelttoner; akkorder, effekter og gjentatte anslag på samme tone kan gi feil.
 
-## Låttekst og Song Lab
+## This is Lyrics. og Song Lab
 
-### Skriv ord til musikken
+### This is Skriv ord til musikken.
 
-Velg Lyrics og en seksjon i This is the song map Write words for this section lagrer inntil 12 000 UTF-16-tegn sammen med seksjonen; This is the phrase reference ved siden av viser akkordene. This is the song notebook samler ideer, bilder og fremføringsnotater. Gjentatte seksjoner deler tekst; Make this variation skiller dem. Save this song lagrer begge, og Undo/Versions tar dem med.
+Velg This is Lyrics. og en seksjon i This is the song map Write words for this section lagrer inntil 12 000 UTF-16-tegn sammen med seksjonen; This is the phrase reference ved siden av viser akkordene. This is the song notebook samler ideer, bilder og fremføringsnotater. Gjentatte seksjoner deler tekst; Make this variation skiller dem. Save this song lagrer begge, og Undo/This is Versions. tar dem med.
 
 ### Be om et nyttig forslag
 
-Song Lab ligger under Compose og Lyrics. Velg These are alternative chords, This is a contrasting bridge, This is a lyric seed or This is arrangement feedback. Beskriv et musikalsk mål, for eksempel: «Gi plass til vokal; la siste refreng føles mer åpent.» Generate this idea bruker valgt AI-tilkobling. Rediger foreslått tekst og akkorder før du bruker dem. Låttekst legges til valgt seksjon; råd havner i notatboken. En bro legges til som en seksjon sist i formen og kan flyttes.
+Song Lab ligger under This is Compose. og This is Lyrics. Velg These are alternative chords, This is a contrasting bridge, This is a lyric seed or This is arrangement feedback. Beskriv et musikalsk mål, for eksempel: «Gi plass til vokal; la siste refreng føles mer åpent.» Generate this idea bruker valgt AI-tilkobling. Rediger foreslått tekst og akkorder før du bruker dem. Låttekst legges til valgt seksjon; råd havner i notatboken. En bro legges til som en seksjon sist i formen og kan flyttes.
 
 ### Hva AI-en vet
 
 Song Lab får akkordskjema, seksjonsinnstillinger, tekst/notater og valgt kontekst, ikke innspilt lyd. Den kan ikke vurdere gitarlyden eller om et opptak låter bra. Når du bruker et forslag, valideres svaret og en tidligere versjon beholdes; lagre etterpå. Endres låten under forespørselen, avvises det gamle forslaget. Ugyldige, avkortede eller mislykkede svar lar låten være uendret.
 
-## Fang ideer, ta opp og legg gitarlag
+## This is Fang ideer, ta opp og legg gitarlag.
 
 ### Ta vare på det du nettopp spilte
 
-Velg 15, 30 eller 60 sekunder i Record & layers, og trykk Arm this capture før du spiller. Keep that take. H is the shortcut eller en innlært pedal lagrer den siste bufferen som et opptak. Fangsten skjer lokalt. Dette er ikke automatisk transkripsjon, og lyd fra før aktivering kan ikke hentes tilbake. Når du slår av fangsten, tømmes bare den ulagrede bufferen. Lagrede ideer blir liggende blant opptakene.
+Velg 15, 30 eller 60 sekunder i This is Record & layers., og trykk Arm this capture før du spiller. Keep that take. H is the shortcut eller en innlært pedal lagrer den siste bufferen som et opptak. Fangsten skjer lokalt. Dette er ikke automatisk transkripsjon, og lyd fra før aktivering kan ikke hentes tilbake. Når du slår av fangsten, tømmes bare den ulagrede bufferen. Lagrede ideer blir liggende blant opptakene.
 
 ### Beskjær og plasser et lag
 
@@ -82,13 +82,13 @@ Legg til et opptak som gitarlag. Still inn start/slutt i sekunder, første takt,
 
 Record this take i Write lagrer og laster låten, starter på takt 1 uten opptelling og tar opp valgt gitarinngang mens bandet og tidligere lag spiller. Save this take avslutter. Tempo- og låtendringer sperres under opptak. Eksisterende lag flettes ikke destruktivt inn i den nye gitarinngangen. Opptaket beholder et øyeblikksbilde av låten.
 
-Bare valgt inngangskanal tas opp, ikke tørre og prosesserte HeadRush-kanaler samtidig. Lytt til gitaren gjennom maskinvaren. Kontroller inngangsnivå, kanal og gitar-offset før viktige opptak. Measure loopback i Settings med en kabel fra utgang til gitarinngang, eller enter the guitar offset.
+Bare valgt inngangskanal tas opp, ikke tørre og prosesserte HeadRush-kanaler samtidig. Lytt til gitaren gjennom maskinvaren. Kontroller inngangsnivå, kanal og gitar-offset før viktige opptak. Measure this loopback i Settings med en kabel fra utgang til gitarinngang, eller enter the guitar offset.
 
-## Finish: sterkere egne låter
+## This is Finish. sterkere egne låter
 
 ### Se hva som trenger oppmerksomhet
 
-Åpne Write → Finish. Gjennomgangen sjekker arbeidstittelen, ubrukte seksjoner, like bandinnstillinger i naboseksjoner, manglende opptak, ugyldige utsnitt og gitarlag som går utenfor låtformen. Slå på Include lyric reminders for en låt med vokal. Instrumentale seksjoner er helt greit; påminnelsene er forslag, aldri en kvalitetskarakter.
+Åpne Write → This is Finish. Gjennomgangen sjekker arbeidstittelen, ubrukte seksjoner, like bandinnstillinger i naboseksjoner, manglende opptak, ugyldige utsnitt og gitarlag som går utenfor låtformen. Slå på Include lyric reminders for en låt med vokal. Instrumentale seksjoner er helt greit; påminnelsene er forslag, aldri en kvalitetskarakter.
 
 Gjennomgangen leser låtdata og opptaksmetadata. Den lytter ikke til musikken og beviser ikke at en lydfil fortsatt finnes på disken. Oppdater Sessions etter å ha gjenopprettet filer, og lytt før du tar kreative valg.
 
@@ -102,21 +102,21 @@ Se tabellen med nåværende og foreslåtte verdier, og velg Keep this variation 
 
 ### Sett sammen en seksjonskomp
 
-Spill inn flere fremføringer av samme original i Record & layers. Hvert opptak må starte ved takt 1 og nå slutten av seksjonen du vil bruke. I Finish velger du seksjonsforekomsten, deretter Choose the performance. Listen to this selection og deretter Use this performance. Gjenta for andre seksjoner for å sette sammen fremføringen du foretrekker.
+Spill inn flere fremføringer av samme original i This is Record & layers. Hvert opptak må starte ved takt 1 og nå slutten av seksjonen du vil bruke. I This is Finish. velger du seksjonsforekomsten, deretter Choose the performance. Listen to this selection og deretter Use this performance. Gjenta for andre seksjoner for å sette sammen fremføringen du foretrekker.
 
 Kompatibilitet krever et opptaksøyeblikksbilde fra denne originalen med samme tempo, toneart, taktart og utvidede akkordtidslinje. Endringer i bandintensitet, seksjonsnavn eller gitarlag påvirker ikke tidslinjen. Nylig fangede ideer, andre låter, for korte opptak og eldre øyeblikksbilder uten nok informasjon utelates med en forklaring. Lyden strekkes, transponeres eller genereres ikke.
 
-Kompen er et vanlig gitarlag med et utsnitt som dekker akkurat disse taktene i kildeopptaket. Et nytt opptak for samme taktområde erstatter bare den kompen; andre lag er fortsatt hørbare og kan overlappe. Sjekk Record & layers hvis du hører dobbel gitar. Grensen er 16 lag. Senere endringer i arrangementet flytter ikke klipp automatisk; kontroller formen og utsnittene på nytt. Spill inn den sammensatte låten for å lage et opptak til Sessions og DAW-eksport.
+Kompen er et vanlig gitarlag med et utsnitt som dekker akkurat disse taktene i kildeopptaket. Et nytt opptak for samme taktområde erstatter bare den kompen; andre lag er fortsatt hørbare og kan overlappe. Sjekk This is Record & layers. hvis du hører dobbel gitar. Grensen er 16 lag. Senere endringer i arrangementet flytter ikke klipp automatisk; kontroller formen og utsnittene på nytt. Spill inn den sammensatte låten for å lage et opptak til Sessions og DAW-eksport.
 
 ### Behold muligheten til å angre
 
 Hver beholdte variant eller gitarkomp oppretter først en navngitt versjon av den forrige låten. Endringen kan også angres med Undo. Hvis alle 20 versjonsplassene er brukt, må du fjerne en ubrukt versjon før du bruker et nytt eksperiment. Lagre låten for å beholde både resultatet og den gamle versjonen på disken. Versjoner inneholder låtdata, ikke kopier av lydfilene; behold kildeopptakene.
 
-## Lagre, angre og behold versjoner
+## This is Lagre, angre og behold versjoner.
 
 ### Tre ulike sikkerhetsnett
 
-Undo/Redo dekker nylige innholdsendringer i minnet. Navngitte Versions er kontrollpunkter i låten med akkorder, innstillinger, tekst og lagreferanser. Save this song skriver gjeldende dokument og versjonene til disk. En versjon du beholder uten å lagre er ikke varig. Gjenoppretting av en versjon kan også angres. Fjern en ubrukt versjon når grensen på 20 er nådd. Et drag på en glidebryter eller sammenhengende skriving i ett felt teller som ett Undo-steg, slik at ekte redigeringer ikke skyves ut av historikken på 50 steg.
+Undo/Redo dekker nylige innholdsendringer i minnet. Navngitte This is Versions. er kontrollpunkter i låten med akkorder, innstillinger, tekst og lagreferanser. Save this song skriver gjeldende dokument og versjonene til disk. En versjon du beholder uten å lagre er ikke varig. Gjenoppretting av en versjon kan også angres. Fjern en ubrukt versjon når grensen på 20 er nådd. Et drag på en glidebryter eller sammenhengende skriving i ett felt teller som ett Undo-steg, slik at ekte redigeringer ikke skyves ut av historikken på 50 steg.
 
 ### Konflikter og endringer under lagring
 
@@ -126,23 +126,23 @@ En diskrevisjon hindrer at ett vindu overskriver et annet uten varsel. Hvis file
 
 Lagre før du lukker. Skrivebordsappen hindrer lukking under opptak/arbeid og spør om ulagrede låt-, skjema- eller filmutkast. Keep these edits lar deg lagre; Discard these edits and close forkaster ulagrede endringer. Avslutning fra appmenyen eller med Cmd+Q på Mac går gjennom samme kontroll. Vern mot ny innlasting av nettleseren avhenger av nettleseren. Forrige fil beholdes som sikkerhetskopi ved lagring, men en slik kopi er ikke en full versjonshistorikk. Kopier hele brukermappen til et annet sted for en ordentlig sikkerhetskopi.
 
-## Stage: spill og øv
+## This is Stage. spill og øv
 
 ### Fremføring
 
 Uten innlastet skjema viser Stage Pick a chart or a song. Or hold PTT and tell Jo. Live PTT er ikke konfigurert. Go to this Library og Open these Songs åpner de rommene. Manglende lydpakke tilbyr Open this First run. Tapt lydenhet tilbyr Open these audio devices. Provider off tilbyr Open these AI settings. The charts are loading vises mens skjemaer hentes.
 
-Transportlinjen øverst spiller av, pauser, stopper, tar opp, velger opptelling og slår av/på løkker. Stage viser gjeldende/neste akkord og posisjon. Stemmeapparatet starter av, så tempo og takt forblir synlige. Transporttempo klemmes til 20–300 BPM; skjemaer, Write og øvingslisten holder 40–240. These are the chart and band settings. Det panelet velger skjema og passende stil, endrer intensitet og band-/klikkvolum og aktiverer stemmeapparat eller referansetone. Kilde forblir jam-bandet eller ber om Lyria RealTime. Jo kan kalle lyria_vibe for å endre prompts og generate_track for en Lyria 3- eller ElevenLabs-fil; begge forblir ikke konfigurert uten nøkkel. Uten Google Gemini-nøkkel, JAM_LIVE=1 og en innspilt leverandørøkt forblir Lyria ikke konfigurert og åpner aldri en WebSocket; WebView spiller aldri den strømmen. Starter du bandet eller en sang, stopper Lyria, og starter du Lyria, stopper bandet. Lyria-BPM er en forespørsel, ikke bandklokken. Cues ber om Fill, Crash, Stop eller Ending. Noen endringer venter til neste takt og vises som ventende. Mute gjelder trommer, bass eller komp; follow-energy følger målt gitarnivå, ikke musikalsk hensikt. Shapes viser et spillbart grep for gjeldende akkord og, mindre, neste akkord, med grunntonen i gult; nummerknappene velger et annet grep. Dette er teoriforslag i standardstemming, ikke en transkripsjon av det som ble spilt.
+Transportlinjen øverst spiller av, pauser, stopper, tar opp, velger opptelling og slår av/på løkker. Stage viser gjeldende/neste akkord og posisjon. Stemmeapparatet starter av, så tempo og takt forblir synlige. Transporttempo klemmes til 20–300 BPM; skjemaer, Write og øvingslisten holder 40–240. These are the chart and band settings. Det panelet velger skjema og passende stil, endrer intensitet og band-/klikkvolum og aktiverer stemmeapparat eller referansetone. Kilde forblir jam-bandet eller ber om Lyria RealTime. Jo kan kalle lyria_vibe for å endre prompts og generate_track for en Lyria 3- eller ElevenLabs-fil; begge forblir ikke konfigurert uten nøkkel. Uten Google Gemini-nøkkel, JAM_LIVE=1 og en innspilt leverandørøkt forblir Lyria ikke konfigurert og åpner aldri en WebSocket; WebView spiller aldri den strømmen. Starter du bandet eller en sang, stopper Lyria, og starter du Lyria, stopper bandet. Lyria-BPM er en forespørsel, ikke bandklokken. Cues ber om Fill this., Crash this., Stop this. eller Ending this. Noen endringer venter til neste takt og vises som ventende. Mute gjelder trommer, bass eller komp; follow-energy følger målt gitarnivå, ikke musikalsk hensikt. Shapes viser et spillbart grep for gjeldende akkord og, mindre, neste akkord, med grunntonen i gult; nummerknappene velger et annet grep. Dette er teoriforslag i standardstemming, ikke en transkripsjon av det som ble spilt.
 
 Hvis du laster et akkordskjema med en annen taktart under opptelling, starter opptellingen på nytt i den nye taktarten før bandet kommer inn. Samme taktart beholder posisjonen i opptellingen. Etter opptellingen starter avspillingen ved den valgte takten. Hvis spillehodet står ved begynnelsen og en løkke er aktiv, starter bandet ved løkkens start. Et nytt trykk på Play under opptelling starter den ikke på nytt; velger du en annen takt, endres stedet der bandet kommer inn.
 
 ### Øving og tempotrening
 
-Practice viser partier fra det innlastede skjemaet. Velg ett for å repetere taktintervallet, inkludert gjentakelser. Exit this loop går tilbake til hele formen. Velg starttempo, måltempo, temposteg og hvor ofte tempoet endres i tempotreneren, aktiver og trykk Play fra stopp. Tempoet justeres etter valgt antall spilte takter, også i korte løkker; et aktivt opptak endres ikke. Styringen bruker UI-telemetri og er ikke et samplenøyaktig spor for tempoautomasjon.
+This is Practice. viser partier fra det innlastede skjemaet. Velg ett for å repetere taktintervallet, inkludert gjentakelser. Exit this loop går tilbake til hele formen. Velg starttempo, måltempo, temposteg og hvor ofte tempoet endres i tempotreneren, aktiver og trykk Play fra stopp. Tempoet justeres etter valgt antall spilte takter, også i korte løkker; et aktivt opptak endres ikke. Styringen bruker UI-telemetri og er ikke et samplenøyaktig spor for tempoautomasjon.
 
 ### Nivå, stemming og taktart
 
-Perform og Levels viser begge inngangs- og masternivå. Live nivåoppdateringer kjører bare på synlig visning. There is no audio eller headless betyr at redigeringen fungerer, men at faktisk lyd ikke er bekreftet. Stemmeapparatet anslår tonehøyde fra valgt inngang; bruk en ren, stabil enkelttone fremfor en akkord. Slå av referansetonen før opptak.
+This is Perform. og This is Levels. viser begge inngangs- og masternivå. Live nivåoppdateringer kjører bare på synlig visning. There is no audio eller headless betyr at redigeringen fungerer, men at faktisk lyd ikke er bekreftet. Stemmeapparatet anslår tonehøyde fra valgt inngang; bruk en ren, stabil enkelttone fremfor en akkord. Slå av referansetonen før opptak.
 
 Motoren teller slag etter nevneren: 6/8 ved 60 BPM gir seks sekunder per takt. Stil og skjema må ha samme taktart. Write bruker fortsatt 4/4; øvrige støttede taktarter hører til skjema/Stage. MIDI- og REAPER-eksport konverterer dette til firedels-BPM.
 
@@ -150,7 +150,7 @@ Motoren teller slag etter nevneren: 6/8 ved 60 BPM gir seks sekunder per takt. S
 
 Åpne This is the rehearsal setlist øverst i Stage. Velg et akkordskjema fra Library, eventuelt en groove i skjemaets taktart (ellers skjemaets egen standard), tempo (40–240 BPM) og opptelling (0–4 takter), og trykk Add this to the setlist. Inntil 32 oppføringer lagres umiddelbart i innstillingene. Edit this entry henter en oppføring til kontrollene; Update this entry lagrer nytt skjema, groove, tempo og opptelling. Bruk Cue igjen for å bruke det nye oppsettet. Move this up og Remove this entry endrer rekkefølgen. Cue klargjør en oppføring: stopper avspilling, laster skjemaet, setter oppføringens groove (eller skjemaets standard), tempo og opptelling, slår av løkke og tempotrener og går til første takt. Avspillingen starter ikke automatisk. Trykk Play når du er klar, eller Cue the next entry for neste oppføring. Manglende skjemaer må gjenopprettes i Library eller fjernes fra listen. Du kan ikke bytte mens du tar opp. Nettleservisningen beholder oppføringer bare til siden lastes på nytt og spiller ingen lyd.
 
-## Library: akkordskjemaer og grooves
+## This is Library. akkordskjemaer og grooves
 
 ### Finn, rediger og spill
 
@@ -168,7 +168,7 @@ Egne skjemaer, stiler og riggprofiler ligger i separate mapper under brukermappe
 
 Velg den åpne egne låten eller et skjema fra Library i This is harmonic discovery. Treffene har noen av de samme bevegelsene mellom akkordenes grunntoner og akkordtyper i samme taktart, selv i en annen toneart. Listen viser de konkrete bevegelsene; dette er ikke likhetsprosenter eller påstander om at låtene høres like ut. Study this in Stage klargjør et treff uten å starte avspilling. Ingen skyforespørsel eller lydanalyse brukes. Legg til flere skjemaer hvis du ikke får treff.
 
-## Jo AI og installerte agenter
+## This is Jo AI. og installerte agenter
 
 ### Kommandoer og endringer du godkjenner
 
@@ -176,7 +176,7 @@ Jo AI tar imot skrevne bandkommandoer. En tom chat sier Type a command or tap a 
 
 ### Snakk med Jo
 
-Lagre en ElevenLabs-nøkkel i AI & models i skrivebordsappen, og start en fungerende fysisk lydutgang. Åpne Jo AI → Open the voice setup, velg mikrofon, skriv inn en stemme-ID (eller bruk Load these voices.), velg hvor mye bandet skal dempes, og trykk Save this voice setup. Mikrofonen bruker første inngangskanal. Et grensesnitt med bare gitarinngang er ikke en talemikrofon. Taleoppsettet er atskilt fra gitarinngangen.
+Lagre en ElevenLabs-nøkkel i These are the AI and models. i skrivebordsappen, og start en fungerende fysisk lydutgang. Åpne Jo AI → Open the voice setup, velg mikrofon, skriv inn en stemme-ID (eller bruk Load these voices.), velg hvor mye bandet skal dempes, og trykk Save this voice setup. Mikrofonen bruker første inngangskanal. Et grensesnitt med bare gitarinngang er ikke en talemikrofon. Taleoppsettet er atskilt fra gitarinngangen.
 
 Hold this to talk med pekeren, eller hold Space/Enter mens knappen har fokus. Når du slipper, sendes opptaket til ElevenLabs for transkripsjon. Jo bruker så valgt tekstmodell eller støttede frakoblede engelske kommandoer og leser opp det faktiske resultatet. Forslag til låtendringer krever fortsatt gjennomgang. Et nytt trykk mens Jo snakker avbryter talen. Opptak stopper automatisk etter 20 sekunder; Cancel forkaster ventende resultater, og et aktivt mikrofonopptak avbrytes når du bytter til et annet vindu. Allerede utførte kommandoer beholdes. Innsendte forespørsler kan fortsatt faktureres; appen prøver aldri automatisk på nytt.
 
@@ -190,7 +190,7 @@ Taleforbruk viser innsendte STT-sekunder og TTS-tegn, også for mislykkede eller
 
 ### Koble til en tekst-API
 
-Velg Gemini, OpenAI, Claude API eller OpenRouter i Settings → AI & models. Lagre riktig API-nøkkel, velg en kompatibel modell-ID og trykk Save these AI settings. Load these provider models henter en katalog; ikke alle oppførte modeller er garantert kompatible. Test this model sender en liten fakturerbar forespørsel bare når du trykker. Jo og Song Lab deler valget. En feil bytter ikke skjult til en annen betalt leverandør. Enkle støttede engelske kommandoer kan fortsatt fungere lokalt.
+Velg Gemini, OpenAI, Claude API eller OpenRouter i Settings → These are the AI and models. Lagre riktig API-nøkkel, velg en kompatibel modell-ID og trykk Save these AI settings. Load these provider models henter en katalog; ikke alle oppførte modeller er garantert kompatible. Test this model sender en liten fakturerbar forespørsel bare når du trykker. Jo og Song Lab deler valget. En feil bytter ikke skjult til en annen betalt leverandør. Enkle støttede engelske kommandoer kan fortsatt fungere lokalt.
 
 ### Bruk Codex eller Claude Code inne i appen
 
@@ -208,7 +208,7 @@ Les handlingsresultatet: Jo viser motorens avvisning i stedet for å melde at ha
 
 Skriv et konkret mål og trykk Ask these three perspectives. Én forespørsel går til valgt Jo-leverandør eller installert agent og gir forslag om komposisjon, arrangement og fremføring. Akkordskjema, form, sangtekst, notater og bandinnstillinger sendes, aldri gitarklipp, lydbilde-snapshot eller blåkopier; ingen lyd sendes eller blir hørt. En forespørsel over 48 000 tegn avvises før noe sendes. Cancel avbryter ventingen: en installert agent stoppes, mens et API-svar som allerede er sendt inn forkastes uten refusjon. Vinduet kan lukkes mens en forespørsel venter. API-kostnader eller abonnementets bruksgrenser kan gjelde. Draft this in Jo legger ett eksperiment i samtalefeltet for gjennomgang; det sendes aldri automatisk og overskriver ikke en eksisterende kladd. Keep this in the song notes legger til ett forslag med versjons- og angrebeskyttelse. Be om nye råd når låten er endret. Manglende oppsett og ugyldige svar gir en feilmelding; ingen ekstra betalt reserveforespørsel kjøres.
 
-## Songs: mikser og referanser
+## This is Songs. mikser og referanser
 
 ### Importer og lytt
 
@@ -296,17 +296,17 @@ For eldre lyd: åpne This is the local file i Songs og velg Keep these song file
 
 En skadet eller ukjent versjon av song.json vises som en advarsel i biblioteket; appen bruker ikke en eldre mediekopi med samme ID i stillhet. Gjenopprett en kjent god sikkerhetskopi eller rett filen som er navngitt. Manglende stems kan omgås med Load this original mix. Endret kildelyd må importeres som en ny sang. Lyddekoding er innebygd; automatisk leverandøranalyse er et separat arbeid.
 
-## AI Music og lokale modeller
+## This is AI Music. og lokale modeller
 
 ### Generer med et bevisst valg
 
-Velg Create music, en katalogoppføring og en redigerbar modell-ID. Beskriv arrangement, instrumenter, stemning og eventuell tekstretning. Prompt starters endrer bare teksten. Velg ønsket lengde og instrumentalmodus der det støttes. Generate sender forespørselen uttrykkelig og kan bruke API-kreditter. Modellenes egenskaper og kontotilgang varierer; en redigerbar ID må fortsatt passe adapterens protokoll. Katalogen er konfigurasjon, ikke en kvalitetsrangering.
+Velg This is Create music., en katalogoppføring og en redigerbar modell-ID. Beskriv arrangement, instrumenter, stemning og eventuell tekstretning. Prompt starters endrer bare teksten. Velg ønsket lengde og instrumentalmodus der det støttes. Generate sender forespørselen uttrykkelig og kan bruke API-kreditter. Modellenes egenskaper og kontotilgang varierer; en redigerbar ID må fortsatt passe adapterens protokoll. Katalogen er konfigurasjon, ikke en kvalitetsrangering.
 
 ### Tilkoblinger og jobbkvitteringer
 
 Katalogen omfatter Google-musikk/video, ElevenLabs-musikk, MiniMax-musikk, video via Runway og lokale ComfyUI-alternativer for lyd/video, også kinesiske modellfamilier. Velg tilkoblingen oppføringen oppgir; modellnavnet alene sier ikke hvilken API-nøkkel som trengs. Bekreft aktuell tilgang før du baserer et prosjekt på modellen.
 
-Library & jobs beholder jobbkvitteringer. Refresh this job sjekker en eksisterende jobb og sender den aldri inn på nytt. Ukjent resultat etter et avbrudd betyr at du bør sjekke leverandørhistorikken før ny generering. Forespørselen kan allerede være belastet. Oppdater mediebiblioteket når resultatet er klart.
+This is Library & jobs. beholder jobbkvitteringer. Refresh this job sjekker en eksisterende jobb og sender den aldri inn på nytt. Ukjent resultat etter et avbrudd betyr at du bør sjekke leverandørhistorikken før ny generering. Forespørselen kan allerede være belastet. Oppdater mediebiblioteket når resultatet er klart.
 
 Mottatt lyd lagres og analyseres lokalt før jobben blir klar. AI Music åpner en ferdig sang i Stage med avspillingen stoppet; trykk Play når du er klar. Det samme skjer når Refresh this job fullfører en lagret forespørsel. Film beholder resultatet som lydspor. FFmpeg trengs ikke for lydimport, generering eller analyse.
 
@@ -322,13 +322,13 @@ Krav til GPU og kjøremiljø varierer, og noen modeller krever CUDA fremfor Mac-
 
 Velg Faithful, Stripped eller Reimagined som et redigerbart utgangspunkt. Build this arrangement brief setter sammen toneart, tempo, taktart, form, akkorder og bandintensitet fra den åpne låten lokalt. Instrumental utelater sangtekst; slå det av for å ta med seksjonenes tekster. Les og rediger beskrivelsen før Use this prompt in AI Music. Dette erstatter bare prosjektets genereringsbeskrivelse og instrumentalvalg; modell og varighet beholdes. Beskrivelsen er et musikalsk ønske, ingen garanti for taktnøyaktig resultat. Den må være under 4 000 tegn; modellens egne grenser gjelder fortsatt. Ingen betalt forespørsel kjøres før du velger Generate i de vanlige kontrollene. Medieverktøyets Undo gjenoppretter forrige beskrivelse; Save this project beholder den.
 
-## Film: fra lydspor til musikkvideo
+## This is Film. fra lydspor til musikkvideo
 
 ### Velg et rent lydspor
 
-Soundtrack velger importert/generert lyd, eller Use this take fra et lagret studioopptak. Use this take lager en ren startmiks av band, tørr gitar og umutede gitarlag, uten monitor/master som kan inneholde klikk og referansetone. Inngangene gjennomsnittsmikses for headroom; dette er ikke en mastret utgivelse. Til en ferdig film kan du importere sluttmiksen fra DAW via Songs.
+This is Soundtrack. velger importert/generert lyd, eller Use this take fra et lagret studioopptak. Use this take lager en ren startmiks av band, tørr gitar og umutede gitarlag, uten monitor/master som kan inneholde klikk og referansetone. Inngangene gjennomsnittsmikses for headroom; dette er ikke en mastret utgivelse. Til en ferdig film kan du importere sluttmiksen fra DAW via Songs.
 
-### Storyboard og videomateriale
+### This is Storyboard. og videomateriale
 
 Velg tittel, kreativ retning og liggende 16:9 eller stående 9:16. Build these cuts from the song sections bruker opptakets lagrede skjema eller åpen Write-låt, og tilpasser firetakters klipp til lydsporets lengde. Legg til/rediger klipp manuelt ved behov. Hvert klipp har tittel, prompt, tidslinjelengde, modell, ønsket genereringslengde, videofil og startpunkt i filen. Korte filer gjentas; lange beskjæres.
 
@@ -336,7 +336,7 @@ Let the selected brain direct this gir redigerbare klippbeskrivelser fra tekst/t
 
 ### Lagre og rendre
 
-Save video lagrer prosjektinnstillinger og lokal modellkonfigurasjon. Render & jobs viser manglende video, manglende lydspor og lengdeavvik. Fit all these cuts to the song length skalerer klipplengder proporsjonalt. Render this music video krever alle klipp og en tidslinje som passer. Resultatet er 720p, 30 bilder/s, beskåret til valgt format, med lydspor i 48 kHz AAC; lyd fra genererte videoklipp fjernes. Originale lydfiler beholdes separat.
+Save video lagrer prosjektinnstillinger og lokal modellkonfigurasjon. This is Render & jobs. viser manglende video, manglende lydspor og lengdeavvik. Fit all these cuts to the song length skalerer klipplengder proporsjonalt. Render this music video krever alle klipp og en tidslinje som passer. Resultatet er 720p, 30 bilder/s, beskåret til valgt format, med lydspor i 48 kHz AAC; lyd fra genererte videoklipp fjernes. Originale lydfiler beholdes separat.
 
 Forhåndsvisningen i appen er lydløs. Play this film with sound åpner systemets spiller. Cancel stopper lokal rendring; den kan ikke trekke tilbake en innsendt skygenerering. Ferdige eksporter og prosjektkopier ligger under music-videos/exports. Grensene er 120 klipp, 0,1–120 sekunder per klipp og ti minutter totalt. Undo gjenoppretter endringer og beholder diskrevisjonen.
 
@@ -344,7 +344,7 @@ Forhåndsvisningen i appen er lydløs. Play this film with sound åpner systemet
 
 Angi lydsporets BPM, klippavstand i taktslag og hvor første slag starter (0–10 sekunder). Preview these aligned cuts flytter indre klippepunkter til nærmeste punkt i rutenettet. Siste klipp beholder opprinnelig slutt, slik at totalvarighet og kildeklippenes startpunkter er uendret. Et rutenett som fjerner et klipp eller bryter grensen på 0,1–120 sekunder per klipp, avvises: velg tettere slag eller juster korte klipp. Apply bruker eksisterende Undo og Save for medieprosjektet. Verktøyet bruker tempoet du oppgir, ikke automatisk anslagsanalyse, og forutsetter jevnt tempo. Eksporten sjekker fortsatt kildelengdene; et lengre klipp kan kreve mer opptak.
 
-## Sessions og eksport til DAW
+## This is Sessions. og eksport til DAW
 
 ### Finn opptaket du vil beholde
 
@@ -366,7 +366,7 @@ Hvis diskskrivingen ikke kan ta imot lyd, slutter opptaksindikatoren å pulsere,
 
 ### Justering og separate spor
 
-Opptaket kobler gitarinngangen til bandrammene som sendes til lydutgangen. Save this take venter kort på lyd som allerede ligger i kø før filene lukkes. Hvis lydstrømmen eller opptakskøen mister rammer, lagrer du det delvise opptaket og løser det meldte problemet før du tar opp igjen. Enter the guitar offset er rundturen i sampler. Measure loopback i Settings eller Sessions spiller tre klikk og lytter på gitarinngangen gjennom en kabel (eller Scarlett Loopback); ta ut kabelen etterpå. Uten sløyfe viser appen et anslag på 2× buffer og endrer ikke en headless/fil-offset. Du kan fortsatt Enter the guitar offset. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.
+Opptaket kobler gitarinngangen til bandrammene som sendes til lydutgangen. Save this take venter kort på lyd som allerede ligger i kø før filene lukkes. Hvis lydstrømmen eller opptakskøen mister rammer, lagrer du det delvise opptaket og løser det meldte problemet før du tar opp igjen. Enter the guitar offset er rundturen i sampler. Measure this loopback i Settings eller Sessions spiller tre klikk og lytter på gitarinngangen gjennom en kabel (eller Scarlett Loopback); ta ut kabelen etterpå. Uten sløyfe viser appen et anslag på 2× buffer og endrer ikke en headless/fil-offset. Du kan fortsatt Enter the guitar offset. Nye fulle opptak inneholder separat gitar, trommer, bass og komp, band-/masterreferanser, planlagte bandnoter i MIDI, tempokart og øyeblikksbilde av fremføringen. Refererte gitarlag eksporteres som justerte WAV-filer. Fangede enkeltideer rekonstruerer ikke band-MIDI. Manglende filer rapporteres i eksportresultatet.
 
 ### Logic og andre musikkprogrammer
 
@@ -382,11 +382,11 @@ Når alle nødvendige spor finnes, inkluderer eksporten også Import into REAPER
 
 Velg to ulike opptak av samme skjema og tempo. Sett et identisk utdrag på 0,1–60 sekunder som finnes i begge, og trykk Start this blind comparison. A og B tildeles tilfeldig og navnene skjules. Listen A/B spiller bare gitarlyden ved uendret nivå; lydstyrken normaliseres ikke. Stop avslutter avspillingen. Reveal these identities viser hvilket opptak som var hvilket. Keep A/B markerer det valgte opptaket som favoritt og avslører navnet uten å endre eller slette det andre. Start this new comparison starter en ny runde. Slettede eller flyttede kildefiler må gjenopprettes før lytting; lyd krever skrivebordsappen.
 
-## Rigg og håndfri styring
+## This is Rig. og håndfri styring
 
 ### Koble til riktig MIDI-forbindelse
 
-Uten porter viser Rig No MIDI output found. Plug in the interface. En forsvunnet port sier MIDI port disappeared og ber deg søke på nytt eller velge en annen. Begge bannerne har Rescan, som åpner Connection & MIDI og oppdaterer listen. Åpne Rig → Connection & MIDI, søk på nytt og velg riktig utgang. Check this virtual MIDI sender to programendringer gjennom en loopMIDI- eller IAC-port når JAM_LIVE=1 navngir den porten, eller gjennom minnemonitoren når JAM_MIDI_FIXTURE=1. Uten den porten er kommandoen ikke konfigurert. Dette hevder ikke HeadRush eller Black Spirit. Velg maskinvareprofil og kontroller MIDI-kanalen på enheten. Uten en aktiv port vises meldingene bare i monitoren. Sceneknapper sender profilens Program Change-/Control Change-sekvens; parameterkontroller bruker CC-kartet. Dette endrer maskinvareinnstillinger, ikke gitarbehandling i programvaren. Prøv én scene med lavt volum før en økt.
+Uten porter viser Rig No MIDI output found. Plug in the interface. En forsvunnet port sier MIDI port disappeared og ber deg søke på nytt eller velge en annen. Begge bannerne har Rescan this, som åpner This is Connection and MIDI. og oppdaterer listen. Åpne Rig → This is Connection and MIDI., søk på nytt og velg riktig utgang. Check this virtual MIDI sender to programendringer gjennom en loopMIDI- eller IAC-port når JAM_LIVE=1 navngir den porten, eller gjennom minnemonitoren når JAM_MIDI_FIXTURE=1. Uten den porten er kommandoen ikke konfigurert. Dette hevder ikke HeadRush eller Black Spirit. Velg maskinvareprofil og kontroller MIDI-kanalen på enheten. Uten en aktiv port vises meldingene bare i monitoren. Sceneknapper sender profilens Program Change-/Control Change-sekvens; parameterkontroller bruker CC-kartet. Dette endrer maskinvareinnstillinger, ikke gitarbehandling i programvaren. Prøv én scene med lavt volum før en økt.
 
 ### Seksjonsautomasjon
 
@@ -394,7 +394,7 @@ Koble navngitte skjemaseksjoner til scener, og aktiver følging når du er klar.
 
 ### Lær inn pedaler
 
-Velg MIDI-inngang i Write → Record & layers → Hands-free controls. Klikk Learn ved en handling, trykk pedalen én gang og aktiver pedalhandlinger. Innlæring lagrer uten å utføre handlingen. Du kan blant annet velge Keep this riff, Record or save this take, Play or stop this, Loop this selected section, Loop this next section og Keep this version. Fangst må være aktivert før Keep. Koblinger lagres; aktiv tilkobling og bryter velges bevisst hver økt.
+Velg MIDI-inngang i Write → This is Record & layers. → Hands-free controls. Klikk Learn ved en handling, trykk pedalen én gang og aktiver pedalhandlinger. Innlæring lagrer uten å utføre handlingen. Du kan blant annet velge Keep this riff, Record or save this take, Play or stop this, Loop this selected section, Loop this next section og Keep this version. Fangst må være aktivert før Keep. Koblinger lagres; aktiv tilkobling og bryter velges bevisst hver økt.
 
 CC utløses når verdien passerer 64 oppover; note-on utløser notekoblinger. Slipp og holdte verdier utløser ikke på nytt. Dupliserte Program Change innen 250 ms og samsvarende riggutgang som kommer i retur innen 500 ms undertrykkes. Et HeadRush-trykk for riggvalg kan også endre den fysiske tonen. Bruk et egnet MIDI-grensesnitt, og test trykk/slipp, ny tilkobling og tilbakekobling på den faktiske riggen.
 
@@ -402,17 +402,17 @@ CC utløses når verdien passerer 64 oppover; note-on utløser notekoblinger. Sl
 
 Med en egen låt åpen lagrer Capture this current tone profil-ID, scene og kontrollerverdier i låten. Save i Write lagrer på disk, og versjon og Undo bevarer forrige tilstand. Recall this snapshot to the rig kontrollerer verdiene mot installert profil før MIDI sendes til den valgte porten. Seksjonsfølging slås av, profil og scene velges, og kontrollerverdiene gjenopprettes. Slå selv på seksjonsfølging igjen når du ønsker det. Porten byttes ikke og lyden hentes ikke automatisk når en låt åpnes. En MIDI-feil kan komme etter at noen endringer allerede er utført; sjekk utstyret før du prøver igjen. Øyeblikksbildet dekker verdier Jamstudio kjenner, ikke manuelle knottendringer som enheten ikke har meldt tilbake.
 
-## Innstillinger, lyd og kostnader
+## This is Settings. lyd og kostnader
 
 ### Lydenheter
 
 Velg navn på inn-/utgangsenheter, inngangskanal og støttet bufferstørrelse. Grensesnittet nummererer kanaler fra 1; lagret konfigurasjon starter på 0. Tørr HeadRush-kanal 3 lagres derfor som 2, når driveren faktisk tilbyr den. Enhetsendringer starter lyden på nytt og lagres etter vellykket oppsett. Bruk helst ett lydkort for inn og ut. Mindre buffer kan redusere forsinkelsen, men øke utfall; bruk større buffer hvis stream errors eller input gaps øker. Motoren følger foreløpig utgangsenhetens samplingsfrekvens; konvertering til fast 48 kHz er ikke ferdig. Hvis inngang og utgang har ulik frekvens, stenges inngangen og statusen viser begge verdiene. Jamopptak, låtopptak og Keep recent idea avviser denne inngangen. Velg enheter/frekvenser som samsvarer og bruk Restart this audio; sperren fjernes etter en omstart med samsvarende frekvenser. Ingen automatisk resampling utføres.
 
-This is guitar alignment. Koble en kabel fra en utgang til gitarinngangen (eller Scarlett Loopback), velg Measure loopback og ta ut kabelen. Tre klikk spilles; målt rundtur lagres per enhet og trimmer gitarsporet. Uten sløyfe merkes resultatet som et anslag på 2× buffer. Nettleserforhåndsvisningen kan ikke måle maskinvare. Du kan fortsatt skrive inn gitar-offset.
+This is guitar alignment. Koble en kabel fra en utgang til gitarinngangen (eller Scarlett Loopback), velg Measure this loopback og ta ut kabelen. Tre klikk spilles; målt rundtur lagres per enhet og trimmer gitarsporet. Uten sløyfe merkes resultatet som et anslag på 2× buffer. Nettleserforhåndsvisningen kan ikke måle maskinvare. Du kan fortsatt skrive inn gitar-offset.
 
 ### Første oppstart og signering
 
-Settings → First run viser engangsoppsettet: lydenheter, sløyfemåling, nøkler i nøkkelringen, en virtuell MIDI-port, lydpakker, residual og Load this minus-guitar mix i Songs, Progress fra opptaksfiler og README.txt-eksport i Sessions, og deretter signering. Å åpne Logic og ekte-låt-residual på -6 dB eller bedre er ikke hevdet. Åpne siden når som helst. Den skrevne gitaristveiledningen er docs/guide/setup.md (kabling, usignert Mac-notat, feilsøking). Lydpakken assets-v1 er publisert med registrerte SHA-256 for standard-rock-kit.zip og freepats-bass-comp.zip (CC0 FreePats-bass og FM-piano). Nedlasting krever JAM_LIVE=1. Etter utpakking spiller bandet kit.json/WAV og bass.sf2/comp.sf2 fra JosefinesJamstudio/assets. En manglende pakke blir på det syntetiske settet eller sinus og sier det. Test this key er ikke konfigurert; Check this key status ser bare i operativsystemets nøkkelring. These are the diagnostics. Viser rAF-fps for lerretsmålere og spillehodet etter at Stage har tegnet. Sample this idle CPU leser denne prosessen; DESIGN ledig CPU under 3 % er ikke bevist uten en skrivebords-WebView+motor i ro. Signering og notarisering er ikke konfigurert. Installasjonsfilene forblir usignerte til en Apple Developer-konto og Windows-signering finnes. På Mac bruker du høyreklikk Åpne eller xattr -dr com.apple.quarantine. Dette er ikke et krav om en signert utgivelse.
+Settings → This is First run. viser engangsoppsettet: lydenheter, sløyfemåling, nøkler i nøkkelringen, en virtuell MIDI-port, lydpakker, residual og Load this minus-guitar mix i Songs, Progress fra opptaksfiler og README.txt-eksport i Sessions, og deretter signering. Å åpne Logic og ekte-låt-residual på -6 dB eller bedre er ikke hevdet. Åpne siden når som helst. Den skrevne gitaristveiledningen er docs/guide/setup.md (kabling, usignert Mac-notat, feilsøking). Lydpakken assets-v1 er publisert med registrerte SHA-256 for standard-rock-kit.zip og freepats-bass-comp.zip (CC0 FreePats-bass og FM-piano). Nedlasting krever JAM_LIVE=1. Etter utpakking spiller bandet kit.json/WAV og bass.sf2/comp.sf2 fra JosefinesJamstudio/assets. En manglende pakke blir på det syntetiske settet eller sinus og sier det. Test this key er ikke konfigurert; Check this key status ser bare i operativsystemets nøkkelring. These are the diagnostics. Viser rAF-fps for lerretsmålere og spillehodet etter at Stage har tegnet. Sample this idle CPU leser denne prosessen; DESIGN ledig CPU under 3 % er ikke bevist uten en skrivebords-WebView+motor i ro. Signering og notarisering er ikke konfigurert. Installasjonsfilene forblir usignerte til en Apple Developer-konto og Windows-signering finnes. På Mac bruker du høyreklikk Åpne eller xattr -dr com.apple.quarantine. Dette er ikke et krav om en signert utgivelse.
 
 ### Diagnostikk og redusert bevegelse
 
@@ -426,7 +426,7 @@ Tillat mikrofontilgang for Jamstudio på Mac når du blir spurt; valgt lydinngan
 
 ### Nøkler, modeller og forbruk
 
-AI & models inneholder leverandørvalg, redigerbare modell-ID-er, deteksjon av installerte agenter og API-nøkler. Nøkler lagres i Windows-legitimasjon eller Mac Keychain, aldri i låtdokumenter. Nøkkelfeltet tømmes etter lagring; appen viser at nøkkelen finnes uten å returnere hemmeligheten. Save these AI settings lagrer valgt modell/grenser. Modellbytte tømmer gamle prisanslag. The keychain is unavailable betyr at den lagrede nøkkelen ikke kunne kontrolleres, ikke at den mangler. Lås opp eller tillat tilgang til operativsystemets nøkkellager, og bruk Check this key status under API keys. Kontrollen leser bare om nøkkelen finnes og sender ingen betalt forespørsel. Test this key er ikke konfigurert og kaller ikke et billigste endepunkt. Mislykket sletting vises som en feil; appen hevder ikke at nøkkelen er fjernet. Jo viser feil ved mislykkede leverandørforespørsler uten å kjøre frakoblede kommandoer. En Music.ai-nøkkel kan lagres på samme måte. Live Music.ai-beats, akkorder, toneart og seksjoner er ikke konfigurert før JAM_LIVE=1 og en innspilt SUCCEEDED-jobb finnes; lokal Analyze tempo and chords er fortsatt tilgjengelig.
+These are the AI and models. inneholder leverandørvalg, redigerbare modell-ID-er, deteksjon av installerte agenter og API-nøkler. Nøkler lagres i Windows-legitimasjon eller Mac Keychain, aldri i låtdokumenter. Nøkkelfeltet tømmes etter lagring; appen viser at nøkkelen finnes uten å returnere hemmeligheten. Save these AI settings lagrer valgt modell/grenser. Modellbytte tømmer gamle prisanslag. The keychain is unavailable betyr at den lagrede nøkkelen ikke kunne kontrolleres, ikke at den mangler. Lås opp eller tillat tilgang til operativsystemets nøkkellager, og bruk Check this key status under API keys. Kontrollen leser bare om nøkkelen finnes og sender ingen betalt forespørsel. Test this key er ikke konfigurert og kaller ikke et billigste endepunkt. Mislykket sletting vises som en feil; appen hevder ikke at nøkkelen er fjernet. Jo viser feil ved mislykkede leverandørforespørsler uten å kjøre frakoblede kommandoer. En Music.ai-nøkkel kan lagres på samme måte. Live Music.ai-beats, akkorder, toneart og seksjoner er ikke konfigurert før JAM_LIVE=1 og en innspilt SUCCEEDED-jobb finnes; lokal Analyze tempo and chords er fortsatt tilgjengelig.
 
 Usage registrerer leverandør/modell/status/tid/byte, eventuelle anslag og leverandørens LLM-token, ikke prompter eller innloggingsdata. Tokengrenser og anslag i USD per million hjelper planlegging; de er ikke håndhevede kontobudsjetter eller sluttfakturaer. Sett budsjettgrenser hos leverandøren og kontroller dens kontrollpanel. Medieforespørsler og installert CLI-bruk har egne faktureringsregler.
 
@@ -436,7 +436,7 @@ Taleforbruk viser innsendte STT-sekunder og TTS-tegn, også for mislykkede eller
 
 Gi gjeldende lydoppsett et navn og trykk Save this current setup. Inntil tolv profiler beholder navn på inn- og utenhet, gitarkanal, samplingsfrekvens og bufferstørrelse i innstillingene, uten API-nøkler. Lagring med samme navn erstatter profilen. Recall krever at de lagrede enhetene og kanalen er tilgjengelige, og bruker deretter oppsettet i den innebygde lydmotoren. Feil eller stoppet motor gir en melding; sjekk enhetsinnstillingene og inngangsmåleren. Systemets standardenheter følger det som til enhver tid er valgt i operativsystemet. Remove this profile sletter bare profilen, ikke aktivt oppsett. Endringer blokkeres under opptak. Nettleserprofiler er midlertidige og kan ikke konfigurere maskinvare.
 
-## Filer, sikkerhetskopier og gjenoppretting
+## This is Files. sikkerhetskopier og gjenoppretting
 
 ### Hvor arbeidet lagres
 
@@ -452,13 +452,13 @@ For å gjenopprette en tidligere fil: kopier først skadet fil og sikkerhetskopi
 
 Uleselige låter, opptak og medieoppføringer rapporteres enkeltvis mens friske oppføringer fortsatt vises. Ugyldige brukerskjemaer hoppes over. Ved oppstart bevares skadede innstillinger først som settings.json.broken-<tidsstempel>. Deretter gjenopprettes en gyldig settings.json.bak, eller standardverdier hvis ingen gyldig kopi finnes. En melding viser hvor den skadede filen er bevart. Kontroller lydenhet og MIDI-port før avspilling. Start appen på nytt for å gjenopprette innstillinger som skades mens den kjører. Ved tilgangs- eller diskfeil må det meldte problemet løses. Ta vare på filbanen i feilmeldingen når du ber om hjelp. Opptakeren bruker en avgrenset diskkø og oppdaterer WAV-hoder jevnlig. Diskfeil rapporteres; delvise filer kan bli igjen, men regnes ikke som vellykket lagrede opptak. Mellomfiler fra rendring bruker diskplass.
 
-## Feilsøking og godkjenning i praksis
+## This is Troubleshooting. og godkjenning i praksis
 
 ### Ingen lyd, ingen inngang eller feil timing
 
 Se om Browser preview-banneret er synlig. Åpne Settings i skrivebordsappen og les Audio Engine-modus/feil før du endrer noe. Velg riktig utgang og inngang, kontroller tilbudt kanal og støtte for 48 kHz, og bruk Restart this audio. Sjekk kabler og maskinvarelytting. Hvis stemmeapparatet er stille, sjekk inngangsmålere og kanal først. Nekter et skjema å spille, må taktarten passe stilen. Lagre/stopp aktivt opptak før tidslinjeendringer.
 
-Ved feiljustert gitar kjører du Measure loopback med en kabel fra utgang til gitarinngang, eller skriver inn gitar-offset fra en kjent transient i DAW. Hvis klipp ikke passer etter tempo-/akkord-/formendring, gå tilbake til forrige versjon eller flytt/spill inn på nytt; appen strekker eller transponerer ikke gitar automatisk.
+Ved feiljustert gitar kjører du Measure this loopback med en kabel fra utgang til gitarinngang, eller skriver inn gitar-offset fra en kjent transient i DAW. Hvis klipp ikke passer etter tempo-/akkord-/formendring, gå tilbake til forrige versjon eller flytt/spill inn på nytt; appen strekker eller transponerer ikke gitar automatisk.
 
 ### Feil i AI, filer og medier
 
@@ -472,7 +472,7 @@ Før du baserer deg på en utgivelse, gjennomfør en ekte Mac-økt: tillat oppta
 
 Oppgi bygg-commit, operativsystem, enhetsnavn, kanal/buffer, skjerm/handling, nøyaktig feil, forventet resultat og en minimal låt som gjenskaper feilen. Fjern nøkler og private medier før du deler diagnostikk. Grønne tester betyr ikke at alle kontoer, GPU-er eller maskinvareenheter er testet.
 
-## Utvikler- og utvidelsesveiledning
+## This is Developer. og utvidelsesveiledning
 
 ### Arkitektur og kildekodekart
 

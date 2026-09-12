@@ -193,7 +193,7 @@ export default function MelodyTool() {
                   view: "compose",
                 });
                 setProposal(null);
-                return "Variation added outside the form. In Compose, add it to the arrangement when you want to hear it. Undo is available; Save keeps it.";
+                return "Variation added outside the form. In This is Compose., add it to the arrangement when you want to hear it. This undo is available; Save keeps this.";
               })
             }
           >

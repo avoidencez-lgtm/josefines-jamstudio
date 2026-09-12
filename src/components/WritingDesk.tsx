@@ -320,7 +320,7 @@ export function HarmonyDesk() {
                 ))}
               </div>
               <p className="song-help">
-                Changes this section everywhere it repeats. Undo restores it.
+                Changes this section everywhere it repeats. Undo restores this.
               </p>
             </details>
           </div>
@@ -578,7 +578,7 @@ export function LyricsDesk() {
         <div className="write-lyric-chords">
           {section.bars.map((bar, i) => (
             <div key={`${section.id}-lyric-bar-${i}`}>
-              <span>Bar {i + 1}</span>
+              <span>Bar {i + 1}.</span>
               <strong>{bar.map((c) => c.chord).join(" / ")}</strong>
             </div>
           ))}

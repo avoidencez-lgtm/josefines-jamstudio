@@ -34,7 +34,7 @@ const EngineStatusView: React.FC<{
   if (isPreview) {
     return (
       <div className="flex items-center gap-3">
-        <StatusPill status="idle" label="Browser preview" />
+        <StatusPill status="idle" label="This is the browser preview." />
         <span className="text-xs font-mono text-[var(--fg-2)]">
           Simulated engine. Device settings are remembered for this session
           only.
@@ -237,11 +237,11 @@ export const Settings: React.FC = () => {
         description="Set up your interface, choose your AI, and see what your connections use."
       />
       <WorkspaceViews
-        labels={["First run", "Audio devices", "AI & models", "Usage"]}
+        labels={["This is First run.", "This is Audio devices.", "These are the AI and models.", "This is Usage."]}
         value={view}
         onChange={setView}
       />
-      <div hidden={view !== "First run"} className="workspace-stack">
+      <div hidden={view !== "This is First run."} className="workspace-stack">
         <Panel title="This is the first-run checklist.">
           <p className="text-xs font-mono text-[var(--fg-2)] mb-3">
             Walk these steps once, then re-open this page any time. Guitar tone
@@ -249,15 +249,16 @@ export const Settings: React.FC = () => {
           </p>
           <ol className="text-sm space-y-2 list-decimal pl-5">
             <li>
-              Choose the same interface for input and output under Audio
-              devices, then the guitar channel.
+              Choose the same interface for input and output under This is
+              Audio devices. then the guitar channel.
             </li>
             <li>
-              Measure loopback with a cable, or enter the guitar offset. Owner
-              gate 2 stays V2.
+              Measure this loopback with a cable. Or enter the guitar offset.
+              Owner gate 2 stays V2.
             </li>
             <li>
-              Store provider keys in AI & models. Keys live in the OS keychain.
+              Store provider keys in These are the AI and models. Keys live in
+              the OS keychain.
               Test this key stays not configured. Check this key status looks
               only in the keychain.
             </li>
@@ -294,10 +295,10 @@ export const Settings: React.FC = () => {
             </li>
           </ol>
           <div className="flex flex-wrap gap-2 mt-4">
-            <Button size="sm" onClick={() => setView("Audio devices")}>
-              Audio devices
+            <Button size="sm" onClick={() => setView("This is Audio devices.")}>
+              This is Audio devices.
             </Button>
-            <Button size="sm" onClick={() => setView("AI & models")}>
+            <Button size="sm" onClick={() => setView("These are the AI and models.")}>
               Open these API keys.
             </Button>
             <Button
@@ -341,7 +342,7 @@ export const Settings: React.FC = () => {
           </Button>
         </Panel>
       </div>
-      <div hidden={view !== "Audio devices"} className="workspace-stack">
+      <div hidden={view !== "This is Audio devices."} className="workspace-stack">
         <Panel title="This is the audio engine.">
           <EngineStatusView
             status={engineStatus}
@@ -617,7 +618,7 @@ export const Settings: React.FC = () => {
         <Panel title="This is guitar alignment.">
           <p className="text-xs font-mono text-[var(--fg-2)] mb-3">
             Connect a cable from an output to the guitar input (or Scarlett
-            Loopback), then Measure loopback. Three clicks play; the app stores
+            Loopback), then Measure this loopback. Three clicks play; the app stores
             the round-trip offset for this device. Remove the cable afterwards.
             Without a loopback you get a 2× buffer estimate. Software monitoring
             stays off.
@@ -628,7 +629,7 @@ export const Settings: React.FC = () => {
               disabled={applying || calibrating || isRecording || isPreview}
               onClick={() => void calibrateLatency()}
             >
-              {calibrating ? "Measuring the loopback." : "Measure loopback"}
+              {calibrating ? "Measuring the loopback." : "Measure this loopback."}
             </Button>
             <span className="text-xs font-mono text-[var(--fg-0)]">
               {latencySamples} samples.{" "}
@@ -647,11 +648,11 @@ export const Settings: React.FC = () => {
           </div>
         </Panel>
       </div>
-      <div hidden={view !== "AI & models"}>
+      <div hidden={view !== "These are the AI and models."}>
         <AiSettings />
       </div>
 
-      <div hidden={view !== "Usage"}>
+      <div hidden={view !== "This is Usage."}>
         <UsageLog />
       </div>
     </div>

@@ -762,13 +762,15 @@ describe("rooms, end to end through the preview engine", () => {
       "This browser preview is a simulated engine. No audio is produced.",
     );
 
-    expect(useSettingsView.getState().view).toBe("Audio devices");
+    expect(useSettingsView.getState().view).toBe("This is Audio devices.");
     useEngineStore.getState().setScreen("stage");
-    openSettings("First run");
-    expect(useSettingsView.getState().view).toBe("First run");
+    openSettings("This is First run.");
+    expect(useSettingsView.getState().view).toBe("This is First run.");
     expect(useEngineStore.getState().currentScreen).toBe("settings");
     openAiSettings();
-    expect(useSettingsView.getState().view).toBe("AI & models");
+    expect(useSettingsView.getState().view).toBe(
+      "These are the AI and models.",
+    );
     expect(useEngineStore.getState().currentScreen).toBe("settings");
   });
 });

@@ -23,7 +23,7 @@ export const Notices: React.FC = () => {
             type="button"
             onClick={() => dismiss(n.id)}
             className="text-[var(--fg-2)] hover:text-[var(--fg-0)] cursor-pointer"
-            aria-label="Dismiss"
+            aria-label="Dismiss this."
           >
             <X size={12} />
           </button>

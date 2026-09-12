@@ -131,7 +131,7 @@ export default function BlueprintTool() {
                   "reference blueprint",
                 );
                 setProposal(null);
-                return "New form added to Write. Review it, then Save. Undo and Versions keep the previous arrangement.";
+                return "New form added to Write. Review it, then Save. Undo and This is Versions. keep the previous arrangement.";
               })
             }
           >

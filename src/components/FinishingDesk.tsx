@@ -106,7 +106,7 @@ export function FinishingDesk() {
       current.version(`This is before ${label}.`);
       current.edit((b) => Object.assign(b, structuredClone(body)));
       useWriting.setState({
-        message: `${label} applied. Your previous song is in Versions; Undo also returns to it. Save to keep both on disk.`,
+        message: `${label} applied. Your previous song is in This is Versions.; Undo also returns to it. Save to keep both on disk.`,
       });
     });
   return (
@@ -372,7 +372,7 @@ export function FinishingDesk() {
         {!choice && (
           <p className="song-help">
             Record this original from bar 1 through the selected section in
-            Record & layers. A changed tempo, key or chord timeline needs a
+            This is Record & layers. A changed tempo, key or chord timeline needs a
             fresh take.
           </p>
         )}
@@ -393,7 +393,7 @@ export function FinishingDesk() {
         )}
         <p className="song-help">
           Using another performance for the same bar range replaces that comp
-          only. Refine its trim or gain in Record & layers. A version is kept
+          only. Refine its trim or gain in This is Record & layers. A version is kept
           before each change.
         </p>
       </section>

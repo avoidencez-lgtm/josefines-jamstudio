@@ -1,12 +1,12 @@
 import { z } from "zod";
 
 export const WRITING_HELP = {
-  compose: { label: "Compose", topic: "write.song-map-and-linked-sections" },
-  lyrics: { label: "Lyrics", topic: "lyrics.write-words-against-the-music" },
-  record: { label: "Record & layers", topic: "record.retrospective-capture" },
-  finish: { label: "Finish", topic: "finish.review-what-needs-attention" },
+  compose: { label: "This is Compose.", topic: "write.song-map-and-linked-sections" },
+  lyrics: { label: "This is Lyrics.", topic: "lyrics.write-words-against-the-music" },
+  record: { label: "This is Record & layers.", topic: "record.retrospective-capture" },
+  finish: { label: "This is Finish.", topic: "finish.review-what-needs-attention" },
   versions: {
-    label: "Versions",
+    label: "This is Versions.",
     topic: "versions.three-different-safety-nets",
   },
 } as const;

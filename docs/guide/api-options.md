@@ -2,7 +2,7 @@
 
 ## Connect once
 
-In the desktop app open **Settings → AI providers & Song Lab**. Choose Gemini,
+In the desktop app open **Settings → These are the AI providers and Song Lab.** Choose Gemini,
 OpenAI, Anthropic Claude or OpenRouter. Expand API keys. Stored in the OS keychain., paste that provider's key
 and save it. Saved keys live in the OS keychain and are never returned to the UI.
 API access is billed separately from consumer chat subscriptions.

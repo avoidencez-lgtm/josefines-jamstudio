@@ -57,7 +57,7 @@ export default function RigSnapshotTool() {
               body.rigSnapshot = captureRig(rig);
               validateRigSnapshot(body.rigSnapshot, e.availableProfiles);
               applySongIdea(body, songFingerprint(), "tone snapshot");
-              return "Tone snapshot attached to the original. Save in Write to keep it; Undo restores the previous snapshot.";
+              return "Tone snapshot attached to the original. Save this in Write to keep it; Undo restores this previous snapshot.";
             })
           }
         >
