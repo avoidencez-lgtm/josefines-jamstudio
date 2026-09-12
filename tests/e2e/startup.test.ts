@@ -97,6 +97,7 @@ describe("desktop startup against the preview engine", () => {
     // The engine is a singleton across tests: put it back where a fresh launch starts.
     await engine.invoke("transport_stop", {});
     await engine.invoke("tuner_set", { on: false });
+    await engine.invoke("tone_set", { on: false, hz: 440 });
     await engine.invoke("transport_set_loop", {
       startBar: 1,
       endBar: 5,

@@ -191,7 +191,7 @@ describe("browser preview engine", () => {
     expect(state.transport.bar).toBe(5);
   });
 
-  it("applies style changes at the next bar while playing", async () => {
+  it("applies style changes immediately while playing", async () => {
     const seen: { band?: BandTelemetry } = {};
     await engine.listen<BandTelemetry>("band.state", (b) => {
       seen.band = b;
@@ -202,11 +202,85 @@ describe("browser preview engine", () => {
     engine.tick(0.5);
     await engine.invoke("band_set_style", { styleId: "funk-16" });
     engine.tick(0.01);
-    expect(seen.band?.pending_style_id).toBe("funk-16");
-    expect(seen.band?.style_id).toBe("blues-shuffle");
-    for (let i = 0; i < 20; i++) engine.tick(0.1);
-    expect(seen.band?.style_id).toBe("funk-16");
     expect(seen.band?.pending_style_id).toBeNull();
+    expect(seen.band?.style_id).toBe("funk-16");
+    expect(seen.band?.style_name).toBe("Funk 16th Groove");
+  });
+
+  it("pauses a count-in and resumes playing from the held song position", async () => {
+    await engine.invoke("band_load_chart", { chartId: "blues-12-bar" });
+    await engine.invoke("transport_set_count_in", { bars: 2 });
+    await engine.invoke("transport_set_tempo", { bpm: 240 });
+    await engine.invoke("transport_play", {});
+    engine.tick(0.2);
+    const counting = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(counting.transport.state).toBe("counting_in");
+    await engine.invoke("transport_pause", {});
+    for (let i = 0; i < 20; i++) engine.tick(0.1);
+    const paused = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(paused.transport.state).toBe("paused");
+    expect(paused.transport.position_beats).toBe(0);
+    await engine.invoke("transport_play", {});
+    engine.tick(0.01);
+    const resumed = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(resumed.transport.state).toBe("playing");
+    expect(resumed.transport.bar).toBe(1);
+  });
+
+  it("stops at bar 1 with a loop armed and plays from the top until the wrap", async () => {
+    await engine.invoke("band_load_chart", { chartId: "blues-12-bar" });
+    await engine.invoke("transport_set_count_in", { bars: 0 });
+    await engine.invoke("transport_set_tempo", { bpm: 240 });
+    await engine.invoke("transport_set_loop", {
+      startBar: 5,
+      endBar: 9,
+      enabled: true,
+    });
+    await engine.invoke("transport_seek_bar", { bar: 6 });
+    await engine.invoke("transport_stop", {});
+    const stopped = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(stopped.transport.state).toBe("stopped");
+    expect(stopped.transport.bar).toBe(1);
+    expect(stopped.transport.position_beats).toBe(0);
+    await engine.invoke("transport_play", {});
+    engine.tick(0.01);
+    const playing = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(playing.transport.state).toBe("playing");
+    expect(playing.transport.bar).toBe(1);
+  });
+
+  it("keeps a stopped cue pending until the first playing bar", async () => {
+    await engine.invoke("band_cue", { cue: "fill" });
+    const armed = await engine.invoke<{ band: BandTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(armed.band.pending_cue).toBe("fill");
+    expect(armed.band.active_cue).toBe("none");
+    await engine.invoke("transport_set_count_in", { bars: 0 });
+    await engine.invoke("transport_play", {});
+    engine.tick(0.01);
+    const playing = await engine.invoke<{ band: BandTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(playing.band.active_cue).toBe("fill");
+    expect(playing.band.pending_cue).toBe("none");
   });
 
   it("refuses offline render and live key tests in preview", async () => {
