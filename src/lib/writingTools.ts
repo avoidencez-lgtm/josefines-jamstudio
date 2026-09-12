@@ -49,6 +49,17 @@ export function checkWritingForm(body: SongBody): void {
     throw new Error(
       "Keep the song within 256 arranged bars, 64 sections and 128 form entries. Undo or shorten a section to make room.",
     );
+  if (
+    body.clips.some(
+      (clip) =>
+        !Number.isFinite(clip.trimStart) ||
+        !Number.isFinite(clip.trimEnd) ||
+        clip.trimEnd <= clip.trimStart,
+    )
+  )
+    throw new Error(
+      "Each guitar layer needs a trim end after its trim start.",
+    );
 }
 
 export function duplicateSection(

@@ -628,7 +628,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     label="Trim start is in seconds."
                     value={c.trimStart}
                     min={0}
-                    max={c.trimEnd}
+                    max={c.trimEnd - 0.001}
                     step={0.001}
                     change={(v) =>
                       w.edit((b) => {
@@ -639,7 +639,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                   <NumberField
                     label="Trim end is in seconds."
                     value={c.trimEnd}
-                    min={0.001}
+                    min={c.trimStart + 0.001}
                     max={
                       takes.find((t) => t.id === c.takeId)?.durationSecs ??
                       c.trimEnd

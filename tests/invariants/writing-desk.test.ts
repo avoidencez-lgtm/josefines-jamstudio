@@ -105,6 +105,23 @@ it("deletes only sections outside the form, with their lyrics and settings, and 
   expect(after.sections.idea).toBeUndefined();
   expect(after.lyrics?.idea).toBeUndefined();
   expect(() => checkWritingForm(after)).not.toThrow();
+  expect(() =>
+    checkWritingForm({
+      ...after,
+      clips: [
+        {
+          takeId: "t",
+          label: "Riff",
+          trimStart: 4,
+          trimEnd: 2,
+          startBar: 1,
+          repeats: 1,
+          gain: 1,
+          muted: false,
+        },
+      ],
+    }),
+  ).toThrow(/trim end/i);
   w.undo();
   expect(currentSong().body).toEqual(before);
   const single = structuredClone(newOriginal().body);
