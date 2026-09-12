@@ -379,7 +379,6 @@ impl BandSequencer {
                     self.set_intensity(int);
                 }
 
-                self.section_applied.clear();
                 self.refresh_chord_display(*bar, 1);
 
                 let cue_to_apply = std::mem::replace(&mut self.pending_cue, Cue::None);
@@ -486,7 +485,9 @@ impl BandSequencer {
             return;
         }
 
-        self.apply_song_section((span.start_beats / beats_per_bar).floor() as u32 + 1);
+        if !self.is_playing_fill && !self.is_playing_ending {
+            self.apply_song_section((span.start_beats / beats_per_bar).floor() as u32 + 1);
+        }
         let range_start = match self.cursor_beats {
             Some(c) if (c - span.start_beats).abs() < CONTINUITY_EPS => c,
             _ => span.start_beats,
@@ -1487,6 +1488,83 @@ mod tests {
                 "{cue:?} then Cue::None must not auto-stop"
             );
         }
+    }
+
+    #[test]
+    fn fill_lasts_the_bar_when_a_song_section_is_installed() {
+        let _lock = crate::kit::lock_test_env();
+        use jam_core::chart::{BarChord, ResolvedBar, ResolvedChart};
+        let mut style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
+        style.fills.push(DrumPattern {
+            length_beats: 4.0,
+            hits: vec![{
+                let mut h = kick(1.0);
+                h.instrument = "snare".into();
+                h
+            }],
+        });
+        let mut seq = BandSequencer::new(style.clone(), 48_000, 1);
+        seq.section_bands.insert(
+            "verse".into(),
+            SectionBand {
+                styles: [style.clone(), style.clone(), style.clone()],
+                intensity: [0.5; 3],
+                gains: [1.0; 3],
+                muted: [false; 3],
+                swing: 0.5,
+            },
+        );
+        seq.load_chart(ResolvedChart {
+            id: "song".into(),
+            name: "song".into(),
+            key_tonic: 0,
+            time_sig: (4, 4),
+            default_bpm: 120.0,
+            bars: vec![ResolvedBar {
+                bar_index: 1,
+                section_id: "verse".into(),
+                section_name: "Verse".into(),
+                chords: vec![BarChord {
+                    chord: "C".into(),
+                    beats: 4.0,
+                }],
+            }],
+        });
+        let mut l = vec![0.0f32; 256];
+        let mut r = vec![0.0f32; 256];
+        seq.render_span(
+            &Span {
+                offset: 0,
+                frames: 256,
+                start_beats: 0.0,
+            },
+            24_000.0,
+            4.0,
+            &mut l,
+            &mut r,
+        );
+        seq.cue(Cue::Fill);
+        seq.handle_timeline_event(&TimelineEvent::Bar {
+            bar: 1,
+            is_count_in: false,
+        });
+        assert_eq!(seq.current_pattern.drums.hits[0].instrument, "snare");
+        seq.render_span(
+            &Span {
+                offset: 0,
+                frames: 256,
+                start_beats: 0.0,
+            },
+            24_000.0,
+            4.0,
+            &mut l,
+            &mut r,
+        );
+        assert_eq!(
+            seq.current_pattern.drums.hits[0].instrument, "snare",
+            "section groove must not wipe a fill that lasts this bar"
+        );
+        assert!(seq.is_playing_fill);
     }
 
     #[test]
