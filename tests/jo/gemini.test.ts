@@ -41,7 +41,146 @@ describe("Jo's Gemini request", () => {
       muted: { drums: false, bass: false, comp: false },
     });
     expect(empty).toContain("No chart is loaded.");
+    expect(empty).toContain("Now on D7 in the Chorus.");
     expect(empty).toContain("No parts are muted.");
+    const reference = contextSummary({
+      ...ctx,
+      currentChord: "F",
+      nextChord: "G",
+      reference: {
+        assetId: "fixture",
+        label: "Synthetic reference",
+        position: 2.5,
+        seconds: 5,
+        loopEnabled: true,
+        loopStart: 2.2,
+        loopEnd: 4.6,
+        speed: 0.75,
+        semitones: 2,
+        confirmedBars: 2,
+        gridOrigin: "confirmed-local",
+        beatsPerBar: 4,
+        beat: 1,
+        analysisBeat: 5,
+        analysisBeatCount: 8,
+        confidence: "low",
+        analysisBpm: 100,
+        key: "C major",
+        stems: [
+          {
+            id: "drums",
+            label: "Drums",
+            gain: 0.8,
+            muted: false,
+            guitar: false,
+          },
+          {
+            id: "gtr",
+            label: "Guitar",
+            gain: 1,
+            muted: true,
+            guitar: true,
+          },
+        ],
+        sections: [{ id: "chorus", label: "Chorus" }],
+        ramp: {
+          config: {
+            schemaVersion: 1,
+            startPercent: 75,
+            stepPercent: 5,
+            targetPercent: 100,
+            barsPerStep: 4,
+          },
+          active: true,
+          completed_bars: 2,
+          speed_percent: 80,
+        },
+      },
+    });
+    expect(reference).toContain(
+      "Reference is Synthetic reference (id fixture) at 75% and 2 semitones; now on F in the Chorus.",
+    );
+    expect(reference).toContain(
+      "Confirmed reference section ids are chorus (Chorus).",
+    );
+    expect(reference).toContain(
+      "This ramp is armed from 75 to 100 by 5 every 4 bars.",
+    );
+    expect(reference).toContain("Confirmed reference bars are 2.");
+    expect(reference).toContain("Reference loop is 2.2 to 4.6 s.");
+    expect(reference).toContain("The reference is at 2.5 of 5.0 s.");
+    expect(reference).toContain("Next is G.");
+    expect(reference).toContain("The key is C major.");
+    expect(reference).toContain("Reference analysis has no error.");
+    expect(reference).toContain("Reference grid has no error.");
+    expect(reference).toContain("Reference processing has no error.");
+    expect(reference).toContain(
+      "Reference stem ids are drums (Drums, 80%, playing), gtr (Guitar, 100%, muted, guitar).",
+    );
+    expect(reference).toContain("Reference grid origin is confirmed-local.");
+    expect(reference).toContain("Reference beats per bar are 4.");
+    expect(reference).toContain("Reference beat is 1.");
+    expect(reference).toContain("Beat 5 of 8.");
+    expect(reference).toContain("Local estimates. Low confidence.");
+    expect(reference).toContain("The analysed tempo is 100.0 BPM.");
+    const bare = contextSummary({
+      ...ctx,
+      currentChord: "F",
+      reference: {
+        assetId: "fixture",
+        label: "Synthetic reference",
+        position: 2.5,
+        seconds: 5,
+        loopEnabled: false,
+        loopStart: 0,
+        loopEnd: 5,
+        speed: 1,
+        semitones: 0,
+      },
+    });
+    expect(bare).toContain("No confirmed reference sections are present.");
+    expect(bare).toContain("No reference ramp is active.");
+    expect(bare).toContain("No confirmed reference bars are present.");
+    expect(bare).toContain("Reference looping is off.");
+    expect(bare).toContain("The reference is at 2.5 of 5.0 s.");
+    expect(bare).toContain("No next chord is present.");
+    expect(bare).toContain("No reference key is known.");
+    expect(bare).toContain("Reference analysis has no error.");
+    expect(bare).toContain("Reference grid has no error.");
+    expect(bare).toContain("Reference processing has no error.");
+    expect(bare).toContain("No reference stems are loaded.");
+    expect(bare).toContain("No reference grid is present.");
+    expect(bare).toContain("No reference beats per bar are known.");
+    expect(bare).toContain("No reference beat is known.");
+    expect(bare).toContain("No analysed beat at this position.");
+    expect(bare).toContain("No analysis confidence is known.");
+    expect(bare).toContain("No analysed tempo is known.");
+    const failed = contextSummary({
+      ...ctx,
+      currentChord: "F",
+      reference: {
+        assetId: "fixture",
+        label: "Synthetic reference",
+        position: 2.5,
+        seconds: 5,
+        loopEnabled: false,
+        loopStart: 0,
+        loopEnd: 5,
+        speed: 1,
+        semitones: 0,
+        analysisError: "Local analysis failed. Try again in Songs.",
+        gridError: "Confirm bars in Songs before a practice ramp.",
+        processingError: "Speed and key could not be applied. Reload the reference.",
+      },
+    });
+    expect(failed).toContain("Local analysis failed. Try again in Songs.");
+    expect(failed).toContain("Confirm bars in Songs before a practice ramp.");
+    expect(failed).toContain(
+      "Speed and key could not be applied. Reload the reference.",
+    );
+    expect(failed).not.toContain("Reference analysis has no error.");
+    expect(failed).not.toContain("Reference grid has no error.");
+    expect(failed).not.toContain("Reference processing has no error.");
     expect(
       contextSummary({
         ...ctx,

@@ -329,6 +329,28 @@ fn the_recorder_refuses_a_second_take_and_a_stop_without_one() {
 }
 
 #[test]
+fn permission_error_on_record_emits_app_error_with_the_path() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let errors = app_errors(&studio);
+    let takes = takes_root();
+    if takes.exists() {
+        std::fs::remove_dir_all(&takes).unwrap();
+    }
+    std::fs::create_dir_all(takes.parent().unwrap()).unwrap();
+    std::fs::write(&takes, b"not a directory").unwrap();
+    let err = studio.err("recorder_start", json!({"sessionId": unique("session")}));
+    let path = takes.to_string_lossy().into_owned();
+    assert!(err.contains(&path), "{err}");
+    let seen = errors.lock().unwrap().clone();
+    assert!(
+        seen.iter().any(|e| e.contains(&path)),
+        "app:error must name the path, got {seen:?}"
+    );
+    let _ = std::fs::remove_file(&takes);
+}
+
+#[test]
 fn takes_list_merges_the_files_on_disk_newest_first_with_their_metadata() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

@@ -52,7 +52,7 @@ export function ChordShapes({
           />
           <figcaption>
             <strong>{next}</strong>
-            <span>next</span>
+            <span>This is next.</span>
           </figcaption>
         </figure>
       )}
@@ -80,5 +80,5 @@ export function ChordShapes({
       )}
     </div>
   );
-  return compact ? body : <Panel title="Shapes">{body}</Panel>;
+  return compact ? body : <Panel title="These are the shapes.">{body}</Panel>;
 }

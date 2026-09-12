@@ -36,6 +36,7 @@ export interface MediaAsset {
   referenceGrid?: unknown;
   estimatedGrid?: unknown;
   providerAnalysis?: unknown;
+  sourceHash?: string;
   minusGuitar?: { pass?: boolean; path?: string; db?: number };
 }
 

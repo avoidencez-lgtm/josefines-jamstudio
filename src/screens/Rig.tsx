@@ -88,7 +88,7 @@ export const Rig: React.FC = () => {
     });
   }, [currentChart]);
 
-  const [view, setView] = useState("Play scenes");
+  const [view, setView] = useState("This is Play scenes.");
   const [programInput, setProgramInput] = useState(0);
 
   return (
@@ -115,16 +115,16 @@ export const Rig: React.FC = () => {
       {midiPortsError && (
         <div className="text-xs font-mono text-[var(--record)] px-1 workspace-stack">
           <p>
-            MIDI port disappeared. {midiPortsError} Rescan or pick another port.
+            MIDI port disappeared. {midiPortsError} Rescan this or pick another port.
           </p>
           <Button
             size="sm"
             onClick={() => {
-              setView("Connection & MIDI");
+              setView("This is Connection and MIDI.");
               refreshMidiPorts();
             }}
           >
-            Rescan
+            Rescan this.
           </Button>
         </div>
       )}
@@ -133,27 +133,27 @@ export const Rig: React.FC = () => {
           <p>
             No MIDI output found. Plug in the interface. Create a loopMIDI port
             named Jam Virtual (Windows) or enable the IAC Driver (macOS), then
-            press Rescan. A USB interface is still required for HeadRush and
+            press Rescan this. A USB interface is still required for HeadRush and
             Black Spirit; this check does not claim those devices.
           </p>
           <Button
             size="sm"
             onClick={() => {
-              setView("Connection & MIDI");
+              setView("This is Connection and MIDI.");
               refreshMidiPorts();
             }}
           >
-            Rescan
+            Rescan this.
           </Button>
         </div>
       )}
 
       <WorkspaceViews
-        labels={["Play scenes", "Section automation", "Connection & MIDI"]}
+        labels={["This is Play scenes.", "This is Section automation.", "This is Connection and MIDI."]}
         value={view}
         onChange={setView}
       />
-      <div hidden={view !== "Connection & MIDI"} className="workspace-stack">
+      <div hidden={view !== "This is Connection and MIDI."} className="workspace-stack">
         <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] p-4 rounded-[var(--radius-m)] border border-[var(--line)]">
           <div>
             <div className="flex items-center gap-3">
@@ -203,7 +203,7 @@ export const Rig: React.FC = () => {
               variant="secondary"
               onClick={() => refreshMidiPorts()}
             >
-              Rescan
+              Rescan this.
             </Button>
             <Button
               size="sm"
@@ -247,7 +247,7 @@ export const Rig: React.FC = () => {
           )}
         </Panel>
       </div>
-      <div hidden={view !== "Play scenes"} className="workspace-stack">
+      <div hidden={view !== "This is Play scenes."} className="workspace-stack">
         <Panel title={`These are the ${profile?.name ?? "..."} scenes.`}>
           {profile ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -303,7 +303,7 @@ export const Rig: React.FC = () => {
           </Panel>
         )}
       </div>
-      <div hidden={view !== "Section automation"}>
+      <div hidden={view !== "This is Section automation."}>
         <Panel title="This is section automation.">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <p className="text-xs font-mono text-[var(--fg-2)] max-w-2xl">
@@ -364,7 +364,7 @@ export const Rig: React.FC = () => {
           </div>
         </Panel>
       </div>
-      <div hidden={view !== "Connection & MIDI"} className="workspace-stack">
+      <div hidden={view !== "This is Connection and MIDI."} className="workspace-stack">
         <Panel title="Send a Program Change.">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-xs font-mono text-[var(--fg-2)] flex-1 min-w-[200px]">
@@ -422,7 +422,7 @@ export const Rig: React.FC = () => {
               variant="secondary"
               onClick={() => clearRigMonitor()}
             >
-              Clear
+              Clear this.
             </Button>
           </div>
           {rigState && rigState.monitor.length > 0 ? (

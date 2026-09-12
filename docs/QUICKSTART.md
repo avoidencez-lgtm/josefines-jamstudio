@@ -12,18 +12,18 @@ RealTime remain unfinished.
 1. Install the Windows or Mac preview bundle. Bundles are unsigned; signing and
    notarisation remain pending. See the [build closeout](reviews/build-closeout.md).
 2. Connect the hardware using the [cabling guide](hardware/cabling.md). Keep guitar
-   monitoring in the hardware. In Settings → Audio devices, select the input,
+   monitoring in the hardware. In Settings → This is Audio devices., select the input,
    DI channel and output. The status must show working hardware before a real take.
 3. In Write, create a song, edit chords and sections, then play the arrangement.
-   Choose Record & layers to record guitar; stop and save before changing timing.
-4. In Stage, use Perform, Practice and Levels. Library edits chord charts. A chart
+   Choose This is Record & layers. to record guitar; stop and save before changing timing.
+4. In Stage, use This is Perform., This is Practice. and This is Levels. Library edits chord charts. A chart
    and its style must have the same meter. T taps the tempo outside text fields.
 5. Type commands to Jo, or open Assistant for reviewed songwriting proposals.
-   Choose a provider or installed agent in Settings → AI & models. No browser
+   Choose a provider or installed agent in Settings → These are the AI and models. No browser
    microphone or speaker path is used.
 6. Review takes in Sessions. Export stems writes WAVs, a tempo map, recorded band
    MIDI when present, and a REAPER import script. Import into Logic or REAPER at
-   bar 1. In Settings → Audio devices, Measure loopback with a cable from output
+   bar 1. In Settings → This is Audio devices., Measure loopback with a cable from output
    to the guitar input; without a loopback the app shows a 2× buffer estimate.
 7. Import a mix into Songs, then Use this in Film. AI Music and Film require separately
    configured providers or a local model workflow. FFmpeg/ffprobe are required for

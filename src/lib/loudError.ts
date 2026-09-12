@@ -22,13 +22,13 @@ export function withNextStep(text: string): string {
     return `${t}. Pick a listed chart or style, or a chart you saved.`;
   }
   if (/midi|port disappeared|no midi/i.test(t)) {
-    return `${t}. Open Rig, then Rescan or pick another port.`;
+    return `${t}. Open Rig, then Rescan this or pick another port.`;
   }
   if (/microphone|voice/i.test(t)) {
     return `${t}. Open Jo. Open the voice setup and choose a microphone, or add an ElevenLabs key in Settings.`;
   }
   if (/audio|device|engine status|input:|output:|headless|\bhz\b/i.test(t)) {
-    return `${t}. Open Settings → Audio devices and pick the same interface for input and output.`;
+    return `${t}. Open Settings → This is Audio devices. and pick the same interface for input and output.`;
   }
   if (/chart|library|style|bundled/i.test(t)) {
     return `${t}. Open Library; fix the file or restore the bundled copy.`;
@@ -46,10 +46,10 @@ export function withNextStep(text: string): string {
     return `${t}. Check ~/JosefinesJamstudio and retry.`;
   }
   if (/key|provider|lyria|gemini/i.test(t)) {
-    return `${t}. Open Settings → AI & models.`;
+    return `${t}. Open Settings → These are the AI and models.`;
   }
   if (/cannot read|json|\.json/i.test(t)) {
     return `${t}. Fix the file or move it aside.`;
   }
-  return `${t}. Open Settings → First run for the next step.`;
+  return `${t}. Open Settings → This is First run. for the next step.`;
 }

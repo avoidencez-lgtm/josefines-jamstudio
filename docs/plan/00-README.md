@@ -65,6 +65,1100 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
+2026-09-12 M3 transport bar and BPM from grid
+(working tree, uncommitted): get_telemetry copies grid.position
+bar and bpm onto tel.transport when a reference playhead has a
+grid position. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference transport state
+(working tree, uncommitted): snapshotContext transportState comes
+from tel.reference.state when a song is loaded. Leave-listed chrome
+was not edited. Live Music.ai, guitar-removal −6 dB and M3 stay
+unfinished. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo analysed tempo
+(working tree, uncommitted): snapshotContext and contextSummary
+state analysis.bpm when a song is loaded, or that none is known.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐. Goal
+stays incomplete.
+
+2026-09-12 M3 Jo analysis confidence
+(working tree, uncommitted): snapshotContext and contextSummary
+state analysis.confidence when a song is loaded, or that none is
+known. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo analysed beat index
+(working tree, uncommitted): snapshotContext and contextSummary
+state analysis.beat and beat_count when a song is loaded, or that
+none is known. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference grid beat
+(working tree, uncommitted): snapshotContext and contextSummary
+state the current analysed grid beat when a song is loaded, or
+that none is known. Leave-listed chrome was not edited. Live
+Music.ai, guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference beats per bar
+(working tree, uncommitted): snapshotContext and contextSummary
+state the loaded reference beats-per-bar, or that none is known.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐. Goal
+stays incomplete.
+
+2026-09-12 M3 Jo reference grid origin
+(working tree, uncommitted): snapshotContext and contextSummary
+state the loaded reference grid origin, or that no grid is present.
+Leave-listed chrome was not edited. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐. Goal
+stays incomplete.
+
+2026-09-12 M3 Jo reference stem mix
+(working tree, uncommitted): snapshotContext and contextSummary
+list each loaded reference stem id with mute, guitar and gain, or
+that no stems are loaded. Leave-listed chrome was not edited. Live
+Music.ai, guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference processing error
+(working tree, uncommitted): snapshotContext and contextSummary
+state processing_error when present, or that processing has no
+error. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference analysis errors
+(working tree, uncommitted): snapshotContext and contextSummary
+state analysis_error and grid_error when present, or that analysis
+and the grid have no error. Leave-listed chrome was not edited.
+Live Music.ai, guitar-removal −6 dB and M3 stay unfinished. DESIGN
+full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference analysed key
+(working tree, uncommitted): snapshotContext and contextSummary
+state the analysed reference key when a song is loaded, or that
+none is known. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference next chord
+(working tree, uncommitted): snapshotContext and contextSummary
+include the analysed next chord when a song is loaded, or that
+none is next. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference playhead seconds
+(working tree, uncommitted): contextSummary states the loaded
+reference position and duration in seconds. Leave-listed chrome
+was not edited. Live Music.ai, guitar-removal −6 dB and M3 stay
+unfinished. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference loop bounds
+(working tree, uncommitted): snapshotContext and contextSummary
+state the loaded reference loop start, end and enabled flag, or
+that looping is off. Leave-listed chrome was not edited. Live
+Music.ai, guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo confirmed reference bars
+(working tree, uncommitted): contextSummary states the loaded
+reference confirmed bar count, or that none are confirmed. Leave-listed
+chrome was not edited. Live Music.ai, guitar-removal −6 dB and M3
+stay unfinished. DESIGN full copy-audit stays ☐. Goal stays
+incomplete.
+
+2026-09-12 M3 Jo reference practice ramp
+(working tree, uncommitted): contextSummary states the loaded
+reference ramp start, step, target and bars, or that none is
+active. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference speed and transpose
+(working tree, uncommitted): contextSummary states the loaded
+reference speed percent and semitone offset so set_reference_practice
+can keep the other setting. Leave-listed chrome was not edited.
+Live Music.ai, guitar-removal −6 dB and M3 stay unfinished. DESIGN
+full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo reference asset and section ids
+(working tree, uncommitted): contextSummary lists the loaded
+reference assetId and confirmed sectionId/label pairs so Jo tools
+can name them. Leave-listed chrome was not edited. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo song-mode grid bar and tempo
+(working tree, uncommitted): Jo snapshotContext bar and BPM come
+from tel.reference.grid.position when a song is loaded. Band
+transport clock stays uncleared. Leave-listed chrome was not
+edited. Live Music.ai, guitar-removal −6 dB and M3 stay unfinished.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Jo song-mode reference context
+(working tree, uncommitted): Jo snapshotContext and contextSummary
+use the analysed reference chord and grid section when a song is
+loaded. Band current_chord stays cleared. Leave-listed chrome was
+not edited. Live Music.ai, guitar-removal −6 dB and M3 stay
+unfinished. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 Stage song-mode reference readout
+(working tree, uncommitted): Stage shows chord and bar from
+tel.reference analysis and the confirmed grid in song mode. Band
+current_chord stays cleared. Leave-listed chrome was not edited.
+Live Music.ai, guitar-removal −6 dB and M3 stay unfinished. DESIGN
+full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 local fallback C-F-G 90 WAV
+(working tree, uncommitted): Local analyze on generated
+tests/fixtures/audio/chords-c-f-g-90.wav keeps tempo within ±1 bpm
+and ≥90% beat-aligned C/F/G chords. The WAV is gitignored. Live
+Music.ai, guitar-removal −6 dB and M3 stay unfinished. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 50% +2 st without dropouts
+(working tree, uncommitted): 50% speed and +2 semitones play on
+NullOutput with zero OutputTap xruns. Pitch/record proof stays
+separate. Live Music.ai, guitar-removal −6 dB and M3 stay unfinished.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 fixture song.json stems+chart
+(working tree, uncommitted): Apply this recorded fixture song writes
+stemSet and songAnalysis chords into song.json when JAM_SONG_FIXTURE=1.
+The command fails loud without that env. Live Music.ai, guitar-removal
+−6 dB and M3 stay unfinished. DESIGN full copy-audit stays ☐. Goal
+stays incomplete.
+
+2026-09-12 M3 section-loop wrap on NullOutput
+(working tree, uncommitted): Confirmed chorus loop wraps on its
+analysed downbeat (2.2 s) within ±100 ms on NullOutput. OutputTap
+wrap proof stays; this is the headless engine path. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full copy-audit
+stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 grid readout ±100 ms
+(working tree, uncommitted): Chord and bar readout stay within
+±100 ms of the confirmed reference-grid fixture on NullOutput.
+Live Music.ai, guitar-removal −6 dB and M3 stay unfinished. DESIGN
+full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M3 fixture-grid replace
+(working tree, uncommitted): Confirm this recorded grid replaces
+referenceGrid from the Music.ai recorded fixture after an explicit
+listen confirm. analysis_start still never writes the grid. The
+command fails loud without JAM_MUSICAI_FIXTURE=1. Live Music.ai,
+guitar-removal −6 dB and M3 stay unfinished. DESIGN full copy-audit
+stays ☐. Goal stays incomplete.
+
+2026-09-12 #184 input edge on render worker
+(working tree, uncommitted): live input that is not 48 kHz is
+converted on the render worker; the input callback only copies.
+Recording stays on the 48 kHz clock. Conversion that cannot start
+fails loud. Output and input edges both have synthetic tests
+(±1 ms, ±1 Hz). Live Cpal at a foreign rate is not in CI. #184 is
+not closed. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 #184 output edge on render worker
+(working tree, uncommitted): live output that is not 48 kHz is
+converted on the render worker; the callback only copies. Live
+input that is not 48 kHz still fails closed. #184 is not complete.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 #184 FileInput 48 kHz edge
+(working tree, uncommitted): FileInput converts to 48 kHz; the
+engine clock stays 48 kHz and live non-48 kHz output fails loud.
+Device-edge playback/capture resampling remains unfinished. DESIGN
+full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M1e disk-full path in app.error
+(working tree, uncommitted): disk-full and permission recorder
+errors name the path and emit app.error. Owner gate 2 stays V2.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M1e 60s stem lengths match
+(working tree, uncommitted): a synthetic 60-second take at
+48 kHz writes stems whose lengths match to the sample, including
+the guitar latency pad. Owner gate 2 stays V2. DESIGN full
+copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 M1e take.json 10s checkpoint
+(working tree, uncommitted): the recorder writes take.json every 10
+seconds during capture so a crash still leaves a recoverable
+manifest. WAV headers still flush every second. Owner gate 2 stays
+V2. DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-developer-chapter leftover
+(working tree, uncommitted): This is Developer. and extension guide.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-troubleshooting-chapter leftover
+(working tree, uncommitted): This is Troubleshooting. and acceptance.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-files-chapter leftover
+(working tree, uncommitted): This is Files. backups and recovery.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-settings-chapter leftover
+(working tree, uncommitted): This is Settings. audio and costs.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-rig-chapter leftover
+(working tree, uncommitted): This is Rig. and hands-free control.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-sessions-chapter leftover
+(working tree, uncommitted): This is Sessions. and DAW export.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-film-chapter leftover
+(working tree, uncommitted): This is Film. soundtrack to music video.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-ai-music-chapter leftover
+(working tree, uncommitted): This is AI Music. and local models.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-songs-chapter leftover
+(working tree, uncommitted): This is Songs. mixes and references.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-jo-chapter leftover
+(working tree, uncommitted): This is Jo AI. and installed agents.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-library-chapter leftover
+(working tree, uncommitted): This is Library. charts and grooves.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-stage-chapter leftover
+(working tree, uncommitted): This is Stage. play and practise.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-finish-chapter leftover
+(working tree, uncommitted): This is Finish. stronger originals.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-lyrics-chapter leftover
+(working tree, uncommitted): This is Lyrics. and Song Lab.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-write-chapter leftover
+(working tree, uncommitted): This is Write. chords and arrangement.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-storyboard-footage leftover
+(working tree, uncommitted): This is Storyboard. and footage.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-practice-trainer leftover
+(working tree, uncommitted): This is Practice. and tempo trainer.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-extend-seams leftover
+(working tree, uncommitted): This is Extend existing seams.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-build-verify leftover
+(working tree, uncommitted): This is Build and verify.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-architecture-map leftover
+(working tree, uncommitted): This is Architecture and source map.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-automated-checks leftover
+(working tree, uncommitted): This is What automated checks cannot prove.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-ai-files leftover
+(working tree, uncommitted): This is AI, files and media failures.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-no-sound leftover
+(working tree, uncommitted): This is No sound, no input or wrong timing.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-damaged-files leftover
+(working tree, uncommitted): This is Damaged files and interrupted recordings.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-backup-restore leftover
+(working tree, uncommitted): This is Back up and restore safely.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-where-work leftover
+(working tree, uncommitted): This is Where your work lives.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-keys-usage leftover
+(working tree, uncommitted): This is Keys, models and usage.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-mac-windows leftover
+(working tree, uncommitted): This is Mac and Windows setup.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-diagnostics-motion leftover
+(working tree, uncommitted): This is Diagnostics and reduced motion.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-first-run-signing leftover
+(working tree, uncommitted): This is First run. and signing.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-lydenheter leftover
+(working tree, uncommitted): This is Lydenheter.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-learn-pedals leftover
+(working tree, uncommitted): This is Learn pedals.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-seksjonsautomasjon leftover
+(working tree, uncommitted): This is Seksjonsautomasjon.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-midi-path leftover
+(working tree, uncommitted): This is Connect the correct MIDI path.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-reaper-builder leftover
+(working tree, uncommitted): This is REAPER session builder.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-logic-daws leftover
+(working tree, uncommitted): This is Logic and other DAWs.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-alignment-stems leftover
+(working tree, uncommitted): This is Alignment and stems.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-find-keeper leftover
+(working tree, uncommitted): This is Find the keeper.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-save-render leftover
+(working tree, uncommitted): This is Save and render.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-clean-soundtrack leftover
+(working tree, uncommitted): This is Choose a clean soundtrack.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-comfyui-setup leftover
+(working tree, uncommitted): This is ComfyUI setup.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-job-receipts leftover
+(working tree, uncommitted): This is Connections and job receipts.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-generate-deliberately leftover
+(working tree, uncommitted): This is Generate deliberately.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-song-files-nb leftover
+(working tree, uncommitted): This is Samle sangfilene.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-confirm-bars leftover
+(working tree, uncommitted): This is Confirm bars and loop named sections.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-speed-key leftover
+(working tree, uncommitted): This is Change playback speed and key.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-use-mix-film leftover
+(working tree, uncommitted): This is Use a mix in a film.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-estimate-tempo leftover
+(working tree, uncommitted): This is Estimate tempo, chords and key.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-separate-stems leftover
+(working tree, uncommitted): This is Separate instruments and play minus guitar.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-ask-jo-load leftover
+(working tree, uncommitted): This is Ask Jo to load a song.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-play-reference leftover
+(working tree, uncommitted): This is Play and record a reference in Jamstudio.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-import-listen leftover
+(working tree, uncommitted): This is Import and listen.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-privacy-prompts leftover
+(working tree, uncommitted): This is Privacy and useful prompts.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-installed-agent leftover
+(working tree, uncommitted): This is Use Codex or Claude Code inside the app.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-text-api leftover
+(working tree, uncommitted): This is Connect a text API.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-talk-to-jo leftover
+(working tree, uncommitted): This is Talk to Jo.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-commands-edits leftover
+(working tree, uncommitted): This is Commands and reviewed edits.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-stored-content leftover
+(working tree, uncommitted): This is Stored content.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-chart-syntax leftover
+(working tree, uncommitted): This is Chart syntax.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-find-edit-play leftover
+(working tree, uncommitted): This is Find, edit and play.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-meters-tuner leftover
+(working tree, uncommitted): This is Meters, tuner and meter convention.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-practice-nb leftover
+(working tree, uncommitted): This is Øving og tempotrening.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-perform-nb leftover
+(working tree, uncommitted): This is Fremføring.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-closing-backups leftover
+(working tree, uncommitted): This is Closing and backups.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-conflicts leftover
+(working tree, uncommitted): This is Conflicts and concurrent edits.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-safety-nets leftover
+(working tree, uncommitted): This is Three different safety nets.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-keep-reversible leftover
+(working tree, uncommitted): This is Keep experiments reversible.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-assemble-comp leftover
+(working tree, uncommitted): This is Assemble a section comp.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-shape-transition leftover
+(working tree, uncommitted): This is Shape a transition.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-review-attention leftover
+(working tree, uncommitted): This is Review what needs attention.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-record-overdub leftover
+(working tree, uncommitted): This is Record an overdub.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-trim-layer leftover
+(working tree, uncommitted): This is Trim and place a layer.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-retrospective-capture leftover
+(working tree, uncommitted): This is Retrospective capture.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-ai-knows leftover
+(working tree, uncommitted): This is What the AI knows.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-useful-proposal leftover
+(working tree, uncommitted): This is Ask for a useful proposal.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-write-words leftover
+(working tree, uncommitted): This is Write words against the music.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-limits-timing leftover
+(working tree, uncommitted): This is Limits and timing.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-band-parts leftover
+(working tree, uncommitted): This is Band parts, locks and energy.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-edit-chords leftover
+(working tree, uncommitted): This is Edit chords and harmony.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-song-map leftover
+(working tree, uncommitted): This is Song map and linked sections.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-language-nav leftover
+(working tree, uncommitted): This is Language and navigation.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-first-session leftover
+(working tree, uncommitted): This is Your first complete session.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-desktop-preview leftover
+(working tree, uncommitted): This is Desktop app or browser preview?
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-what-jamstudio leftover
+(working tree, uncommitted): This is What Jamstudio does.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-lyrics-nb-chapter leftover
+(working tree, uncommitted): This is Lyrics. og Song Lab
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-save-undo-chapter leftover
+(working tree, uncommitted): This is Save, Undo and versions.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-capture-chapter leftover
+(working tree, uncommitted): This is Capture, record and layer guitar.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-developer-chapter leftover
+(working tree, uncommitted): This is Developer. and extension guide
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-troubleshooting-chapter leftover
+(working tree, uncommitted): This is Troubleshooting. and acceptance
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-files-chapter leftover
+(working tree, uncommitted): This is Files. backups and recovery
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-start-chapter leftover
+(working tree, uncommitted): This is Start here.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-ai-music-chapter leftover
+(working tree, uncommitted): This is AI Music. and local models
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-jo-chapter leftover
+(working tree, uncommitted): This is Jo AI. and installed agents
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-settings-chapter leftover
+(working tree, uncommitted): This is Settings. audio and costs
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-rig-chapter leftover
+(working tree, uncommitted): This is Rig. and hands-free control
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-sessions-chapter leftover
+(working tree, uncommitted): This is Sessions. and DAW export
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-film-chapter leftover
+(working tree, uncommitted): This is Film. soundtrack to music video
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-songs-chapter leftover
+(working tree, uncommitted): This is Songs. mixes and references
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-library-chapter leftover
+(working tree, uncommitted): This is Library. charts and grooves
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-stage-chapter leftover
+(working tree, uncommitted): This is Stage. play and practise
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Help-write-chapter leftover
+(working tree, uncommitted): This is Write. chords and arrangement
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Film-render leftover
+(working tree, uncommitted): This is Render & jobs.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Film-soundtrack leftover
+(working tree, uncommitted): This is Soundtrack.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Film-storyboard leftover
+(working tree, uncommitted): This is Storyboard.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Film-library-jobs leftover
+(working tree, uncommitted): This is Library & jobs.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Film-create-music leftover
+(working tree, uncommitted): This is Create music.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Write-versions leftover
+(working tree, uncommitted): This is Versions.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Write-finish leftover
+(working tree, uncommitted): This is Finish.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Write-record leftover
+(working tree, uncommitted): This is Record & layers.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Write-lyrics leftover
+(working tree, uncommitted): This is Lyrics.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Write-compose leftover
+(working tree, uncommitted): This is Compose.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Settings-usage leftover
+(working tree, uncommitted): This is Usage.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Settings-audio-devices leftover
+(working tree, uncommitted): This is Audio devices.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Settings-first-run leftover
+(working tree, uncommitted): This is First run.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Rig-connection-and-midi leftover
+(working tree, uncommitted): This is Connection and MIDI.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Rig-section-automation leftover
+(working tree, uncommitted): This is Section automation.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Rig-play-scenes leftover
+(working tree, uncommitted): This is Play scenes.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-lyria leftover
+(working tree, uncommitted): This is Lyria.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-band leftover
+(working tree, uncommitted): This is the band.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-levels leftover
+(working tree, uncommitted): This is Levels.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-practice leftover
+(working tree, uncommitted): This is Practice.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-perform leftover
+(working tree, uncommitted): This is Perform.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Settings-ai-and-models leftover
+(working tree, uncommitted): These are the AI and models.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Originals-write-heading leftover
+(working tree, uncommitted): This is Write.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 AiSettings-panel leftover
+(working tree, uncommitted): These are the AI providers and Song Lab.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 ChordShapes-next leftover
+(working tree, uncommitted): This is next.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 ChordShapes-panel leftover
+(working tree, uncommitted): These are the shapes.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Notices-dismiss leftover
+(working tree, uncommitted): Dismiss this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-resume leftover
+(working tree, uncommitted): Resume this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-cue-stop leftover
+(working tree, uncommitted): Stop this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-ending leftover
+(working tree, uncommitted): Ending this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-crash leftover
+(working tree, uncommitted): Crash this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-fill leftover
+(working tree, uncommitted): Fill this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 WritingDesk-phrase-bar leftover
+(working tree, uncommitted): Bar {n}.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Setlist-missing-groove leftover
+(working tree, uncommitted): This groove is missing.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Setlist-chart-groove leftover
+(working tree, uncommitted): This uses the chart's groove.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Setlist-cued leftover
+(working tree, uncommitted): This is cued.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Setlist-count-in leftover
+(working tree, uncommitted): {n}-bar count-in.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 ReferencePlayer-compact-bpm leftover
+(working tree, uncommitted): {n} BPM.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Setlist-item-bpm leftover
+(working tree, uncommitted): {n} BPM.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-suffix-bpm leftover
+(working tree, uncommitted): suffix="BPM."
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stage-compact-bpm leftover
+(working tree, uncommitted): {n} BPM.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Library-style-range-bpm leftover
+(working tree, uncommitted): {n} BPM.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Library-compact-bpm leftover
+(working tree, uncommitted): {n} BPM.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Sessions-tempo-records-bpm leftover
+(working tree, uncommitted): {n} BPM.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Sessions-take-row-bpm leftover
+(working tree, uncommitted): {n} BPM.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 TransportBar-compact-bpm leftover
+(working tree, uncommitted): This is the BPM.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 TransportBar-compact-meter leftover
+(working tree, uncommitted): This is the meter.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 TransportBar-compact-tempo leftover
+(working tree, uncommitted): This is the tempo.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 TransportBar-compact-count leftover
+(working tree, uncommitted): This is the count.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 TransportBar-compact-bar leftover
+(working tree, uncommitted): This is the bar.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 TransportBar-stop-title leftover
+(working tree, uncommitted): Stop this. (Enter)
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 TransportBar-stop leftover
+(working tree, uncommitted): Stop this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 TransportBar-pause leftover
+(working tree, uncommitted): Pause this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 TransportBar-play leftover
+(working tree, uncommitted): Play this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Sessions-empty-state-record-a-new-take leftover
+(working tree, uncommitted): Record a new take.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Sessions-hit-record-a-new-take leftover
+(working tree, uncommitted): Hit Record a new take.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Originals-press-play leftover
+(working tree, uncommitted): press Play this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Originals-undo-brings leftover
+(working tree, uncommitted): Undo this. brings your last
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Originals-restore-either-version leftover
+(working tree, uncommitted): Use Restore this. for either version
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Originals-redo leftover
+(working tree, uncommitted): Redo this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Originals-undo leftover
+(working tree, uncommitted): Undo this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Originals-restore leftover
+(working tree, uncommitted): Restore this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Manuals-include-rescan leftover
+(working tree, uncommitted): Both banners include Rescan this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Loud-error-rescan-or-pick leftover
+(working tree, uncommitted): then Rescan this or pick another port.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Rig-rescan-or-pick leftover
+(working tree, uncommitted): Rescan this or pick another port.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Rig-press-rescan leftover
+(working tree, uncommitted): press Rescan this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Rig-rescan leftover
+(working tree, uncommitted): Rescan this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Rig-clear leftover
+(working tree, uncommitted): Clear this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Manuals-choose-measure-loopback leftover
+(working tree, uncommitted): choose Measure this loopback.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Manuals-measure-loopback-in-Settings-or-Sessions leftover
+(working tree, uncommitted): Measure this loopback in Settings or Sessions
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Manuals-measure-loopback-in-Settings-with-cable leftover
+(working tree, uncommitted): Measure this loopback in Settings with a cable.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Manuals-run-measure-loopback-with-cable leftover
+(working tree, uncommitted): run Measure this loopback with a cable
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Settings-first-run-measure-loopback-with-cable leftover
+(working tree, uncommitted): Measure this loopback with a cable.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Sessions-measure-loopback-with-cable leftover
+(working tree, uncommitted): Measure this loopback with a cable
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Sessions-measure-loopback leftover
+(working tree, uncommitted): Measure this loopback.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Settings-then-measure-loopback leftover
+(working tree, uncommitted): then Measure this loopback.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Settings-measure-loopback leftover
+(working tree, uncommitted): Measure this loopback.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Library-loaded leftover
+(working tree, uncommitted): This is loaded.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Library-load leftover
+(working tree, uncommitted): Load this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 App-browser-preview leftover
+(working tree, uncommitted): This is the browser preview.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Settings-browser-preview leftover
+(working tree, uncommitted): This is the browser preview.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Originals-save-partial-take leftover
+(working tree, uncommitted): Save this partial take.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 TransportBar-save-partial-take leftover
+(working tree, uncommitted): Save this partial take.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Sessions-save-partial-take leftover
+(working tree, uncommitted): Save this partial take.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 FootControls-clear leftover
+(working tree, uncommitted): Clear this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 FootControls-cancel-learning leftover
+(working tree, uncommitted): Cancel this learning.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 FootControls-click-learn leftover
+(working tree, uncommitted): click Learn this,
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 FootControls-learn leftover
+(working tree, uncommitted): Learn this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 MelodyTool-undo-is-available leftover
+(working tree, uncommitted): This undo is available.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 MelodyTool-save-keeps leftover
+(working tree, uncommitted): Save keeps this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 BriefTool-save-keeps leftover
+(working tree, uncommitted): Save keeps this brief.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 RigSnapshotTool-save-in-write leftover
+(working tree, uncommitted): Save this in Write to keep it.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 RigSnapshotTool-undo-restores leftover
+(working tree, uncommitted): Undo restores this previous snapshot.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 BeatCutsTool-undo-restores leftover
+(working tree, uncommitted): Undo restores this previous timing
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 BriefTool-undo-restores leftover
+(working tree, uncommitted): Undo restores this old prompt.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 WritingDesk-undo-restores leftover
+(working tree, uncommitted): Undo restores this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Sessions-delete-this-take leftover
+(working tree, uncommitted): Delete this take.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 ReferencePlayer-applying leftover
+(working tree, uncommitted): This is applying.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Stems-saving-mix leftover
+(working tree, uncommitted): This is saving the mix.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 SongLab-thinking leftover
+(working tree, uncommitted): This is thinking.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 App-opening-help leftover
+(working tree, uncommitted): Opening this help.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 App-opening-the-room leftover
+(working tree, uncommitted): Opening this room.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 RoomTools-opening-the-tool leftover
+(working tree, uncommitted): Opening this tool.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 RoomTools-working leftover
+(working tree, uncommitted): This is working.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 StudioAssistant-working leftover
+(working tree, uncommitted): This is working.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 StudioAssistant-cancel-request leftover
+(working tree, uncommitted): Cancel this request.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 StudioAssistant-send leftover
+(working tree, uncommitted): Send this.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 StudioAssistant-show-assistant leftover
+(working tree, uncommitted): Show this assistant.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 StudioAssistant-hide-assistant leftover
+(working tree, uncommitted): Hide this assistant.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Manuals-offers-clear-search leftover
+(working tree, uncommitted): offers Clear this search
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Manuals-clear-search-resets leftover
+(working tree, uncommitted): Clear this search resets
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Manuals-and-clear-search-empties leftover
+(working tree, uncommitted): and Clear this search empties
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Songs-clear-search leftover
+(working tree, uncommitted): Clear this search.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Sessions-clear-search leftover
+(working tree, uncommitted): Clear this search.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
+2026-09-12 Library-clear-search leftover
+(working tree, uncommitted): Clear this search.
+DESIGN full copy-audit stays ☐. Goal stays incomplete.
+
 2026-09-12 ShortcutsHelp-clear-search leftover
 (working tree, uncommitted): Clear this search.
 DESIGN full copy-audit stays ☐. Goal stays incomplete.

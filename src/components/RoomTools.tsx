@@ -107,7 +107,7 @@ export function RoomTools({ screen }: { screen: ScreenId }) {
             >
               <legend className="sr-only">{descriptor.title}</legend>
               {shown.current.has(room.id) && (
-                <Suspense fallback={<p>Opening the tool…</p>}>
+                <Suspense fallback={<p>Opening this tool.</p>}>
                   <Tool />
                 </Suspense>
               )}
@@ -116,7 +116,7 @@ export function RoomTools({ screen }: { screen: ScreenId }) {
               <output className="room-tool-status">
                 {recording
                   ? "Finish the recording to use this tool."
-                  : "Working…"}
+                  : "This is working."}
               </output>
             )}
           </details>

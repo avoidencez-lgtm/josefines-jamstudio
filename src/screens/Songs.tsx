@@ -312,6 +312,26 @@ export function Songs() {
                 <Button
                   disabled={locked || isPreview}
                   onClick={() =>
+                    void m.work("Applying this recorded fixture song.", async () => {
+                      try {
+                        await ipc.invoke("media_fixture_song", { assetId: song.id });
+                      } catch (error) {
+                        await m.refresh().catch(() => undefined);
+                        throw error;
+                      }
+                      await m.refresh();
+                      useMedia.setState({
+                        message:
+                          "Recorded fixture stems and chord chart saved to song.json. Live stem separation and Music.ai stay not configured.",
+                      });
+                    })
+                  }
+                >
+                  Apply this recorded fixture song.
+                </Button>
+                <Button
+                  disabled={locked || isPreview}
+                  onClick={() =>
                     void m.work("Loading this reference.", async () => {
                       await loadReference(song.id);
                       useMedia.setState({

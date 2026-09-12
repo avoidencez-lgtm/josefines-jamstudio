@@ -42,9 +42,9 @@ export function TransportBar() {
   const reference = telemetry.reference;
   const isPlaying =
     transport.state === "playing" || transport.state === "counting_in";
-  const playLabel = isPlaying ? "Pause" : "Play";
+  const playLabel = isPlaying ? "Pause this." : "Play this.";
   const recordLabel = recordingError
-    ? "Save partial take"
+    ? "Save this partial take."
     : isRecording
       ? "Stop recording."
       : "Record a new take.";
@@ -74,8 +74,8 @@ export function TransportBar() {
             type="button"
             onClick={() => transportStop()}
             className="w-9 h-9 rounded-[var(--radius-m)] flex items-center justify-center bg-[var(--bg-2)] text-[var(--fg-0)] hover:bg-[var(--bg-3)] cursor-pointer"
-            title="Stop (Enter)"
-            aria-label="Stop"
+            title="Stop this. (Enter)"
+            aria-label="Stop this."
           >
             <Stop size={18} />
           </button>
@@ -116,7 +116,9 @@ export function TransportBar() {
           <>
             <div className="flex items-baseline gap-2 font-mono tabular-nums">
               <span className="text-xs uppercase text-[var(--fg-2)] tracking-wider">
-                {transport.state === "counting_in" ? "Count" : "Bar"}
+                {transport.state === "counting_in"
+                  ? "This is the count."
+                  : "This is the bar."}
               </span>
               <span
                 className={`text-lg font-semibold ${
@@ -133,12 +135,12 @@ export function TransportBar() {
 
             <div className="flex items-baseline gap-2 font-mono tabular-nums">
               <span className="text-xs uppercase text-[var(--fg-2)] tracking-wider">
-                Tempo
+                This is the tempo.
               </span>
               <span className="text-lg font-semibold text-[var(--fg-0)]">
                 {transport.bpm.toFixed(0)}
               </span>
-              <span className="text-xs text-[var(--fg-2)]">BPM</span>
+              <span className="text-xs text-[var(--fg-2)]">This is the BPM.</span>
             </div>
 
             <div className="h-5 w-px bg-[var(--line)]" />
@@ -148,7 +150,7 @@ export function TransportBar() {
               title="Meter follows the loaded chart."
             >
               <span className="text-xs uppercase text-[var(--fg-2)] tracking-wider">
-                Meter
+                This is the meter.
               </span>
               <span className="text-lg font-semibold text-[var(--fg-0)]">
                 {transport.time_signature[0]}/{transport.time_signature[1]}

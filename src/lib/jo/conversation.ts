@@ -71,20 +71,24 @@ export function discardPendingProposal(reason: string): boolean {
   return true;
 }
 
-const snapshotContext = (): JoContext => {
+export const snapshotContext = (): JoContext => {
   const s = useEngineStore.getState();
   const t = s.telemetry;
   const w = useWriting.getState();
+  const song = t.reference;
+  const gridAt = song?.grid?.position;
   return {
-    transportState: t.transport.state,
-    bpm: t.transport.bpm,
-    bar: t.transport.bar,
+    transportState: song?.state ?? t.transport.state,
+    bpm: gridAt?.bpm ?? t.transport.bpm,
+    bar: gridAt?.bar ?? t.transport.bar,
     styleId: t.band.style_id,
     styleName: t.band.style_name,
     intensity: t.band.intensity,
     chartName: s.currentChart?.name ?? null,
-    currentChord: t.band.current_chord,
-    currentSection: t.band.current_section,
+    currentChord: song?.analysis?.chord || t.band.current_chord,
+    nextChord: song?.analysis?.next_chord || t.band.next_chord || "",
+    currentSection:
+      song?.grid?.position?.section_label || t.band.current_section,
     muted: {
       drums: t.band.mute_drums,
       bass: t.band.mute_bass,
@@ -98,10 +102,25 @@ const snapshotContext = (): JoContext => {
           label: t.reference.label,
           position: t.reference.position,
           seconds: t.reference.seconds,
+          loopEnabled: t.reference.loop_enabled,
+          loopStart: t.reference.loop_start,
+          loopEnd: t.reference.loop_end,
           speed: t.reference.speed ?? 1,
           semitones: t.reference.semitones ?? 0,
           ramp: t.reference.ramp,
           confirmedBars: t.reference.grid?.bars ?? 0,
+          key: t.reference.analysis?.key ?? null,
+          analysisError: t.reference.analysis_error ?? null,
+          gridError: t.reference.grid_error ?? null,
+          processingError: t.reference.processing_error ?? null,
+          stems: t.reference.stems,
+          gridOrigin: t.reference.grid?.origin ?? null,
+          beatsPerBar: t.reference.grid?.beats_per_bar ?? null,
+          beat: gridAt != null ? Math.floor(gridAt.beat) : null,
+          analysisBeat: t.reference.analysis?.beat ?? null,
+          analysisBeatCount: t.reference.analysis?.beat_count ?? null,
+          confidence: t.reference.analysis?.confidence ?? null,
+          analysisBpm: t.reference.analysis?.bpm ?? null,
           sections: t.reference.grid?.sections.map(({ id, label }) => ({
             id,
             label,

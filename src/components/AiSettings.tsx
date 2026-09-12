@@ -76,7 +76,7 @@ export function AiSettings() {
       },
     }));
   return (
-    <Panel title="AI providers & Song Lab">
+    <Panel title="These are the AI providers and Song Lab.">
       <div className="flex flex-col gap-5">
         <p className="text-sm text-[var(--fg-1)]">
           Choose who helps the studio assistant, Jo and Song Lab. Installed

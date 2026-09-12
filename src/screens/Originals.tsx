@@ -82,7 +82,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
     <div className="song-editor">
       <header className="song-heading">
         <div className="write-identity">
-          <h1>Write</h1>
+          <h1>This is Write.</h1>
           {song && (
             <label className="song-title">
               Name this song.
@@ -133,7 +133,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
         <section className="song-empty">
           <h2>Start with your own idea.</h2>
           <p>
-            Create this new song, then use Record & layers to capture a riff.
+            Create this new song, then use This is Record & layers. to capture a riff.
             You can add a recorded idea whenever you are ready.
           </p>
           <Button variant="primary" onClick={w.createSong}>
@@ -157,13 +157,13 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
               disabled={!w.past.length || w.busy || isRecording}
               onClick={w.undo}
             >
-              Undo
+              Undo this.
             </Button>
             <Button
               disabled={!w.future.length || w.busy || isRecording}
               onClick={w.redo}
             >
-              Redo
+              Redo this.
             </Button>
             <Button
               disabled={w.busy || isRecording}
@@ -205,7 +205,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
               onClick={() => run(w.record)}
             >
               {recordingError
-                ? "Save partial take"
+                ? "Save this partial take."
                 : isRecording
                   ? "Save this take."
                   : "Record this take."}
@@ -235,11 +235,11 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
             >
               {(
                 [
-                  ["compose", "Compose"],
-                  ["lyrics", "Lyrics"],
-                  ["record", "Record & layers"],
-                  ["finish", "Finish"],
-                  ["versions", "Versions"],
+                  ["compose", "This is Compose."],
+                  ["lyrics", "This is Lyrics."],
+                  ["record", "This is Record & layers."],
+                  ["finish", "This is Finish."],
+                  ["versions", "This is Versions."],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -759,14 +759,17 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                 </div>
               </div>
               <p className="song-help">
-                Keep a version before experimenting. Restore either version and
-                press Play to compare; Undo brings your last edit back.
+                Keep a version before experimenting. Use Restore this. for either
+                version and press Play this. to compare; Undo this. brings your last
+                edit back.
               </p>
               <div className="song-versions">
                 {song.versions.map((v) => (
                   <div key={v.id}>
                     <strong>{v.name}</strong>
-                    <Button onClick={() => w.restore(v.id)}>Restore</Button>
+                    <Button onClick={() => w.restore(v.id)}>
+                      Restore this.
+                    </Button>
                     <Button
                       onClick={() =>
                         useWriting.setState({

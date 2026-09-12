@@ -103,7 +103,7 @@ export function StemMixer({ song }: { song: ReferenceState }) {
       </fieldset>
       <div className="workspace-actions">
         <Button type="submit" disabled={locked}>
-          {busy ? "Saving mix…" : "Apply and save this mix."}
+          {busy ? "This is saving the mix." : "Apply and save this mix."}
         </Button>
         <Button
           type="button"

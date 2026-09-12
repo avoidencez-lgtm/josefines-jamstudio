@@ -784,6 +784,18 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   ).toContain("Capture this current tone.");
   expect(
     readFileSync("src/components/tools/RigSnapshotTool.tsx", "utf8"),
+  ).not.toContain("Undo restores the previous snapshot.");
+  expect(
+    readFileSync("src/components/tools/RigSnapshotTool.tsx", "utf8"),
+  ).toContain("Undo restores this previous snapshot.");
+  expect(
+    readFileSync("src/components/tools/RigSnapshotTool.tsx", "utf8"),
+  ).not.toContain("Save in Write to keep it");
+  expect(
+    readFileSync("src/components/tools/RigSnapshotTool.tsx", "utf8"),
+  ).toContain("Save this in Write to keep it");
+  expect(
+    readFileSync("src/components/tools/RigSnapshotTool.tsx", "utf8"),
   ).not.toContain("Recall snapshot to rig");
   expect(
     readFileSync("src/components/tools/RigSnapshotTool.tsx", "utf8"),
@@ -952,6 +964,10 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(melody).toContain("Preview these chord choices.");
   expect(melody).not.toContain("Keep as a section variation");
   expect(melody).toContain("Keep this as a section variation.");
+  expect(melody).not.toContain("Save keeps it.");
+  expect(melody).toContain("Save keeps this.");
+  expect(melody).not.toContain("Undo is available");
+  expect(melody).toContain("This undo is available");
   expect(melody).not.toContain("Editable melody ·");
   expect(melody).toContain(
     "Editable melody. Note, start seconds, and duration seconds.",
@@ -1003,6 +1019,18 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   ).not.toContain("Use prompt in AI Music");
   expect(readFileSync("src/components/tools/BriefTool.tsx", "utf8")).toContain(
     "Use this prompt in AI Music.",
+  );
+  expect(readFileSync("src/components/tools/BriefTool.tsx", "utf8")).not.toContain(
+    "Undo restores the old prompt.",
+  );
+  expect(readFileSync("src/components/tools/BriefTool.tsx", "utf8")).toContain(
+    "Undo restores this old prompt.",
+  );
+  expect(readFileSync("src/components/tools/BriefTool.tsx", "utf8")).not.toContain(
+    "Save keeps the brief",
+  );
+  expect(readFileSync("src/components/tools/BriefTool.tsx", "utf8")).toContain(
+    "Save keeps this brief",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Build arrangement brief compiles",
@@ -1779,6 +1807,9 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/screens/Songs.tsx", "utf8")).toContain(
     "Analyze again.",
   );
+  expect(readFileSync("src/screens/Songs.tsx", "utf8")).toContain(
+    "Apply this recorded fixture song.",
+  );
   expect(
     readFileSync("src/components/ReferenceGrid.tsx", "utf8"),
   ).not.toContain("Analyze tempo & chords");
@@ -2274,6 +2305,60 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/components/FootControls.tsx", "utf8")).toContain(
     "Rescan these inputs.",
   );
+  expect(readFileSync("src/components/FootControls.tsx", "utf8")).not.toContain(
+    ': "Learn"}',
+  );
+  expect(readFileSync("src/components/FootControls.tsx", "utf8")).toContain(
+    ': "Learn this."}',
+  );
+  expect(readFileSync("src/components/FootControls.tsx", "utf8")).not.toContain(
+    "click Learn,",
+  );
+  expect(readFileSync("src/components/FootControls.tsx", "utf8")).toContain(
+    "click Learn this,",
+  );
+  expect(readFileSync("src/components/FootControls.tsx", "utf8")).not.toContain(
+    '"Cancel learning"',
+  );
+  expect(readFileSync("src/components/FootControls.tsx", "utf8")).toContain(
+    '"Cancel this learning."',
+  );
+  expect(readFileSync("src/components/FootControls.tsx", "utf8")).not.toContain(
+    "\n                Clear\n",
+  );
+  expect(readFileSync("src/components/FootControls.tsx", "utf8")).toContain(
+    "\n                Clear this.\n",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).not.toContain(
+    "\n              Clear\n",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
+    "\n              Clear this.\n",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).not.toContain(
+    "\n            Rescan\n",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
+    "\n            Rescan this.\n",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).not.toContain(
+    "\n              Rescan\n",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
+    "\n              Rescan this.\n",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).not.toContain(
+    "press Rescan.",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
+    "press Rescan this.",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).not.toContain(
+    "} Rescan or pick another port.",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
+    "} Rescan this or pick another port.",
+  );
   expect(readFileSync("src/components/Stems.tsx", "utf8")).not.toContain(
     "Your account price · USD per minute (optional)",
   );
@@ -2375,6 +2460,12 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   );
   expect(readFileSync("src/components/SongLab.tsx", "utf8")).toContain(
     "Generate this idea.",
+  );
+  expect(readFileSync("src/components/SongLab.tsx", "utf8")).not.toContain(
+    '"Thinking…"',
+  );
+  expect(readFileSync("src/components/SongLab.tsx", "utf8")).toContain(
+    '"This is thinking."',
   );
   expect(readFileSync("src/components/SongLab.tsx", "utf8")).not.toContain(
     "Add bridge & keep original version",
@@ -3432,10 +3523,19 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "${t}. Open Rig, then Rescan",
   );
   expect(readFileSync("src/lib/loudError.ts", "utf8")).not.toContain(
-    "${t} Open Settings → Audio devices",
+    "then Rescan or pick another port.",
   );
   expect(readFileSync("src/lib/loudError.ts", "utf8")).toContain(
+    "then Rescan this or pick another port.",
+  );
+  expect(readFileSync("src/lib/loudError.ts", "utf8")).not.toContain(
+    "${t} Open Settings → Audio devices",
+  );
+  expect(readFileSync("src/lib/loudError.ts", "utf8")).not.toContain(
     "${t}. Open Settings → Audio devices",
+  );
+  expect(readFileSync("src/lib/loudError.ts", "utf8")).toContain(
+    "${t}. Open Settings → This is Audio devices.",
   );
   expect(readFileSync("src/lib/loudError.ts", "utf8")).not.toContain(
     "${t} Open Library;",
@@ -3470,8 +3570,11 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/lib/loudError.ts", "utf8")).not.toContain(
     "${t} Open Settings → AI & models.",
   );
-  expect(readFileSync("src/lib/loudError.ts", "utf8")).toContain(
+  expect(readFileSync("src/lib/loudError.ts", "utf8")).not.toContain(
     "${t}. Open Settings → AI & models.",
+  );
+  expect(readFileSync("src/lib/loudError.ts", "utf8")).toContain(
+    "${t}. Open Settings → These are the AI and models.",
   );
   expect(readFileSync("src/lib/loudError.ts", "utf8")).not.toContain(
     "${t} Fix the file or move it aside.",
@@ -3482,8 +3585,11 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/lib/loudError.ts", "utf8")).not.toContain(
     "${t} Open Settings → First run",
   );
-  expect(readFileSync("src/lib/loudError.ts", "utf8")).toContain(
+  expect(readFileSync("src/lib/loudError.ts", "utf8")).not.toContain(
     "${t}. Open Settings → First run",
+  );
+  expect(readFileSync("src/lib/loudError.ts", "utf8")).toContain(
+    "${t}. Open Settings → This is First run.",
   );
   expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).not.toContain(
     "Unsaved edits.",
@@ -3954,14 +4060,17 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
     "Record a new take., then",
   );
-  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
     "Hit Record a new take, then",
   );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
+    "Hit Record a new take. then",
+  );
   expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
-    "Record a new take.</strong> to",
+    "Hit <strong>Record a new take</strong> to",
   );
   expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
-    "Hit <strong>Record a new take</strong> to record multi-track",
+    "Hit <strong>Record a new take.</strong> to",
   );
   expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
     "Analyze again. to",
@@ -3979,7 +4088,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "Create this new song. then",
   );
   expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
-    "Create this new song, then use Record & layers to capture a riff.",
+    "Create this new song, then use This is Record & layers. to capture a riff.",
   );
   expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
     "Play this song. loads",
@@ -4539,14 +4648,20 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Save this song. persists",
   );
-  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Save this song persists both, and Undo/Versions include them.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Save this song persists both, and Undo/This is Versions. include them.",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Save this song. lagrer begge",
   );
-  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Save this song lagrer begge, og Undo/Versions tar dem med.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Save this song lagrer begge, og Undo/This is Versions. tar dem med.",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "These are alternative chords., This is a contrasting",
@@ -5065,6 +5180,2097 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "tilbyr Clear this search",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "run Measure loopback with a cable",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "run Measure this loopback with a cable",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "kjører du Measure loopback med en kabel",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "kjører du Measure this loopback med en kabel",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Measure loopback in Settings with a cable",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Measure this loopback in Settings with a cable",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Measure loopback i Settings med en kabel",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Measure this loopback i Settings med en kabel",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Measure loopback in Settings or Sessions",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Measure this loopback in Settings or Sessions",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Measure loopback i Settings eller Sessions",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Measure this loopback i Settings eller Sessions",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "choose Measure loopback",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "choose Measure this loopback",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "velg Measure loopback",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "velg Measure this loopback",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Both banners include Rescan,",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Both banners include Rescan this,",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Begge bannerne har Rescan,",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Begge bannerne har Rescan this,",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    ">Restore<",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    "\n                      Restore this.\n",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    "\n              Undo\n",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    "\n              Undo this.\n",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    "\n              Redo\n",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    "\n              Redo this.\n",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    "Restore either version",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    "Use Restore this. for either",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    "Undo brings your last edit back",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    "Undo this. brings your last",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    "press Play to compare",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    "press Play this. to compare",
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).not.toContain(
+    'isPlaying ? "Pause" : "Play";',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
+    ' : "Play this.";',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).not.toContain(
+    'isPlaying ? "Pause" : "Play this.";',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
+    'isPlaying ? "Pause this." : "Play this.";',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).not.toContain(
+    'aria-label="Stop"',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
+    'aria-label="Stop this."',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).not.toContain(
+    'title="Stop (Enter)"',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
+    'title="Stop this. (Enter)"',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).not.toContain(
+    '? "Count" : "Bar"',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
+    ': "This is the bar."}',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).not.toContain(
+    '? "Count" : "This is the bar."',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
+    '? "This is the count."',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).not.toContain(
+    "\n                Tempo\n",
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
+    "\n                This is the tempo.\n",
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).not.toContain(
+    "\n                Meter\n",
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
+    "\n                This is the meter.\n",
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).not.toContain(
+    'text-[var(--fg-2)]">BPM</span>',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
+    'text-[var(--fg-2)]">This is the BPM.</span>',
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
+    "{take.tempo.toFixed(0)} BPM</span>",
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
+    "{take.tempo.toFixed(0)} BPM.</span>",
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
+    "${r.chartId} ${r.tempo.toFixed(0)} BPM`",
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
+    "${r.chartId} ${r.tempo.toFixed(0)} BPM.`",
+  );
+  expect(readFileSync("src/screens/Library.tsx", "utf8")).not.toContain(
+    "{Math.round(c.defaultBpm)} BPM ·",
+  );
+  expect(readFileSync("src/screens/Library.tsx", "utf8")).toContain(
+    "{Math.round(c.defaultBpm)} BPM. ·",
+  );
+  expect(readFileSync("src/screens/Library.tsx", "utf8")).not.toContain(
+    "{Math.round(s.feel.bpmRange[1])} BPM\n",
+  );
+  expect(readFileSync("src/screens/Library.tsx", "utf8")).toContain(
+    "{Math.round(s.feel.bpmRange[1])} BPM.\n",
+  );
+  expect(readFileSync("src/screens/Stage.tsx", "utf8")).not.toContain(
+    "{Math.round(bpmRange[1])} BPM\n",
+  );
+  expect(readFileSync("src/screens/Stage.tsx", "utf8")).toContain(
+    "{Math.round(bpmRange[1])} BPM.\n",
+  );
+  expect(readFileSync("src/screens/Stage.tsx", "utf8")).not.toContain(
+    'suffix="BPM"',
+  );
+  expect(readFileSync("src/screens/Stage.tsx", "utf8")).toContain(
+    'suffix="BPM."',
+  );
+  expect(
+    readFileSync("src/components/tools/SetlistTool.tsx", "utf8"),
+  ).not.toContain("{item.bpm} BPM\n");
+  expect(
+    readFileSync("src/components/tools/SetlistTool.tsx", "utf8"),
+  ).toContain("{item.bpm} BPM.\n");
+  expect(
+    readFileSync("src/components/ReferencePlayer.tsx", "utf8"),
+  ).not.toContain("${song.grid.position.bpm.toFixed(1)} BPM ·");
+  expect(
+    readFileSync("src/components/ReferencePlayer.tsx", "utf8"),
+  ).toContain("${song.grid.position.bpm.toFixed(1)} BPM. ·");
+  expect(
+    readFileSync("src/components/tools/SetlistTool.tsx", "utf8"),
+  ).not.toContain("{item.countIn}-bar count-in ");
+  expect(
+    readFileSync("src/components/tools/SetlistTool.tsx", "utf8"),
+  ).toContain("{item.countIn}-bar count-in.");
+  expect(
+    readFileSync("src/components/tools/SetlistTool.tsx", "utf8"),
+  ).not.toContain('? "· cued"');
+  expect(
+    readFileSync("src/components/tools/SetlistTool.tsx", "utf8"),
+  ).toContain('? "· This is cued."');
+  expect(
+    readFileSync("src/components/tools/SetlistTool.tsx", "utf8"),
+  ).not.toContain('?? "chart\'s groove"');
+  expect(
+    readFileSync("src/components/tools/SetlistTool.tsx", "utf8"),
+  ).toContain('?? "This uses the chart\'s groove."');
+  expect(
+    readFileSync("src/components/tools/SetlistTool.tsx", "utf8"),
+  ).not.toContain('?? "missing groove"');
+  expect(
+    readFileSync("src/components/tools/SetlistTool.tsx", "utf8"),
+  ).toContain('?? "This groove is missing."');
+  expect(
+    readFileSync("src/components/WritingDesk.tsx", "utf8"),
+  ).not.toContain("<span>Bar {i + 1}</span>");
+  expect(
+    readFileSync("src/components/WritingDesk.tsx", "utf8"),
+  ).toContain("<span>Bar {i + 1}.</span>");
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('label="Fill"');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).toContain('label="Fill this."');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('label="Crash"');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).toContain('label="Crash this."');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('label="Ending"');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).toContain('label="Ending this."');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('? "Resume" : "Stop"');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('? "Resume" : "Stop this."');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).toContain('? "Resume this." : "Stop this."');
+  expect(
+    readFileSync("src/components/Notices.tsx", "utf8"),
+  ).not.toContain('aria-label="Dismiss"');
+  expect(
+    readFileSync("src/components/Notices.tsx", "utf8"),
+  ).toContain('aria-label="Dismiss this."');
+  expect(
+    readFileSync("src/components/ChordShapes.tsx", "utf8"),
+  ).not.toContain('title="Shapes"');
+  expect(
+    readFileSync("src/components/ChordShapes.tsx", "utf8"),
+  ).toContain('title="These are the shapes."');
+  expect(
+    readFileSync("src/components/ChordShapes.tsx", "utf8"),
+  ).not.toContain("<span>next</span>");
+  expect(
+    readFileSync("src/components/AiSettings.tsx", "utf8"),
+  ).not.toContain('title="AI providers & Song Lab"');
+  expect(
+    readFileSync("src/components/AiSettings.tsx", "utf8"),
+  ).toContain('title="These are the AI providers and Song Lab."');
+  expect(readFileSync("docs/guide/api-options.md", "utf8")).not.toContain(
+    "**Settings → AI providers & Song Lab**",
+  );
+  expect(readFileSync("docs/guide/api-options.md", "utf8")).toContain(
+    "**Settings → These are the AI providers and Song Lab.**",
+  );
+  expect(
+    readFileSync("src/screens/Originals.tsx", "utf8"),
+  ).not.toContain("<h1>Write</h1>");
+  expect(
+    readFileSync("src/screens/Originals.tsx", "utf8"),
+  ).toContain("<h1>This is Write.</h1>");
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).not.toContain('"AI & models"');
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).toContain('"These are the AI and models."');
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).not.toContain("in AI & models.");
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).toContain("in These are the AI and models.");
+  expect(readFileSync("src/lib/settingsView.ts", "utf8")).not.toContain(
+    'openSettings("AI & models")',
+  );
+  expect(readFileSync("src/lib/settingsView.ts", "utf8")).toContain(
+    'openSettings("These are the AI and models.")',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "key in AI & models and",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "key in These are the AI and models. and",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Settings → AI & models choose",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Settings → These are the AI and models. choose",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "AI & models holds provider",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "These are the AI and models. holds provider",
+  );
+  expect(readFileSync("docs/guide/setup.md", "utf8")).not.toContain(
+    "under AI & models.",
+  );
+  expect(readFileSync("docs/guide/setup.md", "utf8")).toContain(
+    "under These are the AI and models.",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).not.toContain(
+    "Use AI & models in Settings",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).toContain(
+    "Use These are the AI and models. in Settings",
+  );
+  expect(readFileSync("docs/QUICKSTART.md", "utf8")).not.toContain(
+    "Settings → AI & models.",
+  );
+  expect(readFileSync("docs/QUICKSTART.md", "utf8")).toContain(
+    "Settings → These are the AI and models.",
+  );
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('useState("Perform")');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).toContain('useState("This is Perform.")');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('["Perform", "Practice", "Levels"]');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('["This is Perform.", "Practice", "Levels"]');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('["This is Perform.", "This is Practice.", "Levels"]');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).toContain('["This is Perform.", "This is Practice.", "This is Levels."]');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('view !== "Levels"');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).toContain('view !== "This is Levels."');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain('view !== "Practice"');
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).toContain('view !== "This is Practice."');
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Perform"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Perform."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Perform and Levels both show",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "This is Perform. and Levels both show",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "This is Perform. and This is Levels. both show",
+  );
+  expect(readFileSync("docs/QUICKSTART.md", "utf8")).not.toContain(
+    "use Perform, Practice and Levels.",
+  );
+  expect(readFileSync("docs/QUICKSTART.md", "utf8")).not.toContain(
+    "use This is Perform., Practice and Levels.",
+  );
+  expect(readFileSync("docs/QUICKSTART.md", "utf8")).not.toContain(
+    "use This is Perform., This is Practice. and Levels.",
+  );
+  expect(readFileSync("docs/QUICKSTART.md", "utf8")).toContain(
+    "use This is Perform., This is Practice. and This is Levels.",
+  );
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain("\n                Band\n");
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).toContain("\n                This is the band.\n");
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).not.toContain("\n                Lyria\n");
+  expect(
+    readFileSync("src/screens/Stage.tsx", "utf8"),
+  ).toContain("\n                This is Lyria.\n");
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).not.toContain(
+    'useState("Play scenes")',
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
+    'useState("This is Play scenes.")',
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).not.toContain(
+    '["Play scenes", "Section automation"',
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).not.toContain(
+    '["This is Play scenes.", "Section automation"',
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
+    '["This is Play scenes.", "This is Section automation."',
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).not.toContain(
+    '"Connection & MIDI"',
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
+    '"This is Connection and MIDI."',
+  );
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).not.toContain('"First run"');
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).toContain('"This is First run."');
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).not.toContain('"Audio devices"');
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).toContain('"This is Audio devices."');
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).not.toContain("\n              Audio devices\n");
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).toContain("\n              This is Audio devices.\n");
+  expect(readFileSync("src/lib/settingsView.ts", "utf8")).not.toContain(
+    'view: "Audio devices"',
+  );
+  expect(readFileSync("src/lib/settingsView.ts", "utf8")).toContain(
+    'view: "This is Audio devices."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Open Settings → Audio devices.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Open Settings → This is Audio devices.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Audio devices"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Audio devices."',
+  );
+  expect(readFileSync("docs/QUICKSTART.md", "utf8")).not.toContain(
+    "Settings → Audio devices,",
+  );
+  expect(readFileSync("docs/QUICKSTART.md", "utf8")).toContain(
+    "Settings → This is Audio devices.,",
+  );
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).not.toContain('"Usage"');
+  expect(
+    readFileSync("src/screens/Settings.tsx", "utf8"),
+  ).toContain('"This is Usage."');
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    '["compose", "Compose"]',
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    '["compose", "This is Compose."]',
+  );
+  expect(readFileSync("src/lib/help.ts", "utf8")).not.toContain(
+    'compose: { label: "Compose"',
+  );
+  expect(readFileSync("src/lib/help.ts", "utf8")).toContain(
+    'compose: { label: "This is Compose."',
+  );
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).not.toContain(
+    "add it in Compose so",
+  );
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).toContain(
+    "add it in This is Compose. so",
+  );
+  expect(
+    readFileSync("src/components/tools/MelodyTool.tsx", "utf8"),
+  ).not.toContain("In Compose, add it");
+  expect(
+    readFileSync("src/components/tools/MelodyTool.tsx", "utf8"),
+  ).toContain("In This is Compose., add it");
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "In Compose, add the variation",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "In This is Compose., add the variation",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "below Compose and Lyrics",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "below This is Compose. and Lyrics.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "below This is Compose. and This is Lyrics.",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    '["lyrics", "Lyrics"]',
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    '["lyrics", "This is Lyrics."]',
+  );
+  expect(readFileSync("src/lib/help.ts", "utf8")).not.toContain(
+    'lyrics: { label: "Lyrics"',
+  );
+  expect(readFileSync("src/lib/help.ts", "utf8")).toContain(
+    'lyrics: { label: "This is Lyrics."',
+  );
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).not.toContain(
+    "Write a line in Lyrics,",
+  );
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).toContain(
+    "Write a line in This is Lyrics.,",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Choose Lyrics and a section",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Choose This is Lyrics. and a section",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Lyrics and Song Lab"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Lyrics. and Song Lab."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Låttekst og Song Lab"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Lyrics. og Song Lab."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "What Jamstudio does"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is What Jamstudio does."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Hva Jamstudio gjør"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Hva Jamstudio gjør."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Desktop app or browser preview?"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Desktop app or browser preview?"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Skrivebordsapp eller nettleservisning?"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Skrivebordsapp eller nettleservisning?"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Your first complete session"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Your first complete session."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Din første komplette økt"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Din første komplette økt."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Language and navigation"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Language and navigation."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Språk og navigasjon"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Språk og navigasjon."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Song map and linked sections"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Song map and linked sections."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Låtkart og koblede seksjoner"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Låtkart og koblede seksjoner."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Edit chords and harmony"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Edit chords and harmony."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Rediger akkorder og harmonikk"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Rediger akkorder og harmonikk."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Band parts, locks and energy"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Band parts, locks and energy."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Bandstemmer, låser og energi"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Bandstemmer, låser og energi."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Limits and timing"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Limits and timing."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Grenser og tidsplassering"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Grenser og tidsplassering."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Write words against the music"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Write words against the music."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Skriv ord til musikken"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Skriv ord til musikken."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Ask for a useful proposal"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Ask for a useful proposal."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Be om et nyttig forslag"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Be om et nyttig forslag."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "What the AI knows"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is What the AI knows."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Hva AI-en vet"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Hva AI-en vet."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Retrospective capture"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Retrospective capture."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Ta vare på det du nettopp spilte"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Ta vare på det du nettopp spilte."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Trim and place a layer"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Trim and place a layer."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Beskjær og plasser et lag"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Beskjær og plasser et lag."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Record an overdub"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Record an overdub."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Spill inn et nytt lag"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Spill inn et nytt lag."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Review what needs attention"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Review what needs attention."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Se hva som trenger oppmerksomhet"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Se hva som trenger oppmerksomhet."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Shape a transition"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Shape a transition."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Form en overgang"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Form en overgang."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Assemble a section comp"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Assemble a section comp."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Sett sammen en seksjonskomp"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Sett sammen en seksjonskomp."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Keep experiments reversible"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Keep experiments reversible."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Behold muligheten til å angre"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Behold muligheten til å angre."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Three different safety nets"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Three different safety nets."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Tre ulike sikkerhetsnett"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Tre ulike sikkerhetsnett."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Conflicts and concurrent edits"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Conflicts and concurrent edits."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Konflikter og endringer under lagring"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Konflikter og endringer under lagring."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Closing and backups"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Closing and backups."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Lukking og sikkerhetskopier"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Lukking og sikkerhetskopier."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Fremføring"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Fremføring."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Øving og tempotrening"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Øving og tempotrening."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Meters, tuner and meter convention"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Meters, tuner and meter convention."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Nivå, stemming og taktart"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Nivå, stemming og taktart."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Find, edit and play"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Find, edit and play."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Finn, rediger og spill"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Finn, rediger og spill."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Chart syntax"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Chart syntax."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Syntaks for akkordskjema"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Syntaks for akkordskjema."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Stored content"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Stored content."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Lagret innhold"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Lagret innhold."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Commands and reviewed edits"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Commands and reviewed edits."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Kommandoer og endringer du godkjenner"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Kommandoer og endringer du godkjenner."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Talk to Jo"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Talk to Jo."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Snakk med Jo"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Snakk med Jo."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Connect a text API"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Connect a text API."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Koble til en tekst-API"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Koble til en tekst-API."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Use Codex or Claude Code inside the app"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Use Codex or Claude Code inside the app."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Bruk Codex eller Claude Code inne i appen"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Bruk Codex eller Claude Code inne i appen."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Privacy and useful prompts"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Privacy and useful prompts."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Personvern og nyttige forespørsler"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Personvern og nyttige forespørsler."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Import and listen"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Import and listen."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Importer og lytt"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Importer og lytt."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Play and record a reference in Jamstudio"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Play and record a reference in Jamstudio."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Spill og ta opp med en referanse i Jamstudio"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Spill og ta opp med en referanse i Jamstudio."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Ask Jo to load a song"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Ask Jo to load a song."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Be Jo laste en sang"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Be Jo laste en sang."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Separate instruments and play minus guitar"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Separate instruments and play minus guitar."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Skill instrumenter og spill uten gitar"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Skill instrumenter og spill uten gitar."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Estimate tempo, chords and key"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Estimate tempo, chords and key."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Anslå tempo, akkorder og toneart"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Anslå tempo, akkorder og toneart."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Use a mix in a film"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Use a mix in a film."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Bruk en miks i en film"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Bruk en miks i en film."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Change playback speed and key"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Change playback speed and key."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Endre hastighet og toneart under avspilling"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Endre hastighet og toneart under avspilling."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Confirm bars and loop named sections"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Confirm bars and loop named sections."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Bekreft takter og lag seksjonsløkker"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Bekreft takter og lag seksjonsløkker."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Samle sangfilene"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Samle sangfilene."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Generate deliberately"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Generate deliberately."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Generer med et bevisst valg"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Generer med et bevisst valg."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Connections and job receipts"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Connections and job receipts."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Tilkoblinger og jobbkvitteringer"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Tilkoblinger og jobbkvitteringer."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "ComfyUI setup"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is ComfyUI setup."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Oppsett av ComfyUI"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Oppsett av ComfyUI."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Choose a clean soundtrack"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Choose a clean soundtrack."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Velg et rent lydspor"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Velg et rent lydspor."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Save and render"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Save and render."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Lagre og rendre"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Lagre og rendre."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Find the keeper"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Find the keeper."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Finn opptaket du vil beholde"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Finn opptaket du vil beholde."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Alignment and stems"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Alignment and stems."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Justering og separate spor"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Justering og separate spor."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Logic and other DAWs"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Logic and other DAWs."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Logic og andre musikkprogrammer"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Logic og andre musikkprogrammer."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "REAPER session builder"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is REAPER session builder."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Øktbygger for REAPER"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Øktbygger for REAPER."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Connect the correct MIDI path"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Connect the correct MIDI path."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Koble til riktig MIDI-forbindelse"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Koble til riktig MIDI-forbindelse."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Seksjonsautomasjon"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Seksjonsautomasjon."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Learn pedals"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Learn pedals."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Lær inn pedaler"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Lær inn pedaler."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Lydenheter"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Lydenheter."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is First run. and signing"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is First run. and signing."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Første oppstart og signering"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Første oppstart og signering."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Diagnostics and reduced motion"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Diagnostics and reduced motion."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Diagnostikk og redusert bevegelse"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Diagnostikk og redusert bevegelse."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Mac and Windows setup"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Mac and Windows setup."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Oppsett på Mac og Windows"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Oppsett på Mac og Windows."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Keys, models and usage"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Keys, models and usage."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Nøkler, modeller og forbruk"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Nøkler, modeller og forbruk."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Where your work lives"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Where your work lives."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Hvor arbeidet lagres"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Hvor arbeidet lagres."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Back up and restore safely"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Back up and restore safely."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Sikker sikkerhetskopiering og gjenoppretting"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Sikker sikkerhetskopiering og gjenoppretting."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Damaged files and interrupted recordings"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Damaged files and interrupted recordings."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Skadede filer og avbrutte opptak"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Skadede filer og avbrutte opptak."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "No sound, no input or wrong timing"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is No sound, no input or wrong timing."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Ingen lyd, ingen inngang eller feil timing"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Ingen lyd, ingen inngang eller feil timing."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "AI, files and media failures"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is AI, files and media failures."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Feil i AI, filer og medier"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Feil i AI, filer og medier."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "What automated checks cannot prove"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is What automated checks cannot prove."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Hva automatiske tester ikke kan bevise"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Hva automatiske tester ikke kan bevise."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Architecture and source map"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Architecture and source map."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Arkitektur og kildekodekart"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Arkitektur og kildekodekart."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Build and verify"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Build and verify."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Bygg og kontroller"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Bygg og kontroller."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Extend existing seams"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Extend existing seams."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Utvid eksisterende utvidelsespunkter"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Utvid eksisterende utvidelsespunkter."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Practice. and tempo trainer"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Practice. and tempo trainer."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Storyboard. and footage"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Storyboard. and footage."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Storyboard. og videomateriale"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Storyboard. og videomateriale."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Write. chords and arrangement"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Write. chords and arrangement."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Write. akkorder og arrangement"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Write. akkorder og arrangement."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Lyrics. and Song Lab"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Lyrics. and Song Lab."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Lyrics. og Song Lab"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Lyrics. og Song Lab."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Finish. stronger originals"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Finish. stronger originals."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Finish. sterkere egne låter"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Finish. sterkere egne låter."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Stage. play and practise"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Stage. play and practise."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Stage. spill og øv"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Stage. spill og øv."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Library. charts and grooves"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Library. charts and grooves."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Library. akkordskjemaer og grooves"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Library. akkordskjemaer og grooves."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Jo AI. and installed agents"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Jo AI. and installed agents."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Jo AI. og installerte agenter"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Jo AI. og installerte agenter."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Songs. mixes and references"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Songs. mixes and references."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Songs. mikser og referanser"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Songs. mikser og referanser."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is AI Music. and local models"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is AI Music. and local models."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is AI Music. og lokale modeller"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is AI Music. og lokale modeller."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Film. soundtrack to music video"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Film. soundtrack to music video."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Film. fra lydspor til musikkvideo"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Film. fra lydspor til musikkvideo."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Sessions. and DAW export"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Sessions. and DAW export."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Sessions. og eksport til DAW"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Sessions. og eksport til DAW."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Rig. and hands-free control"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Rig. and hands-free control."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Rig. og håndfri styring"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Rig. og håndfri styring."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Settings. audio and costs"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Settings. audio and costs."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Settings. lyd og kostnader"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Settings. lyd og kostnader."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Files. backups and recovery"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Files. backups and recovery."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Files. sikkerhetskopier og gjenoppretting"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Files. sikkerhetskopier og gjenoppretting."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Troubleshooting. and acceptance"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Troubleshooting. and acceptance."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Troubleshooting. og godkjenning i praksis"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Troubleshooting. og godkjenning i praksis."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "This is Developer. and extension guide"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Developer. and extension guide."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "This is Developer. og utvidelsesveiledning"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Developer. og utvidelsesveiledning."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "periodically updates WAV headers. A disk failure",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "take.json is written every 10 seconds so a crash still leaves a recoverable manifest.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "og oppdaterer WAV-hoder jevnlig. Diskfeil",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "take.json skrives hvert 10. sekund, så en uventet avslutning likevel etterlater en gjenopprettbar beskrivelse.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "A 60-second take writes stems whose lengths match to the sample.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Et 60-sekunders opptak skriver spor hvis lengder stemmer til samplen.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "A full disk or a permission error names the file path in the on-screen error.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "En full disk eller en tilgangsfeil navngir filbanen i feilmeldingen på skjermen.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "The engine clock stays at 48 kHz. Local file input is converted to 48 kHz.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Motorklokken holder 48 kHz. Lokal filinngang konverteres til 48 kHz.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Live output that is not 48 kHz is converted on the render worker",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "En live-utgang som ikke er 48 kHz konverteres på rendringstråden",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Live input that is not 48 kHz is converted on the render worker",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "En live-inngang som ikke er 48 kHz konverteres på rendringstråden",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    '["record", "Record & layers"]',
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    '["record", "This is Record & layers."]',
+  );
+  expect(readFileSync("src/lib/help.ts", "utf8")).not.toContain(
+    'record: { label: "Record & layers"',
+  );
+  expect(readFileSync("src/lib/help.ts", "utf8")).toContain(
+    'record: { label: "This is Record & layers."',
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    "then use Record & layers to capture",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    "then use This is Record & layers. to capture",
+  );
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).not.toContain(
+    "Trim it in Record & layers or",
+  );
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).toContain(
+    "Trim it in This is Record & layers. or",
+  );
+  expect(
+    readFileSync("src/components/FinishingDesk.tsx", "utf8"),
+  ).not.toContain("in Record & layers.");
+  expect(
+    readFileSync("src/components/FinishingDesk.tsx", "utf8"),
+  ).toContain("in This is Record & layers.");
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Use Record & layers to",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Use This is Record & layers. to",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Write → Record & layers →",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Write → This is Record & layers. →",
+  );
+  expect(readFileSync("docs/QUICKSTART.md", "utf8")).not.toContain(
+    "Choose Record & layers to",
+  );
+  expect(readFileSync("docs/QUICKSTART.md", "utf8")).toContain(
+    "Choose This is Record & layers. to",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    '["finish", "Finish"]',
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    '["finish", "This is Finish."]',
+  );
+  expect(readFileSync("src/lib/help.ts", "utf8")).not.toContain(
+    'finish: { label: "Finish"',
+  );
+  expect(readFileSync("src/lib/help.ts", "utf8")).toContain(
+    'finish: { label: "This is Finish."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Finish: stronger originals"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Finish. stronger originals."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Open Finish to review",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Open This is Finish. to review",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Open Write → Finish.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Open Write → This is Finish.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "In Finish, choose",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "In This is Finish., choose",
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
+    '["versions", "Versions"]',
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    '["versions", "This is Versions."]',
+  );
+  expect(readFileSync("src/lib/help.ts", "utf8")).not.toContain(
+    'label: "Versions"',
+  );
+  expect(readFileSync("src/lib/help.ts", "utf8")).toContain(
+    'label: "This is Versions."',
+  );
+  expect(
+    readFileSync("src/components/FinishingDesk.tsx", "utf8"),
+  ).not.toContain("is in Versions;");
+  expect(
+    readFileSync("src/components/FinishingDesk.tsx", "utf8"),
+  ).toContain("is in This is Versions.;");
+  expect(readFileSync("src/lib/roomActions.ts", "utf8")).not.toContain(
+    "Undo and Versions preserve",
+  );
+  expect(readFileSync("src/lib/roomActions.ts", "utf8")).toContain(
+    "Undo and This is Versions. preserve",
+  );
+  expect(
+    readFileSync("src/components/tools/BlueprintTool.tsx", "utf8"),
+  ).not.toContain("Undo and Versions keep");
+  expect(
+    readFileSync("src/components/tools/BlueprintTool.tsx", "utf8"),
+  ).toContain("Undo and This is Versions. keep");
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Versions contain song data",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "This is Versions. contain song data",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Named Versions are checkpoints",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Named This is Versions. are checkpoints",
+  );
+  expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).not.toContain(
+    '"Create music"',
+  );
+  expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).toContain(
+    '"This is Create music."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Choose Create music,",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Choose This is Create music.,",
+  );
+  expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).not.toContain(
+    '"Library & jobs"',
+  );
+  expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).toContain(
+    '"This is Library & jobs."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Library & jobs keeps generation",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "This is Library & jobs. keeps generation",
+  );
+  expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).not.toContain(
+    '"Storyboard"',
+  );
+  expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).toContain(
+    '"This is Storyboard."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Storyboard and footage"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Storyboard. and footage."',
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).not.toContain(
+    "Film's Storyboard edits",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).toContain(
+    "Film's This is Storyboard. edits",
+  );
+  expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).not.toContain(
+    '"Soundtrack"',
+  );
+  expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).toContain(
+    '"This is Soundtrack."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Soundtrack selects imported",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "This is Soundtrack. selects imported",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).not.toContain(
+    "edits shots, Soundtrack selects",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).toContain(
+    "edits shots, This is Soundtrack. selects",
+  );
+  expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).not.toContain(
+    '"Render & jobs"',
+  );
+  expect(readFileSync("src/screens/MusicVideo.tsx", "utf8")).toContain(
+    '"This is Render & jobs."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Render & jobs shows missing",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "This is Render & jobs. shows missing",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).not.toContain(
+    "audio and Render &",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).toContain(
+    "audio and This is Render & jobs.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Write: chords and arrangement"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Write. chords and arrangement."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Write: akkorder og arrangement"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Write. akkorder og arrangement."',
+  );
+  expect(readFileSync("src/screens/registry.ts", "utf8")).toContain(
+    'label: "Write"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Stage: play and practise"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Stage. play and practise."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Stage: spill og øv"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Stage. spill og øv."',
+  );
+  expect(readFileSync("src/screens/registry.ts", "utf8")).toContain(
+    'label: "Stage"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Library: charts and grooves"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Library. charts and grooves."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Library: akkordskjemaer og grooves"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Library. akkordskjemaer og grooves."',
+  );
+  expect(readFileSync("src/screens/registry.ts", "utf8")).toContain(
+    'label: "Library"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Songs: mixes and references"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Songs. mixes and references."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Songs: mikser og referanser"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Songs. mikser og referanser."',
+  );
+  expect(readFileSync("src/screens/registry.ts", "utf8")).toContain(
+    'label: "Songs"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Film: soundtrack to music video"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Film. soundtrack to music video."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Film: fra lydspor til musikkvideo"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Film. fra lydspor til musikkvideo."',
+  );
+  expect(readFileSync("src/screens/registry.ts", "utf8")).toContain(
+    'label: "Film"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Sessions and DAW export"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Sessions. and DAW export."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Sessions og eksport til DAW"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Sessions. og eksport til DAW."',
+  );
+  expect(readFileSync("src/screens/registry.ts", "utf8")).toContain(
+    'label: "Sessions"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Rig and hands-free control"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Rig. and hands-free control."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Rigg og håndfri styring"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Rig. og håndfri styring."',
+  );
+  expect(readFileSync("src/screens/registry.ts", "utf8")).toContain(
+    'label: "Rig"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Settings, audio and costs"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Settings. audio and costs."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Innstillinger, lyd og kostnader"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Settings. lyd og kostnader."',
+  );
+  expect(readFileSync("src/screens/registry.ts", "utf8")).toContain(
+    'label: "Settings"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Jo AI and installed agents"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Jo AI. and installed agents."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Jo AI og installerte agenter"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Jo AI. og installerte agenter."',
+  );
+  expect(readFileSync("src/screens/registry.ts", "utf8")).toContain(
+    'label: "Jo AI"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "AI Music and local models"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is AI Music. and local models."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "AI Music og lokale modeller"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is AI Music. og lokale modeller."',
+  );
+  expect(readFileSync("src/screens/registry.ts", "utf8")).toContain(
+    'label: "AI Music"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Start here"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Start here."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Start her"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Start her."',
+  );
+  expect(readFileSync("src/lib/theory/solo.ts", "utf8")).toContain(
+    "Start here.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Files, backups and recovery"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Files. backups and recovery."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Filer, sikkerhetskopier og gjenoppretting"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Files. sikkerhetskopier og gjenoppretting."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Troubleshooting and acceptance"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Troubleshooting. and acceptance."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Feilsøking og godkjenning i praksis"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Troubleshooting. og godkjenning i praksis."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Developer and extension guide"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Developer. and extension guide."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Utvikler- og utvidelsesveiledning"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Developer. og utvidelsesveiledning."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Capture, record and layer guitar"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Capture, record and layer guitar."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Fang ideer, ta opp og legg gitarlag"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Fang ideer, ta opp og legg gitarlag."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Save, Undo and versions"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Save, Undo and versions."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"nb": "Lagre, angre og behold versjoner"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"nb": "This is Lagre, angre og behold versjoner."',
+  );
+  expect(readFileSync("src/screens/Stage.tsx", "utf8")).not.toContain(
+    'openSettings("First run")',
+  );
+  expect(readFileSync("src/screens/Stage.tsx", "utf8")).toContain(
+    'openSettings("This is First run.")',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "First run and signing"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is First run. and signing."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Settings → First run lists",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Settings → This is First run. lists",
+  );
+  expect(readFileSync("docs/guide/setup.md", "utf8")).not.toContain(
+    "**Settings → First run**",
+  );
+  expect(readFileSync("docs/guide/setup.md", "utf8")).toContain(
+    "**Settings → This is First run.**",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "opens Connection & MIDI and",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "opens This is Connection and MIDI. and",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Open Rig → Connection & MIDI,",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Open Rig → This is Connection and MIDI.,",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).not.toContain(
+    "under Connection & MIDI",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).toContain(
+    "under This is Connection and MIDI.",
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).not.toContain(
+    'view !== "Section automation"',
+  );
+  expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
+    'view !== "This is Section automation."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Section automation"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Section automation."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    '"en": "Practice and tempo trainer"',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    '"en": "This is Practice. and tempo trainer."',
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Practice lists passages",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "This is Practice. lists passages",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).not.toContain(
+    "use Practice to loop",
+  );
+  expect(readFileSync("docs/guide/studio-rooms.md", "utf8")).toContain(
+    "use This is Practice. to loop",
+  );
+  expect(
+    readFileSync("src/components/ChordShapes.tsx", "utf8"),
+  ).toContain("<span>This is next.</span>");
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Cues request Fill, Crash",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Crash this., Stop or Ending.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Cues request Fill this., Crash this., Stop this. or Ending this.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Cues ber om Fill, Crash",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
+    "Crash this., Stop eller Ending.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Cues ber om Fill this., Crash this., Stop this. eller Ending this.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Load these provider models. fetches",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
@@ -5269,13 +7475,25 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "Apply these Music.ai estimates. writes",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
-    "Apply these Music.ai estimates writes unverified fixture results only when JAM_MUSICAI_FIXTURE=1;",
+    "Apply these Music.ai estimates writes unverified fixture results only when JAM_MUSICAI_FIXTURE=1.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Confirm this recorded grid may replace the confirmed bar grid",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Apply these Music.ai estimates. lagrer",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
-    "Apply these Music.ai estimates lagrer bare uverifiserte fiksturresultater når JAM_MUSICAI_FIXTURE=1;",
+    "Apply these Music.ai estimates lagrer bare uverifiserte fiksturresultater når JAM_MUSICAI_FIXTURE=1.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Confirm this recorded grid kan erstatte det bekreftede taktkartet",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Apply this recorded fixture song writes stems and a chord chart into song.json only when JAM_SONG_FIXTURE=1.",
+  );
+  expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
+    "Apply this recorded fixture song skriver stems og et akkordkart til song.json bare når JAM_SONG_FIXTURE=1.",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Analyze again. replaces",
@@ -5578,13 +7796,13 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "use Restart this audio.;",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
-    "use Restart this audio; the refusal clears after a matching restart.",
+    "Select a 48 kHz device and use Restart this audio.",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "bruk Restart this audio.;",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
-    "bruk Restart this audio; sperren fjernes etter en omstart med samsvarende frekvenser.",
+    "Velg en 48 kHz-enhet og bruk Restart this audio.",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Loop off. disables",
@@ -6199,6 +8417,18 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     'title="Load this into the band. This adopts its tempo and style."',
   );
   expect(readFileSync("src/screens/Library.tsx", "utf8")).not.toContain(
+    ': "Load"}',
+  );
+  expect(readFileSync("src/screens/Library.tsx", "utf8")).toContain(
+    ': "Load this."}',
+  );
+  expect(readFileSync("src/screens/Library.tsx", "utf8")).not.toContain(
+    '? "Loaded"',
+  );
+  expect(readFileSync("src/screens/Library.tsx", "utf8")).toContain(
+    '? "This is loaded."',
+  );
+  expect(readFileSync("src/screens/Library.tsx", "utf8")).not.toContain(
     'title="Preview of the form"',
   );
   expect(readFileSync("src/screens/Library.tsx", "utf8")).toContain(
@@ -6276,8 +8506,23 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
     "Record this take for å spille inn et nytt lag fra takt 1.",
   );
-  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
     '"Save partial take"',
+  );
+  expect(readFileSync("src/screens/Originals.tsx", "utf8")).toContain(
+    '"Save this partial take."',
+  );
+  expect(readFileSync("src/screens/Settings.tsx", "utf8")).not.toContain(
+    'label="Browser preview"',
+  );
+  expect(readFileSync("src/screens/Settings.tsx", "utf8")).toContain(
+    'label="This is the browser preview."',
+  );
+  expect(readFileSync("src/App.tsx", "utf8")).not.toContain(
+    "\n              Browser preview\n",
+  );
+  expect(readFileSync("src/App.tsx", "utf8")).toContain(
+    "\n              This is the browser preview.\n",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Finish with Save take.",
@@ -6698,6 +8943,12 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   );
   expect(readFileSync("src/components/Stems.tsx", "utf8")).toContain(
     "Apply and save this mix.",
+  );
+  expect(readFileSync("src/components/Stems.tsx", "utf8")).not.toContain(
+    '"Saving mix…"',
+  );
+  expect(readFileSync("src/components/Stems.tsx", "utf8")).toContain(
+    '"This is saving the mix."',
   );
   expect(readFileSync("src/components/Stems.tsx", "utf8")).not.toContain(
     '"Minus guitar"',
@@ -7213,7 +9464,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "Apply these Music.ai estimates. writes",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
-    "Apply these Music.ai estimates writes unverified fixture results only when JAM_MUSICAI_FIXTURE=1;",
+    "Apply these Music.ai estimates writes unverified fixture results only when JAM_MUSICAI_FIXTURE=1.",
   );
   expect(
     readFileSync("src/components/ProviderEstimates.tsx", "utf8"),
@@ -7230,6 +9481,12 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(
     readFileSync("src/components/tools/BeatCutsTool.tsx", "utf8"),
   ).toContain("First beat is in seconds.");
+  expect(
+    readFileSync("src/components/tools/BeatCutsTool.tsx", "utf8"),
+  ).not.toContain("Undo restores the previous timing");
+  expect(
+    readFileSync("src/components/tools/BeatCutsTool.tsx", "utf8"),
+  ).toContain("Undo restores this previous timing");
   expect(readFileSync("src/components/tools/shared.tsx", "utf8")).not.toContain(
     " · {s.bars.length} bars",
   );
@@ -7919,6 +10176,12 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(settings).toContain("These are the input gaps.");
   expect(settings).not.toContain('"Measuring…"');
   expect(settings).toContain('"Measuring the loopback."');
+  expect(settings).not.toContain(': "Measure loopback"}');
+  expect(settings).toContain(': "Measure this loopback."}');
+  expect(settings).not.toContain("then Measure loopback.");
+  expect(settings).toContain("then Measure this loopback.");
+  expect(settings).not.toContain("Measure loopback with a cable");
+  expect(settings).toContain("Measure this loopback with a cable.");
   expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
     '"Measuring…"',
   );
@@ -7926,10 +10189,28 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     '"Measuring the loopback."',
   );
   expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
+    ': "Measure loopback"}',
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
+    ': "Measure this loopback."}',
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
+    "Measure loopback with a cable",
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
+    "Measure this loopback with a cable",
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
     '"Stop Recording"',
   );
   expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
     '"Stop recording."',
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
+    '? "Save partial take"',
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
+    '? "Save this partial take."',
   );
   expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
     "\n              Record New Take\n",
@@ -8111,8 +10392,11 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
     "\n              Delete…\n",
   );
-  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).not.toContain(
     "Delete this take…",
+  );
+  expect(readFileSync("src/screens/Sessions.tsx", "utf8")).toContain(
+    "\n              Delete this take.\n",
   );
   expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
     "\n                Add guitar layer\n",
@@ -8167,6 +10451,12 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   ).not.toContain('"Apply & save speed/key"');
   expect(readFileSync("src/components/ReferencePlayer.tsx", "utf8")).toContain(
     '"Apply and save the speed and key."',
+  );
+  expect(
+    readFileSync("src/components/ReferencePlayer.tsx", "utf8"),
+  ).not.toContain('"Applying…"');
+  expect(readFileSync("src/components/ReferencePlayer.tsx", "utf8")).toContain(
+    '"This is applying."',
   );
   expect(
     readFileSync("src/components/FinishingDesk.tsx", "utf8"),
@@ -8263,6 +10553,36 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   );
   expect(
     readFileSync("src/components/StudioAssistant.tsx", "utf8"),
+  ).not.toContain('"Hide assistant"');
+  expect(readFileSync("src/components/StudioAssistant.tsx", "utf8")).toContain(
+    '"Hide this assistant."',
+  );
+  expect(
+    readFileSync("src/components/StudioAssistant.tsx", "utf8"),
+  ).not.toContain(': "Assistant"}');
+  expect(readFileSync("src/components/StudioAssistant.tsx", "utf8")).toContain(
+    '"Show this assistant."',
+  );
+  expect(
+    readFileSync("src/components/StudioAssistant.tsx", "utf8"),
+  ).not.toContain(': "Send"}');
+  expect(readFileSync("src/components/StudioAssistant.tsx", "utf8")).toContain(
+    '"Send this."',
+  );
+  expect(
+    readFileSync("src/components/StudioAssistant.tsx", "utf8"),
+  ).not.toContain("\n                  Cancel request\n");
+  expect(readFileSync("src/components/StudioAssistant.tsx", "utf8")).toContain(
+    "\n                  Cancel this request.\n",
+  );
+  expect(
+    readFileSync("src/components/StudioAssistant.tsx", "utf8"),
+  ).not.toContain('"Working…"');
+  expect(readFileSync("src/components/StudioAssistant.tsx", "utf8")).toContain(
+    '? "This is working." : "Send this."',
+  );
+  expect(
+    readFileSync("src/components/StudioAssistant.tsx", "utf8"),
   ).not.toContain("\n                        Tweak proposed action values\n");
   expect(readFileSync("src/components/StudioAssistant.tsx", "utf8")).toContain(
     "Tweak the proposed action values.",
@@ -8329,6 +10649,12 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   );
   expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
     '"Stop recording."',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).not.toContain(
+    '? "Save partial take"',
+  );
+  expect(readFileSync("src/components/TransportBar.tsx", "utf8")).toContain(
+    '? "Save this partial take."',
   );
   expect(
     readFileSync("src/components/ReferencePlayer.tsx", "utf8"),
@@ -8485,6 +10811,12 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   );
   expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).toContain(
     "Remove this section.",
+  );
+  expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).not.toContain(
+    "Undo restores it.",
+  );
+  expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).toContain(
+    "Undo restores this.",
   );
   expect(readFileSync("src/screens/Originals.tsx", "utf8")).not.toContain(
     "\n                    Remove layer\n",
@@ -8662,6 +10994,30 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   );
   expect(readFileSync("src/components/RoomTools.tsx", "utf8")).toContain(
     'title: "This is the rehearsal setlist."',
+  );
+  expect(readFileSync("src/components/RoomTools.tsx", "utf8")).not.toContain(
+    ': "Working…"}',
+  );
+  expect(readFileSync("src/components/RoomTools.tsx", "utf8")).toContain(
+    ': "This is working."}',
+  );
+  expect(readFileSync("src/components/RoomTools.tsx", "utf8")).not.toContain(
+    "<p>Opening the tool…</p>",
+  );
+  expect(readFileSync("src/components/RoomTools.tsx", "utf8")).toContain(
+    "<p>Opening this tool.</p>",
+  );
+  expect(readFileSync("src/App.tsx", "utf8")).not.toContain(
+    ">Opening the room…<",
+  );
+  expect(readFileSync("src/App.tsx", "utf8")).toContain(
+    ">Opening this room.<",
+  );
+  expect(readFileSync("src/App.tsx", "utf8")).not.toContain(
+    ">Opening help…<",
+  );
+  expect(readFileSync("src/App.tsx", "utf8")).toContain(
+    ">Opening this help.<",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     '"en": "Blind take comparison"',
@@ -9172,8 +11528,8 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("crates/jam-audio/src/engine.rs", "utf8")).not.toContain(
     "Cannot record:",
   );
-  expect(readFileSync("crates/jam-audio/src/engine.rs", "utf8")).toContain(
-    "Cannot record.",
+  expect(readFileSync("crates/jam-audio/src/edge.rs", "utf8")).toContain(
+    "Cannot convert input at",
   );
   expect(readFileSync("crates/jam-audio/src/import.rs", "utf8")).not.toContain(
     "Damaged audio:",

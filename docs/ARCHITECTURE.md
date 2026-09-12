@@ -341,7 +341,9 @@ soundtrack selection. Music.ai is on the net allow-list. Recorded public
 module JSON parses to unverified beats, chords, key and sections.
 `analysis_start` persists them to `song.json` as `providerAnalysis`
 (`drivesGrid: false`) when `JAM_MUSICAI_FIXTURE=1`; otherwise it stays
-not configured. Local analysis also writes `estimatedGrid` (4/4, first
+not configured. `media_fixture_song` writes recorded-fixture `stemSet`
+and a `songAnalysis` chord chart into `song.json` when `JAM_SONG_FIXTURE=1`,
+and fails loud without that env. Local analysis also writes `estimatedGrid` (4/4, first
 beat as downbeat). Confirmed `referenceGrid` still wins; ramps require
 it. `media_guitar_residual` is not configured without a marked guitar
 stem.
@@ -1105,6 +1107,13 @@ explicit listening confirmation, not automatic downbeat/section detection.
 native worker rehashes the original file before saving. It rejects changed
 analysis, sources, unsupported versions, invalid bounds and unconfirmed input.
 Unknown asset/grid fields and unknown fields of retained section IDs survive.
+`media_reference_grid_replace` writes the same `referenceGrid` from the recorded
+Music.ai fixture beats after an explicit listen confirm. It fails loud without
+`JAM_MUSICAI_FIXTURE=1`. Live upload never writes the grid.
+`media_fixture_song` writes `stemSet` and a `songAnalysis` chord chart into
+`song.json` from the recorded fixture song when `JAM_SONG_FIXTURE=1`. It fails
+loud without that env and does not claim live stem separation or guitar-removal
+−6 dB.
 
 The additive `referenceGrid` asset object has `schemaVersion:1`,
 `origin:"confirmed-local"`, `sourceHash`, `beatsPerBar`, source-second `beats`

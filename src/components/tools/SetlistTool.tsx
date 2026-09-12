@@ -30,7 +30,7 @@ export default function SetlistTool() {
     (s) => !chart || s.feel.timeSig.join("/") === chart.timeSig.join("/"),
   );
   const grooveName = (id?: string) =>
-    id ? (e.styles.find((s) => s.id === id)?.name ?? "missing groove") : null;
+    id ? (e.styles.find((s) => s.id === id)?.name ?? "This groove is missing.") : null;
   const save = (next: Setlist) =>
     run(async () => {
       setlistSchema.parse(next);
@@ -151,8 +151,9 @@ export default function SetlistTool() {
               {i + 1}.{" "}
               {e.charts.find((c) => c.id === item.chartId)?.name ??
                 "This chart is missing."}{" "}
-              · {grooveName(item.styleId) ?? "chart's groove"} · {item.bpm} BPM
-              · {item.countIn}-bar count-in {cued === item.id ? "· cued" : ""}
+              · {grooveName(item.styleId) ?? "This uses the chart's groove."} · {item.bpm} BPM.
+              · {item.countIn}-bar count-in.{" "}
+              {cued === item.id ? "· This is cued." : ""}
             </span>
             <div className="room-tool-row">
               <Button

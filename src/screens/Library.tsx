@@ -280,7 +280,7 @@ export const Library: React.FC = () => {
                       </div>
                       <div className="text-[10px] font-mono text-[var(--fg-2)]">
                         {keyName(c.keyTonic, c.mode)} · {c.timeSig[0]}/
-                        {c.timeSig[1]} · {Math.round(c.defaultBpm)} BPM ·{" "}
+                        {c.timeSig[1]} · {Math.round(c.defaultBpm)} BPM. ·{" "}
                         {resolveChart(c).length} bars
                         {isUserChart(c) ? " This is yours." : ""}
                       </div>
@@ -291,7 +291,7 @@ export const Library: React.FC = () => {
                       onClick={() => bandLoadChart(c.id)}
                       title="Load this into the band. This adopts its tempo and style."
                     >
-                      {active ? "Loaded" : "Load"}
+                      {active ? "This is loaded." : "Load this."}
                     </Button>
                   </div>
                 );
@@ -348,7 +348,7 @@ export const Library: React.FC = () => {
                       <div className="text-[10px] font-mono text-[var(--fg-2)]">
                         {s.genre} · {s.feel.timeSig[0]}/{s.feel.timeSig[1]} ·{" "}
                         {Math.round(s.feel.bpmRange[0])}–
-                        {Math.round(s.feel.bpmRange[1])} BPM
+                        {Math.round(s.feel.bpmRange[1])} BPM.
                         {s.feel.swing > 0.55 ? " This is swung." : ""}
                       </div>
                     </button>

@@ -27,7 +27,7 @@ export const STUDIO_TOOLS: Record<string, StudioTool> = {
     declaration: {
       name: "keep_harmony_variation",
       description:
-        "Keep one chord per bar as a new section variation outside the arrangement. Existing form, lyrics and guitar timing stay intact. The user can add the variation to the form in Compose.",
+        "Keep one chord per bar as a new section variation outside the arrangement. Existing form, lyrics and guitar timing stay intact. The user can add the variation to the form in This is Compose.",
       parameters: {
         type: "object",
         properties: {

@@ -72,7 +72,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
           </p>
           <p className="font-mono tabular-nums">
             {song.grid.position
-              ? `Bar ${song.grid.position.bar} · beat ${song.grid.position.beat.toFixed(1)} · ${song.grid.position.bpm.toFixed(1)} BPM · ${song.grid.position.section_label ?? "This is outside named sections."}`
+              ? `Bar ${song.grid.position.bar} · beat ${song.grid.position.beat.toFixed(1)} · ${song.grid.position.bpm.toFixed(1)} BPM. · ${song.grid.position.section_label ?? "This is outside named sections."}`
               : "Outside the confirmed bars, or waiting for output."}
           </p>
           <div className="workspace-actions">
@@ -238,7 +238,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
             </select>
           </label>
           <Button type="submit" disabled={locked}>
-            {processing ? "Applying…" : "Apply and save the speed and key."}
+            {processing ? "This is applying." : "Apply and save the speed and key."}
           </Button>
           <Button
             type="button"

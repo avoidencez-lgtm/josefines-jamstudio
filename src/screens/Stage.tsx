@@ -94,7 +94,7 @@ export const Stage: React.FC = () => {
     })),
   );
 
-  const [view, setView] = useState("Perform");
+  const [view, setView] = useState("This is Perform.");
   const [showSolo, setShowSolo] = useState(true);
   const [lastTap, setLastTap] = useState<number | null>(null);
   const [packNote, setPackNote] = useState<string | null>(null);
@@ -157,7 +157,20 @@ export const Stage: React.FC = () => {
     ? transport.bpm < bpmRange[0] || transport.bpm > bpmRange[1]
     : false;
 
-  if (telemetry.reference)
+  if (telemetry.reference) {
+    const song = telemetry.reference;
+    const chord = song.analysis?.chord || "This is a rest or no chord.";
+    const next = song.analysis?.next_chord
+      ? `Next is ${song.analysis.next_chord}`
+      : "";
+    const gridAt = song.grid?.position;
+    const bar = gridAt ? `${gridAt.bar} · ${Math.floor(gridAt.beat)}` : "--";
+    const bpm =
+      gridAt != null
+        ? `${gridAt.bpm.toFixed(0)} BPM.`
+        : song.analysis?.bpm != null
+          ? `${song.analysis.bpm.toFixed(0)} BPM.`
+          : "";
     return (
       <div className="workspace-stack max-w-6xl mx-auto w-full">
         <WorkspaceHeader
@@ -166,12 +179,32 @@ export const Stage: React.FC = () => {
           description="Rehearse through your studio output with the reference speed, key and mix you choose."
         />
         <JoStage />
-        <ReferencePlayer
-          key={telemetry.reference.asset_id}
-          song={telemetry.reference}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Panel className="flex flex-col items-center justify-center min-h-[180px]">
+            <BigReadout
+              value={chord}
+              subValue={next}
+              label="This is the active chord."
+              kind="chord"
+              highlight={song.state === "playing"}
+            />
+          </Panel>
+          <Panel className="flex flex-col items-center justify-center min-h-[180px]">
+            <BigReadout
+              value={bar}
+              subValue={bpm}
+              label="This is the bar."
+              kind="tempo"
+            />
+          </Panel>
+        </div>
+        {song.analysis?.chord ? (
+          <ChordShapes now={song.analysis.chord} next={song.analysis.next_chord} />
+        ) : null}
+        <ReferencePlayer key={song.asset_id} song={song} />
       </div>
     );
+  }
 
   return (
     <div className="flex flex-col gap-6 max-w-6xl mx-auto w-full">
@@ -184,10 +217,10 @@ export const Stage: React.FC = () => {
       {packNote && (
         <div className="text-xs font-mono text-[var(--fg-2)] border border-[var(--line)] rounded-[var(--radius-m)] p-3 workspace-stack">
           <p>
-            {packNote} Sample packs are missing. Settings → First run has the
-            next step.
+            {packNote} Sample packs are missing. Settings → This is First run.
+            has the next step.
           </p>
-          <Button size="sm" onClick={() => openSettings("First run")}>
+          <Button size="sm" onClick={() => openSettings("This is First run.")}>
             Open this First run.
           </Button>
         </div>
@@ -201,7 +234,7 @@ export const Stage: React.FC = () => {
             Audio device lost. {engineStatus.last_error} Reconnect or pick
             another device in Settings.
           </p>
-          <Button size="sm" onClick={() => openSettings("Audio devices")}>
+          <Button size="sm" onClick={() => openSettings("This is Audio devices.")}>
             Open these audio devices.
           </Button>
         </div>
@@ -229,7 +262,7 @@ export const Stage: React.FC = () => {
         </div>
       )}
       <WorkspaceViews
-        labels={["Perform", "Practice", "Levels"]}
+        labels={["This is Perform.", "This is Practice.", "This is Levels."]}
         value={view}
         onChange={setView}
       />
@@ -252,14 +285,14 @@ export const Stage: React.FC = () => {
                 variant={activeSource !== "lyria" ? "primary" : "secondary"}
                 onClick={() => void lyriaStop()}
               >
-                Band
+                This is the band.
               </Button>
               <Button
                 size="sm"
                 variant={activeSource === "lyria" ? "primary" : "secondary"}
                 onClick={() => void lyriaStart()}
               >
-                Lyria
+                This is Lyria.
               </Button>
               <StatusPill
                 status={
@@ -282,7 +315,7 @@ export const Stage: React.FC = () => {
                 session before it may open a WebSocket. Provider off until those
                 are set. BPM is a request, not the band clock.
               </p>
-              <Button size="sm" onClick={() => openSettings("AI & models")}>
+              <Button size="sm" onClick={() => openSettings("These are the AI and models.")}>
                 Open these AI settings.
               </Button>
             </div>
@@ -441,7 +474,7 @@ export const Stage: React.FC = () => {
           </div>
         </div>
       </details>
-      <div hidden={view !== "Perform"} className="workspace-stack">
+      <div hidden={view !== "This is Perform."} className="workspace-stack">
         {/* Main readouts */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Panel className="flex flex-col items-center justify-center min-h-[180px]">
@@ -497,7 +530,7 @@ export const Stage: React.FC = () => {
                 {outOfRange && bpmRange && (
                   <span className="text-[10px] font-mono text-[var(--accent)] -mt-2">
                     {band.style_name} feels best at {Math.round(bpmRange[0])}–
-                    {Math.round(bpmRange[1])} BPM
+                    {Math.round(bpmRange[1])} BPM.
                   </span>
                 )}
                 <div className="flex items-center gap-2 mt-4">
@@ -620,21 +653,21 @@ export const Stage: React.FC = () => {
             </span>
             <CueButton
               cue="fill"
-              label="Fill"
+              label="Fill this."
               hint="F"
               band={band}
               onCue={bandCue}
             />
             <CueButton
               cue="crash"
-              label="Crash"
+              label="Crash this."
               hint="K"
               band={band}
               onCue={bandCue}
             />
             <CueButton
               cue="stop"
-              label={band.is_stopped ? "Resume" : "Stop"}
+              label={band.is_stopped ? "Resume this." : "Stop this."}
               hint="S"
               band={band}
               onCue={bandCue}
@@ -642,7 +675,7 @@ export const Stage: React.FC = () => {
             />
             <CueButton
               cue="ending"
-              label="Ending"
+              label="Ending this."
               hint="E"
               band={band}
               onCue={bandCue}
@@ -677,14 +710,14 @@ export const Stage: React.FC = () => {
               peakDb={telemetry.input_level.peak_db}
               rmsDb={telemetry.input_level.rms_db}
               width="w-full"
-              live={clockLive && view === "Perform"}
+              live={clockLive && view === "This is Perform."}
             />
             <Meter
               label="This is the master output."
               peakDb={telemetry.output_level.peak_db}
               rmsDb={telemetry.output_level.rms_db}
               width="w-full"
-              live={clockLive && view === "Perform"}
+              live={clockLive && view === "This is Perform."}
             />
           </div>
         </Panel>
@@ -716,7 +749,7 @@ export const Stage: React.FC = () => {
           />
         </Panel>
       </div>
-      <section hidden={view !== "Practice"} className="workspace-stack">
+      <section hidden={view !== "This is Practice."} className="workspace-stack">
         <div>
           <h2 className="text-lg mb-3">Rehearse this section.</h2>
           <div className="stage-passages">
@@ -774,7 +807,7 @@ export const Stage: React.FC = () => {
               min={20}
               max={300}
               onChange={(v) => setTempoTrainer({ startBpm: v })}
-              suffix="BPM"
+              suffix="BPM."
             />
             <NumberField
               label="Choose the target tempo."
@@ -782,7 +815,7 @@ export const Stage: React.FC = () => {
               min={20}
               max={300}
               onChange={(v) => setTempoTrainer({ targetBpm: v })}
-              suffix="BPM"
+              suffix="BPM."
             />
             <NumberField
               label="Choose the tempo step."
@@ -790,7 +823,7 @@ export const Stage: React.FC = () => {
               min={1}
               max={20}
               onChange={(v) => setTempoTrainer({ stepBpm: v })}
-              suffix="BPM"
+              suffix="BPM."
             />
             <NumberField
               label="Change every this many bars."
@@ -830,7 +863,7 @@ export const Stage: React.FC = () => {
           />
         )}
       </section>
-      <section hidden={view !== "Levels"}>
+      <section hidden={view !== "This is Levels."}>
         <Panel title="This is the signal telemetry.">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
             <Meter
@@ -838,14 +871,14 @@ export const Stage: React.FC = () => {
               peakDb={telemetry.input_level.peak_db}
               rmsDb={telemetry.input_level.rms_db}
               width="w-full"
-              live={clockLive && view === "Levels"}
+              live={clockLive && view === "This is Levels."}
             />
             <Meter
               label="This is the master output."
               peakDb={telemetry.output_level.peak_db}
               rmsDb={telemetry.output_level.rms_db}
               width="w-full"
-              live={clockLive && view === "Levels"}
+              live={clockLive && view === "This is Levels."}
             />
           </div>
         </Panel>

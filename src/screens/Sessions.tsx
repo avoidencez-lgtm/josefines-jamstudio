@@ -167,7 +167,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
         <div className="flex flex-wrap items-center gap-3">
           <label
             className="flex items-center gap-2 text-xs font-mono text-[var(--fg-2)]"
-            title="Samples trimmed from the start of the guitar stem so it lines up with the band. Measure loopback with a cable from output to guitar input, or enter the guitar offset."
+            title="Samples trimmed from the start of the guitar stem so it lines up with the band. Measure this loopback with a cable from output to guitar input, or enter the guitar offset."
           >
             <span>Enter the guitar offset.</span>
             <input
@@ -192,12 +192,12 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
             onClick={() => void calibrateLatency()}
             title="Plays three clicks and listens on the guitar input."
           >
-            {calibrating ? "Measuring the loopback." : "Measure loopback"}
+            {calibrating ? "Measuring the loopback." : "Measure this loopback."}
           </Button>
 
           {isRecording ? (
             <Button size="sm" variant="danger" onClick={() => stopRecording()}>
-              {recordingError ? "Save partial take" : "Stop recording."}
+              {recordingError ? "Save this partial take." : "Stop recording."}
             </Button>
           ) : (
             <Button
@@ -227,7 +227,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
           <div className="py-8 flex flex-col items-center justify-center text-center text-[var(--fg-2)] space-y-2 font-mono text-xs">
             <p>Your first take will appear here.</p>
             <p className="text-[var(--fg-1)]">
-              Progress uses recorded take files. Hit Record a new take, then
+              Progress uses recorded take files. Hit Record a new take. then
               Analyze this take for timing and pitch trends.
             </p>
           </div>
@@ -248,7 +248,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
                 Highest tempos are{" "}
                 {progress.tempoRecords
                   .slice(0, 8)
-                  .map((r) => `${r.chartId} ${r.tempo.toFixed(0)} BPM`)
+                  .map((r) => `${r.chartId} ${r.tempo.toFixed(0)} BPM.`)
                   .join(" · ")}
                 .
               </p>
@@ -328,7 +328,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
             <CassetteTape size={40} aria-hidden="true" />
             <p>Your first take will appear here.</p>
             <p className="text-[var(--fg-1)]">
-              Hit <strong>Record a new take</strong> to record multi-track
+              Hit <strong>Record a new take.</strong> to record multi-track
               stems.
             </p>
           </div>
@@ -444,7 +444,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
             <span>•</span>
             <span>{take.chartId}</span>
             <span>•</span>
-            <span>{take.tempo.toFixed(0)} BPM</span>
+            <span>{take.tempo.toFixed(0)} BPM.</span>
           </div>
         </div>
 
@@ -594,7 +594,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
               disabled={recording || busy}
               onClick={() => setConfirmDelete(true)}
             >
-              Delete this take…
+              Delete this take.
             </Button>
           )}
         </div>

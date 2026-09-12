@@ -98,7 +98,7 @@ export default function BriefTool() {
                   audioGeneration: { ...current, prompt: brief, instrumental },
                 });
                 setBrief("");
-                return "Prompt placed in AI Music below. Review the selected model, duration and cost before Generate. Save keeps the brief; Undo restores the old prompt.";
+                return "Prompt placed in AI Music below. Review the selected model, duration and cost before Generate. Save keeps this brief; Undo restores this old prompt.";
               })
             }
           >

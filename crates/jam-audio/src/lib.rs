@@ -3,6 +3,7 @@
 pub mod analysis;
 pub mod calibration;
 pub mod devices;
+pub mod edge;
 pub mod engine;
 pub mod export;
 pub mod io;

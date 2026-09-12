@@ -195,7 +195,10 @@ mod tests {
         assert_eq!(analysis.confidence, "unverified");
         assert!(!analysis.drives_grid);
         assert_eq!(analysis.bpm, Some(120.0));
-        assert_eq!(analysis.beats, vec![0.0, 0.5, 1.0, 1.5]);
+        assert_eq!(
+            analysis.beats,
+            vec![0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
+        );
         assert_eq!(analysis.key.as_deref(), Some("C Major"));
         assert_eq!(analysis.chords[1].chord.as_deref(), Some("F"));
         assert_eq!(analysis.sections[0].name, "Verse");
@@ -207,7 +210,10 @@ mod tests {
         let mut doc = recorded();
         doc.as_object_mut().unwrap().remove("beatMap");
         let analysis = read_recorded(&doc).unwrap();
-        assert_eq!(analysis.beats, vec![0.0, 0.5, 1.0, 1.5]);
+        assert_eq!(
+            analysis.beats,
+            vec![0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
+        );
         assert_eq!(analysis.bpm, Some(120.0));
     }
 

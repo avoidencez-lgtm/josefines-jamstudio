@@ -22,15 +22,15 @@ Follow [hardware/cabling.md](../hardware/cabling.md). Setup A (HeadRush USB
 only) is the default. Guitar tone stays in the hardware. The app is never in
 the monitoring path.
 
-## First run in the app
+## This is First run. in the app
 
-Open **Settings → First run** and walk the list:
+Open **Settings → This is First run.** and walk the list:
 
-1. Audio devices: same interface for input and output. HeadRush dry DI is
+1. This is Audio devices.: same interface for input and output. HeadRush dry DI is
    channel 3 in the UI (stored as channel 2).
 2. Measure loopback with a cable, or enter the guitar offset. Five hardware runs
    ±2 samples remain owner gate 2 (V2).
-3. Store provider keys under AI & models. Keys live in the OS keychain.
+3. Store provider keys under These are the AI and models. Keys live in the OS keychain.
    Test this key stays not configured. Check this key status looks only in the keychain.
 4. Rig: create a loopMIDI port named Jam Virtual (Windows) or enable the IAC
    Driver (macOS), then Check this virtual MIDI. HeadRush and Black Spirit are not

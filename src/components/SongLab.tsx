@@ -113,7 +113,7 @@ export function SongLab() {
         disabled={!ready || !song || busy || isRecording}
         onClick={() => void generate()}
       >
-        {busy ? "Thinking…" : "Generate this idea."}
+        {busy ? "This is thinking." : "Generate this idea."}
       </Button>
       {error && (
         <output className="song-message" aria-live="polite">

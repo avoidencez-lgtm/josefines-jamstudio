@@ -566,6 +566,16 @@ export function createPreviewEngine(
         "Music.ai analysis is not configured. Add a Music.ai key in the desktop app, set JAM_LIVE=1, and record a SUCCEEDED job before upload. Local Analyze tempo and chords stays available.",
       );
     },
+    media_reference_grid_replace: () => {
+      throw new Error(
+        "Music.ai analysis is not configured. Add a Music.ai key in the desktop app, set JAM_LIVE=1, and record a SUCCEEDED job before upload. Local Analyze tempo and chords stays available.",
+      );
+    },
+    media_fixture_song: () => {
+      throw new Error(
+        "Recorded fixture song import is not configured. Set JAM_SONG_FIXTURE=1 to write stems and a chord chart from the recorded fixtures. Live stem separation and Music.ai stay not configured without JAM_LIVE=1.",
+      );
+    },
     lyria_start: () => {
       throw new Error(
         "Lyria RealTime is not configured. Add a Google Gemini key in Settings, set JAM_LIVE=1, and record a provider session before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.",

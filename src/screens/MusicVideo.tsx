@@ -101,7 +101,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
     })),
   );
   const ai = useAi();
-  const [view, setView] = useState(audioOnly ? "Create music" : "Storyboard");
+  const [view, setView] = useState(audioOnly ? "This is Create music." : "This is Storyboard.");
   const [jobFilter, setJobFilter] = useState("All jobs");
   const [selected, setSelected] = useState(0);
   const [path, setPath] = useState("");
@@ -149,9 +149,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
   const chosenAudio = MEDIA_MODELS.find((p) => p.id === audioModel);
   const localSelected =
     (!audioOnly &&
-      view === "Storyboard" &&
+      view === "This is Storyboard." &&
       chosenModel?.protocol === "comfy") ||
-    ((view === "Create music" || view === "Soundtrack") &&
+    ((view === "This is Create music." || view === "This is Soundtrack.") &&
       chosenAudio?.protocol === "comfy");
   const local = project.local as
     | {
@@ -375,19 +375,19 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       <WorkspaceViews
         labels={
           audioOnly
-            ? ["Create music", "Library & jobs"]
-            : ["Storyboard", "Soundtrack", "Render & jobs"]
+            ? ["This is Create music.", "This is Library & jobs."]
+            : ["This is Storyboard.", "This is Soundtrack.", "This is Render & jobs."]
         }
         value={view}
         onChange={setView}
       />
       {!audioOnly && (
         <div className="film-progress" aria-label="This is the film readiness.">
-          <button type="button" onClick={() => setView("Soundtrack")}>
+          <button type="button" onClick={() => setView("This is Soundtrack.")}>
             <strong>Step 1 is the soundtrack.</strong>
             <span>{audio ? audio.label : "Choose the song."}</span>
           </button>
-          <button type="button" onClick={() => setView("Storyboard")}>
+          <button type="button" onClick={() => setView("This is Storyboard.")}>
             <strong>Step 2 is the footage.</strong>
             <span>
               {
@@ -400,7 +400,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               of {project.shots.length} shots are assigned.
             </span>
           </button>
-          <button type="button" onClick={() => setView("Render & jobs")}>
+          <button type="button" onClick={() => setView("This is Render & jobs.")}>
             <strong>Step 3 is the export.</strong>
             <span>
               {m.renderPath
@@ -442,7 +442,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
           )}
         </output>
       )}
-      <div hidden={view !== "Create music" && view !== "Soundtrack"}>
+      <div hidden={view !== "This is Create music." && view !== "This is Soundtrack."}>
         <details className="video-audio-lab" open={audioOnly || undefined}>
           <summary>
             Generate a song.{" "}
@@ -633,7 +633,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
         </details>
       )}
       <div
-        hidden={audioOnly ? view !== "Library & jobs" : view !== "Soundtrack"}
+        hidden={audioOnly ? view !== "This is Library & jobs." : view !== "This is Soundtrack."}
       >
         <section className="video-source">
           <div>
@@ -732,7 +732,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
           </p>
         </details>
       </div>
-      <div hidden={audioOnly || view !== "Storyboard"}>
+      <div hidden={audioOnly || view !== "This is Storyboard."}>
         <details className="video-direction-settings">
           <summary>
             Set the creative direction.{" "}
@@ -1120,7 +1120,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
           )}
         </section>
       </div>
-      <div hidden={audioOnly || view !== "Render & jobs"}>
+      <div hidden={audioOnly || view !== "This is Render & jobs."}>
         <section className="video-export">
           <div>
             <span className="video-eyebrow">This section is the film.</span>
@@ -1184,7 +1184,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       </div>
       <div
         hidden={
-          audioOnly ? view !== "Library & jobs" : view !== "Render & jobs"
+          audioOnly ? view !== "This is Library & jobs." : view !== "This is Render & jobs."
         }
       >
         <div className="workspace-search">

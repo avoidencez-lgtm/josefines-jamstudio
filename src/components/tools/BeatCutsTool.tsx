@@ -102,7 +102,7 @@ export default function BeatCutsTool() {
                   );
                 m.edit({ shots: proposal.shots });
                 setProposal(null);
-                return "Cuts aligned. Undo restores the previous timing; Save keeps this edit.";
+                return "Cuts aligned. Undo restores this previous timing; Save keeps this edit.";
               })
             }
           >

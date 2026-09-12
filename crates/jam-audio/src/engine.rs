@@ -80,6 +80,10 @@ struct OutputTap {
     filling: Arc<AtomicBool>,
     recording: bool,
     reference_position: Arc<AtomicU64>,
+    /// Device-rate copy only. 48 kHz frames are recorded on the render worker.
+    copy_only: bool,
+    /// Keep render-worker DI when live input is converted off this callback.
+    keep_rendered_di: Arc<AtomicBool>,
 }
 
 impl OutputTap {
@@ -87,7 +91,11 @@ impl OutputTap {
         let mut underrun = false;
         let mut reference_position = None;
         for stereo in buffer.as_chunks_mut::<2>().0 {
-            let input = self.input.pop().ok();
+            let input = if self.copy_only {
+                None
+            } else {
+                self.input.pop().ok()
+            };
             match self.playback.pop() {
                 Ok(mut frame) => {
                     reference_position = Some(frame.reference_position);
@@ -95,6 +103,15 @@ impl OutputTap {
                     // timer scheduling gaps do not lose synthetic samples.
                     self.recording = frame.take != 0 && !frame.synthetic;
                     stereo.copy_from_slice(&frame.output);
+                    if self.copy_only {
+                        continue;
+                    }
+                    if self.keep_rendered_di.load(Ordering::Relaxed) {
+                        if self.recorded.push(frame).is_err() {
+                            self.lost.store(true, Ordering::Release);
+                        }
+                        continue;
+                    }
                     if !frame.synthetic {
                         if input.is_none() && frame.take != 0 {
                             self.lost.store(true, Ordering::Release);
@@ -376,15 +393,20 @@ fn headless_requested() -> bool {
         .unwrap_or(false)
 }
 
-/// Different in/out rates starve or overrun the input queue: the DI is damaged.
-/// Refuse the input (invariant 7) instead of recording a bad take. Resampling
-/// is the longer-term invariant-2 work.
-fn input_rate_mismatch(input_hz: u32, output_hz: u32) -> Option<String> {
-    (input_hz != output_hz && input_hz > 0 && output_hz > 0).then(|| {
-        format!(
-            "Cannot record. Input is {input_hz} Hz and output is {output_hz} Hz. Use one interface for both; a take would be damaged."
-        )
-    })
+fn ingest_capture(
+    sample: f32,
+    edge: Option<&mut crate::edge::MonoInEdge>,
+    queue: &mut std::collections::VecDeque<f32>,
+) -> Result<(), String> {
+    if let Some(edge) = edge {
+        edge.push(sample)?;
+        while let Some(converted) = edge.pop() {
+            queue.push_back(converted);
+        }
+    } else {
+        queue.push_back(sample);
+    }
+    Ok(())
 }
 
 fn transport_telemetry(tl: &Timeline) -> TransportTelemetry {
@@ -484,7 +506,7 @@ fn render_ahead_needed(
 
 impl AudioEngine {
     pub fn new(config: AudioConfig) -> Self {
-        let sample_rate = config.sample_rate;
+        let sample_rate = crate::edge::INTERNAL_RATE;
         let sequencer = BandSequencer::new(default_style(), sample_rate, 42);
         let recorder = crate::recorder::TakeRecorder::new(sample_rate, dirs_base().join("takes"));
 
@@ -519,7 +541,7 @@ impl AudioEngine {
             calib_epoch: AtomicU64::new(0),
             latest_telemetry: Arc::new(Mutex::new(EngineTelemetry::default())),
             status: Arc::new(Mutex::new(EngineStatus {
-                sample_rate: config.sample_rate,
+                sample_rate: crate::edge::INTERNAL_RATE,
                 buffer_size: config.buffer_size,
                 ..Default::default()
             })),
@@ -1193,6 +1215,14 @@ impl AudioEngine {
             .map(|song| song.played_state(self.reference_position.load(Ordering::Acquire)));
         if let Some(reference) = &tel.reference {
             tel.transport.state = reference.state.clone();
+            if let Some(pos) = reference
+                .grid
+                .as_ref()
+                .and_then(|grid| grid.position.as_ref())
+            {
+                tel.transport.bar = pos.bar as u32;
+                tel.transport.bpm = pos.bpm;
+            }
             tel.band.current_chord.clear();
             tel.band.next_chord = None;
             tel.band.current_section.clear();
@@ -1223,7 +1253,7 @@ impl AudioEngine {
             return Ok(());
         }
 
-        let requested_rate = self.config.sample_rate.max(8_000);
+        let requested_rate = crate::edge::INTERNAL_RATE;
         let requested_buffer = self.config.buffer_size.max(32);
         let mut status = EngineStatus {
             mode: EngineMode::Hardware,
@@ -1252,7 +1282,9 @@ impl AudioEngine {
         let lost = Arc::clone(&self.recording_clock.lost);
         let filling = Arc::clone(&self.filling);
         let reference_position = Arc::clone(&self.reference_position);
-        let make_output = move || {
+        let keep_rendered_di = Arc::new(AtomicBool::new(false));
+        let keep_rendered_di_for_tap = Arc::clone(&keep_rendered_di);
+        let make_output = move |copy_only: bool| {
             let (prod, playback) = RingBuffer::new(ring_capacity / 2);
             let (input_prod, input) = RingBuffer::new(ring_capacity);
             let (recorded, captured) = RingBuffer::new(ring_capacity);
@@ -1265,12 +1297,32 @@ impl AudioEngine {
                 filling: Arc::clone(&filling),
                 recording: false,
                 reference_position: Arc::clone(&reference_position),
+                copy_only,
+                keep_rendered_di: Arc::clone(&keep_rendered_di_for_tap),
+            };
+            let (edge_recorded, edge_captured) = if copy_only {
+                let (prod, cons) = RingBuffer::new(ring_capacity);
+                (Some(prod), Some(cons))
+            } else {
+                (None, None)
             };
             let cb: crate::io::OutputCallback = Box::new(move |buffer| tap.render(buffer));
-            (prod, cb, input_prod, captured)
+            (
+                prod,
+                cb,
+                input_prod,
+                if copy_only {
+                    edge_captured.unwrap()
+                } else {
+                    captured
+                },
+                edge_recorded,
+            )
         };
 
         // --- output ---
+        let mut playback_edge = None;
+        let mut recorded_prod = None;
         let (output_driver, output_prod, mut recording_input, captured): (
             Box<dyn AudioOutput>,
             _,
@@ -1278,25 +1330,71 @@ impl AudioEngine {
             _,
         ) = if headless_requested() {
             status.mode = EngineMode::Headless;
-            let (prod, cb, input, captured) = make_output();
+            let (prod, cb, input, captured, _) = make_output(false);
             let mut null = NullOutput::new(requested_rate, requested_buffer as usize);
             null.start(cb)?;
             (Box::new(null), prod, input, captured)
         } else {
-            let (prod, cb, input, captured) = make_output();
+            let (prod, cb, input, captured, _) = make_output(false);
             let mut cpal_out = CpalOutput::new(
                 self.config.output_device.clone(),
                 requested_rate,
                 requested_buffer,
             );
             match cpal_out.start(cb) {
-                Ok(()) => (Box::new(cpal_out), prod, input, captured),
+                Ok(()) => {
+                    let hz = cpal_out.info().map(|i| i.sample_rate).unwrap_or(0);
+                    if hz > 0 && hz != requested_rate {
+                        let _ = cpal_out.stop();
+                        match crate::edge::StereoOutEdge::to_device(hz) {
+                            Ok(edge) => {
+                                let (prod, cb, input, captured, rec) = make_output(true);
+                                let mut cpal_out = CpalOutput::new(
+                                    self.config.output_device.clone(),
+                                    requested_rate,
+                                    requested_buffer,
+                                );
+                                match cpal_out.start(cb) {
+                                    Ok(()) => {
+                                        playback_edge = Some(edge);
+                                        recorded_prod = rec;
+                                        (Box::new(cpal_out), prod, input, captured)
+                                    }
+                                    Err(e) => {
+                                        problems.push(format!(
+                                            "The output audio device failed. {e} Running headless."
+                                        ));
+                                        status.mode = EngineMode::Headless;
+                                        let (prod, cb, input, captured, _) = make_output(false);
+                                        let mut null = NullOutput::new(
+                                            requested_rate,
+                                            requested_buffer as usize,
+                                        );
+                                        null.start(cb)?;
+                                        (Box::new(null), prod, input, captured)
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                problems.push(crate::edge::output_rate_unsupported(hz));
+                                status.mode = EngineMode::Headless;
+                                let (prod, cb, input, captured, _) = make_output(false);
+                                let mut null =
+                                    NullOutput::new(requested_rate, requested_buffer as usize);
+                                null.start(cb)?;
+                                (Box::new(null), prod, input, captured)
+                            }
+                        }
+                    } else {
+                        (Box::new(cpal_out), prod, input, captured)
+                    }
+                }
                 Err(e) => {
                     problems.push(format!(
                         "The output audio device failed. {e} Running headless."
                     ));
                     status.mode = EngineMode::Headless;
-                    let (prod, cb, input, captured) = make_output();
+                    let (prod, cb, input, captured, _) = make_output(false);
                     let mut null = NullOutput::new(requested_rate, requested_buffer as usize);
                     null.start(cb)?;
                     (Box::new(null), prod, input, captured)
@@ -1305,30 +1403,22 @@ impl AudioEngine {
         };
 
         status.output = output_driver.info();
-        let effective_rate = status
-            .output
-            .as_ref()
-            .map(|i| i.sample_rate)
-            .filter(|r| *r > 0)
-            .unwrap_or(requested_rate);
-        if effective_rate != requested_rate {
-            problems.push(format!(
-                "device runs at {effective_rate} Hz, not the requested {requested_rate} Hz; following the device"
-            ));
-        }
-        status.sample_rate = effective_rate;
+        status.sample_rate = requested_rate;
 
         // --- input ---
         let fake_wav = std::env::var("JAM_FAKE_INPUT").ok();
         let live_input = fake_wav.is_none() && !headless_requested();
         let (mut input_prod, input_cons) = RingBuffer::<f32>::new(ring_capacity);
         let clock = Arc::clone(&self.recording_clock);
+        let capture_device_rate = Arc::new(AtomicBool::new(false));
+        let skip_live_di = Arc::clone(&capture_device_rate);
         let input_callback = Box::new(move |buffer: &[f32]| {
             for &sample in buffer {
                 // Dropping on overflow is the right call: the render thread bounds
                 // the backlog anyway.
                 let _ = input_prod.push(sample);
                 if live_input
+                    && !skip_live_di.load(Ordering::Relaxed)
                     && recording_input.push(sample).is_err()
                     && clock.active.load(Ordering::Acquire)
                 {
@@ -1345,18 +1435,18 @@ impl AudioEngine {
                     ));
                     Box::new(FileInput::sine_440(
                         requested_buffer as usize,
-                        effective_rate,
+                        requested_rate,
                     ))
                 }
             },
             (None, true) => Box::new(FileInput::sine_440(
                 requested_buffer as usize,
-                effective_rate,
+                requested_rate,
             )),
             (None, false) => Box::new(CpalInput::new(
                 self.config.input_device.clone(),
                 self.config.input_channel,
-                effective_rate,
+                requested_rate,
                 requested_buffer,
             )),
         };
@@ -1368,29 +1458,43 @@ impl AudioEngine {
                 ));
                 // The failed driver consumed the callback; the silent input needs none
                 // because nothing reads from it.
-                Box::new(FileInput::silent(requested_buffer as usize, effective_rate))
+                Box::new(FileInput::silent(requested_buffer as usize, requested_rate))
             }
         };
         status.input = input_driver.info().filter(|_| input_driver.is_running());
-        self.input_rate_error = status
-            .input
-            .as_ref()
-            .and_then(|input| input_rate_mismatch(input.sample_rate, effective_rate));
-        if let Some(msg) = &self.input_rate_error {
-            problems.push(msg.clone());
-            let _ = input_driver.stop();
-            input_driver = Box::new(FileInput::silent(requested_buffer as usize, effective_rate));
-            status.input = None;
+        let mut capture_edge = None;
+        self.input_rate_error = None;
+        if let Some(input) = &status.input {
+            if input.sample_rate > 0 && input.sample_rate != requested_rate {
+                match crate::edge::MonoInEdge::from_device(input.sample_rate) {
+                    Ok(edge) => {
+                        capture_device_rate.store(true, Ordering::Release);
+                        keep_rendered_di.store(true, Ordering::Release);
+                        capture_edge = Some(edge);
+                    }
+                    Err(reason) => {
+                        let msg =
+                            crate::edge::input_rate_unsupported(input.sample_rate, &reason);
+                        self.input_rate_error = Some(msg.clone());
+                        problems.push(msg);
+                        let _ = input_driver.stop();
+                        input_driver =
+                            Box::new(FileInput::silent(requested_buffer as usize, requested_rate));
+                        status.input = None;
+                    }
+                }
+            }
         }
 
-        // --- clock and instruments follow the device rate ---
+        // Invariant 2: the clock stays 48 kHz. FileInput converts; live output
+        // and live input that are not 48 kHz resample on this worker.
         {
             let mut tl = self.timeline.lock();
             tl.stop();
-            tl.sample_rate = effective_rate;
+            tl.sample_rate = requested_rate;
         }
-        self.sequencer.lock().set_sample_rate(effective_rate);
-        let _ = self.recorder.lock().set_sample_rate(effective_rate);
+        self.sequencer.lock().set_sample_rate(requested_rate);
+        let _ = self.recorder.lock().set_sample_rate(requested_rate);
         // Audio from before a device restart has a different clock/rate.
         let mut capture = self.capture.lock();
         let seconds = capture.seconds;
@@ -1412,8 +1516,11 @@ impl AudioEngine {
             output_prod,
             input_cons,
             captured,
-            effective_rate,
+            requested_rate,
             wait_for_input,
+            recorded_prod,
+            playback_edge,
+            capture_edge,
         );
 
         self.output_driver = Some(output_driver);
@@ -1438,6 +1545,9 @@ impl AudioEngine {
         mut captured: rtrb::Consumer<OutputFrame>,
         sample_rate: u32,
         wait_for_input: bool,
+        mut recorded_prod: Option<rtrb::Producer<OutputFrame>>,
+        mut playback_edge: Option<crate::edge::StereoOutEdge>,
+        mut capture_edge: Option<crate::edge::MonoInEdge>,
     ) {
         let running = Arc::clone(&self.running);
         let tone_active = Arc::clone(&self.tone_active);
@@ -1531,7 +1641,12 @@ impl AudioEngine {
                     drop(_gate);
 
                     while let Ok(s) = input_cons.pop() {
-                        input_queue.push_back(s);
+                        if let Err(error) =
+                            ingest_capture(s, capture_edge.as_mut(), &mut input_queue)
+                        {
+                            recorder_arc.lock().interrupt(&error);
+                            break;
+                        }
                     }
                     // Bound the backlog so a drifting input clock cannot add latency
                     // forever; keep two blocks so the recorder sees continuous audio.
@@ -1578,9 +1693,21 @@ impl AudioEngine {
 
                     filling.store(true, Ordering::Release);
                     let mut rendered = false;
-                    while prod.slots() >= block_len {
+                    let min_slots = playback_edge.as_ref().map_or(block_len, |edge| {
+                        ((block_len as u64)
+                            .saturating_mul(edge.to_hz as u64)
+                            .div_ceil(sample_rate as u64) as usize)
+                            .saturating_add(64)
+                            .max(block_len)
+                    });
+                    while prod.slots() >= min_slots {
                         while let Ok(s) = input_cons.pop() {
-                            input_queue.push_back(s);
+                            if let Err(error) =
+                                ingest_capture(s, capture_edge.as_mut(), &mut input_queue)
+                            {
+                                recorder_arc.lock().interrupt(&error);
+                                break;
+                            }
                         }
                         if input_queue.len() > block_len * 16 {
                             let drop = input_queue.len() - block_len * 2;
@@ -1714,9 +1841,10 @@ impl AudioEngine {
                                 .sort_by_key(|(_, index, _)| *index);
                         }
 
-                        for (i, stems) in frames.into_iter().enumerate() {
-                            // slots() was checked above, so these cannot fail.
-                            let _ = prod.push(OutputFrame {
+                        let rendered_frames: Vec<OutputFrame> = frames
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, stems)| OutputFrame {
                                 output: [ctx.out_left[i], ctx.out_right[i]],
                                 stems,
                                 synthetic: wait_for_input,
@@ -1726,7 +1854,29 @@ impl AudioEngine {
                                 calib_gen: if calib_idx[i] == 0 { 0 } else { calib_gen },
                                 reference_position: ctx.reference_positions[i],
                                 reference_clock: ctx.reference_clocks[i],
-                            });
+                            })
+                            .collect();
+                        if let Some(rec) = recorded_prod.as_mut() {
+                            for frame in &rendered_frames {
+                                let _ = rec.push(*frame);
+                            }
+                        }
+                        if let Some(edge) = playback_edge.as_mut() {
+                            for frame in &rendered_frames {
+                                if let Err(error) = edge.push(frame.output[0], frame.output[1]) {
+                                    recorder_arc.lock().interrupt(&error);
+                                    break;
+                                }
+                                while let Some(stereo) = edge.pop() {
+                                    let mut device = *frame;
+                                    device.output = stereo;
+                                    let _ = prod.push(device);
+                                }
+                            }
+                        } else {
+                            for frame in rendered_frames {
+                                let _ = prod.push(frame);
+                            }
                         }
                         output_index += block_len as u64;
                         if take != 0 {
@@ -2366,6 +2516,73 @@ mod tests {
     }
 
     #[test]
+    fn half_speed_plus_two_semitones_plays_without_xruns_on_null_output() {
+        // M3 acceptance: 50% speed and +2 semitones play without dropouts.
+        // Metric: zero OutputTap underruns (xruns) while NullOutput is filling.
+        const DROPOUT_TOLERANCE: u64 = 0;
+        let mut engine = headless_engine();
+        let samples: Vec<f32> = (0..96_000)
+            .flat_map(|i| {
+                let tone = 0.2 * (std::f32::consts::TAU * 440.0 * i as f32 / 48_000.0).sin();
+                [tone, -tone * 0.5]
+            })
+            .collect();
+        engine
+            .load_reference(
+                crate::song::ReferenceSong::new("half-plus-two".into(), "Fixture".into(), samples)
+                    .unwrap(),
+            )
+            .unwrap();
+        engine
+            .reference_processing("half-plus-two", 0.5, 2)
+            .unwrap();
+        engine.start().unwrap();
+        assert_eq!(engine.status().mode, EngineMode::Headless);
+        assert_eq!(
+            engine
+                .status()
+                .output
+                .as_ref()
+                .map(|o| o.device_name.as_str()),
+            Some("headless")
+        );
+        engine.transport_play();
+
+        let mut loudest = f32::NEG_INFINITY;
+        let deadline = Instant::now() + Duration::from_millis(800);
+        loop {
+            let tel = engine.get_telemetry();
+            assert_eq!(
+                tel.xruns, DROPOUT_TOLERANCE,
+                "NullOutput xruns must stay at {DROPOUT_TOLERANCE} at 50% +2 st, got {}",
+                tel.xruns
+            );
+            assert_eq!(engine.xruns.load(Ordering::Relaxed), DROPOUT_TOLERANCE);
+            let reference = tel.reference.expect("loaded reference");
+            assert_eq!(reference.speed, 0.5);
+            assert_eq!(reference.semitones, 2);
+            assert!(reference.processing_error.is_none());
+            loudest = loudest.max(tel.output_level.peak_db);
+            if Instant::now() >= deadline {
+                assert!(
+                    reference.position > 0.0,
+                    "processed reference must advance: {}",
+                    reference.position
+                );
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            loudest > -60.0,
+            "processed reference should be audible, peak {loudest} dB"
+        );
+        engine.transport_stop();
+        engine.stop().unwrap();
+        assert_eq!(engine.get_telemetry().xruns, DROPOUT_TOLERANCE);
+    }
+
+    #[test]
     fn voice_ducking_preserves_monitor_and_does_not_unmute_the_band() {
         let mut ctx = RenderContext::new(48_000);
         let mut voice = crate::voice::VoiceBus::default();
@@ -2417,6 +2634,8 @@ mod tests {
                     filling: Arc::new(AtomicBool::new(true)),
                     recording: false,
                     reference_position: Arc::clone(&position),
+                    copy_only: false,
+                    keep_rendered_di: Arc::new(AtomicBool::new(false)),
                 };
                 let mut rendered = 0usize;
                 let mut consumed = 0usize;
@@ -2487,6 +2706,250 @@ mod tests {
     }
 
     #[test]
+    fn analysed_grid_chord_and_bar_readout_stays_within_100_ms_on_null_output() {
+        // M3 acceptance: chord and bar readout stay within ±100 ms of the
+        // analysed beat grid on NullOutput, using the confirmed-grid fixture.
+        const TOLERANCE_S: f64 = 0.100;
+        let mut engine = headless_engine();
+        engine.start().unwrap();
+        assert_eq!(engine.status().mode, EngineMode::Headless);
+        assert_eq!(
+            engine
+                .status()
+                .output
+                .as_ref()
+                .map(|o| o.device_name.as_str()),
+            Some("headless")
+        );
+
+        let grid: crate::song::grid::Grid = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/seams/reference-grid.json"
+        ))
+        .unwrap();
+        let seconds = 6.0;
+        let mut song = crate::song::ReferenceSong::new(
+            "grid-readout".into(),
+            "Fixture".into(),
+            vec![0.05; (seconds * 48_000.0 * 2.0) as usize],
+        )
+        .unwrap();
+        song.set_grid(grid.clone()).unwrap();
+        let chords = vec![
+            jam_dsp::offline::ChordEstimate {
+                start: 0.2,
+                end: 2.2,
+                chord: Some("C".into()),
+            },
+            jam_dsp::offline::ChordEstimate {
+                start: 2.2,
+                end: 4.6,
+                chord: Some("F".into()),
+            },
+        ];
+        song.set_analysis(jam_dsp::offline::SongAnalysis {
+            schema_version: 1,
+            analyzer: "local-chroma-v1".into(),
+            confidence: "low".into(),
+            seconds,
+            bpm: Some(120.0),
+            beats: grid.beats.clone(),
+            key: Some("C major".into()),
+            chords: chords.clone(),
+        })
+        .unwrap();
+        engine.load_reference(song).unwrap();
+        engine.transport_play();
+
+        let chord_at = |t: f64| -> Option<&str> {
+            let index = chords.partition_point(|c| c.end <= t);
+            chords
+                .get(index)
+                .filter(|c| c.start <= t)
+                .and_then(|c| c.chord.as_deref())
+        };
+        let bar_at = |t: f64| grid.state(t, 1.0).position.map(|p| p.bar);
+        let locked = |t: f64, chord: Option<&str>, bar: Option<usize>| {
+            let steps = (TOLERANCE_S / 0.005) as i32;
+            (-steps..=steps).any(|i| {
+                let t_prime = t + f64::from(i) * 0.005;
+                chord_at(t_prime) == chord && bar_at(t_prime) == bar
+            })
+        };
+
+        let mut saw_verse = false;
+        let mut saw_chorus = false;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let reference = engine
+                .get_telemetry()
+                .reference
+                .expect("loaded reference publishes readout");
+            let t = reference.position;
+            if (0.2..4.6).contains(&t) {
+                let chord = reference
+                    .analysis
+                    .as_ref()
+                    .and_then(|a| a.chord.as_deref());
+                let bar = reference
+                    .grid
+                    .as_ref()
+                    .and_then(|g| g.position.as_ref())
+                    .map(|p| p.bar);
+                assert!(
+                    locked(t, chord, bar),
+                    "at {t:.3}s chord={chord:?} bar={bar:?} is outside ±100 ms of the analysed grid"
+                );
+                if (0.3..2.1).contains(&t) {
+                    assert_eq!(chord, Some("C"));
+                    assert_eq!(bar, Some(1));
+                    saw_verse = true;
+                }
+                if (2.3..4.5).contains(&t) {
+                    assert_eq!(chord, Some("F"));
+                    assert_eq!(bar, Some(2));
+                    saw_chorus = true;
+                }
+            }
+            if t >= 4.5 || Instant::now() >= deadline {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            saw_verse && saw_chorus,
+            "NullOutput must play both confirmed bars so the ±100 ms lock is sampled"
+        );
+        engine.transport_stop();
+        engine.stop().unwrap();
+    }
+
+    #[test]
+    fn loaded_reference_publishes_grid_bar_and_bpm_on_transport() {
+        let mut engine = headless_engine();
+        engine.start().unwrap();
+        assert_eq!(engine.status().mode, EngineMode::Headless);
+        let grid: crate::song::grid::Grid = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/seams/reference-grid.json"
+        ))
+        .unwrap();
+        let mut song = crate::song::ReferenceSong::new(
+            "grid-clock".into(),
+            "Fixture".into(),
+            vec![0.05; 576_000],
+        )
+        .unwrap();
+        song.set_grid(grid).unwrap();
+        engine.load_reference(song).unwrap();
+        let before = engine.get_telemetry();
+        assert!(before
+            .reference
+            .as_ref()
+            .and_then(|r| r.grid.as_ref())
+            .and_then(|g| g.position.as_ref())
+            .is_none());
+        assert_eq!(before.transport.bar, 1);
+        assert!((before.transport.bpm - 120.0).abs() < 1e-9);
+        engine.reference_seek(3.0).unwrap();
+        let tel = engine.get_telemetry();
+        let pos = tel
+            .reference
+            .as_ref()
+            .and_then(|r| r.grid.as_ref())
+            .and_then(|g| g.position.as_ref())
+            .expect("seeked playhead has a grid position");
+        assert_eq!(pos.bar, 2);
+        assert!((pos.bpm - 100.0).abs() < 1e-9);
+        assert_eq!(tel.transport.bar, 2);
+        assert!((tel.transport.bpm - 100.0).abs() < 1e-9);
+        engine.stop().unwrap();
+    }
+
+    #[test]
+    fn analysed_section_loop_wraps_on_its_downbeat_on_null_output() {
+        // M3 acceptance: a section loop wraps on the analysed downbeat.
+        // Wall-clock NullOutput cannot assert ±1 sample; state ±100 ms.
+        const TOLERANCE_S: f64 = 0.100;
+        const CHORUS_DOWNBEAT: f64 = 2.2;
+        const CHORUS_END: f64 = 4.6;
+        let mut engine = headless_engine();
+        engine.start().unwrap();
+        assert_eq!(engine.status().mode, EngineMode::Headless);
+        assert_eq!(
+            engine
+                .status()
+                .output
+                .as_ref()
+                .map(|o| o.device_name.as_str()),
+            Some("headless")
+        );
+
+        let grid: crate::song::grid::Grid = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/seams/reference-grid.json"
+        ))
+        .unwrap();
+        let mut song = crate::song::ReferenceSong::new(
+            "grid-loop".into(),
+            "Fixture".into(),
+            vec![0.05; 576_000],
+        )
+        .unwrap();
+        song.set_grid(grid).unwrap();
+        engine.load_reference(song).unwrap();
+        assert!(engine.reference_loop_section("grid-loop", "missing").is_err());
+        engine
+            .reference_loop_section("grid-loop", "chorus")
+            .unwrap();
+        let armed = engine.get_telemetry().reference.unwrap();
+        assert!(armed.loop_enabled);
+        assert!((armed.loop_start - CHORUS_DOWNBEAT).abs() < 1e-9);
+        assert!((armed.loop_end - CHORUS_END).abs() < 1e-9);
+        engine.transport_play();
+
+        let mut previous = None;
+        let mut wraps = 0usize;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let reference = engine
+                .get_telemetry()
+                .reference
+                .expect("loaded reference publishes readout");
+            let t = reference.position;
+            let in_chorus =
+                t + TOLERANCE_S >= CHORUS_DOWNBEAT && t < CHORUS_END + TOLERANCE_S;
+            if in_chorus {
+                let position = reference.grid.as_ref().and_then(|g| g.position.as_ref());
+                if let Some(p) = position {
+                    assert_eq!(p.bar, 2);
+                    assert_eq!(p.section_id.as_deref(), Some("chorus"));
+                }
+                if let Some(prev) = previous {
+                    if prev - t > 1.0 {
+                        wraps += 1;
+                        assert!(
+                            (t - CHORUS_DOWNBEAT).abs() <= TOLERANCE_S,
+                            "wrap landed at {t:.3}s, outside ±100 ms of the analysed chorus downbeat {CHORUS_DOWNBEAT}"
+                        );
+                        let p = position.expect("wrap must stay on the analysed chorus bar");
+                        assert_eq!(p.bar, 2);
+                        assert_eq!(p.section_id.as_deref(), Some("chorus"));
+                    }
+                }
+                previous = Some(t);
+            }
+            if wraps >= 1 || Instant::now() >= deadline {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            wraps >= 1,
+            "NullOutput must wrap the confirmed chorus loop on its analysed downbeat"
+        );
+        engine.transport_stop();
+        engine.stop().unwrap();
+    }
+
+    #[test]
     fn output_tap_aligns_all_stems_with_live_di_despite_variable_render_lead() {
         let (mut playback, output) = RingBuffer::new(16_384);
         let (mut input, guitar) = RingBuffer::new(16_384);
@@ -2501,6 +2964,8 @@ mod tests {
             filling: Arc::new(AtomicBool::new(true)),
             recording: false,
             reference_position: Arc::new(AtomicU64::new(0)),
+            copy_only: false,
+            keep_rendered_di: Arc::new(AtomicBool::new(false)),
         };
         // Render a long way ahead. Actual DI arrives only at each output callback.
         for index in 0..10_000 {
@@ -3007,12 +3472,32 @@ mod tests {
     }
 
     #[test]
-    fn input_rate_mismatch_names_both_rates_and_the_recording() {
-        let msg = super::input_rate_mismatch(44_100, 48_000).unwrap();
+    fn live_input_edge_converts_on_the_worker_and_fails_loud_when_it_cannot_start() {
+        assert_eq!(
+            crate::edge::MonoInEdge::from_device(44_100).unwrap().from_hz,
+            44_100
+        );
+        let mut queue = VecDeque::new();
+        super::ingest_capture(0.25, None, &mut queue).unwrap();
+        assert_eq!(queue, [0.25]);
+        assert!(crate::edge::MonoInEdge::from_device(0).is_err());
+        assert!(crate::edge::MonoInEdge::from_device(crate::edge::INTERNAL_RATE).is_err());
+        let msg = crate::edge::input_rate_unsupported(44_100, "no converter");
         assert!(msg.contains("44100"), "{msg}");
-        assert!(msg.contains("48000"), "{msg}");
-        assert!(msg.contains("Cannot record"), "{msg}");
-        assert!(super::input_rate_mismatch(48_000, 48_000).is_none());
-        assert!(super::input_rate_mismatch(0, 48_000).is_none());
+        assert!(msg.contains("48 kHz"), "{msg}");
+        assert!(msg.contains("Cannot convert"), "{msg}");
+    }
+
+    #[test]
+    fn engine_clock_stays_at_48k_and_names_unsupported_output() {
+        let engine = AudioEngine::new(AudioConfig {
+            sample_rate: 44_100,
+            ..AudioConfig::default()
+        });
+        assert_eq!(engine.sample_rate(), crate::edge::INTERNAL_RATE);
+        let msg = crate::edge::output_rate_unsupported(44_100);
+        assert!(msg.contains("44100"), "{msg}");
+        assert!(msg.contains("48 kHz"), "{msg}");
+        assert!(msg.contains("not configured"), "{msg}");
     }
 }

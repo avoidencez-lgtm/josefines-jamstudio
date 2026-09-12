@@ -348,7 +348,7 @@ export const App: React.FC = () => {
         {isPreview && (
           <div className="bg-[var(--accent-soft)] border-b border-[var(--accent)] text-[var(--fg-0)] text-xs font-mono px-6 py-1.5 flex items-center gap-3">
             <span className="uppercase tracking-wider font-semibold text-[var(--accent)]">
-              Browser preview
+              This is the browser preview.
             </span>
             <span>
               Explore the studio. Sound, files and connected services work in
@@ -363,14 +363,14 @@ export const App: React.FC = () => {
           <main className="studio-room overflow-y-auto p-8 relative">
             <RoomTools screen={currentScreen} />
             <Suspense
-              fallback={<p className="workspace-note">Opening the room…</p>}
+              fallback={<p className="workspace-note">Opening this room.</p>}
             >
               {renderScreen()}
             </Suspense>
           </main>
           {showHelp && (
             <Suspense
-              fallback={<p className="workspace-note">Opening help…</p>}
+              fallback={<p className="workspace-note">Opening this help.</p>}
             >
               <ShortcutsHelp
                 key={helpRequest}

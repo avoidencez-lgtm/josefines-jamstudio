@@ -5,7 +5,7 @@ you can immediately change. Audio operations require the desktop app; browser pr
 
 ## Capture an idea
 
-Open **Record & layers**. Choose 15, 30 or 60 seconds and press **Arm capture** before playing.
+Open **This is Record & layers.** Choose 15, 30 or 60 seconds and press **Arm capture** before playing.
 Press **H**, **Keep that**, or tell Jo “keep that” to save the recent audio.
 Capture stays local. Disarming clears only the unsaved buffer; saved takes remain.
 
@@ -15,7 +15,7 @@ the guitar is never silently retuned or stretched. Choose the first bar and repe
 
 ## Shape the song
 
-Choose a section in the **Song map**. In **Compose**, click a chord cell, then use
+Choose a section in the **Song map**. In **This is Compose.**, click a chord cell, then use
 **Find the next colour** to replace it with an in-key chord, a chord borrowed from
 the parallel key, or a dominant with a suggested destination. Suggestions are
 local theory calculations, not cloud predictions. The selected chord keeps its
@@ -47,7 +47,7 @@ Save the song to persist versions. Up to 20 versions, 256 arranged bars and 16 g
 
 ## Play without reaching for the mouse
 
-Expand **Hands-free controls** under **Record & layers**. Choose the physical MIDI input, click
+Expand **Hands-free controls** under **This is Record & layers.** Choose the physical MIDI input, click
 **Learn** beside an action, then press a pedal once. Learning saves the assignment
 without executing it. Enable pedal actions when ready. Reassigning a press removes
 its old action; **Clear** removes a binding. Bindings survive restart, while the
@@ -183,14 +183,14 @@ OpenRouter connection. See [API setup and creative examples](api-options.md).
 Suggestions use song text, never recorded audio, and wait for explicit application;
 the previous song version is kept before a change. Save to persist it.
 
-## Lyrics and creative alternatives
+## This is Lyrics. and creative alternatives
 
-Open **Lyrics** and choose a section in the song map. Its words sit beside the
+Open **This is Lyrics.** and choose a section in the song map. Its words sit beside the
 chord reference and song notebook. Lyrics persist with Save song and are included
 in Undo and named versions. Repeated sections share lyrics; Make variation keeps
-a separate draft. **Versions** holds named checkpoints and restore controls.
+a separate draft. **This is Versions.** holds named checkpoints and restore controls.
 
-Song Lab is below Compose and Lyrics. A lyric seed can be edited before **Add to
+Song Lab is below This is Compose. and This is Lyrics. A lyric seed can be edited before **Add to
 section lyrics**; existing words are kept. The in-app assistant can append section
 lyrics through `write_notes` with a section ID. Both paths retain a previous version
 and reject stale proposals. No recorded audio is sent by these writing tools.

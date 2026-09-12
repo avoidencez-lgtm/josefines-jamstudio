@@ -138,14 +138,14 @@ export function finishingReview(
         id: `unused-${section.id}`,
         title: `${section.name} is outside the form.`,
         detail:
-          "Keep it as an idea, add it in Compose so the band plays it, or use Delete this section to let it go.",
+          "Keep it as an idea, add it in This is Compose. so the band plays it, or use Delete this section to let it go.",
       });
     else if (vocal && !body.lyrics?.[section.id]?.trim())
       issues.push({
         id: `lyrics-${section.id}`,
         title: `${section.name} has no lyric draft.`,
         detail:
-          "Write a line in Lyrics, or intentionally leave this section instrumental.",
+          "Write a line in This is Lyrics., or intentionally leave this section instrumental.",
       });
   }
   // ponytail: compares settings, not perceived musical quality; listening remains the decision.
@@ -195,7 +195,7 @@ export function finishingReview(
         id: `overflow-${i}`,
         title: `${clip.label} extends beyond the song form.`,
         detail:
-          "Trim it in Record & layers or extend the arrangement. Guitar clips stay at absolute bar positions when the form changes.",
+          "Trim it in This is Record & layers. or extend the arrangement. Guitar clips stay at absolute bar positions when the form changes.",
       });
   }
   return issues;

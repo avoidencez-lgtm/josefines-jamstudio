@@ -84,10 +84,16 @@ extend `src-tauri/src/net/musicai.rs`. The provider row lives in
 `PROVIDERS` (`id: musicai`, `https://api.music.ai`, `Authorization` header).
 `analysis_start` / `analysis_cancel` are registered next to `media_analyze`.
 Parse fixtures in unit tests; persist them with `JAM_MUSICAI_FIXTURE=1`
-into `providerAnalysis` only. Do not treat public-doc shapes as a live job.
-Live upload stays not configured without `JAM_LIVE=1` and a recorded
-SUCCEEDED response. Never write these estimates into `referenceGrid` or
-claim downbeats. Local `estimate_grid` may write `estimatedGrid`.
+into `providerAnalysis`. `media_reference_grid_replace` may write
+`referenceGrid` from those fixture beats only after an explicit listen
+confirm. The command fails loud without `JAM_MUSICAI_FIXTURE=1`. Do not
+treat public-doc shapes as a live job. `media_fixture_song` writes
+`stemSet` and a `songAnalysis` chord chart into `song.json` from
+`tests/fixtures/seams/fixture-song.json` only when `JAM_SONG_FIXTURE=1`.
+It fails loud without that env. Live stem separation and Music.ai stay
+not configured. Live upload stays not configured
+without `JAM_LIVE=1` and a recorded SUCCEEDED response, and never writes
+the grid. Local `estimate_grid` may write `estimatedGrid`.
 Secrets stay in SecretStore; request bodies are not logged.
 
 ## Lyria RealTime
@@ -132,7 +138,7 @@ reports the bundled synthetic kit only and never writes files. After unpack,
 MIT `rustysynth` (`oxisynth` is LGPL and is not used). A missing or invalid
 pack stays on the synthetic kit or sine voices and says so on
 `band.state.kit_message` / `bass_message`. Goldens set `JAM_SYNTHETIC_KIT=1`.
-Settings → First run names the next step. Fixture:
+Settings → This is First run. names the next step. Fixture:
 `tests/fixtures/seams/assets.json`. Tests: `tests/invariants/assets.test.ts`
 and `cargo test -p src-tauri --test ipc_assets`.
 
@@ -425,7 +431,7 @@ The recipe below describes implemented paths; older planning recipes later in th
 
 The existing `docs/guide/manual.json` is the English/Bokmål help source. Each section has a unique stable `id` such as `write.song-map-and-linked-sections`; preserve it when editing or translating its title. The help pane uses it for keyboard-focusable topic links. Add both translations and run `node scripts/export-manual.mjs` after changing text, then `pnpm test` to validate IDs and exported manuals.
 
-Help opens beside the current room, or beneath it at compact widths. It is nonmodal: room controls and the global transport stay available. Escape with focus inside help closes it and returns focus to the opener. Music shortcuts are suppressed inside help; room-focused shortcuts and transport buttons remain usable. Write’s Compose, Lyrics, Record, Finish and Versions views launch their topic through `WRITING_HELP` in `src/lib/help.ts`. Each launch resets the pane to that topic, including repeated requests. Extend this map with an existing manual section ID; the invariant test checks every target. Chapter selection retains native select focus so keyboard users can continue choosing; topic links move focus to their heading.
+Help opens beside the current room, or beneath it at compact widths. It is nonmodal: room controls and the global transport stay available. Escape with focus inside help closes it and returns focus to the opener. Music shortcuts are suppressed inside help; room-focused shortcuts and transport buttons remain usable. Write’s This is Compose., This is Lyrics., This is Record & layers., This is Finish. and This is Versions. views launch their topic through `WRITING_HELP` in `src/lib/help.ts`. Each launch resets the pane to that topic, including repeated requests. Extend this map with an existing manual section ID; the invariant test checks every target. Chapter selection retains native select focus so keyboard users can continue choosing; topic links move focus to their heading.
 
 ## Native speech
 
@@ -490,7 +496,9 @@ source-position, de-click, queued-analysis and processed-recording regressions.
 Confirmed reference maps use `jam-audio::song::grid::Grid`; validate before
 attaching with `ReferenceSong::set_grid`. Keep its original-source times and
 explicit provenance. Use `media_reference_grid_save` to preserve unknown metadata
-and reject stale analysis/source hashes. Section endpoints are exclusive bar
+and reject stale analysis/source hashes. `media_reference_grid_replace` confirms
+the recorded Music.ai fixture beats into the same `referenceGrid` and fails
+loud without `JAM_MUSICAI_FIXTURE=1`. Section endpoints are exclusive bar
 boundaries, never approximate seconds rounded by JS. `loop_reference_section`
 in the Jo registry and `media_reference_loop_section` share the native path.
 The shared synthetic fixture is `tests/fixtures/seams/reference-grid.json`, with
