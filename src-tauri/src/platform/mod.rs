@@ -40,42 +40,82 @@ pub fn allowed_https_url(url: &str) -> Result<&str, String> {
 
 pub async fn open_https(url: &str) -> Result<(), String> {
     allowed_https_url(url)?;
-    #[cfg(target_os = "macos")]
-    let mut opener = command(std::path::Path::new("/usr/bin/open"));
-    #[cfg(windows)]
-    let mut opener = command(std::path::Path::new("explorer.exe"));
-    #[cfg(not(any(target_os = "macos", windows)))]
-    let mut opener = command(std::path::Path::new("xdg-open"));
-    launch_opener(opener.arg(url)).await
+    open_with_os(url).await
 }
 
 pub async fn open_media(path: &std::path::Path) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let mut opener = command(std::path::Path::new("/usr/bin/open"));
-    #[cfg(windows)]
-    let mut opener = command(std::path::Path::new("explorer.exe"));
-    #[cfg(not(any(target_os = "macos", windows)))]
-    let mut opener = command(std::path::Path::new("xdg-open"));
     // The user's explicit Play action opens their default media player.
-    launch_opener(opener.arg(path)).await
+    open_with_os(&path.to_string_lossy()).await
 }
 
-async fn launch_opener(opener: &mut tokio::process::Command) -> Result<(), String> {
-    // Explorer hands off to an existing process; its exit code does not prove
-    // whether a browser/player opened. macOS open and xdg-open report failure.
+async fn open_with_os(target: &str) -> Result<(), String> {
     #[cfg(windows)]
-    opener
-        .kill_on_drop(false)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    #[cfg(not(windows))]
     {
-        let status = opener.status().await.map_err(|e| e.to_string())?;
-        if !status.success() {
-            return Err(
-                "The system could not open this item. Check the default application.".into(),
-            );
-        }
+        let target = target.to_string();
+        return tokio::task::spawn_blocking(move || windows_shell_open(&target))
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()));
+    }
+    #[cfg(target_os = "macos")]
+    let mut opener = command(std::path::Path::new("/usr/bin/open"));
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let mut opener = command(std::path::Path::new("xdg-open"));
+    #[cfg(not(windows))]
+    launch_opener(opener.arg(target)).await
+}
+
+/// ShellExecuteW is how a user double-clicking an https shortcut opens the
+/// default browser. `explorer.exe` plus CREATE_NO_WINDOW often does nothing.
+#[cfg(windows)]
+fn windows_shell_open(target: &str) -> Result<(), String> {
+    let failed = || -> String {
+        "The system could not open this item. Check the default application.".into()
+    };
+    if target.is_empty() {
+        return Err(failed());
+    }
+    use std::os::windows::ffi::OsStrExt;
+    fn wide(s: &str) -> Vec<u16> {
+        std::ffi::OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteW(
+            hwnd: *mut core::ffi::c_void,
+            operation: *const u16,
+            file: *const u16,
+            parameters: *const u16,
+            directory: *const u16,
+            show: i32,
+        ) -> isize;
+    }
+    const SW_SHOWNORMAL: i32 = 1;
+    let operation = wide("open");
+    let file = wide(target);
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            operation.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if result <= 32 {
+        return Err(failed());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+async fn launch_opener(opener: &mut tokio::process::Command) -> Result<(), String> {
+    let status = opener.status().await.map_err(|e| e.to_string())?;
+    if !status.success() {
+        return Err("The system could not open this item. Check the default application.".into());
     }
     Ok(())
 }
@@ -199,6 +239,14 @@ mod url_tests {
         assert!(super::allowed_https_url("https://user:pass@ffmpeg.org/").is_err());
         assert!(super::allowed_https_url("file:///etc/passwd").is_err());
     }
+
+    #[tokio::test]
+    async fn disallowed_https_fails_before_the_os_opener() {
+        assert!(super::open_https("https://evil.example/").await.is_err());
+        assert!(super::open_https("http://ffmpeg.org/download.html")
+            .await
+            .is_err());
+    }
 }
 
 #[cfg(all(test, windows))]
@@ -252,5 +300,22 @@ mod tests {
         assert!(status.success(), "{status:?}");
         assert_eq!(std::fs::read_to_string(&output).unwrap().trim(), "ran");
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn windows_shell_open_reports_failure_instead_of_hidden_explorer() {
+        let err = super::windows_shell_open("").unwrap_err();
+        assert!(err.contains("could not open"), "{err}");
+        let src = include_str!("mod.rs");
+        let https = src
+            .split("pub async fn open_https")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn open_media").next())
+            .unwrap_or("");
+        assert!(
+            !https.contains("explorer.exe"),
+            "https open must not launch explorer.exe"
+        );
+        assert!(https.contains("open_with_os"));
     }
 }
