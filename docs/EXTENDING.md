@@ -129,6 +129,10 @@ reports the bundled synthetic kit only and never writes files. After unpack,
 ready status checks every installed file against the retained, SHA-256-verified
 release ZIP. Missing or modified samples require reinstalling the pack; status
 checks run off the UI thread. A failed install preserves the previous pack.
+The old ZIP is kept as `.zip.previous` until the new directory is published;
+publication failure restores it and retains the new download when possible.
+Existing recovery archives/folders are refused without replacement. If an OS
+error prevents restoration, the error names the retained archive or pack folder.
 Resume validates the full HTTP `Content-Range` and declared response length
 against the manifest and saved prefix. A valid response starting at zero replaces
 the prefix. An invalid range or HTTP 416 retries once without `Range`. The prefix

@@ -621,8 +621,39 @@ async fn install(pack: &Pack, mut on_state: impl FnMut(&PackStatus)) -> Result<(
     }
     let result = (|| {
         unpack_zip(&part, &staging)?;
-        fs::rename(&part, &zip_path).map_err(|e| e.to_string())?;
-        replace_dir(&staging, &dest)
+        let previous_zip = zip_path.with_extension("zip.previous");
+        if previous_zip.try_exists().map_err(|e| e.to_string())? {
+            return Err(format!(
+                "A previous sample-pack archive was kept at {}. Move it aside before retrying the install.",
+                previous_zip.display()
+            ));
+        }
+        let had_zip = zip_path.try_exists().map_err(|e| e.to_string())?;
+        if had_zip {
+            fs::rename(&zip_path, &previous_zip).map_err(|e| e.to_string())?;
+        }
+        let publish = (|| {
+            fs::rename(&part, &zip_path).map_err(|e| e.to_string())?;
+            if let Err(e) = replace_dir(&staging, &dest) {
+                // Keep the new download for retry before restoring the old archive.
+                let _ = fs::rename(&zip_path, &part);
+                return Err(e);
+            }
+            Ok(())
+        })();
+        if had_zip {
+            if let Err(ref original) = publish {
+                if let Err(restore) = fs::rename(&previous_zip, &zip_path) {
+                    return Err(format!(
+                        "{original} Cannot restore the previous archive: {restore}. Its bytes are kept at {}.",
+                        previous_zip.display()
+                    ));
+                }
+            } else {
+                let _ = fs::remove_file(&previous_zip);
+            }
+        }
+        publish
     })();
     if result.is_err() {
         let _ = fs::remove_dir_all(&staging);
@@ -1020,6 +1051,76 @@ mod tests {
             .with_file_name("bad-kit.unpacking")
             .join("kit.json")
             .is_file());
+    }
+
+    #[test]
+    fn failed_pack_publication_preserves_the_installed_archive_and_recovery_folder() {
+        let root = test_root();
+        let zip = root.dir.join("kit.zip");
+        tiny_kit_zip(&zip);
+        let pack = kit_pack("publish-kit", &zip);
+        std::env::set_var("JAM_ASSETS_LOCAL", &zip);
+        tauri::async_runtime::block_on(install(&pack, |_| {})).unwrap();
+        let dest = pack_dir(&pack.id);
+        let archive = dest.with_extension("zip");
+        let old_archive = fs::read(&archive).unwrap();
+        let old_kit = fs::read(dest.join("kit.json")).unwrap();
+
+        let mut updated = zip::ZipWriter::new_append(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&zip)
+                .unwrap(),
+        )
+        .unwrap();
+        updated
+            .start_file("README.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        updated.write_all(b"Updated sample pack").unwrap();
+        updated.finish().unwrap();
+        let updated_pack = kit_pack("publish-kit", &zip);
+        let archive_recovery = archive.with_extension("zip.previous");
+        fs::write(&archive_recovery, b"unrecovered archive").unwrap();
+        let err = tauri::async_runtime::block_on(install(&updated_pack, |_| {})).unwrap_err();
+        assert!(err.contains("previous sample-pack archive"), "{err}");
+        assert_eq!(fs::read(&archive_recovery).unwrap(), b"unrecovered archive");
+        assert_eq!(fs::read(&archive).unwrap(), old_archive);
+        assert!(pack_ready(&dest, &pack.sha256));
+        fs::rename(&archive_recovery, root.dir.join("saved-archive.zip")).unwrap();
+        let recovery = dest.with_extension("previous");
+        fs::create_dir(&recovery).unwrap();
+        fs::write(recovery.join("keep.txt"), b"unrecovered pack").unwrap();
+
+        let err = tauri::async_runtime::block_on(install(&updated_pack, |_| {})).unwrap_err();
+        assert!(err.contains("previous sample pack"), "{err}");
+        assert_eq!(
+            fs::read(&archive).unwrap(),
+            old_archive,
+            "A later directory failure must not replace the installed ZIP"
+        );
+        assert_eq!(fs::read(dest.join("kit.json")).unwrap(), old_kit);
+        assert_eq!(
+            fs::read(recovery.join("keep.txt")).unwrap(),
+            b"unrecovered pack"
+        );
+        assert!(pack_ready(&dest, &pack.sha256));
+        assert!(!dest.with_file_name("publish-kit.unpacking").exists());
+        assert!(!archive_recovery.exists());
+        assert_eq!(
+            fs::read(dest.with_extension("zip.part")).unwrap(),
+            fs::read(&zip).unwrap()
+        );
+
+        fs::rename(&recovery, root.dir.join("saved-recovery")).unwrap();
+        tauri::async_runtime::block_on(install(&updated_pack, |_| {})).unwrap();
+        assert!(pack_ready(&dest, &updated_pack.sha256));
+        assert!(!archive_recovery.exists());
+        assert_eq!(fs::read(&archive).unwrap(), fs::read(&zip).unwrap());
+        assert_eq!(
+            fs::read(root.dir.join("saved-recovery/keep.txt")).unwrap(),
+            b"unrecovered pack"
+        );
     }
 
     #[test]
