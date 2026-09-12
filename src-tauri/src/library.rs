@@ -272,6 +272,14 @@ pub fn validate_chart(chart: &Chart) -> Result<(), String> {
     if chart.id.trim().is_empty() {
         return Err("chart id is empty".into());
     }
+    if chart.id.len() > 100
+        || !chart
+            .id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+    {
+        return Err("Chart id may only contain letters, numbers, hyphens and underscores.".into());
+    }
     if chart.sections.is_empty() {
         return Err("chart has no sections".into());
     }
@@ -410,5 +418,21 @@ mod tests {
         chart.sections[0].bars[0][0].beats = f64::NAN;
         assert!(validate_chart(&chart).is_err());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn chart_ids_that_sanitize_onto_one_file_are_refused() {
+        let lib = Library::load_from(temp_root("id-charset"));
+        let mut spaced = lib.chart("blues-12-bar").unwrap();
+        spaced.id = "My Chart".into();
+        assert!(validate_chart(&spaced)
+            .unwrap_err()
+            .contains("letters, numbers, hyphens and underscores"));
+        let mut dotted = lib.chart("blues-12-bar").unwrap();
+        dotted.id = "foo.bar".into();
+        assert!(validate_chart(&dotted).is_err());
+        let mut dashed = lib.chart("blues-12-bar").unwrap();
+        dashed.id = "My-Chart".into();
+        validate_chart(&dashed).unwrap();
     }
 }
