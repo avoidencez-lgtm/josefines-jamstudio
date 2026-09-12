@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs,
-    io::Write,
+    io::{Seek, Write},
     path::{Path, PathBuf},
     sync::mpsc,
     thread,
@@ -171,33 +171,25 @@ impl TakeRecorder {
             let mut peak = 0.0f32;
             let mut peaks = Vec::new();
             let mut write_error = None;
-            for block in rx {
-                if write_error.is_some() {
-                    continue;
-                }
+            'recording: for block in rx {
                 for frame in block {
+                    if frame.iter().any(|v| !v.is_finite()) {
+                        write_error = Some("Non-finite audio.".into());
+                        break 'recording;
+                    }
                     for (channels, writer) in &mut writers {
                         if channels == &[0] && frames < offset {
                             continue;
                         }
                         for &ch in channels.iter() {
                             let v = frame[ch];
-                            if !v.is_finite() {
-                                write_error = Some(
-                                    "Non-finite audio; partial WAVs kept for recovery.".into(),
-                                );
-                                break;
-                            }
                             if let Err(e) =
                                 writer.write_sample((v.clamp(-1.0, 1.0) * 8_388_607.0) as i32)
                             {
                                 write_error = Some(e.to_string());
-                                break;
+                                break 'recording;
                             }
                         }
-                    }
-                    if write_error.is_some() {
-                        break;
                     }
                     peak = peak.max(frame[0].abs()).max(frame[3].abs());
                     frames += 1;
@@ -209,7 +201,7 @@ impl TakeRecorder {
                         for (_, writer) in &mut writers {
                             if let Err(e) = writer.flush() {
                                 write_error = Some(e.to_string());
-                                break;
+                                break 'recording;
                             }
                         }
                         checkpoint = frames;
@@ -217,17 +209,13 @@ impl TakeRecorder {
                 }
             }
             // Pad the shifted input so every exported stem retains a common duration.
-            if write_error.is_none() {
-                for (channels, writer) in &mut writers {
-                    if channels == &[0] {
-                        for _ in 0..offset.min(frames) {
-                            writer.write_sample(0i32).map_err(|e| e.to_string())?;
-                        }
-                    }
-                }
-            }
-            for (_, writer) in writers {
-                let _ = writer.finalize();
+            for (channels, writer) in writers {
+                let padding = if channels == [0] {
+                    offset.min(frames)
+                } else {
+                    0
+                };
+                finish_writer(writer, padding, &mut write_error);
             }
             if peaks.is_empty() {
                 peaks.push(peak);
@@ -239,7 +227,8 @@ impl TakeRecorder {
             meta.sample_count = frames;
             meta.duration_secs = frames as f64 / rate as f64;
             if let Some(e) = write_error {
-                meta.notes = e;
+                meta.notes =
+                    format!("Recording was interrupted. {e} Partial WAVs were kept for recovery.");
             }
             Ok(meta)
         });
@@ -309,16 +298,38 @@ impl TakeRecorder {
             );
         }
         if let Some(e) = self.failure.take() {
-            meta.notes = e;
-            save_manifest(&meta)?;
-            // Files are truth: the take is on disk. Returning Err hid it from
-            // Sessions until a manual refresh (#92).
-            return Ok(meta);
+            meta.notes = if meta.notes.is_empty() {
+                e
+            } else {
+                format!("{} {e}", meta.notes)
+            };
         }
         save_manifest(&meta)?;
+        // Return the saved partial take too, so Sessions can list it (#92, #368).
         Ok(meta)
     }
 }
+
+/// Finish every stem even after capture, padding or header/flush errors. The
+/// first error survives into the manifest instead of skipping metadata recovery.
+fn finish_writer<W: Write + Seek>(
+    mut writer: WavWriter<W>,
+    padding: usize,
+    error: &mut Option<String>,
+) {
+    if error.is_none() {
+        for _ in 0..padding {
+            if let Err(e) = writer.write_sample(0i32) {
+                *error = Some(e.to_string());
+                break;
+            }
+        }
+    }
+    if let Err(e) = writer.finalize() {
+        error.get_or_insert_with(|| e.to_string());
+    }
+}
+
 impl Drop for TakeRecorder {
     fn drop(&mut self) {
         if self.is_recording() {
@@ -388,6 +399,77 @@ pub fn wav_sample_rate(path: &Path) -> Result<u32, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    #[derive(Default)]
+    struct FaultWriter {
+        bytes: std::io::Cursor<Vec<u8>>,
+        fail_writes: std::sync::Arc<AtomicBool>,
+        fail_flush: bool,
+        flushes: std::sync::Arc<AtomicUsize>,
+    }
+    impl Write for FaultWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if self.fail_writes.load(Ordering::Relaxed) {
+                return Err(std::io::Error::other("synthetic disk write failure"));
+            }
+            self.bytes.write(bytes)
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.flushes.fetch_add(1, Ordering::Relaxed);
+            if self.fail_flush {
+                return Err(std::io::Error::other("synthetic disk flush failure"));
+            }
+            Ok(())
+        }
+    }
+    impl Seek for FaultWriter {
+        fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+            self.bytes.seek(pos)
+        }
+    }
+
+    #[test]
+    fn padding_header_and_flush_errors_survive_while_other_stems_are_finalized() {
+        let spec = WavSpec {
+            channels: 1,
+            sample_rate: 48_000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        for (padding, fail_writes, fail_flush, prior) in [
+            (1, true, false, None),
+            (0, true, false, None),
+            (0, false, true, None),
+            (1, true, true, Some("capture failed")),
+        ] {
+            let bad = FaultWriter {
+                fail_flush,
+                ..Default::default()
+            };
+            let fail = bad.fail_writes.clone();
+            let writer = WavWriter::new(bad, spec).unwrap();
+            fail.store(fail_writes, Ordering::Relaxed);
+            let good = FaultWriter::default();
+            let flushes = good.flushes.clone();
+            let other = WavWriter::new(good, spec).unwrap();
+            let mut error = prior.map(str::to_owned);
+            finish_writer(writer, padding, &mut error);
+            let expected = prior.unwrap_or(if fail_writes {
+                "synthetic disk write failure"
+            } else {
+                "synthetic disk flush failure"
+            });
+            assert!(
+                error.as_ref().is_some_and(|e| e.contains(expected)),
+                "{error:?}"
+            );
+            finish_writer(other, 0, &mut error);
+            assert_eq!(flushes.load(Ordering::Relaxed), 1);
+            assert!(error.unwrap().contains(expected));
+        }
+    }
+
     #[test]
     fn manifest_write_never_overwrites_an_existing_temporary_link() {
         let root = std::env::temp_dir().join(format!("jam-manifest-link-{}", std::process::id()));
@@ -420,6 +502,16 @@ mod tests {
         r.start_take("song".into(), "rock".into(), "verse".into(), 100.0)
             .unwrap();
         r.push_capture(&[[f32::NAN; 9]; 1]).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while !r.writer.as_ref().unwrap().is_finished() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "failed writer must stop accepting audio before Save"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        r.push_frames(vec![[0.1; 9]], vec![], &[]);
+        assert!(r.error().unwrap().contains("interrupted"));
         let t = r
             .stop_and_save()
             .expect("partial take stays listed after a writer error");
@@ -427,6 +519,10 @@ mod tests {
             t.notes.contains("finite") || t.notes.contains("Non-finite"),
             "{}",
             t.notes
+        );
+        assert!(
+            t.notes.contains("interrupted"),
+            "the UI must warn that this take is partial"
         );
         assert!(Path::new(&t.path_input)
             .parent()
