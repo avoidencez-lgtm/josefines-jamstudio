@@ -221,7 +221,9 @@ impl RigOrchestrator {
         self.run_commands(
             &[RigCommand::ProgramChange { program }],
             &format!("manual {name}"),
-        )
+        )?;
+        self.last_sent_scene = None;
+        Ok(())
     }
 
     /// Turns a knob: clamps to the declared range and remembers the value.
@@ -449,6 +451,20 @@ mod tests {
         assert!(orch.set_control(200, 1).is_err());
         assert!(orch.send_program(200).is_err());
         assert!(orch.send_program(127).is_ok());
+    }
+
+    #[test]
+    fn send_program_invalidates_last_sent_scene_so_section_automation_can_return() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.set_section_mapping("Verse".into(), 0);
+        orch.set_section_mapping("Bridge".into(), 0);
+        assert_eq!(orch.on_section_change("Verse").unwrap(), Some(0));
+        orch.send_program(3).unwrap();
+        assert_eq!(
+            orch.on_section_change("Bridge").unwrap(),
+            Some(0),
+            "manual PC must not suppress the next mapped scene"
+        );
     }
 
     #[test]
