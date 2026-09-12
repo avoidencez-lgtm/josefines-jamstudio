@@ -1,9 +1,15 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import manifest from "../../assets/manifest.json";
 import { type PreviewEngine, createPreviewEngine } from "../../src/ipc/preview";
 import seam from "../fixtures/seams/assets.json";
 
 describe("sample pack seam", () => {
+  it("cargo deny includes exclusive dev-dependencies so AGPL cannot enter green", () => {
+    const deny = readFileSync("deny.toml", "utf8");
+    expect(deny).toMatch(/\[licenses\][\s\S]*?include-dev\s*=\s*true/);
+  });
+
   let engine: PreviewEngine | undefined;
   afterEach(() => engine?.dispose());
 
