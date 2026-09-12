@@ -377,6 +377,7 @@ async fn download_resume(
     if expected > MAX_ZIP {
         return Err("Sample pack is larger than 64 MB.".into());
     }
+    let limit = if expected > 0 { expected } else { MAX_ZIP };
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(4))
         .timeout(std::time::Duration::from_secs(120))
@@ -424,9 +425,10 @@ async fn download_resume(
             have = 0;
         }
         if let Some(len) = response.content_length() {
-            let total = have.saturating_add(len);
-            if total > MAX_ZIP {
-                return Err("Sample pack is larger than 64 MB.".into());
+            if len > limit - have {
+                return Err(format!(
+                    "Sample pack download exceeds its {limit}-byte limit. Retry the download."
+                ));
             }
         }
         fs::create_dir_all(part.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
@@ -459,13 +461,19 @@ async fn download_resume(
             }
         };
         emit_pct(have);
+        let mut written = have;
         while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
-            file.write_all(&chunk).map_err(|e| e.to_string())?;
-            let pos = file.stream_position().map_err(|e| e.to_string())?;
-            if pos > MAX_ZIP {
-                return Err("Sample pack is larger than 64 MB.".into());
+            if chunk.len() as u64 > limit - written {
+                return Err(format!(
+                    "Sample pack download exceeds its {limit}-byte limit. Retry the download."
+                ));
             }
-            emit_pct(pos);
+            file.write_all(&chunk).map_err(|e| e.to_string())?;
+            written += chunk.len() as u64;
+            emit_pct(written);
+        }
+        if total > 0 && written < total {
+            return Err(format!("Sample pack download is incomplete ({written} of {total} bytes). Retry to resume the download."));
         }
         return Ok(());
     }
@@ -753,11 +761,13 @@ mod tests {
                 if !reply.delay.is_zero() {
                     thread::sleep(reply.delay);
                 }
-                let mut head = format!(
-                    "HTTP/1.1 {} TEST\r\nContent-Length: {}\r\nConnection: close\r\n",
-                    reply.status,
-                    reply.body.len()
-                );
+                let mut head = format!("HTTP/1.1 {} TEST\r\nConnection: close\r\n", reply.status);
+                if !reply.headers.iter().any(|(key, _)| {
+                    key.eq_ignore_ascii_case("content-length")
+                        || key.eq_ignore_ascii_case("transfer-encoding")
+                }) {
+                    head.push_str(&format!("Content-Length: {}\r\n", reply.body.len()));
+                }
                 for (k, v) in &reply.headers {
                     head.push_str(&format!("{k}: {v}\r\n"));
                 }
@@ -1228,6 +1238,112 @@ mod tests {
         assert!(pcts.contains(&100), "{pcts:?}");
         assert!(pcts.windows(2).all(|w| w[0] <= w[1]), "{pcts:?}");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn incomplete_pack_download_keeps_the_prefix_and_resumes_before_installing() {
+        let root = test_root();
+        let zip = root.dir.join("kit.zip");
+        tiny_kit_zip(&zip);
+        let bytes = fs::read(&zip).unwrap();
+        let split = bytes.len() / 2;
+        let mut pack = kit_pack("interrupted-kit", &zip);
+        let dest = pack_dir(&pack.id);
+        let part = dest.with_extension("zip.part");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("kit.json"), b"previous kit").unwrap();
+        fs::write(dest.with_extension("zip"), b"previous archive").unwrap();
+        let (url, server) = spawn_http(vec![HttpReply {
+            status: 200,
+            headers: vec![],
+            body: bytes[..split].to_vec(),
+            delay: Duration::ZERO,
+        }]);
+        pack.url = url;
+        let mut states = Vec::new();
+        let err = tauri::async_runtime::block_on(install(&pack, |state| {
+            states.push(state.state.clone());
+        }))
+        .unwrap_err();
+        server.join().unwrap();
+        assert!(
+            part.is_file(),
+            "Keep an incomplete download for retry: {err}"
+        );
+        assert_eq!(fs::read(&part).unwrap(), bytes[..split]);
+        assert!(err.contains("incomplete"), "{err}");
+        assert!(!states.iter().any(|state| state == "verifying"));
+        assert_eq!(fs::read(dest.join("kit.json")).unwrap(), b"previous kit");
+        assert_eq!(
+            fs::read(dest.with_extension("zip")).unwrap(),
+            b"previous archive"
+        );
+
+        let (url, server) = spawn_http(vec![HttpReply {
+            status: 206,
+            headers: vec![(
+                "Content-Range".into(),
+                format!("bytes {split}-{}/{}", bytes.len() - 1, bytes.len()),
+            )],
+            body: bytes[split..].to_vec(),
+            delay: Duration::ZERO,
+        }]);
+        pack.url = url;
+        tauri::async_runtime::block_on(install(&pack, |_| {})).unwrap();
+        let requests = server.join().unwrap();
+        assert!(requests[0]
+            .to_ascii_lowercase()
+            .contains(&format!("\r\nrange: bytes={split}-\r\n")));
+        assert!(pack_ready(&dest, &pack.sha256));
+        assert_eq!(fs::read(dest.with_extension("zip")).unwrap(), bytes);
+        assert!(!part.exists());
+    }
+
+    #[test]
+    fn download_resume_checks_size_before_replacing_or_appending_bytes() {
+        let root = test_root();
+        let part = root.dir.join("pack.zip.part");
+        fs::write(&part, b"prefix").unwrap();
+        let (url, server) = spawn_http(vec![HttpReply {
+            status: 200,
+            headers: vec![],
+            body: vec![0; 11],
+            delay: Duration::ZERO,
+        }]);
+        let result = tauri::async_runtime::block_on(download_resume(&url, &part, 10, |_| {}));
+        server.join().unwrap();
+        assert!(
+            result.is_err(),
+            "An oversized response must be refused before truncating the prefix"
+        );
+        assert_eq!(fs::read(&part).unwrap(), b"prefix");
+
+        // A chunked response has no Content-Length; enforce both the manifest
+        // size and the global ceiling before any offending chunk reaches disk.
+        for expected in [10, MAX_ZIP, 0] {
+            let limit = if expected == 0 { MAX_ZIP } else { expected };
+            File::create(&part).unwrap().set_len(limit - 4).unwrap();
+            let (url, server) = spawn_http(vec![HttpReply {
+                status: 206,
+                headers: vec![
+                    (
+                        "Content-Range".into(),
+                        format!("bytes {}-{}/{limit}", limit - 4, limit - 1),
+                    ),
+                    ("Transfer-Encoding".into(), "chunked".into()),
+                ],
+                body: b"8\r\n12345678\r\n0\r\n\r\n".to_vec(),
+                delay: Duration::ZERO,
+            }]);
+            let result =
+                tauri::async_runtime::block_on(download_resume(&url, &part, expected, |_| {}));
+            server.join().unwrap();
+            assert!(result.is_err(), "{expected}: reject an oversized stream");
+            assert!(
+                part.metadata().unwrap().len() <= limit,
+                "{expected}: do not write bytes beyond the limit"
+            );
+        }
     }
 
     #[test]

@@ -133,6 +133,10 @@ Resume validates the full HTTP `Content-Range` and declared response length
 against the manifest and saved prefix. A valid response starting at zero replaces
 the prefix. An invalid range or HTTP 416 retries once without `Range`. The prefix
 is kept until a valid response can replace it. See [HTTP range semantics](https://www.rfc-editor.org/rfc/rfc9110.html#name-content-range).
+Response lengths and each streamed chunk are checked against the manifest size
+(or the 64 MiB ceiling when size is unknown) before writing. A clean EOF before
+the expected size reports an incomplete download and retains the `.part` file
+for retry; it never reaches checksum verification or replaces the installed pack.
 `Sampler::open` loads `kit.json` and WAVs from
 `~/JosefinesJamstudio/assets/<id>/` (or `JAM_KIT_DIR` / `JAM_USER_DIR`).
 `Sf2Synth::open` loads `freepats-bass-comp` (`bass.sf2`, `comp.sf2`) with
