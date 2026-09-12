@@ -113,6 +113,27 @@ export function scrollBarInStrip(
 }
 
 /**
+ * Shift-click loop start is 1-based. A stopped or count-in transport reports bar 0,
+ * so fall back to the clicked bar instead of sending startBar 0.
+ */
+export function loopFromBar(
+  anchor: number | null,
+  currentBar: number,
+  barIndex: number,
+): number {
+  return anchor ?? (currentBar > 0 ? currentBar : barIndex);
+}
+
+export function loopRangeFromShiftClick(
+  anchor: number | null,
+  currentBar: number,
+  barIndex: number,
+): [number, number] {
+  const from = loopFromBar(anchor, currentBar, barIndex);
+  return [Math.min(from, barIndex), Math.max(from, barIndex) + 1];
+}
+
+/**
  * The whole form as a row of bars, current bar lit, section names above. Click a bar
  * to jump there; shift-click a second bar to loop the span between them.
  */
@@ -150,10 +171,12 @@ export const ChordStrip: React.FC<ChordStripProps> = ({
 
   const handleClick = (e: React.MouseEvent, barIndex: number) => {
     if (e.shiftKey && onSetLoop) {
-      const from = anchor.current ?? currentBar;
-      const lo = Math.min(from, barIndex);
-      const hi = Math.max(from, barIndex);
-      onSetLoop(lo, hi + 1);
+      const [startBar, endBar] = loopRangeFromShiftClick(
+        anchor.current,
+        currentBar,
+        barIndex,
+      );
+      onSetLoop(startBar, endBar);
       anchor.current = null;
       return;
     }
