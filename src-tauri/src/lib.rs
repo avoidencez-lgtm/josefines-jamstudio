@@ -1618,7 +1618,14 @@ pub fn configure<R: tauri::Runtime>(
                             tel.transport.bpm,
                             tel.status.sample_rate,
                         );
-                        let _ = rig.lock().on_transport_tick(now, tel.transport.bpm);
+                        let mut rig = rig.lock();
+                        let was_live = rig.is_live();
+                        if let Err(e) = rig.on_transport_tick(now, tel.transport.bpm) {
+                            let _ = app_handle.emit("rig:error", &e);
+                        }
+                        if was_live && !rig.is_live() {
+                            let _ = app_handle.emit("rig:state", &rig_state_dto(&rig));
+                        }
                     }
                     if tel.reference.is_none()
                         && tel.transport.state == "playing"

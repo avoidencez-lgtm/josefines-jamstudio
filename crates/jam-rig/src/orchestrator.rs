@@ -170,10 +170,7 @@ impl RigOrchestrator {
         self.section_mappings.remove(section);
     }
 
-    fn send_bytes(&mut self, bytes: Vec<u8>, reason: &str) -> Result<(), String> {
-        if !self.dry_run {
-            self.sink.send(&bytes)?;
-        }
+    fn record_monitor(&mut self, bytes: Vec<u8>, reason: &str, live: bool) {
         if self.monitor.len() == MONITOR_CAPACITY {
             self.monitor.pop_front();
         }
@@ -182,8 +179,20 @@ impl RigOrchestrator {
             text: describe_message(&bytes),
             bytes,
             reason: reason.to_string(),
-            live: self.sink.is_live(),
+            live,
         });
+    }
+
+    fn send_bytes(&mut self, bytes: Vec<u8>, reason: &str) -> Result<(), String> {
+        if !self.dry_run {
+            if let Err(e) = self.sink.send(&bytes) {
+                self.close_port();
+                self.record_monitor(bytes, reason, false);
+                return Err(e);
+            }
+        }
+        let live = self.sink.is_live();
+        self.record_monitor(bytes, reason, live);
         Ok(())
     }
 
@@ -730,5 +739,44 @@ mod tests {
             late.monitor().iter().any(|m| m.bytes == [CLOCK]),
             "Send Clock mid-song must arm ticks"
         );
+    }
+
+    struct DisconnectSink {
+        live: bool,
+    }
+    impl MidiSink for DisconnectSink {
+        fn send(&mut self, _: &[u8]) -> Result<(), String> {
+            self.live = false;
+            Err("MIDI send to \"Roland UM-ONE\" failed. disconnected".into())
+        }
+        fn describe(&self) -> String {
+            "Roland UM-ONE".into()
+        }
+        fn is_live(&self) -> bool {
+            self.live
+        }
+    }
+
+    #[test]
+    fn send_failure_closes_the_port_and_clears_live() {
+        let mut orch = RigOrchestrator::new(
+            quad_cortex_like(),
+            Box::new(DisconnectSink { live: true }),
+        );
+        assert!(orch.is_live());
+        let err = orch.send_program(1).unwrap_err();
+        assert!(err.contains("failed"), "{err}");
+        assert!(
+            !orch.is_live(),
+            "a disconnected port must fall back to MemorySink"
+        );
+        assert!(
+            orch.port_description().contains("No MIDI port is open"),
+            "{}",
+            orch.port_description()
+        );
+        orch.send_program(2).unwrap();
+        assert!(!orch.is_live());
+        assert_eq!(orch.monitor().last().unwrap().bytes, vec![0xC0, 2]);
     }
 }

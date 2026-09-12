@@ -68,6 +68,7 @@ pub fn list_output_ports() -> Result<Vec<MidiPortInfo>, String> {
 pub struct MidirSink {
     port_name: String,
     conn: MidiOutputConnection,
+    dead: bool,
 }
 
 impl MidirSink {
@@ -101,7 +102,11 @@ impl MidirSink {
         let conn = out
             .connect(&chosen.1, "jamstudio-rig")
             .map_err(|e| format!("Could not open MIDI port \"{port_name}\". {e}"))?;
-        Ok(Self { port_name, conn })
+        Ok(Self {
+            port_name,
+            conn,
+            dead: false,
+        })
     }
 
     pub fn port_name(&self) -> &str {
@@ -111,15 +116,16 @@ impl MidirSink {
 
 impl MidiSink for MidirSink {
     fn send(&mut self, msg: &[u8]) -> Result<(), String> {
-        self.conn
-            .send(msg)
-            .map_err(|e| format!("MIDI send to \"{}\" failed. {e}", self.port_name))
+        self.conn.send(msg).map_err(|e| {
+            self.dead = true;
+            format!("MIDI send to \"{}\" failed. {e}", self.port_name)
+        })
     }
     fn describe(&self) -> String {
         self.port_name.clone()
     }
     fn is_live(&self) -> bool {
-        true
+        !self.dead
     }
 }
 
