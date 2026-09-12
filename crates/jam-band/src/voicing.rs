@@ -122,7 +122,11 @@ fn classify_quality(suffix: &str) -> ChordQuality {
     if q.starts_with("dim") || q.starts_with('o') || q.starts_with('°') {
         return ChordQuality::Diminished;
     }
-    if q.starts_with("maj") || q.starts_with('Δ') || q.starts_with('M') {
+    // "Min" / "Min7" are minor; a bare "M" / "M7" is major (#325).
+    if q.starts_with("maj")
+        || q.starts_with('Δ')
+        || (q.starts_with('M') && !q.starts_with("Min"))
+    {
         let ext = q
             .trim_start_matches("maj")
             .trim_start_matches('Δ')
@@ -357,6 +361,21 @@ mod tests {
         assert_eq!(voice_chord("C/E", "shell"), voice_chord("C", "shell"));
         assert_eq!(parse_chord("Esus"), Some((4, ChordQuality::Sus4)));
         assert_eq!(parse_chord("E5"), Some((4, ChordQuality::Power5)));
+    }
+
+    #[test]
+    fn min_prefix_is_minor_not_major() {
+        assert_eq!(parse_chord("CMin"), Some((0, ChordQuality::Minor)));
+        assert_eq!(parse_chord("CMin7"), Some((0, ChordQuality::Minor7)));
+        assert_eq!(parse_chord("AMin9"), Some((9, ChordQuality::Minor7)));
+        assert_eq!(parse_chord("Cmin7"), Some((0, ChordQuality::Minor7)));
+        assert_eq!(parse_chord("Cm7"), Some((0, ChordQuality::Minor7)));
+        assert_eq!(parse_chord("CM"), Some((0, ChordQuality::Major)));
+        assert_eq!(parse_chord("CM7"), Some((0, ChordQuality::Major7)));
+        let notes = voice_chord("CMin7", "shell");
+        let root = notes[0] as i32;
+        let rel: Vec<i32> = notes.iter().map(|&n| n as i32 - root).collect();
+        assert_eq!(rel, vec![0, 3, 10], "CMin7 must be a minor seventh, not C-E-G-B");
     }
 
     #[test]
