@@ -122,8 +122,8 @@ owner gate 5. Fixture: `tests/fixtures/seams/virtual-midi.json`. Test:
 
 `assets/manifest.json` lists packs with `id`, `url`, `sha256`, `bytes` and a
 licence line. Commands `assets_status` and `assets_ensure` live in
-`src-tauri/src/assets.rs`. `assets-v1` / `standard-rock-kit.zip` is a CC0
-synthetic kit (not acoustic). Headless download needs `JAM_LIVE=1`; resume
+`src-tauri/src/assets.rs`. `assets-v1` / `standard-rock-kit-acoustic.zip` is a
+compact CC0 Virtuosity Drums acoustic kit. Headless download needs `JAM_LIVE=1`; resume
 writes a `.part` file and checks SHA-256 before unpack. `JAM_ASSETS_FIXTURE=1`
 reports the bundled synthetic kit only and never writes files. After unpack,
 ready status checks every installed file against the retained, SHA-256-verified

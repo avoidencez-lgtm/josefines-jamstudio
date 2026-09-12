@@ -25,15 +25,20 @@ locally from synthetic tones and is never committed or bundled.
 
 ## standard-rock-kit
 - **License**: CC0-1.0 (Creative Commons Zero v1.0 Universal)
-- **Source**: original synthetic percussion generated from
-  `crates/jam-band/src/sampler.rs` (same formulas as the bundled fallback kit).
-  Published as GitHub Release `assets-v1` / `standard-rock-kit.zip`.
-  SHA-256 `afb6b9c5239d65f0630e5bab7770750db72aa146d4ea7c32a156ad0d5085cf75`.
-- **Attribution**: Josefines Jamstudio. This is not an acoustic multisample
-  library. A third-party CC0 acoustic kit (for example VCSL) was not shipped
-  because no small redistributable rock-kit zip with hi-hats was available.
-- **Included**: kick, snare, closed/open/pedal hi-hat, crash, ride, toms,
-  sidestick, `kit.json`, `LICENSE.txt`
+- **Source**: [Virtuosity Drums](https://github.com/sfzinstruments/virtuosity_drums)
+  by Versilian Studios and Karoryfer Samples, pinned at commit
+  `9f04cf9a734527edfbb0a4eee1f674e45bbf71bc`.
+- **Published**: GitHub Release `assets-v1` /
+  `standard-rock-kit-acoustic.zip`, SHA-256
+  `e1754fe4d54e84b106469eb645d1b1ad2e5555b7396cee31112424b4a408ee94`.
+- **Conversion**: selected overhead, kick-mic and snare-mic recordings converted
+  to 48 kHz mono PCM. Kick and snare combine close and overhead microphones;
+  the middle tom is a three-semitone derivative of the high tom. The archive
+  retains the upstream CC0 licence and exact source commit.
+- **Included**: 11 instruments with three velocity bands and two variations per
+  band: kick, snare, closed/open/pedal hi-hat, crash, ride, high/mid/low tom and
+  sidestick; plus `kit.json`, `LICENSE.txt` and `README.txt`.
+- **Rebuild**: `pwsh scripts/build-acoustic-kit.ps1 -OutputZip <path>`.
 
 ## freepats-bass-comp
 - **License**: CC0-1.0

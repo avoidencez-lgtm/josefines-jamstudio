@@ -324,10 +324,10 @@ export const Settings: React.FC = () => {
         </Panel>
         <Panel title="These are the sample packs.">
           <p className="text-xs font-mono text-[var(--fg-2)] mb-3">
-            GitHub Release assets-v1 records standard-rock-kit.zip and
+            GitHub Release assets-v1 records standard-rock-kit-acoustic.zip and
             freepats-bass-comp.zip. Download needs JAM_LIVE=1. After unpack the
-            band plays those files; a missing pack stays synthetic or sine and
-            says so.
+            band plays the acoustic kit and SoundFonts; a missing pack stays
+            synthetic or sine and says so.
           </p>
           <p className="text-xs font-mono text-[var(--fg-0)] mb-3">
             {kitMessage}

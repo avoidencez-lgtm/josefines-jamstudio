@@ -105,7 +105,7 @@ fn live_assets_ensure_unpacks_release_zips_and_play_reports_file_sources() {
     let sf2_zip = root.join("assets/freepats-bass-comp.zip");
     assert_eq!(
         kit_zip.metadata().unwrap().len(),
-        334392,
+        5_196_335,
         "{}",
         kit_zip.display()
     );

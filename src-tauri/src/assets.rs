@@ -15,7 +15,7 @@ const EMPTY_SHA: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991
 const RELEASE_PREFIX: &str =
     "https://github.com/avoidencez-lgtm/josefines-jamstudio/releases/download/";
 const MAX_ZIP: u64 = 64 * 1024 * 1024;
-const MAX_FILES: usize = 64;
+const MAX_FILES: usize = 128;
 /// Wire name: frontend `listen("assets.state")` maps dots to colons.
 const ASSETS_STATE: &str = "assets:state";
 pub const NOT_CONFIGURED: &str = "Sample pack download is not configured. This pack's SHA-256 is the empty-file placeholder. Publish a real assets-v1 zip and record its SHA-256 in assets/manifest.json. The band uses the bundled synthetic kit until then.";

@@ -12,12 +12,12 @@ No audio is committed to this repository. Sample packs (the drum kit, the SoundF
   "packs": [
     {
       "id": "standard-rock-kit",
-      "version": "1.0.0",
-      "url": "https://github.com/avoidencez-lgtm/josefines-jamstudio/releases/download/assets-v1/standard-rock-kit.zip",
-      "sha256": "afb6b9c5239d65f0630e5bab7770750db72aa146d4ea7c32a156ad0d5085cf75",
-      "bytes": 334392,
+      "version": "2.0.0",
+      "url": "https://github.com/avoidencez-lgtm/josefines-jamstudio/releases/download/assets-v1/standard-rock-kit-acoustic.zip",
+      "sha256": "e1754fe4d54e84b106469eb645d1b1ad2e5555b7396cee31112424b4a408ee94",
+      "bytes": 5196335,
       "licence": "CC0-1.0",
-      "attribution": "Original synthetic percussion from jam-band sampler formulas",
+      "attribution": "Compact CC0 acoustic kit derived from Virtuosity Drums",
       "contents": "kit.json + wav"
     },
     {

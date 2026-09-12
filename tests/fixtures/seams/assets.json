@@ -4,8 +4,8 @@
   "name": "Sample pack manifest",
   "origin": "assets/manifest.json",
   "live": false,
-  "sha256": "afb6b9c5239d65f0630e5bab7770750db72aa146d4ea7c32a156ad0d5085cf75",
-  "bytes": 334392,
+  "sha256": "e1754fe4d54e84b106469eb645d1b1ad2e5555b7396cee31112424b4a408ee94",
+  "bytes": 5196335,
   "commands": ["assets_status", "assets_ensure"],
   "liveRequires": ["JAM_LIVE=1"]
 }
