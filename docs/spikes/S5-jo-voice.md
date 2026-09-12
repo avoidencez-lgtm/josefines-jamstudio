@@ -49,11 +49,11 @@ interrupting speech does not erase samples already queued for the device.
   stop, cancelled transcription/LLM, startup cancellation and actual-result speech.
 
 The JSON fixture is authored from the documented response shape, not a recorded
-provider response. The planned recorded
-30-utterance script, provider-reported LLM tokens and first-audio latency measurement remain
-M2 work. A live headset run must record ten release-to-first-audio measurements,
-their median and duck recovery; the target is median ≤2.5 s. Full-response TTS
-buffering is the present ceiling; stream PCM if live evidence misses that target.
+provider response. The 30-utterance script, provider-reported LLM tokens and
+release-to-first-audio measurement now exist. A live headset run with
+`JAM_LIVE=1` must still record ten release-to-first-audio measurements and
+their median; the target is median ≤2.5 s. Full-response TTS buffering is the
+present ceiling; stream PCM if live evidence misses that target.
 
 ## Stage, global key and MIDI controls (2026-09-06)
 

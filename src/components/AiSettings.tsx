@@ -15,7 +15,7 @@ import { Button } from "./Button";
 import { Panel } from "./Panel";
 
 const field =
-  "min-w-0 w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm";
+  "min-w-0 w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded-[var(--radius-m)] text-sm";
 export function AiSettings() {
   const { preferences, save } = useAi();
   const { keysPresent, keyErrors, checkKey, setKey, deleteKey, isPreview } =
@@ -85,12 +85,13 @@ export function AiSettings() {
         </p>
         {!local && keyErrors[draft.selected] && (
           <p role="alert" className="text-sm text-[var(--fg-1)]">
-            {keyErrors[draft.selected]} Open API keys below to retry the check.
+            Key rejected by provider. {keyErrors[draft.selected]} Open these API
+            keys below to retry the check.
           </p>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label>
-            Provider
+            Choose the provider.
             <select
               className={field}
               value={draft.selected}
@@ -107,7 +108,7 @@ export function AiSettings() {
             </select>
           </label>
           <label>
-            Model ID
+            Enter the model ID.
             <input
               list="available-ai-models"
               className={field}
@@ -140,12 +141,12 @@ export function AiSettings() {
               this does not unlock the general API.
             </p>
             <label>
-              Agent executable path (optional)
+              The agent executable path is optional.
               <input
                 className={field}
                 value={model.executable ?? ""}
                 onChange={(e) => changeModel({ executable: e.target.value })}
-                placeholder="Auto-detect from PATH"
+                placeholder="Detect this from PATH."
               />
             </label>
             <Button
@@ -163,7 +164,7 @@ export function AiSettings() {
                 })
               }
             >
-              Detect installed agent
+              Detect this installed agent.
             </Button>
             <a
               className="underline text-sm"
@@ -174,7 +175,7 @@ export function AiSettings() {
                 void openExternal(BRAINS[draft.selected].pricing);
               }}
             >
-              Account and subscription documentation
+              Open the account and subscription documentation.
             </a>
             <p className="text-sm text-[var(--fg-1)]">
               Use a current CLI. The bridge requests structured replies,
@@ -192,23 +193,25 @@ export function AiSettings() {
                   const ids = await listModels(draft.selected);
                   setModels((m) => ({ ...m, [draft.selected]: ids }));
                   setMessage(
-                    `${ids.length} models loaded. Start typing in Model ID. Listings may include models incompatible with text tools; use Test model before relying on one.`,
+                    `${ids.length} models loaded. Start typing in the model ID. Listings may include models incompatible with text tools; use Test this model before relying on one.`,
                   );
                 })
               }
             >
-              Load provider models
+              Load these provider models.
             </Button>
             <p className="text-sm text-[var(--fg-1)]">
-              Model ID stays editable. The catalog shows the first provider page
-              (up to 100 for Gemini/Claude); enter another model ID manually if
-              absent.
+              The model ID stays editable. The catalog shows the first provider
+              page (up to 100 for Gemini/Claude); enter another model ID
+              manually if absent.
             </p>
             <details>
-              <summary>Response limits and cost estimate</summary>
+              <summary>
+                These are the response limits and cost estimate.
+              </summary>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
                 <label>
-                  Maximum output tokens
+                  Maximum output is in tokens.
                   <input
                     className={field}
                     type="number"
@@ -222,14 +225,14 @@ export function AiSettings() {
                   />
                 </label>
                 <label>
-                  Input USD / million tokens
+                  Input is priced in USD per million tokens.
                   <input
                     className={field}
                     type="number"
                     min={0}
                     step="any"
                     value={model.inputPrice ?? ""}
-                    placeholder="Unknown"
+                    placeholder="The price is unknown."
                     onChange={(e) =>
                       changeModel({
                         inputPrice:
@@ -239,14 +242,14 @@ export function AiSettings() {
                   />
                 </label>
                 <label>
-                  Output USD / million tokens
+                  Output is priced in USD per million tokens.
                   <input
                     className={field}
                     type="number"
                     min={0}
                     step="any"
                     value={model.outputPrice ?? ""}
-                    placeholder="Unknown"
+                    placeholder="The price is unknown."
                     onChange={(e) =>
                       changeModel({
                         outputPrice:
@@ -269,9 +272,8 @@ export function AiSettings() {
                     void openExternal(BRAINS[draft.selected].pricing);
                   }}
                 >
-                  Check current pricing
+                  Check the current pricing.
                 </a>
-                .
               </p>
             </details>
           </>
@@ -285,12 +287,12 @@ export function AiSettings() {
                 setMessage(
                   isPreview
                     ? "Saved for this preview session. Cloud requests require the desktop app."
-                    : "AI settings saved.",
+                    : "These AI settings are saved.",
                 );
               })
             }
           >
-            Save AI settings
+            Save these AI settings.
           </Button>
           <Button
             disabled={
@@ -308,12 +310,12 @@ export function AiSettings() {
                   draft,
                 );
                 setMessage(
-                  `${BRAINS[draft.selected].name} responded: ${reply.reply}`,
+                  `${BRAINS[draft.selected].name} responded. ${reply.reply}`,
                 );
               })
             }
           >
-            {local ? "Test agent (uses account)" : "Test model (API request)"}
+            {local ? "Test this agent." : "Test this model."}
           </Button>
         </div>
         <p className="text-sm text-[var(--fg-1)]">
@@ -323,15 +325,15 @@ export function AiSettings() {
           features.
         </p>
         <details>
-          <summary>API keys · stored in the OS keychain</summary>
+          <summary>API keys. Stored in the OS keychain.</summary>
           <label className="block mt-4">
-            Find a connection
+            Find a connection.
             <input
               className={field}
               type="search"
               value={providerQuery}
               onChange={(e) => setProviderQuery(e.target.value)}
-              placeholder="Provider name"
+              placeholder="Enter a provider name."
             />
           </label>
           <div className="flex flex-col gap-4 mt-4">
@@ -345,12 +347,12 @@ export function AiSettings() {
                 }
               >
                 <label htmlFor={`key-${p.id}`}>
-                  {BRAINS[p.id]?.name ?? p.description} ·{" "}
+                  {BRAINS[p.id]?.name ?? p.description}.{" "}
                   {keyErrors[p.id]
-                    ? "Keychain unavailable"
+                    ? "The keychain is unavailable."
                     : keysPresent[p.id]
-                      ? "Key saved"
-                      : "No key"}
+                      ? "A key is saved."
+                      : "No key is saved."}
                 </label>
                 <div className="flex flex-wrap sm:flex-nowrap gap-2 mt-1">
                   <input
@@ -361,7 +363,7 @@ export function AiSettings() {
                     spellCheck={false}
                     value={keys[p.id] ?? ""}
                     disabled={busy || isPreview}
-                    placeholder="Paste a key to save or replace"
+                    placeholder="Paste a key to save or replace."
                     onChange={(e) =>
                       setKeys((k) => ({ ...k, [p.id]: e.target.value }))
                     }
@@ -376,7 +378,7 @@ export function AiSettings() {
                       })
                     }
                   >
-                    Save key
+                    Save this key.
                   </Button>
                   <Button
                     disabled={
@@ -387,11 +389,11 @@ export function AiSettings() {
                     onClick={() =>
                       void run(async () => {
                         await deleteKey(p.id);
-                        setMessage("Key removed.");
+                        setMessage("This key is removed.");
                       })
                     }
                   >
-                    Remove
+                    Remove this key.
                   </Button>
                   <Button
                     disabled={busy || isPreview}
@@ -406,7 +408,18 @@ export function AiSettings() {
                       })
                     }
                   >
-                    Check key status
+                    Check this key status.
+                  </Button>
+                  <Button
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        await ipc.invoke("keys_test", { provider: p.id });
+                        setMessage("Key test passed.");
+                      })
+                    }
+                  >
+                    Test this key.
                   </Button>
                 </div>
                 {keyErrors[p.id] && (
@@ -417,7 +430,7 @@ export function AiSettings() {
                 {p.id === "elevenlabs" && (
                   <p className="text-sm text-[var(--fg-1)]">
                     Eleven Music and Jo voice use this connection. Choose a
-                    microphone and voice in Jo AI → Voice setup.
+                    microphone and voice in Jo AI → Open the voice setup.
                   </p>
                 )}
               </div>

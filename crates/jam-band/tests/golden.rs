@@ -1,60 +1,19 @@
+use jam_band::offline;
 use jam_band::sequencer::BandSequencer;
 use jam_core::style::Style;
-use jam_core::timeline::{beats_to_samples, Timeline};
+use jam_core::timeline::Timeline;
 use jam_dsp::calculate_level;
 use std::time::Instant;
 
 fn render_style_headless(style_json: &str, bars: u32, bpm: f64, seed: u64) -> (Vec<f32>, Vec<f32>) {
-    let sample_rate = 48_000;
+    std::env::set_var("JAM_SYNTHETIC_KIT", "1");
     let style: Style = serde_json::from_str(style_json).expect("valid style JSON");
-    let beats_per_bar = style.feel.time_sig.0 as f64;
-    let mut seq = BandSequencer::new(style.clone(), sample_rate, seed);
-
-    let mut timeline = Timeline::new(sample_rate, bpm, style.feel.time_sig);
-    timeline.set_count_in(0);
-    timeline.play();
-
-    let total_beats = bars as f64 * beats_per_bar;
-    let total_frames = beats_to_samples(total_beats, bpm, sample_rate) as usize;
-
-    let block_size = 256;
-    let mut out_left = Vec::with_capacity(total_frames);
-    let mut out_right = Vec::with_capacity(total_frames);
-
-    let mut blk_l = vec![0.0f32; block_size];
-    let mut blk_r = vec![0.0f32; block_size];
-
-    let mut rendered = 0;
-    while rendered < total_frames {
-        let chunk = block_size.min(total_frames - rendered);
-        let (evs, spans) = timeline.advance_with_spans(chunk);
-        for ev in &evs {
-            seq.handle_timeline_event(ev);
-        }
-
-        blk_l.fill(0.0);
-        blk_r.fill(0.0);
-        for span in &spans {
-            let end = span.offset + span.frames;
-            seq.render_span(
-                span,
-                timeline.samples_per_beat(),
-                beats_per_bar,
-                &mut blk_l[span.offset..end],
-                &mut blk_r[span.offset..end],
-            );
-        }
-
-        out_left.extend_from_slice(&blk_l[..chunk]);
-        out_right.extend_from_slice(&blk_r[..chunk]);
-        rendered += chunk;
-    }
-
-    (out_left, out_right)
+    offline::render_style(style, bars, bpm, seed, None).expect("offline render")
 }
 
 /// Every style must produce audible bass and comp on their own, not just drums.
 fn render_part_only(style_json: &str, drums: bool, bass: bool, comp: bool) -> f32 {
+    std::env::set_var("JAM_SYNTHETIC_KIT", "1");
     let style: Style = serde_json::from_str(style_json).expect("valid style JSON");
     let bpb = style.feel.time_sig.0 as f64;
     let mut seq = BandSequencer::new(style.clone(), 48_000, 3);
@@ -215,11 +174,31 @@ fn test_golden_render_metal_gallop() {
 }
 
 #[test]
+fn fixture_style_golden_renders_without_entering_bundled_styles() {
+    let json = include_str!("../../../tests/fixtures/seams/extending-style.json");
+    let style: Style = serde_json::from_str(json).expect("fixture style parses");
+    assert_eq!(style.id, "fixture-style");
+    assert!(style.patterns.len() >= 3);
+    assert!(!style.fills.is_empty());
+    assert!(!style.endings.is_empty());
+    let (l, r) = render_style_headless(json, 8, 100.0, 42);
+    assert_eq!(l.len(), 921_600);
+    assert_eq!(r.len(), 921_600);
+    let lvl = calculate_level(&l);
+    assert!(lvl.peak_db > -40.0 && lvl.rms_db > -60.0);
+    let (again, _) = render_style_headless(json, 8, 100.0, 42);
+    assert_eq!(l, again);
+}
+
+#[test]
 fn test_render_worker_benchmark_budget() {
-    let rock_json = include_str!("../../../styles/rock-straight.json");
-    let style: Style = serde_json::from_str(rock_json).unwrap();
+    // ARCHITECTURE §9.1: 10 000 blocks of the busiest style (funk-16) < 25% RT.
+    std::env::set_var("JAM_SYNTHETIC_KIT", "1");
+    let json = include_str!("../../../styles/funk-16.json");
+    let style: Style = serde_json::from_str(json).unwrap();
+    let meter = style.feel.time_sig;
     let mut seq = BandSequencer::new(style, 48_000, 42);
-    let mut timeline = Timeline::new(48_000, 120.0, (4, 4));
+    let mut timeline = Timeline::new(48_000, 120.0, meter);
     timeline.set_count_in(0);
     timeline.play();
 
@@ -239,7 +218,7 @@ fn test_render_worker_benchmark_budget() {
             seq.render_span(
                 span,
                 timeline.samples_per_beat(),
-                4.0,
+                f64::from(meter.0),
                 &mut blk_l[span.offset..end],
                 &mut blk_r[span.offset..end],
             );

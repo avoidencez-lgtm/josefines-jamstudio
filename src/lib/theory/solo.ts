@@ -43,21 +43,24 @@ export type Family =
   | "halfdim"
   | "dim"
   | "sus"
+  | "sus2"
   | "power"
   | "aug"
   | "unknown";
 
 export function classify(quality: string): Family {
-  // "M7" means major seventh while "m7" means minor seventh, so fold case carefully.
+  // "M7" means major seventh while "m7" means minor seventh. A bare "M"
+  // (as in "CM") must become major before toLowerCase or it reads as minor.
   const q = quality
     .replace(/\s+/g, "")
-    .replace(/^M(?=\d)/, "maj")
+    .replace(/^M(?=\d|$)/, "maj")
     .replace(/Δ/g, "maj")
     .toLowerCase();
   if (q === "" || /^(maj|6|add9|add2|69|6\/9)$/.test(q)) return "maj";
   if (/^(maj|ma)(7|9|11|13)/.test(q)) return "maj7";
   if (/^ø|^(m|min|-)7b5|^h7/.test(q)) return "halfdim";
   if (/^(dim|°|o)/.test(q)) return "dim";
+  if (/^(7|9)?sus2/.test(q)) return "sus2";
   if (/^(7|9)?sus/.test(q)) return "sus";
   if (q === "5") return "power";
   if (/^(aug|\+)/.test(q)) return "aug";
@@ -80,7 +83,7 @@ const RECIPES: Record<Family, Recipe[]> = {
   dom7: [
     {
       scale: "mixolydian",
-      why: "The home scale for a dominant 7th: major scale with a b7.",
+      why: "The home scale for a dominant 7th is the major scale with a b7.",
     },
     {
       scale: "minor blues",
@@ -102,7 +105,7 @@ const RECIPES: Record<Family, Recipe[]> = {
   dom7alt: [
     {
       scale: "altered",
-      why: "Melodic minor a half step up: hits every altered extension.",
+      why: "Melodic minor a half step up hits every altered extension.",
     },
     {
       scale: "half-whole diminished",
@@ -131,7 +134,7 @@ const RECIPES: Record<Family, Recipe[]> = {
   maj7: [
     {
       scale: "major",
-      why: "Ionian: the chord's own scale. Rest on the 3rd or 7th.",
+      why: "Ionian is the chord's own scale. Rest on the 3rd or 7th.",
     },
     {
       scale: "lydian",
@@ -144,7 +147,7 @@ const RECIPES: Record<Family, Recipe[]> = {
       scale: "minor pentatonic",
       why: "The rock and blues default; no wrong notes.",
     },
-    { scale: "aeolian", why: "Natural minor: the darker full-scale option." },
+    { scale: "aeolian", why: "Natural minor is the darker full-scale option." },
     { scale: "dorian", why: "Natural 6th for a funkier, brighter minor." },
     { scale: "minor blues", why: "Minor pentatonic plus the blue note (b5)." },
   ],
@@ -168,7 +171,7 @@ const RECIPES: Record<Family, Recipe[]> = {
   minmaj7: [
     {
       scale: "melodic minor",
-      why: "Minor with a raised 7th: the chord's own scale.",
+      why: "Minor with a raised 7th is the chord's own scale.",
     },
     {
       scale: "harmonic minor",
@@ -192,7 +195,7 @@ const RECIPES: Record<Family, Recipe[]> = {
   dim: [
     {
       scale: "diminished",
-      why: "Whole-half diminished: symmetric, every note is a chord tone or a 9th.",
+      why: "Whole-half diminished is symmetric. Every note is a chord tone or a 9th.",
     },
     {
       scale: "harmonic minor",
@@ -206,13 +209,23 @@ const RECIPES: Record<Family, Recipe[]> = {
     },
     {
       scale: "major pentatonic",
-      why: "Open-sounding and safe (a 4th down: e.g. D major pent over Asus4).",
+      why: "Open-sounding and safe a fourth down, for example D major pent over Asus4.",
+    },
+  ],
+  sus2: [
+    {
+      scale: "major pentatonic",
+      why: "Sus2 is the root, 2nd and 5th; lean on those, leave the 3rd out.",
+    },
+    {
+      scale: "major",
+      why: "Full major; treat the 3rd as a passing note over sus2.",
     },
   ],
   power: [
     {
       scale: "minor pentatonic",
-      why: "Power chords are ambiguous: minor pentatonic is the rock default.",
+      why: "Power chords are ambiguous. Minor pentatonic is the rock default.",
     },
     { scale: "minor blues", why: "Add the blue note for riffs." },
     {
@@ -224,7 +237,7 @@ const RECIPES: Record<Family, Recipe[]> = {
   aug: [
     {
       scale: "whole tone",
-      why: "Six notes, all a whole step apart: matches the #5.",
+      why: "Six notes, all a whole step apart, match the #5.",
     },
     { scale: "lydian augmented", why: "Melodic minor mode with #4 and #5." },
   ],
@@ -258,6 +271,8 @@ function guideToneIntervals(family: Family): string[] {
       return ["3m", "5d"];
     case "sus":
       return ["4P", "7m"];
+    case "sus2":
+      return ["2M", "5P"];
     case "power":
       return ["5P"];
     case "aug":
@@ -278,6 +293,7 @@ function avoidIntervals(family: Family): string[] {
     case "min":
       return ["6m", "7M"];
     case "sus":
+    case "sus2":
       return ["3M"];
     default:
       return [];
@@ -350,11 +366,11 @@ export function suggestForChord(
       key.mode === "minor"
         ? {
             scale: "minor pentatonic",
-            why: "Key-centre scale: works over the whole tune.",
+            why: "The key-centre scale works over the whole tune.",
           }
         : {
             scale: "major pentatonic",
-            why: "Key-centre scale: works over the whole tune.",
+            why: "The key-centre scale works over the whole tune.",
           };
     keyScale = scaleSuggestion(keyRoot, recipe, 99, flats);
     // Blues tunes are the exception: minor pentatonic on the tonic is the sound.
@@ -363,7 +379,7 @@ export function suggestForChord(
         keyRoot,
         {
           scale: "minor blues",
-          why: "Key-centre blues scale: the classic sound over dominant chords.",
+          why: "The key-centre blues scale is the classic sound over dominant chords.",
         },
         99,
         flats,

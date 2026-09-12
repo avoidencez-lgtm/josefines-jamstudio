@@ -98,7 +98,7 @@ pub(super) fn load(base: &Path, song_id: &str) -> Result<Asset, String> {
     fields.insert("path".into(), json!(path));
     fields.insert("seconds".into(), json!(duration / 1000.0));
     fields.insert("kind".into(), json!("audio"));
-    serde_json::from_value(v).map_err(|e| format!("Invalid song: {e}"))
+    serde_json::from_value(v).map_err(|e| format!("The song is invalid. {e}"))
 }
 
 fn document(dir: &Path, a: &Asset) -> Result<Value, String> {
@@ -216,7 +216,13 @@ pub(super) async fn store(base: &Path, mut a: Asset) -> Result<Asset, String> {
             );
         }
         sync_file(&decoded)?;
-        for key in ["songAnalysis", "referenceGrid", "stemSet"] {
+        for key in [
+            "songAnalysis",
+            "referenceGrid",
+            "estimatedGrid",
+            "providerAnalysis",
+            "stemSet",
+        ] {
             if let Some(value) = a.extra.get_mut(key) {
                 // Stale/unknown analysis stays stale; migration cannot certify it.
                 if value["schemaVersion"] == 1 && value["sourceHash"] == old_hash {
@@ -276,7 +282,7 @@ pub(super) async fn store(base: &Path, mut a: Asset) -> Result<Asset, String> {
         if CANCEL.load(Ordering::Relaxed) {
             return Err("Song import canceled.".into());
         }
-        fs::rename(&stage, &dir).map_err(|e| format!("Could not publish song folder: {e}"))?;
+        fs::rename(&stage, &dir).map_err(|e| format!("Could not publish the song folder. {e}"))?;
         load(base, &a.id)
     }
     .await;
@@ -307,7 +313,9 @@ pub(super) fn append_list(base: &Path, result: &mut Value) -> Result<(), String>
             Err(e) => result["warnings"]
                 .as_array_mut()
                 .unwrap()
-                .push(json!(format!("Song {id}: {e} File left intact."))),
+                .push(json!(format!(
+                    "The song {id} is invalid. {e} File left intact."
+                ))),
         }
     }
     Ok(())

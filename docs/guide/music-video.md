@@ -9,11 +9,11 @@
    file (click and test tone) is never used. An older take without separate stems
    contributes its band file as recorded. Local import copies
    the selected file into the media library. Alternatively generate a soundtrack in **AI Music**.
-3. Set the title, landscape/portrait frame and visual direction. **Build cuts from
-   song sections** uses the selected take's saved chart, or the open Write song.
+3. Set the title, landscape/portrait frame and visual direction. **Build these cuts from
+   the song sections.** uses the selected take's saved chart, or the open Write song.
    It divides sections into four-bar shots and fits them to the recording length.
-   For a song without a chart, add shots manually and **Fit all cuts to song length**.
-4. Edit each shot's prompt, duration and clip start. **Let [brain] direct** proposes
+   For a song without a chart, add shots manually and **Fit all these cuts to the song length.**
+4. Edit each shot's prompt, duration and clip start. **Let [brain] direct this.** proposes
    a coherent set of shot descriptions using the selected Settings connection,
    including installed Codex or Claude Code. Review/edit its JSON before applying.
    The persistent assistant can also use `edit_video_shot`; edits have Undo and
@@ -22,8 +22,8 @@
    or reuse an existing clip from the footage selector. Short clips loop; longer
    clips trim from the chosen offset. Generation duration and timeline duration
    are separate: use a short generated loop in a longer passage if appropriate.
-6. Run **Refresh job** in the generation library until a queued result is ready.
-   Refresh never submits a second generation. Pick **Use for this shot**. Task IDs
+6. Run **Refresh this job.** in the generation library until a queued result is ready.
+   Refresh never submits a second generation. Pick **Use this for this shot.** Task IDs
    survive restarts. Unknown interrupted requests need a provider-history check.
 7. **Save video**, then **Render music video** when every shot has footage and the
    timeline matches the soundtrack. Watch a silent preview inside Jamstudio;

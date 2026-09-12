@@ -10,9 +10,11 @@ mod common;
 use common::{unique, user_dir, Studio};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::{Duration, Instant};
 use tauri::Manager;
 
-const NO_PORT: &str = "no MIDI port open (messages are only logged)";
+const NO_PORT: &str = "No MIDI port is open. Messages are only logged.";
 
 #[test]
 fn generated_audio_refresh_analyzes_saved_output_and_recovers_without_network_or_duplicate_assets()
@@ -975,6 +977,81 @@ fn program_changes_name_the_declared_program_and_are_logged_without_a_port() {
 }
 
 #[test]
+fn rig_panic_sends_all_notes_off_and_reset_controllers() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok(
+        "rig_select_profile",
+        json!({"profileId": "headrush-pedalboard"}),
+    );
+    studio.ok("rig_clear_monitor", json!({}));
+    let state = studio.ok("rig_panic", json!({}));
+    let mon = state["monitor"].as_array().unwrap();
+    assert_eq!(mon[0]["bytes"], json!([0xB0, 123, 0]));
+    assert_eq!(mon[1]["bytes"], json!([0xB0, 121, 0]));
+    assert_eq!(mon[0]["reason"], "panic");
+}
+
+#[test]
+fn rig_clock_follows_transport_play_pause_and_stop() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok("transport_set_count_in", json!({"bars": 0}));
+    studio.ok("transport_set_tempo", json!({"bpm": 240.0}));
+    studio.ok("rig_clear_monitor", json!({}));
+    studio.ok("transport_play", json!({}));
+    thread::sleep(Duration::from_millis(80));
+    studio.ok("audio_get_telemetry", json!({}));
+    assert!(
+        studio.ok("rig_get_state", json!({}))["monitor"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "clock stays silent until enabled"
+    );
+    studio.ok("transport_stop", json!({}));
+
+    let on = studio.ok("rig_set_clock", json!({"on": true}));
+    assert_eq!(on["sendClock"], true);
+    studio.ok("rig_dry_run", json!({"on": true}));
+    assert_eq!(studio.ok("rig_get_state", json!({}))["dryRun"], true);
+    studio.ok("rig_clear_monitor", json!({}));
+    studio.ok("transport_play", json!({}));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let playing = loop {
+        studio.ok("audio_get_telemetry", json!({}));
+        let mon = studio.ok("rig_get_state", json!({}))["monitor"]
+            .as_array()
+            .cloned()
+            .unwrap();
+        let kinds: Vec<u64> = mon.iter().filter_map(|m| m["bytes"][0].as_u64()).collect();
+        if kinds.contains(&0xFA) && kinds.contains(&0xF8) {
+            break mon;
+        }
+        assert!(Instant::now() < deadline, "no start/ticks: {mon:?}");
+        thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(playing[0]["bytes"][0], 0xFA);
+
+    studio.ok("rig_clear_monitor", json!({}));
+    studio.ok("transport_pause", json!({}));
+    assert_eq!(
+        studio.ok("rig_get_state", json!({}))["monitor"][0]["bytes"][0],
+        0xFC
+    );
+    studio.ok("rig_clear_monitor", json!({}));
+    studio.ok("transport_play", json!({}));
+    assert_eq!(
+        studio.ok("rig_get_state", json!({}))["monitor"][0]["bytes"][0],
+        0xFB
+    );
+    studio.ok("transport_stop", json!({}));
+    let state = studio.ok("rig_get_state", json!({}));
+    let stop = state["monitor"].as_array().unwrap().last().unwrap();
+    assert_eq!(stop["bytes"][0], 0xFC);
+}
+
+#[test]
 fn rig_send_program_refuses_a_program_above_127() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
@@ -1365,7 +1442,7 @@ fn media_save_enforces_revisions_and_project_rules() {
         })}),
     );
     assert!(
-        err.starts_with("Video project:") && err.contains("title"),
+        err.starts_with("The video project is invalid.") && err.contains("title"),
         "{err}"
     );
 
@@ -1503,7 +1580,7 @@ fn media_refresh_cancel_and_render_fail_safely_with_nothing_running() {
     assert_eq!(studio.ok("media_cancel", json!({})), Value::Null);
     let err = studio.err("media_render", json!({"document": {"schemaVersion": 1}}));
     assert!(
-        err.starts_with("Video project:") && err.contains("missing field"),
+        err.starts_with("The video project is invalid.") && err.contains("missing field"),
         "{err}"
     );
     let render_id = unique("render");

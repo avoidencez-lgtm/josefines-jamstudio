@@ -13,6 +13,8 @@ pub struct ExportJob<'a> {
     pub tempo: f64,
     pub time_sig: (u8, u8),
     pub sample_rate: u32,
+    pub reference: bool,
+    pub recorded_tempo_map: Option<&'a crate::reference_timing::TempoMap>,
     /// `(section name, 1-indexed first bar)` in playing order.
     pub sections: &'a [(&'a str, u32)],
     /// `(stem name, path to the recorded WAV)`. Missing files are reported, not fatal.
@@ -114,8 +116,10 @@ impl DawExporter {
                 "Take sample rate is missing. Recover the take before exporting.",
             ));
         }
-        let midi_bytes =
-            Self::build_tempo_map_midi_with_meter(job.tempo, job.time_sig, job.sections)?;
+        let midi_bytes = match job.recorded_tempo_map {
+            Some(map) => map.midi()?,
+            None => Self::build_tempo_map_midi_with_meter(job.tempo, job.time_sig, job.sections)?,
+        };
         std::fs::create_dir_all(output_dir)?;
         let midi_path = output_dir.join(format!("{}-tempo-map.mid", job.take_id));
         File::create(&midi_path)?.write_all(&midi_bytes)?;
@@ -145,6 +149,7 @@ impl DawExporter {
             "howTo": "Import the tempo map first so the DAW adopts the tempo and markers, then drop every stem at bar 1."
         });
         File::create(&json_path)?.write_all(serde_json::to_string_pretty(&info)?.as_bytes())?;
+        std::fs::write(output_dir.join("README.txt"), LOGIC_README)?;
 
         Ok(ExportReport {
             dir: output_dir.to_string_lossy().to_string(),
@@ -155,6 +160,9 @@ impl DawExporter {
         })
     }
 }
+
+/// Handoff steps for Logic. Opening the project and measuring drift stay V2.
+const LOGIC_README: &str = "Logic Pro import (not proven on this machine)\n\n1. File > Open the tempo-map MIDI file in this folder (*-tempo-map.mid). Keep the tempo and time signature when asked.\n2. Drag every WAV stem onto bar 1. Do not change speed or pitch.\n3. Mute band and master reference mixes while mixing the individual instruments.\n4. Keep this whole folder together.\n\nOpening the project in Logic Pro and measuring drift stays a V2 owner gate. This file is the handoff, not a claim that Logic opened.\n\nREAPER users: see REAPER-START-HERE.txt when the session builder is present.\n";
 
 /// Quote data as Lua, never as executable text (JSON's Unicode escapes are not Lua).
 fn lua_string(value: &str) -> String {
@@ -179,7 +187,9 @@ pub fn write_reaper_import(
     report: &ExportReport,
     notes: &[crate::workstation::MidiNote],
 ) -> std::io::Result<String> {
-    midi_tempo(job.tempo, job.time_sig)?;
+    if job.recorded_tempo_map.is_none() {
+        midi_tempo(job.tempo, job.time_sig)?;
+    }
     if !report.missing_stems.is_empty() || report.copied_stems.is_empty() || job.sample_rate == 0 {
         return Err(invalid_midi(
             "A complete export and valid tempo/meter are required for REAPER.",
@@ -211,7 +221,8 @@ pub fn write_reaper_import(
     let individual_band = ["drums", "bass", "comp"]
         .iter()
         .all(|role| files.iter().any(|(_, r, _)| r == role));
-    let use_band_mix = !individual_band && files.iter().any(|(_, role, _)| *role == "band");
+    let use_band_mix =
+        (job.reference || !individual_band) && files.iter().any(|(_, role, _)| *role == "band");
     let length = files
         .iter()
         .map(|(_, _, seconds)| *seconds)
@@ -236,15 +247,40 @@ pub fn write_reaper_import(
         ));
     }
     data.push_str("}, markers={\n");
-    for (name, bar) in job.sections {
-        let seconds = bar.saturating_sub(1) as f64 * job.time_sig.0 as f64 * 60.0 / job.tempo;
-        if seconds < length {
+    if let Some(map) = job.recorded_tempo_map {
+        for marker in &map.markers {
             data.push_str(&format!(
                 "{{name={}, time={}}},\n",
-                lua_string(name),
-                seconds
+                lua_string(&marker.name),
+                marker.frame as f64 / f64::from(map.sample_rate)
             ));
         }
+    } else {
+        for (name, bar) in job.sections {
+            let seconds = bar.saturating_sub(1) as f64 * job.time_sig.0 as f64 * 60.0 / job.tempo;
+            if seconds < length {
+                data.push_str(&format!(
+                    "{{name={}, time={}}},\n",
+                    lua_string(name),
+                    seconds
+                ));
+            }
+        }
+    }
+    data.push_str("}, tempos={\n");
+    if let Some(map) = job.recorded_tempo_map {
+        for tempo in &map.tempos {
+            data.push_str(&format!(
+                "{{time={}, bpm={}}},\n",
+                tempo.frame as f64 / f64::from(map.sample_rate),
+                tempo.bpm
+            ));
+        }
+    } else {
+        data.push_str(&format!(
+            "{{time=0, bpm={}}},\n",
+            job.tempo * 4.0 / f64::from(job.time_sig.1)
+        ));
     }
     data.push_str("}, notes={\n");
     for note in notes {
@@ -264,7 +300,7 @@ pub fn write_reaper_import(
     data.push_str(include_str!("reaper_import.lua"));
     let path = output_dir.join("Import into REAPER.lua");
     std::fs::write(&path, data)?;
-    std::fs::write(output_dir.join("REAPER-START-HERE.txt"), "REAPER must be installed separately. No extensions are required.\n\n1. Open a NEW EMPTY project in REAPER (File > New project tab is useful).\n2. Open Actions > Show action list. Choose New action > Load ReaScript.\n3. Select 'Import into REAPER.lua' in this folder and Run it.\n4. Save the resulting project in THIS folder with File > Save project as.\n\nThe script refuses projects containing tracks, markers or tempo automation.\nAudio starts at zero with its original speed/pitch. Reference mixes are muted.\nMIDI tracks are muted until you add instruments and mute the matching audio stems.\nKeep the whole export folder together when moving it or sending it to your Mac.\nWAV stems and the tempo map also remain usable in Logic and other DAWs.\n")?;
+    std::fs::write(output_dir.join("REAPER-START-HERE.txt"), "REAPER must be installed separately. No extensions are required.\n\n1. Open a NEW EMPTY project in REAPER (File > New project tab is useful).\n2. Open Actions > Show action list. Choose New action > Load ReaScript.\n3. Select 'Import into REAPER.lua' in this folder and Run it.\n4. Save the resulting project in THIS folder with File > Save project as.\n\nThe script refuses projects containing tracks, markers or tempo automation.\nAudio starts at zero with its original speed/pitch. The master mix is muted. Reference-song takes use the Band mix; virtual-band takes use individual instruments.\nMIDI tracks are muted until you add instruments and mute the matching audio stems.\nKeep the whole export folder together when moving it or sending it to your Mac.\nWAV stems and the tempo map also remain usable in Logic and other DAWs.\n")?;
     Ok(path.to_string_lossy().into_owned())
 }
 
@@ -290,7 +326,7 @@ fn midi_tempo(tempo: f64, meter: (u8, u8)) -> std::io::Result<u32> {
 }
 
 /// Refuse values beyond the SMF four-byte limit; never shorten musical time.
-fn write_var_len(buf: &mut Vec<u8>, mut val: u64) -> std::io::Result<()> {
+pub(crate) fn write_var_len(buf: &mut Vec<u8>, mut val: u64) -> std::io::Result<()> {
     if val > 0x0FFF_FFFF {
         return Err(invalid_midi("MIDI event distance or length exceeds the four-byte limit. Export a shorter take or repair its section markers."));
     }
@@ -477,6 +513,8 @@ mod tests {
             serde_json::from_value::<Vec<crate::workstation::MidiNote>>(fixture["midi"].clone())
                 .unwrap();
         let job = ExportJob {
+            reference: false,
+            recorded_tempo_map: None,
             take_id: "take-1",
             tempo: 100.0,
             time_sig: (3, 4),
@@ -645,6 +683,25 @@ mod tests {
     }
 
     #[test]
+    fn five_minute_tempo_map_stays_within_one_millisecond() {
+        // 150 bars of 4/4 at 120 bpm is 300 s. Owner Logic import stays V2.
+        let midi = DawExporter::build_tempo_map_midi(120.0, &[("End", 151)]).unwrap();
+        let micros = u32::from_be_bytes([0, midi[34], midi[35], midi[36]]);
+        let mut tick = 0_u32;
+        for byte in &midi[37..] {
+            tick = (tick << 7) | u32::from(byte & 127);
+            if byte & 128 == 0 {
+                break;
+            }
+        }
+        let seconds = tick as f64 / 480.0 * f64::from(micros) / 1_000_000.0;
+        assert!(
+            (seconds - 300.0).abs() < 0.001,
+            "SMF marker drift {seconds} s"
+        );
+    }
+
+    #[test]
     fn bundle_copies_present_stems_and_reports_missing_ones() {
         let dir = std::env::temp_dir().join(format!("jam-export-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -655,6 +712,8 @@ mod tests {
         let missing = src.join("band.wav");
 
         let job = ExportJob {
+            reference: false,
+            recorded_tempo_map: None,
             take_id: "take-1",
             tempo: 96.0,
             time_sig: (4, 4),
@@ -669,6 +728,10 @@ mod tests {
         assert!(dir.join("out").join("take-1-input.wav").exists());
         let info = std::fs::read_to_string(dir.join("out").join("take-1-info.json")).unwrap();
         assert!(info.contains("\"sampleRate\": 44100"));
+        let readme = std::fs::read_to_string(dir.join("out").join("README.txt")).unwrap();
+        assert!(readme.contains("File > Open"), "{readme}");
+        assert!(readme.contains("bar 1"), "{readme}");
+        assert!(readme.contains("V2"), "{readme}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

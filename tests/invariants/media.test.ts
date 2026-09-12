@@ -106,7 +106,7 @@ describe("music video seam", () => {
     const applied = applyShotIdeas(p, JSON.stringify([idea]));
     expect(applied.shots[0].assetId).toBe("existing");
     expect(applied.shots[0].seconds).toBe(p.shots[0].seconds);
-    expect(p.shots[0].title).toBe("Opening");
+    expect(p.shots[0].title).toBe("This is the opening.");
     expect(() => applyShotIdeas(p, JSON.stringify([idea, idea]))).toThrow();
     expect(() =>
       applyShotIdeas(p, JSON.stringify([{ ...idea, id: "other" }])),

@@ -2,7 +2,7 @@
 //! knob and where it is remembered, a real headless recording and the stems it
 //! leaves on disk, listing, deleting, damaged manifests, and analysis, melody,
 //! DAW export and soundtrack mixing of a synthetic take written straight into
-//! the takes folder.
+//! the takes folder. Also `session.json.review` and the `export_logic` alias.
 mod common;
 
 use common::{unique, user_dir, Studio};
@@ -176,6 +176,25 @@ fn latency_offset_round_trips_clamps_and_is_remembered_in_settings_json() {
 
     assert_eq!(studio.ok("recorder_set_latency", json!({"samples": 0})), 0);
     assert_eq!(settings_on_disk()["recorder"]["latency_samples"], 0);
+}
+
+#[test]
+fn audio_calibrate_latency_returns_an_estimate_on_synthetic_input_without_changing_offset() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok("recorder_set_latency", json!({"samples": 0}));
+    let result = studio.ok("audio_calibrate_latency", json!({}));
+    assert_eq!(result["estimated"], true);
+    assert_eq!(result["roundTripFrames"], 512);
+    assert_eq!(result["confidence"], 0.0);
+    assert_eq!(studio.ok("recorder_get_latency", json!({})), 0);
+    assert_eq!(settings_on_disk()["recorder"]["latency_samples"], 0);
+
+    let session = unique("session");
+    studio.ok("recorder_start", json!({"sessionId": session}));
+    let err = studio.err("audio_calibrate_latency", json!({}));
+    assert!(err.contains("recording"), "{err}");
+    studio.ok("recorder_stop", json!({}));
 }
 
 #[test]
@@ -552,7 +571,7 @@ fn take_analysis_survives_restart_and_failed_reanalysis_preserves_the_manifest()
     let before = std::fs::read(&path).unwrap();
     std::fs::create_dir(take.dir.join("take.json.tmp")).unwrap();
     let error = reopened.err("takes_analyze", json!({"takeId": take.id}));
-    assert!(error.contains("Cannot save take analysis"), "{error}");
+    assert!(error.contains("Cannot save the take analysis"), "{error}");
     assert_eq!(std::fs::read(&path).unwrap(), before);
 }
 
@@ -705,6 +724,11 @@ fn daw_export_writes_tempo_map_stems_info_and_reaper_script() {
             .unwrap(),
         json!({"timeSignature": [4, 4]})
     );
+    let readme = std::fs::read_to_string(dir.join("README.txt")).unwrap();
+    assert!(readme.contains("File > Open"), "{readme}");
+    assert!(readme.contains("bar 1"), "{readme}");
+    assert!(readme.contains("*-tempo-map.mid"), "{readme}");
+    assert!(readme.contains("V2"), "{readme}");
 
     let ghost = unique("no-such-take");
     assert_eq!(
@@ -937,4 +961,110 @@ fn invalid_midi_export_keeps_the_previous_bundle_and_take_unchanged() {
     .unwrap();
     studio.ok("takes_export_daw", json!({"takeId": take.id}));
     assert!(midi.parent().unwrap().join("band-notes.mid").is_file());
+}
+
+#[test]
+fn daw_export_uses_recorded_reference_speed_steps_and_preserves_source_audio() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = synthetic_take(12.0, "1800000000.004");
+    let mut saved = manifest(&take.dir);
+    saved["styleId"] = json!("reference");
+    saved["chartId"] = json!("fixture-source");
+    saved["snapshot"]["reference"] = json!({"asset_id":"fixture-source"});
+    saved["referenceTiming"] =
+        serde_json::from_str(include_str!("../../tests/invariants/reference-timing.json")).unwrap();
+    let original = serde_json::to_vec_pretty(&saved).unwrap();
+    std::fs::write(take.dir.join("take.json"), &original).unwrap();
+    let report = studio.ok("takes_export_daw", json!({"takeId":take.id}));
+    let dir = PathBuf::from(report["dir"].as_str().unwrap());
+    let info_path = dir.join(format!("{}-info.json", take.id));
+    let info: Value = serde_json::from_slice(&std::fs::read(&info_path).unwrap()).unwrap();
+    assert_eq!(info["tempoSource"], "recorded-reference");
+    assert_eq!(info["referenceTiming"], saved["referenceTiming"]);
+    assert_eq!(
+        info["recordedTempoMap"]["tempos"][1],
+        json!({"frame":230400,"bpm":75.0})
+    );
+    let script = std::fs::read_to_string(report["reaperScript"].as_str().unwrap()).unwrap();
+    assert!(script.contains("{time=4.8, bpm=75}"));
+    assert!(script.contains(r#"name="band", length=12, muted=false"#));
+    assert_eq!(
+        std::fs::read(dir.join(format!("{}-band.wav", take.id))).unwrap(),
+        std::fs::read(&take.band).unwrap()
+    );
+    assert_eq!(std::fs::read(take.dir.join("take.json")).unwrap(), original);
+    let midi_path = PathBuf::from(report["midiFile"].as_str().unwrap());
+    let midi = std::fs::read(&midi_path).unwrap();
+    assert_eq!(u16::from_be_bytes([midi[12], midi[13]]), 9600);
+    saved["referenceTiming"]["schemaVersion"] = json!(2);
+    std::fs::write(
+        take.dir.join("take.json"),
+        serde_json::to_vec(&saved).unwrap(),
+    )
+    .unwrap();
+    assert!(studio
+        .err("takes_export_daw", json!({"takeId":take.id}))
+        .contains("timing"));
+    assert_eq!(std::fs::read(&midi_path).unwrap(), midi);
+    saved.as_object_mut().unwrap().remove("referenceTiming");
+    std::fs::write(
+        take.dir.join("take.json"),
+        serde_json::to_vec(&saved).unwrap(),
+    )
+    .unwrap();
+    studio.ok("takes_export_daw", json!({"takeId":take.id}));
+    let info: Value = serde_json::from_slice(&std::fs::read(info_path).unwrap()).unwrap();
+    assert_eq!(info["tempoSource"], "constant-take-tempo");
+    assert!(info["recordedTempoMap"].is_null());
+}
+
+#[test]
+fn take_review_is_not_configured_without_a_fixture() {
+    let _scenario = common::scenario();
+    std::env::remove_var("JAM_REVIEW_FIXTURE");
+    let studio = Studio::boot();
+    let take = synthetic_take(0.2, "1700000000.000");
+    let gate = studio.err("takes_review", json!({"takeId": take.id}));
+    assert!(
+        gate.contains("Analyze the take first") || gate.contains("not configured"),
+        "{gate}"
+    );
+    studio.ok("takes_analyze", json!({"takeId": take.id}));
+    let after = studio.err("takes_review", json!({"takeId": take.id}));
+    assert!(
+        after.contains("not configured") && after.contains("JAM_LIVE=1"),
+        "{after}"
+    );
+}
+
+#[test]
+fn recorded_review_fixture_writes_from_analysis_numbers() {
+    let _scenario = common::scenario();
+    std::env::set_var("JAM_REVIEW_FIXTURE", "1");
+    let studio = Studio::boot();
+    let take = synthetic_take(0.4, "1700000000.000");
+    studio.ok("takes_analyze", json!({"takeId": take.id}));
+    let review = studio.ok("takes_review", json!({"takeId": take.id}));
+    assert_eq!(review["fromAudio"], false);
+    assert_eq!(review["origin"], "synthetic-analysis");
+    assert!(review["analysisSummary"]
+        .as_str()
+        .unwrap()
+        .contains("attack"));
+    let session = serde_json::from_slice::<Value>(
+        &std::fs::read(
+            common::user_dir()
+                .join("sessions")
+                .join(format!("session-of-{}", take.id))
+                .join("session.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(session["review"]["fromAudio"], false);
+    assert_eq!(session["review"]["origin"], "synthetic-analysis");
+    let exported = studio.ok("export_logic", json!({"takeId": take.id}));
+    assert!(exported["folder"].as_str().unwrap().contains(&take.id));
+    std::env::remove_var("JAM_REVIEW_FIXTURE");
 }

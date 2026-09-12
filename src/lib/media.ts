@@ -34,16 +34,27 @@ export interface MediaAsset {
   stemSet?: unknown;
   referencePractice?: unknown;
   referenceGrid?: unknown;
+  estimatedGrid?: unknown;
+  providerAnalysis?: unknown;
+  minusGuitar?: { pass?: boolean; path?: string; db?: number };
 }
 
 /** Shared by Songs and Jo; only reconcile UI state after native acceptance. */
-export async function loadReference(assetId: string, useStems?: boolean) {
+export async function loadReference(
+  assetId: string,
+  useStems?: boolean,
+  useMinusGuitar?: boolean,
+) {
   const engine = useEngineStore.getState();
   if (engine.isPreview)
     throw new Error("Open the desktop app to load reference audio.");
   if (engine.isRecording)
     throw new Error("Finish recording before loading another song.");
-  await ipc.invoke("media_reference_load", { assetId, useStems });
+  await ipc.invoke("media_reference_load", {
+    assetId,
+    useStems,
+    useMinusGuitar,
+  });
   useEngineStore.setState((s) => ({
     loadedOriginal: null,
     tempoTrainer: { ...s.tempoTrainer, enabled: false },
@@ -70,9 +81,10 @@ export async function applyReferencePractice(
   await useMedia
     .getState()
     .refresh()
-    .catch((e) =>
+    .catch(() =>
       useMedia.setState({
-        message: `Practice settings applied; library refresh failed: ${String(e)}`,
+        message:
+          "Practice settings are applied. The library list did not refresh. Open Songs and retry.",
       }),
     );
   return applied;
@@ -131,13 +143,16 @@ interface MediaLibrary {
   assets: MediaAsset[];
   jobs: MediaJob[];
 }
-export function newShot(title = "Opening", seconds = 8): MediaShot {
+export function newShot(
+  title = "This is the opening.",
+  seconds = 8,
+): MediaShot {
   return {
     id: crypto.randomUUID(),
     title,
     seconds,
     prompt:
-      "A single continuous shot. A guitarist alone in a warm rehearsal room; close-up of hands, then slowly reveal the room. No titles or dialogue.",
+      "This is a single continuous shot. This is a guitarist alone in a warm rehearsal room, with a close-up of hands, then a slow reveal of the room. This has no titles or dialogue.",
     catalogId: "omni",
     model:
       catalog.find((m) => m.id === "omni")?.model ?? "gemini-omni-1.1-flash",
@@ -151,9 +166,9 @@ export function newVideo(): VideoProject {
     schemaVersion: 1,
     id: crypto.randomUUID(),
     revision: 0,
-    title: "Untitled music video",
+    title: "This is an untitled music video.",
     direction:
-      "Intimate live-performance film. Warm tungsten light, deep shadows, subtle film grain. Keep the same guitarist, clothes and room throughout.",
+      "This is an intimate live-performance film. This uses warm tungsten light, deep shadows, and subtle film grain. Keep the same guitarist, clothes and room throughout.",
     ratio: "16:9",
     audioId: null,
     shots: [newShot()],
@@ -205,10 +220,10 @@ export function shotsFromChart(chart: Chart, seconds: number): MediaShot[] {
             "This form needs more than 120 shots. Build a shorter storyboard.",
           );
         const shot = newShot(
-          `${section.name} · bars ${bar + 1}–${Math.min(bar + 4, section.bars.length)}`,
+          `This is ${section.name}, bars ${bar + 1}–${Math.min(bar + 4, section.bars.length)}.`,
           Math.min(4, section.bars.length - bar) * barSeconds,
         );
-        shot.prompt = `Single continuous music-video shot for ${section.name}. ${/chorus|solo/i.test(section.name) ? "Open the space, bold camera movement, an emotional lift." : "Intimate framing, a slow camera move, attentive performance detail."} No dialogue or on-screen text.`;
+        shot.prompt = `This is a single continuous music-video shot for ${section.name}. ${/chorus|solo/i.test(section.name) ? "This opens the space with bold camera movement and an emotional lift." : "This uses intimate framing, a slow camera move, and attentive performance detail."} This has no dialogue or on-screen text.`;
         shots.push(shot);
       }
     }
@@ -342,7 +357,7 @@ export const useMedia = create<MediaState>((set, get) => ({
         dirty: changed,
         message: changed
           ? "Earlier changes saved. Newer edits still need saving."
-          : "Video saved.",
+          : "This video is saved.",
       };
     });
     await get().refresh();

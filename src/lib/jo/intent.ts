@@ -13,7 +13,7 @@ export function parseNaturalIntent(
 } {
   const lower = text.toLowerCase().trim();
   const toolCalls: JoToolCall[] = [];
-  const reply = "Got it!";
+  const reply = "This is understood.";
   const load = /^(?:load song|last(?: inn)? sang(?:en)?)\s+(.+)$/i.exec(
     text.trim(),
   );
@@ -188,7 +188,7 @@ export function parseNaturalIntent(
     lower === "record"
   ) {
     toolCalls.push({ name: "record_take", arguments: { action: "start" } });
-    return { reply: "Recording take! Make it count.", toolCalls };
+    return { reply: "Recording the take.", toolCalls };
   }
   if (lower.includes("stop recording") || lower.includes("save take")) {
     toolCalls.push({ name: "record_take", arguments: { action: "stop" } });
@@ -208,7 +208,7 @@ export function parseNaturalIntent(
   }
   if (lower.includes("funk") || lower.includes("funky")) {
     toolCalls.push({ name: "set_style", arguments: { styleId: "funk-16" } });
-    return { reply: "Locking in that 16th-note funk groove!", toolCalls };
+    return { reply: "Locking in the 16th-note funk groove.", toolCalls };
   }
   if (lower.includes("jazz") || lower.includes("swing")) {
     toolCalls.push({ name: "set_style", arguments: { styleId: "jazz-swing" } });
@@ -223,7 +223,7 @@ export function parseNaturalIntent(
       name: "set_style",
       arguments: { styleId: "metal-gallop" },
     });
-    return { reply: "Locked in for heavy metal gallop!", toolCalls };
+    return { reply: "Locked in for a heavy metal gallop.", toolCalls };
   }
   if (lower.includes("ballad") || lower.includes("6/8")) {
     toolCalls.push({ name: "set_style", arguments: { styleId: "ballad-68" } });
@@ -234,17 +234,17 @@ export function parseNaturalIntent(
       name: "set_style",
       arguments: { styleId: "rock-straight" },
     });
-    return { reply: "Driving straight 8th rock groove.", toolCalls };
+    return { reply: "This is driving a straight 8th rock groove.", toolCalls };
   }
 
   // 3. Cues
   if (lower.includes("fill") || lower.includes("drum fill")) {
     toolCalls.push({ name: "trigger_cue", arguments: { cue: "fill" } });
-    return { reply: "Drum fill coming up at the next bar!", toolCalls };
+    return { reply: "Drum fill coming up at the next bar.", toolCalls };
   }
   if (lower.includes("crash")) {
     toolCalls.push({ name: "trigger_cue", arguments: { cue: "crash" } });
-    return { reply: "Crashing at next bar downbeat!", toolCalls };
+    return { reply: "Crash on the next bar downbeat.", toolCalls };
   }
   if (
     lower.includes("ending") ||
@@ -274,11 +274,11 @@ export function parseNaturalIntent(
     lower.includes("mute drums")
   ) {
     toolCalls.push({ name: "set_parts", arguments: { muteDrums: true } });
-    return { reply: "Muting drums.", toolCalls };
+    return { reply: "This is muting the drums.", toolCalls };
   }
   if (lower.includes("bring in drums") || lower.includes("unmute drums")) {
     toolCalls.push({ name: "set_parts", arguments: { muteDrums: false } });
-    return { reply: "Drums back in.", toolCalls };
+    return { reply: "This is bringing the drums back in.", toolCalls };
   }
 
   // 5. Energy Following
@@ -297,7 +297,60 @@ export function parseNaturalIntent(
     };
   }
 
-  // 6. Tempo
+  // 6. Stage count-in, tap, seek, transpose, tuner
+  const countIn =
+    /^(?:count[- ]?in|opptelling)\s+(0|1|2)\s*(?:bars?|takter?)?[.!]?$/.exec(
+      lower,
+    );
+  if (countIn) {
+    toolCalls.push({
+      name: "set_count_in",
+      arguments: { bars: Number(countIn[1]) },
+    });
+    return { reply: "Setting the count-in.", toolCalls };
+  }
+  if (/^(?:tap(?: the)? tempo|slå inn tempoet)[.!]?$/.test(lower)) {
+    toolCalls.push({ name: "tap_tempo", arguments: {} });
+    return { reply: "This is tapping the tempo.", toolCalls };
+  }
+  const seekBar =
+    /^(?:(?:go|jump|seek) to|gå til)\s+(?:bar|takt)\s+(\d{1,3})[.!]?$/.exec(
+      lower,
+    );
+  if (seekBar) {
+    toolCalls.push({
+      name: "seek_bar",
+      arguments: { bar: Number(seekBar[1]) },
+    });
+    return { reply: `Jumping to bar ${seekBar[1]}.`, toolCalls };
+  }
+  const chartPitch =
+    /^(?:transpose|transponer)(?:\s+(up|down|opp|ned))?\s+([+-]?\d{1,2})\s*(?:semitones?|halvtoner?)?[.!]?$/.exec(
+      lower,
+    );
+  if (chartPitch) {
+    const n = Number(chartPitch[2]);
+    const dir = chartPitch[1];
+    const semitones =
+      dir === "down" || dir === "ned" ? -Math.abs(n) : n === 0 ? 0 : n;
+    if (semitones !== 0) {
+      toolCalls.push({
+        name: "transpose_chart",
+        arguments: { semitones },
+      });
+      return { reply: "Transposing the chart.", toolCalls };
+    }
+  }
+  if (/^(?:tuner on|stemmeapparat på)[.!]?$/.test(lower)) {
+    toolCalls.push({ name: "toggle_tuner", arguments: { enabled: true } });
+    return { reply: "The tuner is on.", toolCalls };
+  }
+  if (/^(?:tuner off|stemmeapparat av)[.!]?$/.test(lower)) {
+    toolCalls.push({ name: "toggle_tuner", arguments: { enabled: false } });
+    return { reply: "The tuner is off.", toolCalls };
+  }
+
+  // 7. Tempo
   const bpmMatch =
     lower.match(/(\d{2,3})\s*bpm/) ||
     lower.match(/tempo\s*(?:to|at)?\s*(\d{2,3})/);
@@ -323,7 +376,7 @@ export function parseNaturalIntent(
     return { reply: "Pulling back the tempo by 5 BPM.", toolCalls };
   }
 
-  // 7. General Playback / Transport
+  // 8. General Playback / Transport
   if (
     lower.includes("play") ||
     lower.includes("start") ||
@@ -334,7 +387,7 @@ export function parseNaturalIntent(
       name: "transport_control",
       arguments: { action: "play" },
     });
-    return { reply: "Let's roll! 1, 2, 3, 4...", toolCalls };
+    return { reply: "This is rolling.", toolCalls };
   }
   if (lower.includes("pause") || lower.includes("hold on")) {
     toolCalls.push({
@@ -348,7 +401,7 @@ export function parseNaturalIntent(
       name: "transport_control",
       arguments: { action: "stop" },
     });
-    return { reply: "Stopping playback.", toolCalls };
+    return { reply: "This playback is stopping.", toolCalls };
   }
 
   return { reply, toolCalls };

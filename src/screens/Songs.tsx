@@ -8,6 +8,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
+import { ProviderEstimates } from "../components/ProviderEstimates";
 import { ReferenceGridEditor } from "../components/ReferenceGrid";
 import { ReferencePlayer } from "../components/ReferencePlayer";
 import { SongAnalysis } from "../components/SongAnalysis";
@@ -49,7 +50,7 @@ export function Songs() {
         });
         return;
       }
-      void m.work("Importing and analyzing song", async () => {
+      void m.work("Importing and analyzing this song.", async () => {
         const asset = await ipc
           .invoke<MediaAsset>("media_import", {
             path: source,
@@ -65,7 +66,7 @@ export function Songs() {
         setQuery("");
         setPath("");
         useMedia.setState({
-          message: `Song imported locally. ${readAnalysisStatus(asset.analysisStatus)?.message ?? "Load in Jamstudio to play it."}`,
+          message: `Song imported locally. ${readAnalysisStatus(asset.analysisStatus)?.message ?? "Load this in Jamstudio to play it."}`,
         });
       });
     },
@@ -93,7 +94,7 @@ export function Songs() {
       .catch((e) => {
         if (active)
           useMedia.setState({
-            message: `File drop unavailable: ${String(e)}. Use Choose audio file or paste its path.`,
+            message: `File drop is unavailable. ${String(e).replace(/^Error:\s*/, "")}. Use Choose an audio file or paste its path.`,
           });
       });
     return () => {
@@ -121,37 +122,39 @@ export function Songs() {
       </WorkspaceHeader>
       <div className="workspace-summary">
         <span>
-          <strong>{songs.length}</strong>audio files
+          <strong>{songs.length}</strong> audio files.
         </span>
         <span>
           <strong>
             {Math.round(songs.reduce((n, a) => n + a.seconds, 0) / 60)}
           </strong>
-          minutes
+          minutes.
         </span>
-        <span>Stored on your computer</span>
+        <span>Stored on your computer.</span>
       </div>
       <div className="workspace-search">
         <label>
-          Search
+          Search the library.
           <input
             type="search"
-            aria-label="Search songs"
+            aria-label="Search the library."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Find a mix or reference"
+            placeholder="Find a mix or reference."
           />
         </label>
         <Button
           disabled={locked}
-          onClick={() => void m.work("Refreshing audio library", m.refresh)}
+          onClick={() =>
+            void m.work("Refreshing this audio library.", m.refresh)
+          }
         >
-          Refresh library
+          Refresh this library.
         </Button>
       </div>
       <details className="workspace-stack" open={!songs.length || undefined}>
         <summary className="cursor-pointer text-sm">
-          Import a finished mix or reference
+          Import a finished mix or reference.
         </summary>
         <div className="workspace-actions mt-3">
           <Button
@@ -167,7 +170,7 @@ export function Songs() {
                 .finally(() => setPicking(false));
             }}
           >
-            Choose audio file
+            Choose an audio file.
           </Button>
           <p className="workspace-note">
             Or drop one audio file anywhere in Songs.
@@ -175,12 +178,12 @@ export function Songs() {
         </div>
         <div className="workspace-search mt-3">
           <label>
-            File path
+            Enter the audio file path.
             <input
-              aria-label="Audio file path"
+              aria-label="Enter the audio file path."
               value={path}
               onChange={(e) => setPath(e.target.value)}
-              placeholder="Full path to WAV, MP3, FLAC, M4A, AIFF or OGG"
+              placeholder="Paste the full path to a WAV, MP3, FLAC, M4A, AIFF or OGG file."
             />
           </label>
           <Button
@@ -188,26 +191,26 @@ export function Songs() {
             disabled={locked || isPreview || !path.trim()}
             onClick={() => importPath(path.trim())}
           >
-            <UploadSimple size={18} aria-hidden="true" /> Import audio
+            <UploadSimple size={18} aria-hidden="true" /> Import this audio.
           </Button>
         </div>
         <p className="workspace-note mt-2">
           {isPreview && "Open the desktop app to import and listen. "}
-          WAV, MP3, FLAC, AAC/ALAC M4A, AIFF and Ogg Vorbis · mono or stereo ·
-          up to 512 MB and 10 minutes. Import, analysis and playback run locally
+          WAV, MP3, FLAC, AAC/ALAC M4A, AIFF and Ogg Vorbis. Mono or stereo. Up
+          to 512 MB and 10 minutes. Import, analysis and playback run locally
           without FFmpeg. Your original is kept beside a 48 kHz source WAV.
         </p>
       </details>
       {(m.busy || m.message) && (
         <output className="workspace-note">{m.busy || m.message}</output>
       )}
-      {(m.busy === "Preparing practice copy" ||
-        m.busy === "Separating stems" ||
-        m.busy === "Importing stems" ||
-        m.busy === "Loading reference" ||
-        m.busy === "Analyzing song locally" ||
-        m.busy === "Consolidating song files" ||
-        m.busy === "Importing and analyzing song") && (
+      {(m.busy === "Preparing this practice copy." ||
+        m.busy === "Separating these stems." ||
+        m.busy === "Importing these stems." ||
+        m.busy === "Loading this reference." ||
+        m.busy === "Analyzing this song locally." ||
+        m.busy === "Consolidating these song files." ||
+        m.busy === "Importing and analyzing this song.") && (
         <Button
           onClick={() =>
             void ipc
@@ -215,7 +218,7 @@ export function Songs() {
               .catch((e) => useMedia.setState({ message: String(e) }))
           }
         >
-          Cancel current operation
+          Cancel this current operation.
         </Button>
       )}
       {engine.reference && (
@@ -229,25 +232,25 @@ export function Songs() {
           <VinylRecord size={52} aria-hidden="true" />
           <h2>
             {songs.length
-              ? "No matching songs"
+              ? "No matching songs."
               : "Start with something you want to hear again."}
           </h2>
           <p>
             {songs.length
               ? "Try another title or clear the search."
-              : "Import your own mix, or create an idea in AI Music. Your recordings are in Sessions."}
+              : "Drop an audio file here. Import your own mix, or create an idea in AI Music. Your recordings are in Sessions."}
           </p>
           <Button
             onClick={() =>
               songs.length ? setQuery("") : engine.setScreen("sessions")
             }
           >
-            {songs.length ? "Clear search" : "Open recorded takes"}
+            {songs.length ? "Clear this search." : "Open recorded takes."}
           </Button>
         </div>
       ) : (
         <div className="song-collection">
-          <ul aria-label="Audio library">
+          <ul aria-label="This is the audio library.">
             {visible.map((a) => (
               <li key={a.id}>
                 <button
@@ -260,10 +263,11 @@ export function Songs() {
                     {a.label}
                     <small>
                       {Math.floor(a.seconds / 60)}:
-                      {String(Math.floor(a.seconds % 60)).padStart(2, "0")} ·
-                      audio · analysis{" "}
+                      {String(Math.floor(a.seconds % 60)).padStart(2, "0")}.
+                      Audio. Analysis is{" "}
                       {readAnalysisStatus(a.analysisStatus)?.state ??
                         (a.songAnalysis ? "saved" : "not started")}
+                      .
                     </small>
                   </span>
                 </button>
@@ -275,7 +279,7 @@ export function Songs() {
               <VinylRecord size={72} aria-hidden="true" />
               <h2>{song.label}</h2>
               <p className="workspace-note">
-                {song.seconds.toFixed(1)} seconds · plays as saved
+                {song.seconds.toFixed(1)} seconds. Plays as saved.
               </p>
               <div className="workspace-actions">
                 <Button
@@ -286,7 +290,7 @@ export function Songs() {
                     song.seconds > 1200
                   }
                   onClick={() =>
-                    void m.work("Analyzing song locally", async () => {
+                    void m.work("Analyzing this song locally.", async () => {
                       try {
                         await ipc.invoke("media_analyze", { assetId: song.id });
                       } catch (error) {
@@ -302,28 +306,28 @@ export function Songs() {
                   }
                 >
                   {song.songAnalysis
-                    ? "Analyze again"
-                    : "Analyze tempo & chords"}
+                    ? "Analyze again."
+                    : "Analyze tempo and chords."}
                 </Button>
                 <Button
                   disabled={locked || isPreview}
                   onClick={() =>
-                    void m.work("Loading reference", async () => {
+                    void m.work("Loading this reference.", async () => {
                       await loadReference(song.id);
                       useMedia.setState({
                         message:
-                          "Reference loaded. Use Play reference or the top transport to start.",
+                          "Reference loaded. Use Play the reference or the top transport to start.",
                       });
                     })
                   }
                 >
-                  Load in Jamstudio
+                  Load this in Jamstudio.
                 </Button>
                 {Boolean(song.stemSet || song.referencePractice) && (
                   <Button
                     disabled={locked || isPreview}
                     onClick={() =>
-                      void m.work("Loading reference", async () => {
+                      void m.work("Loading this reference.", async () => {
                         await loadReference(song.id, false);
                         useMedia.setState({
                           message:
@@ -332,19 +336,34 @@ export function Songs() {
                       })
                     }
                   >
-                    Load original mix
+                    Load this original mix.
                   </Button>
                 )}
+                <Button
+                  disabled={locked || isPreview}
+                  onClick={() =>
+                    void m.work("Loading this minus-guitar mix.", async () => {
+                      await loadReference(song.id, false, true);
+                      useMedia.setState({
+                        message:
+                          "Minus-guitar mix loaded. Synthetic/local residual only. Real-song residual at or below -6 dB is not claimed. Use Play the reference or the top transport to start.",
+                      });
+                    })
+                  }
+                >
+                  Load this minus-guitar mix.
+                </Button>
                 <Button
                   variant="primary"
                   disabled={locked || isPreview}
                   onClick={() =>
-                    void m.work("Opening song", async () => {
+                    void m.work("Opening this song.", async () => {
                       await ipc.invoke("media_open", { path: song.path });
                     })
                   }
                 >
-                  <Play size={18} aria-hidden="true" /> Listen in media player
+                  <Play size={18} aria-hidden="true" /> Listen in the media
+                  player.
                 </Button>
                 <Button
                   disabled={locked}
@@ -353,13 +372,18 @@ export function Songs() {
                     engine.setScreen("music-video");
                   }}
                 >
-                  <FilmSlate size={18} aria-hidden="true" /> Use in Film
+                  <FilmSlate size={18} aria-hidden="true" /> Use this in Film.
                 </Button>
               </div>
               <SongAnalysis
                 key={song.id}
                 value={song.songAnalysis}
                 status={song.analysisStatus}
+              />
+              <ProviderEstimates
+                key={`musicai-${song.id}`}
+                song={song}
+                locked={locked}
               />
               <ReferenceGridEditor
                 key={`grid-${song.id}`}
@@ -373,7 +397,7 @@ export function Songs() {
               />
               <details className="workspace-stack">
                 <summary className="cursor-pointer text-sm">
-                  Make a practice copy
+                  Make this practice copy.
                 </summary>
                 <p className="workspace-note">
                   Change speed without changing pitch, or transpose up to an
@@ -383,9 +407,9 @@ export function Songs() {
                 </p>
                 <div className="workspace-actions">
                   <label className="room-tool-field">
-                    Speed · {speed}%
+                    Speed is {speed}%.
                     <input
-                      aria-label="Practice speed"
+                      aria-label={`Speed is ${speed}%.`}
                       type="range"
                       min={50}
                       max={150}
@@ -396,7 +420,7 @@ export function Songs() {
                     />
                   </label>
                   <label className="room-tool-field">
-                    Transpose
+                    Choose the transpose.
                     <select
                       value={semitones}
                       disabled={locked}
@@ -405,7 +429,7 @@ export function Songs() {
                       {Array.from({ length: 25 }, (_, i) => i - 12).map((n) => (
                         <option key={n} value={n}>
                           {n > 0 ? "+" : ""}
-                          {n} semitones
+                          {n} semitones.
                         </option>
                       ))}
                     </select>
@@ -413,7 +437,7 @@ export function Songs() {
                   <Button
                     disabled={locked || isPreview}
                     onClick={() =>
-                      void m.work("Preparing practice copy", async () => {
+                      void m.work("Preparing this practice copy.", async () => {
                         const copy = await ipc.invoke<MediaAsset>(
                           "media_stretch",
                           { assetId: song.id, speed: speed / 100, semitones },
@@ -423,12 +447,12 @@ export function Songs() {
                         setQuery("");
                         useMedia.setState({
                           message:
-                            "Practice copy saved. Choose Listen in media player to hear it.",
+                            "Practice copy saved. Choose Listen in the media player to hear it.",
                         });
                       })
                     }
                   >
-                    Create practice copy
+                    Create this practice copy.
                   </Button>
                 </div>
                 <p className="workspace-note">
@@ -439,12 +463,14 @@ export function Songs() {
               </details>
               {lyrics && (
                 <details>
-                  <summary>Generated lyrics & structure</summary>
+                  <summary>Open the generated lyrics and structure.</summary>
                   <p className="whitespace-pre-wrap text-sm mt-3">{lyrics}</p>
                 </details>
               )}
               <details>
-                <summary className="cursor-pointer text-sm">Local file</summary>
+                <summary className="cursor-pointer text-sm">
+                  This is the local file.
+                </summary>
                 <p className="workspace-note break-all mt-2">{song.path}</p>
                 <p className="workspace-note mt-2">
                   Keep the source, stems and saved settings in one portable song
@@ -454,7 +480,7 @@ export function Songs() {
                 <Button
                   disabled={locked || isPreview}
                   onClick={() =>
-                    void m.work("Consolidating song files", async () => {
+                    void m.work("Consolidating these song files.", async () => {
                       await ipc.invoke("media_store_song", {
                         assetId: song.id,
                       });
@@ -466,7 +492,7 @@ export function Songs() {
                     })
                   }
                 >
-                  Keep song files together
+                  Keep these song files together.
                 </Button>
               </details>
             </section>
@@ -474,13 +500,16 @@ export function Songs() {
         </div>
       )}
       <p className="workspace-note">
-        Load in Jamstudio plays the reference through the native audio engine,
-        with pause, seek and seconds loops. The system player is also available.
-        Practice copies support local speed and pitch changes. Local analysis
-        estimates steady tempo, major/minor chords and key. Prepare or import
-        stems to mix instruments in the native player. Confirm bars and named
-        sections to use section loops; automatic section detection is pending.
-        Use Library for chord charts and Stage for rehearsing them.
+        Load this in Jamstudio plays the reference through the native audio
+        engine. It has pause, seek and seconds loops. The system player is also
+        available. Practice copies support local speed and pitch changes. Local
+        analysis estimates steady tempo, major/minor chords and key. Prepare or
+        import stems to mix instruments in the native player. Load this
+        minus-guitar mix plays minus-guitar.wav after Check this guitar residual
+        passes. It stays loud if that check has not passed or the file is gone.
+        Confirm bars and named sections to use section loops; automatic section
+        detection is pending. Use Library for chord charts and Stage for
+        rehearsing them.
       </p>
     </div>
   );

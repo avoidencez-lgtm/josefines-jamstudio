@@ -70,10 +70,10 @@ function SilentPreview({ path, label }: { path: string; label: string }) {
             else video.pause();
           }}
         >
-          {playing ? "Pause preview" : "Play silent preview"}
+          {playing ? "Pause this preview." : "Play this silent preview."}
         </Button>
         <label>
-          Preview position
+          Set the preview position.
           <input
             type="range"
             min={0}
@@ -108,7 +108,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
   const [takeId, setTakeId] = useState("");
   const [tools, setTools] = useState({
     ready: false,
-    message: "Checking local media tools…",
+    message: "Checking local media tools.",
   });
   const project = m.project;
   type AudioDraft = {
@@ -133,7 +133,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
   const setAudioModelId = (model: string) => updateAudio({ model });
   const audioPrompt =
     audioDraft?.prompt ??
-    "A soulful original guitar song. Intimate verse, soaring chorus, a short instrumental bridge. Warm live-room sound.";
+    "This is a soulful original guitar song. This is an intimate verse, a soaring chorus, and a short instrumental bridge. This is warm live-room sound.";
   const setAudioPrompt = (prompt: string) => updateAudio({ prompt });
   const audioSeconds = audioDraft?.seconds ?? 120;
   const setAudioSeconds = (seconds: number) => updateAudio({ seconds });
@@ -171,7 +171,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       setTools({
         ready: false,
         message:
-          "Browser preview: importing, generation and rendering require the desktop app.",
+          "This browser preview cannot import, generate or render. Use the desktop app.",
       });
     else
       void ipc
@@ -194,7 +194,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
     else editShot({ assetId: a.id, trimStart: 0 });
   };
   const importFile = (kind: string) =>
-    work("Importing media", async () =>
+    work("Importing this media.", async () =>
       attach(
         await ipc.invoke<MediaAsset>("media_import", {
           path: path.trim(),
@@ -203,7 +203,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       ),
     );
   const generate = (kind: "audio" | "video") =>
-    work(`Generating ${kind} · this can take several minutes`, async () => {
+    work(`Generating ${kind}. This can take several minutes.`, async () => {
       const seconds =
         kind === "audio"
           ? audioSeconds
@@ -258,7 +258,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       if (audioOnly && kind === "audio") await completeGeneratedAudio(job);
     });
   const chartStoryboard = () =>
-    work("Planning section cuts", async () => {
+    work("Planning these section cuts.", async () => {
       if (!audio) throw new Error("Choose a soundtrack first.");
       const take = engine.takes.find((t) => t.id === takeId);
       const snapshot = take?.snapshot as
@@ -288,43 +288,43 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       >
         <div className="video-actions">
           <Button disabled={locked || !m.undo.length} onClick={m.undoEdit}>
-            Undo edit
+            Undo this edit.
           </Button>
           <Button
             disabled={locked || m.dirty}
             title={
-              m.dirty ? "Save your current video first" : "Start a new video"
+              m.dirty ? "Save your current video first." : "Start a new video."
             }
             onClick={() => {
               m.open(newVideo());
               setSelected(0);
             }}
           >
-            New project
+            Start this new project.
           </Button>
           <Button
             variant="primary"
             disabled={locked || isPreview}
-            onClick={() => work("Saving video", m.save)}
+            onClick={() => work("Saving this video.", m.save)}
           >
-            Save project
+            Save this project.
           </Button>
           <span>
             {m.dirty
-              ? "Unsaved edits"
+              ? "These are unsaved edits."
               : project.revision
-                ? "Saved locally"
-                : "New project"}
+                ? "This is saved locally."
+                : "This is a new project."}
           </span>
         </div>
       </WorkspaceHeader>
       <details className="video-project-settings">
         <summary>
-          Project settings <span>{project.title}</span>
+          Open the project settings. <span>{project.title}</span>
         </summary>
         <div className="video-project-bar">
           <label>
-            Project
+            Choose a project.
             <select
               disabled={locked || m.dirty}
               value={
@@ -339,7 +339,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               }}
             >
               <option value="" disabled>
-                New unsaved project
+                This is a new unsaved project.
               </option>
               {m.projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -349,7 +349,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             </select>
           </label>
           <label>
-            Project title
+            Name this project.
             <input
               disabled={locked}
               maxLength={100}
@@ -358,7 +358,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             />
           </label>
           <label hidden={audioOnly}>
-            Frame
+            Choose the frame.
             <select
               disabled={locked}
               value={project.ratio}
@@ -366,8 +366,8 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                 m.edit({ ratio: e.target.value as "16:9" | "9:16" })
               }
             >
-              <option value="16:9">Landscape · 16:9</option>
-              <option value="9:16">Portrait · 9:16</option>
+              <option value="16:9">Landscape is 16:9.</option>
+              <option value="9:16">Portrait is 9:16.</option>
             </select>
           </label>
         </div>
@@ -382,13 +382,13 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
         onChange={setView}
       />
       {!audioOnly && (
-        <div className="film-progress" aria-label="Film readiness">
+        <div className="film-progress" aria-label="This is the film readiness.">
           <button type="button" onClick={() => setView("Soundtrack")}>
-            <strong>01 / Soundtrack</strong>
-            <span>{audio ? audio.label : "Choose the song"}</span>
+            <strong>Step 1 is the soundtrack.</strong>
+            <span>{audio ? audio.label : "Choose the song."}</span>
           </button>
           <button type="button" onClick={() => setView("Storyboard")}>
-            <strong>02 / Footage</strong>
+            <strong>Step 2 is the footage.</strong>
             <span>
               {
                 project.shots.filter((s) =>
@@ -397,17 +397,17 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   ),
                 ).length
               }{" "}
-              of {project.shots.length} shots assigned
+              of {project.shots.length} shots are assigned.
             </span>
           </button>
           <button type="button" onClick={() => setView("Render & jobs")}>
-            <strong>03 / Export</strong>
+            <strong>Step 3 is the export.</strong>
             <span>
               {m.renderPath
-                ? "Rendered locally"
+                ? "This is rendered locally."
                 : audio && Math.abs(total - audio.seconds) < 0.1
-                  ? "Duration matches"
-                  : "Fit the cuts to your song"}
+                  ? "This duration matches."
+                  : "Fit the cuts to your song."}
             </span>
           </button>
         </div>
@@ -423,7 +423,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               void openExternal("https://ffmpeg.org/download.html");
             }}
           >
-            Get FFmpeg
+            Get this FFmpeg.
           </a>
         )}
       </p>
@@ -434,10 +434,10 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             "Rendering",
             "Generating",
             "Importing",
-            "Refreshing existing job",
+            "Refreshing this existing job.",
           ].some((label) => m.busy.startsWith(label)) && (
             <Button onClick={() => void ipc.invoke("media_cancel")}>
-              Cancel local work
+              Cancel this local work.
             </Button>
           )}
         </output>
@@ -445,11 +445,12 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       <div hidden={view !== "Create music" && view !== "Soundtrack"}>
         <details className="video-audio-lab" open={audioOnly || undefined}>
           <summary>
-            Song generator <span>Lyria · MiniMax · Eleven · local models</span>
+            Generate a song.{" "}
+            <span>Models include Lyria, MiniMax, Eleven and local.</span>
           </summary>
           <div className="video-audio-fields">
             <label>
-              Music model
+              Choose a music model.
               <select
                 disabled={locked}
                 value={audioModel}
@@ -469,7 +470,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               </select>
             </label>
             <label>
-              Model ID
+              Enter the model ID.
               <input
                 disabled={locked}
                 value={audioModelId}
@@ -477,7 +478,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               />
             </label>
             <label>
-              Requested seconds
+              Requested length is in seconds.
               <input
                 type="number"
                 min={3}
@@ -490,21 +491,21 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
           </div>
           <div
             className="workspace-actions py-3"
-            aria-label="Music prompt starters"
+            aria-label="These are the music prompt starters."
           >
-            <span className="workspace-note">Start from an idea</span>
+            <span className="workspace-note">Start from an idea.</span>
             {[
               [
-                "Acoustic sketch",
-                "An intimate original acoustic guitar song. Fingerpicked verses, a warm melodic chorus and a short instrumental ending. Natural room sound, human dynamics.",
+                "Start from an acoustic sketch.",
+                "This is an intimate original acoustic guitar song. This has fingerpicked verses, a warm melodic chorus, and a short instrumental ending. This is natural room sound and human dynamics.",
               ],
               [
-                "Cinematic build",
-                "Original instrumental guitar music. Begin with a sparse motif, build with bass and brushed drums, open into a soaring chorus, then return to the opening phrase.",
+                "Start from a cinematic build.",
+                "This is original instrumental guitar music. Begin with a sparse motif, build with bass and brushed drums, open into a soaring chorus, then return to the opening phrase.",
               ],
               [
-                "Practice backing",
-                "An original guitar-free backing track: warm electric bass, tight drums and understated organ. Leave space for a lead guitarist. Clear verse and chorus, no lead melody or vocals.",
+                "Start from a practice backing.",
+                "This is an original guitar-free backing track. This uses warm electric bass, tight drums, and understated organ. Leave space for a lead guitarist. This has a clear verse and chorus, with no lead melody or vocals.",
               ],
             ].map(([label, prompt]) => (
               <Button
@@ -518,7 +519,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             ))}
           </div>
           <label>
-            Describe the song
+            Describe the song.
             <textarea
               rows={3}
               maxLength={4000}
@@ -535,7 +536,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                 disabled={locked}
                 onChange={(e) => setInstrumental(e.target.checked)}
               />
-              Instrumental
+              This track is instrumental.
             </label>
             <Button
               variant="primary"
@@ -548,19 +549,19 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               onClick={() => generate("audio")}
             >
               {chosenAudio?.protocol === "comfy"
-                ? "Generate song · local workflow"
-                : "Generate song · uses API credits"}
+                ? "Generate song. Local workflow."
+                : "Generate song. Uses API credits."}
             </Button>
             <Button variant="ghost" onClick={openAiSettings}>
-              API settings
+              Open these AI settings.
             </Button>
           </div>
           <p className="video-note">
             {chosenAudio?.description} Generated audio is saved and analyzed
             locally. AI Music opens completed songs in Stage, stopped and ready
             for practice. Failed analysis can be retried from the saved job
-            without generating again. Cancel local work keeps any received
-            provider output; an already submitted request may still finish and
+            without generating again. Cancel this local work keeps any received
+            provider output. An already submitted request may still finish and
             be billed. Model access and API billing are separate from ChatGPT
             and Claude subscriptions.
           </p>
@@ -568,7 +569,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       </div>
       {localSelected && (
         <details className="video-local" open>
-          <summary>Local model setup · ComfyUI</summary>
+          <summary>Local model setup. ComfyUI.</summary>
           <p className="video-note">
             Start your installed ComfyUI on http://127.0.0.1:8188. Export a
             working workflow in API format, paste it here, and select its
@@ -579,7 +580,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
           </p>
           <div className="video-audio-fields">
             <label>
-              Prompt node ID
+              Enter the prompt node ID.
               <input
                 disabled={locked}
                 value={local?.promptNode ?? ""}
@@ -587,7 +588,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               />
             </label>
             <label>
-              Prompt input name
+              Enter the prompt input name.
               <input
                 disabled={locked}
                 value={local?.promptInput ?? "text"}
@@ -595,7 +596,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               />
             </label>
             <label>
-              Save output node ID
+              Enter the save-output node ID.
               <input
                 disabled={locked}
                 value={local?.outputNode ?? ""}
@@ -604,7 +605,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             </label>
           </div>
           <label>
-            API workflow JSON · no credentials
+            API workflow JSON. No credentials.
             <textarea
               rows={6}
               disabled={locked}
@@ -626,7 +627,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                 );
               }}
             >
-              Workflow documentation
+              Open the workflow documentation.
             </a>
           </p>
         </details>
@@ -636,44 +637,46 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       >
         <section className="video-source">
           <div>
-            <span className="video-eyebrow">01 / SOUNDTRACK</span>
+            <span className="video-eyebrow">
+              This section is the soundtrack.
+            </span>
             <h2>{audio ? audio.label : "Start with the song."}</h2>
             <p>
               {audio
-                ? `${time(audio.seconds)} · The final film uses this audio from the beginning, with no time-stretching.`
+                ? `${time(audio.seconds)}. The final film uses this audio from the beginning, with no time-stretching.`
                 : "Use a recorded performance, import a finished mix, or generate an idea above."}
             </p>
           </div>
           <div className="video-source-controls">
             <label>
-              Saved soundtrack
+              Choose a saved soundtrack.
               <select
                 disabled={locked}
                 value={project.audioId ?? ""}
                 onChange={(e) => m.edit({ audioId: e.target.value || null })}
               >
-                <option value="">Choose audio…</option>
+                <option value="">Choose audio.</option>
                 {m.assets
                   .filter((a) => a.kind === "audio")
                   .map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.label} · {time(a.seconds)}
+                      {a.label}. {time(a.seconds)}.
                     </option>
                   ))}
               </select>
             </label>
             <div className="video-import-row">
               <label>
-                Studio take
+                Choose a studio take.
                 <select
                   disabled={locked}
                   value={takeId}
                   onChange={(e) => setTakeId(e.target.value)}
                 >
-                  <option value="">Choose a recording…</option>
+                  <option value="">Choose a recording.</option>
                   {engine.takes.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.timestamp} · {time(t.durationSecs)}
+                      {t.timestamp}. {time(t.durationSecs)}.
                     </option>
                   ))}
                 </select>
@@ -681,7 +684,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               <Button
                 disabled={locked || isPreview || !takeId || !tools.ready}
                 onClick={() =>
-                  work("Importing recording", async () =>
+                  work("Importing this recording.", async () =>
                     attach(
                       await ipc.invoke<MediaAsset>("media_from_take", {
                         takeId,
@@ -690,28 +693,28 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   )
                 }
               >
-                Use take
+                Use this take.
               </Button>
             </div>
           </div>
         </section>
         <details className="video-import">
-          <summary>Import your audio or footage</summary>
+          <summary>Import your audio or footage.</summary>
           <div className="video-import-row">
             <label>
-              Full local file path
+              Enter the full local file path.
               <input
                 disabled={locked}
                 value={path}
                 onChange={(e) => setPath(e.target.value)}
-                placeholder="Paste the full path to a mix or video clip"
+                placeholder="Paste the full path to a mix or video clip."
               />
             </label>
             <Button
               disabled={locked || isPreview || !path.trim()}
               onClick={() => importFile("audio")}
             >
-              Import soundtrack
+              Import this soundtrack.
             </Button>
             <Button
               hidden={audioOnly}
@@ -720,7 +723,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               }
               onClick={() => importFile("video")}
             >
-              Import clip for this shot
+              Import this clip for this shot.
             </Button>
           </div>
           <p className="video-note">
@@ -732,15 +735,18 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       <div hidden={audioOnly || view !== "Storyboard"}>
         <details className="video-direction-settings">
           <summary>
-            Creative direction <span>Look, subject & AI director</span>
+            Set the creative direction.{" "}
+            <span>Look, subject and the AI director.</span>
           </summary>
           <section className="video-direction">
             <div>
-              <span className="video-eyebrow">02 / CREATIVE DIRECTION</span>
+              <span className="video-eyebrow">
+                This section is the creative direction.
+              </span>
               <h2>One visual story.</h2>
             </div>
             <label>
-              Look, subject and recurring details
+              Describe the look, subject and recurring details.
               <textarea
                 rows={3}
                 maxLength={2000}
@@ -751,7 +757,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             </label>
             <div className="video-actions">
               <Button disabled={locked || !audio} onClick={chartStoryboard}>
-                Build cuts from song sections
+                Build these cuts from the song sections.
               </Button>
               <Button
                 disabled={
@@ -763,9 +769,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   ) ||
                   !project.shots.length
                 }
-                onClick={() => work(`Directing with ${brain.name}`, m.direct)}
+                onClick={() => work(`Directing with ${brain.name}.`, m.direct)}
               >
-                Let {brain.name} direct
+                Let {brain.name} direct this.
               </Button>
               <span>Ideas first. Review before applying.</span>
             </div>
@@ -773,9 +779,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
         </details>
         {m.proposal && (
           <section className="video-proposal">
-            <h2>Director’s proposal</h2>
+            <h2>Review the director’s proposal.</h2>
             <label>
-              Edit the proposed shot descriptions
+              Edit the proposed shot descriptions.
               <textarea
                 rows={8}
                 disabled={locked}
@@ -790,7 +796,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                 disabled={locked}
                 variant="primary"
                 onClick={() =>
-                  work("Applying direction", async () => {
+                  work("Applying this direction.", async () => {
                     if (JSON.stringify(project) !== m.proposalBase)
                       throw new Error(
                         "The storyboard changed. Request a fresh direction before applying.",
@@ -800,13 +806,13 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   })
                 }
               >
-                Apply to storyboard
+                Apply this to the storyboard.
               </Button>
               <Button
                 disabled={locked}
                 onClick={() => useMedia.setState({ proposal: "" })}
               >
-                Dismiss
+                Dismiss this proposal.
               </Button>
             </div>
           </section>
@@ -815,9 +821,11 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
           <div className="video-storyboard">
             <div className="video-section-heading">
               <div>
-                <span className="video-eyebrow">03 / STORYBOARD</span>
+                <span className="video-eyebrow">
+                  This section is the storyboard.
+                </span>
                 <h2>
-                  {project.shots.length} shots · {time(total)}
+                  {project.shots.length} shots. {time(total)}.
                 </h2>
               </div>
               <Button
@@ -826,13 +834,13 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   m.edit({
                     shots: [
                       ...project.shots,
-                      newShot(`Shot ${project.shots.length + 1}`),
+                      newShot(`This is shot ${project.shots.length + 1}.`),
                     ],
                   });
                   setSelected(project.shots.length);
                 }}
               >
-                Add shot
+                Add this shot.
               </Button>
             </div>
             <div className="video-shot-list">
@@ -851,33 +859,41 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   <span>
                     <strong>{s.title}</strong>
                     <small>
-                      {time(videoDuration(project.shots.slice(0, i)))} —{" "}
+                      {time(videoDuration(project.shots.slice(0, i)))} to{" "}
                       {time(videoDuration(project.shots.slice(0, i + 1)))}
                     </small>
                   </span>
                   <span
                     className={s.assetId ? "video-dot ready" : "video-dot"}
-                    title={s.assetId ? "Clip assigned" : "Needs footage"}
+                    title={
+                      s.assetId
+                        ? "A clip is assigned."
+                        : "This shot needs footage."
+                    }
                   />
-                  <small>{s.assetId ? "Assigned" : "Needs clip"}</small>
+                  <small>
+                    {s.assetId
+                      ? "This clip is assigned."
+                      : "This shot needs a clip."}
+                  </small>
                 </button>
               ))}
             </div>
             <Button
               disabled={locked || !audio || !project.shots.length}
               onClick={() =>
-                work("Fitting timeline", async () =>
+                work("Fitting this timeline.", async () =>
                   m.edit({
                     shots: fitShots(project.shots, audio?.seconds ?? 0),
                   }),
                 )
               }
             >
-              Fit all cuts to song length
+              Fit all these cuts to the song length.
             </Button>
             <p className="video-note">
               {audio
-                ? `${Math.abs(total - audio.seconds) < 0.1 ? "Timeline matches your soundtrack." : `${(total - audio.seconds).toFixed(1)} seconds difference — fit the cuts before exporting.`}`
+                ? `${Math.abs(total - audio.seconds) < 0.1 ? "Timeline matches your soundtrack." : `${(total - audio.seconds).toFixed(1)} seconds difference. Fit the cuts before exporting.`}`
                 : "Choose a soundtrack to fit your cuts."}{" "}
               Short clips loop; long clips are trimmed. Rendering crops to fill
               the frame.
@@ -886,7 +902,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
           {shot && (
             <div className="video-shot-editor">
               <div className="video-section-heading">
-                <h2>Edit shot {project.shots.indexOf(shot) + 1}</h2>
+                <h2>Edit shot {project.shots.indexOf(shot) + 1}.</h2>
                 <div className="video-actions">
                   <Button
                     disabled={locked || selected === 0}
@@ -900,7 +916,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                       setSelected(selected - 1);
                     }}
                   >
-                    Move up
+                    Move this up.
                   </Button>
                   <Button
                     disabled={locked || project.shots.length < 2}
@@ -911,12 +927,12 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                       setSelected(0);
                     }}
                   >
-                    Remove
+                    Remove this shot.
                   </Button>
                 </div>
               </div>
               <label>
-                Shot name
+                Name this shot.
                 <input
                   disabled={locked}
                   maxLength={100}
@@ -926,7 +942,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               </label>
               <div className="video-shot-fields">
                 <label>
-                  Timeline seconds
+                  Timeline length is in seconds.
                   <input
                     type="number"
                     min={0.1}
@@ -940,7 +956,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   />
                 </label>
                 <label>
-                  Clip start · seconds
+                  Clip start is in seconds.
                   <input
                     type="number"
                     min={0}
@@ -966,7 +982,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               </label>
               <div className="video-shot-fields">
                 <label>
-                  Video model
+                  Choose a video model.
                   <select
                     disabled={locked}
                     value={shot.catalogId}
@@ -990,7 +1006,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   </select>
                 </label>
                 <label>
-                  Generate seconds
+                  Generate length is in seconds.
                   <input
                     type="number"
                     min={shot.catalogId === "veo" ? 4 : 2}
@@ -1013,9 +1029,9 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                 </label>
               </div>
               <details>
-                <summary>Model ID & API details</summary>
+                <summary>Open the model ID and API details.</summary>
                 <label>
-                  Editable model ID
+                  This model ID is editable.
                   <input
                     disabled={locked}
                     value={shot.model}
@@ -1033,7 +1049,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                         void openExternal(chosenModel.source);
                       }}
                     >
-                      Provider documentation
+                      Open the provider documentation.
                     </a>
                   )}
                 </p>
@@ -1051,11 +1067,11 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   onClick={() => generate("video")}
                 >
                   {chosenModel?.protocol === "comfy"
-                    ? "Generate this shot · local workflow"
-                    : "Generate this shot · uses API credits"}
+                    ? "Generate this shot. Local workflow."
+                    : "Generate this shot. Uses API credits."}
                 </Button>
                 <Button variant="ghost" onClick={openAiSettings}>
-                  API settings
+                  Open these AI settings.
                 </Button>
               </div>
               <p className="video-note">
@@ -1064,7 +1080,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                 final film.
               </p>
               <label>
-                Footage for this shot
+                Choose footage for this shot.
                 <select
                   disabled={locked}
                   value={shot.assetId ?? ""}
@@ -1073,13 +1089,13 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   }
                 >
                   <option value="">
-                    Choose generated or imported footage…
+                    Choose generated or imported footage.
                   </option>
                   {m.assets
                     .filter((a) => a.kind === "video")
                     .map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.label} · {time(a.seconds)} · {a.id.slice(-5)}
+                        {a.label}. {time(a.seconds)}. {a.id.slice(-5)}.
                       </option>
                     ))}
                 </select>
@@ -1088,11 +1104,11 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                 <SilentPreview
                   key={clip.path}
                   path={clip.path}
-                  label="Silent shot preview"
+                  label="This is a silent shot preview."
                 />
               ) : (
                 <div className="video-empty-frame">
-                  <span>YOUR SHOT GOES HERE</span>
+                  <span>Your shot goes here.</span>
                   <p>
                     Generate footage or import a clip.
                     <br />
@@ -1107,10 +1123,10 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       <div hidden={audioOnly || view !== "Render & jobs"}>
         <section className="video-export">
           <div>
-            <span className="video-eyebrow">04 / THE FILM</span>
+            <span className="video-eyebrow">This section is the film.</span>
             <h2>Your performance. A finished MP4.</h2>
             <p>
-              720p · 30 fps · {project.ratio} · {time(total)}. The original
+              720p. 30 fps. {project.ratio}. {time(total)}. The original
               soundtrack is encoded to AAC without changing its pitch or speed.
             </p>
           </div>
@@ -1127,7 +1143,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               Math.abs(total - (audio?.seconds ?? 0)) > 0.1
             }
             onClick={() =>
-              work("Rendering the film locally", async () => {
+              work("Rendering the film locally.", async () => {
                 await m.save();
                 const path = await ipc.invoke<string>("media_render", {
                   document: useMedia.getState().project,
@@ -1138,14 +1154,14 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
               })
             }
           >
-            Render music video
+            Render this music video.
           </Button>
           {m.renderPath && (
             <div className="video-render-result">
               <SilentPreview
                 key={m.renderPath}
                 path={m.renderPath}
-                label="Silent rendered film preview"
+                label="This is a silent rendered film preview."
               />
               <div>
                 <p>
@@ -1153,12 +1169,12 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                 </p>
                 <Button
                   onClick={() =>
-                    work("Opening film", async () => {
+                    work("Opening this film.", async () => {
                       await ipc.invoke("media_open", { path: m.renderPath });
                     })
                   }
                 >
-                  Play film with sound
+                  Play this film with sound.
                 </Button>
                 <p className="video-path">{m.renderPath}</p>
               </div>
@@ -1173,24 +1189,26 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
       >
         <div className="workspace-search">
           <label>
-            Show jobs
+            Show these jobs.
             <select
               value={jobFilter}
               onChange={(e) => setJobFilter(e.target.value)}
             >
-              <option>All jobs</option>
-              <option>Needs attention</option>
-              <option>Ready</option>
+              <option value="All jobs">Show all jobs.</option>
+              <option value="Needs attention">
+                Show jobs that need attention.
+              </option>
+              <option value="Ready">Show ready jobs.</option>
             </select>
           </label>
           <Button onClick={() => engine.setScreen("songs")}>
-            Open audio library
+            Open this audio library.
           </Button>
         </div>
         <details className="video-jobs" open>
           <summary>
-            Generation library{" "}
-            <span>{m.jobs.length} jobs · saved across restarts</span>
+            Open the generation library.{" "}
+            <span>{m.jobs.length} jobs. Saved across restarts.</span>
           </summary>
           {!m.jobs.length && (
             <p className="video-note">
@@ -1217,14 +1235,14 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   <span>{j.status}</span>
                   <p>{j.request.prompt.slice(0, 180)}</p>
                   {j.message && <p className="video-job-error">{j.message}</p>}
-                  {j.taskId && <small>Provider task: {j.taskId}</small>}
+                  {j.taskId && <small>Provider job {j.taskId}.</small>}
                 </div>
                 <div className="video-actions">
                   {j.status !== "ready" && (
                     <Button
                       disabled={locked || isPreview}
                       onClick={() =>
-                        work("Refreshing existing job", async () => {
+                        work("Refreshing this existing job.", async () => {
                           const job = await ipc.invoke<MediaJob>(
                             "media_refresh",
                             {
@@ -1239,8 +1257,8 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                       }
                     >
                       {j.status === "analysis"
-                        ? "Retry local analysis"
-                        : "Refresh job"}
+                        ? "Retry this local analysis."
+                        : "Refresh this job."}
                     </Button>
                   )}
                   {j.assetId && (
@@ -1251,11 +1269,10 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                         if (a) void attach(a);
                       }}
                     >
-                      Use{" "}
                       {m.assets.find((a) => a.id === j.assetId)?.kind ===
                       "audio"
-                        ? "soundtrack"
-                        : "for this shot"}
+                        ? "Use this soundtrack."
+                        : "Use this for this shot."}
                     </Button>
                   )}
                   {j.assetId &&
@@ -1264,7 +1281,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                       <Button
                         disabled={locked}
                         onClick={() =>
-                          work("Opening generated song", async () => {
+                          work("Opening this generated song.", async () => {
                             await ipc.invoke("media_open", {
                               path: m.assets.find((a) => a.id === j.assetId)
                                 ?.path,
@@ -1272,13 +1289,13 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                           })
                         }
                       >
-                        Listen
+                        Listen to this.
                       </Button>
                     )}
                 </div>
                 {j.lyrics && (
                   <details>
-                    <summary>Generated lyrics / structure</summary>
+                    <summary>Open the generated lyrics and structure.</summary>
                     <pre>{j.lyrics}</pre>
                   </details>
                 )}

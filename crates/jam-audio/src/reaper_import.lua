@@ -35,7 +35,9 @@ end
 
 reaper.Undo_BeginBlock()
 local ok, error_text = pcall(function()
-  assert(reaper.SetTempoTimeSigMarker(0, -1, 0, -1, -1, session.tempo, session.numerator, session.denominator, false), "Cannot set project tempo")
+  for i, point in ipairs(session.tempos or {{time=0, bpm=session.tempo}}) do
+    assert(reaper.SetTempoTimeSigMarker(0, -1, point.time, -1, -1, point.bpm, i == 1 and session.numerator or 0, i == 1 and session.denominator or 0, false), "Cannot set project tempo")
+  end
   for i, file in ipairs(session.files) do
     local track = new_track(file.name, file.muted)
     local item = reaper.AddMediaItemToTrack(track)
@@ -78,7 +80,7 @@ reaper.Undo_EndBlock("Import Jamstudio song", -1)
 reaper.TrackList_AdjustWindows(false)
 reaper.UpdateArrange()
 if not ok then
-  reaper.ShowMessageBox("Import stopped: " .. tostring(error_text) .. "\nUse Undo to remove the partial import. Original files are unchanged.", "Jamstudio", 0)
+  reaper.ShowMessageBox("Import stopped. " .. tostring(error_text) .. "\nUse Undo to remove the partial import. Original files are unchanged.", "Jamstudio", 0)
 else
   reaper.ShowMessageBox("Ready. Save this project in the export folder.\n\nMIDI tracks are muted: add instruments, then mute their matching audio stems before enabling them. Audio items retain their recorded speed when you change tempo.", "Jamstudio", 0)
 end

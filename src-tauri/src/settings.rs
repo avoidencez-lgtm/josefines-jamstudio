@@ -36,6 +36,55 @@ pub struct RecorderSettings {
     /// Round-trip offset trimmed from the guitar stem, in samples at the engine rate.
     #[serde(default)]
     pub latency_samples: u32,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub latency_estimated: bool,
+    #[serde(default, skip_serializing_if = "is_zero_f32")]
+    pub latency_confidence: f32,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub latency_by_device: HashMap<String, DeviceLatency>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DeviceLatency {
+    pub round_trip_frames: u32,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub estimated: bool,
+    #[serde(default, skip_serializing_if = "is_zero_f32")]
+    pub confidence: f32,
+}
+
+fn is_zero_f32(value: &f32) -> bool {
+    *value == 0.0
+}
+
+impl RecorderSettings {
+    pub fn device_key(input: Option<&str>, output: Option<&str>, channel: u16) -> String {
+        format!(
+            "{}|{}|{channel}",
+            input.unwrap_or("default"),
+            output.unwrap_or("default")
+        )
+    }
+
+    pub fn remember(
+        &mut self,
+        key: String,
+        round_trip_frames: u32,
+        estimated: bool,
+        confidence: f32,
+    ) {
+        self.latency_samples = round_trip_frames;
+        self.latency_estimated = estimated;
+        self.latency_confidence = confidence;
+        self.latency_by_device.insert(
+            key,
+            DeviceLatency {
+                round_trip_frames,
+                estimated,
+                confidence,
+            },
+        );
+    }
 }
 
 /// What the Rig screen remembers between launches.
@@ -47,6 +96,8 @@ pub struct RigSettings {
     pub midi_port: Option<String>,
     #[serde(default = "yes")]
     pub follow_sections: bool,
+    #[serde(default)]
+    pub send_clock: bool,
     /// Section name -> scene index, per profile id.
     #[serde(default)]
     pub section_mappings: HashMap<String, HashMap<String, usize>>,
@@ -62,6 +113,7 @@ impl Default for RigSettings {
             profile_id: None,
             midi_port: None,
             follow_sections: true,
+            send_clock: false,
             section_mappings: HashMap::new(),
         }
     }
@@ -101,9 +153,9 @@ static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 fn load_from(path: &std::path::Path) -> Result<AppSettings, String> {
     match fs::read_to_string(path) {
         Ok(content) => jam_core::json::from_str(&content)
-            .map_err(|e| format!("Cannot read {}: {e}. Restore settings.json.bak or repair the file; it has not been overwritten.", path.display())),
+            .map_err(|e| format!("Cannot read {}. {e}. Restore settings.json.bak or repair the file; it has not been overwritten.", path.display())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(AppSettings::default()),
-        Err(e) => Err(format!("Cannot read {}: {e}", path.display())),
+        Err(e) => Err(format!("Cannot read {}. {e}", path.display())),
     }
 }
 
@@ -154,7 +206,7 @@ fn recover_from(path: &std::path::Path) -> Result<(AppSettings, Option<String>),
         return Ok((settings, None));
     }
     // Permission/read failures are not evidence of malformed JSON and must not be replaced.
-    let damaged = fs::read(path).map_err(|e| format!("Cannot recover {}: {e}", path.display()))?;
+    let damaged = fs::read(path).map_err(|e| format!("Cannot recover {}. {e}", path.display()))?;
     let backup = path.with_extension("json.bak");
     let restored = backup.is_file().then(|| load_from(&backup).ok()).flatten();
     let source = if restored.is_some() {

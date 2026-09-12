@@ -15,8 +15,10 @@ export function SongAnalysis({
   const preparation = readAnalysisStatus(status);
   const notice = status ? (
     <output className="workspace-note">
-      {preparation?.message ??
-        "Saved analysis status is unreadable. Update the app before retrying."}
+      {preparation?.state === "failed"
+        ? `Analysis failed. ${preparation.message} Retry from Songs.`
+        : (preparation?.message ??
+          "Saved analysis status is unreadable. Update the app before retrying.")}
       {analysis &&
         preparation &&
         !["ready", "unavailable"].includes(preparation.state) &&
@@ -29,8 +31,9 @@ export function SongAnalysis({
         {notice}
         {value ? (
           <p className="workspace-note">
-            Saved analysis is unreadable or from another version. Analyze again
-            to replace it.
+            {
+              "Saved analysis is unreadable or from another version. Analyze again to replace it."
+            }
           </p>
         ) : null}
       </>
@@ -41,14 +44,20 @@ export function SongAnalysis({
     Math.max(0, Math.ceil(passages.length / 16) - 1),
   );
   return (
-    <section className="workspace-stack" aria-label="Saved song analysis">
+    <section
+      className="workspace-stack"
+      aria-label="This is the estimated harmony."
+    >
       {notice}
-      <h3>Estimated harmony</h3>
+      <h3>This is the estimated harmony.</h3>
       <p className="workspace-note">
         {analysis.bpm === null
-          ? "Tempo not found"
-          : `${analysis.bpm.toFixed(1)} BPM`}{" "}
-        · {analysis.key ?? "Key not found"} · Local estimate, low confidence
+          ? "Tempo was not found."
+          : `Tempo is ${analysis.bpm.toFixed(1)} BPM.`}{" "}
+        {analysis.key
+          ? `The key is ${analysis.key}.`
+          : "The key was not found."}{" "}
+        This is a local estimate with low confidence.
       </p>
       <p className="workspace-note">
         Check these estimates by ear. Steady tempo and major/minor triads only;
@@ -56,12 +65,12 @@ export function SongAnalysis({
         been detected.
       </p>
       <ol
-        aria-label="Estimated chord passages"
+        aria-label="These are the estimated chord passages."
         className="grid grid-cols-2 gap-2"
       >
         {passages.slice(current * 16, (current + 1) * 16).map((part) => (
           <li key={part.start} className="border-b border-[var(--line)] py-2">
-            <strong>{part.chord ?? "Unknown chord"}</strong>
+            <strong>{part.chord ?? "This chord is unknown."}</strong>
             <span className="text-sm text-[var(--fg-2)] ml-3 font-mono">
               {part.start.toFixed(1)}–{part.end.toFixed(1)} s
             </span>
@@ -71,7 +80,7 @@ export function SongAnalysis({
       {passages.length > 16 && (
         <div className="workspace-actions">
           <Button disabled={current === 0} onClick={() => setPage(current - 1)}>
-            Previous passages
+            Show these previous passages.
           </Button>
           <span className="workspace-note">
             {current * 16 + 1}–{Math.min((current + 1) * 16, passages.length)}{" "}
@@ -81,7 +90,7 @@ export function SongAnalysis({
             disabled={(current + 1) * 16 >= passages.length}
             onClick={() => setPage(current + 1)}
           >
-            Next passages
+            Show these next passages.
           </Button>
         </div>
       )}

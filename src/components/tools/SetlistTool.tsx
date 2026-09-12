@@ -38,7 +38,7 @@ export default function SetlistTool() {
       setEditing("");
       return isPreview
         ? "Setlist updated in this preview only."
-        : "Setlist saved.";
+        : "This setlist is saved.";
     });
   return (
     <>
@@ -54,7 +54,7 @@ export default function SetlistTool() {
         </p>
       )}
       <div className="room-tool-row">
-        <Field label="Chart">
+        <Field label="Chart for this entry.">
           <select
             value={chartId}
             onChange={(event) => {
@@ -70,7 +70,7 @@ export default function SetlistTool() {
                 setStyle("");
             }}
           >
-            <option value="">Choose a chart</option>
+            <option value="">Choose a chart.</option>
             {e.charts.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -78,12 +78,12 @@ export default function SetlistTool() {
             ))}
           </select>
         </Field>
-        <Field label="Groove">
+        <Field label="Groove for this entry.">
           <select
             value={styleId}
             onChange={(event) => setStyle(event.target.value)}
           >
-            <option value="">Chart's default groove</option>
+            <option value="">Use the chart's default groove.</option>
             {grooves.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -91,7 +91,7 @@ export default function SetlistTool() {
             ))}
           </select>
         </Field>
-        <Field label="Entry BPM">
+        <Field label="Entry tempo is in BPM.">
           <input
             type="number"
             min="40"
@@ -100,7 +100,7 @@ export default function SetlistTool() {
             onChange={(e) => setBpm(e.target.valueAsNumber)}
           />
         </Field>
-        <Field label="Count-in bars">
+        <Field label="Count-in is in bars.">
           <input
             type="number"
             min="0"
@@ -138,9 +138,11 @@ export default function SetlistTool() {
             )
           }
         >
-          {editing ? "Update entry" : "Add to setlist"}
+          {editing ? "Update this entry." : "Add this to the setlist."}
         </Button>
-        {editing && <Button onClick={() => setEditing("")}>Cancel edit</Button>}
+        {editing && (
+          <Button onClick={() => setEditing("")}>Cancel this edit.</Button>
+        )}
       </div>
       <ol className="room-tool-list">
         {list.map((item, i) => (
@@ -148,13 +150,13 @@ export default function SetlistTool() {
             <span>
               {i + 1}.{" "}
               {e.charts.find((c) => c.id === item.chartId)?.name ??
-                "Missing chart"}{" "}
+                "This chart is missing."}{" "}
               · {grooveName(item.styleId) ?? "chart's groove"} · {item.bpm} BPM
               · {item.countIn}-bar count-in {cued === item.id ? "· cued" : ""}
             </span>
             <div className="room-tool-row">
               <Button
-                aria-label={`Edit entry ${i + 1}`}
+                aria-label={`Edit this entry ${i + 1}.`}
                 onClick={() => {
                   setEditing(item.id);
                   setChart(item.chartId);
@@ -164,7 +166,7 @@ export default function SetlistTool() {
                   if (cued === item.id) setCued("");
                 }}
               >
-                Edit
+                Edit this entry.
               </Button>
               <Button
                 disabled={isPreview}
@@ -176,10 +178,10 @@ export default function SetlistTool() {
                   })
                 }
               >
-                Cue {i + 1}
+                Cue entry {i + 1}.
               </Button>
               <Button
-                aria-label={`Move entry ${i + 1} up`}
+                aria-label={`Move this entry ${i + 1} up.`}
                 disabled={i === 0}
                 onClick={() => {
                   const next = [...list];
@@ -187,13 +189,13 @@ export default function SetlistTool() {
                   void save(next);
                 }}
               >
-                Move up
+                Move this up.
               </Button>
               <Button
-                aria-label={`Remove entry ${i + 1}`}
+                aria-label={`Remove this entry ${i + 1}.`}
                 onClick={() => void save(list.filter((s) => s.id !== item.id))}
               >
-                Remove
+                Remove this entry.
               </Button>
             </div>
           </li>
@@ -214,7 +216,7 @@ export default function SetlistTool() {
             })
           }
         >
-          Cue next
+          Cue the next entry.
         </Button>
       )}
       <Status text={message} />

@@ -1,10 +1,13 @@
 //! src-tauri: Tauri application library and command dispatch.
 
 pub mod agents;
+pub mod aliases;
+pub mod assets;
 pub mod clips;
 pub mod controller;
 pub mod keys;
 pub mod library;
+pub mod lyria;
 pub mod media;
 pub mod net;
 pub mod originals;
@@ -15,16 +18,20 @@ pub mod voice;
 
 use jam_audio::devices::{list_devices, AudioConfig, AudioDevices};
 use jam_audio::engine::{AudioEngine, EngineStatus, EngineTelemetry};
+use jam_audio::LatencyCalibration;
 use jam_band::sequencer::Cue;
 use jam_core::chart::Chart;
 use jam_core::style::Style;
+use jam_core::timeline::beats_to_samples;
 use keys::{KeyringStore, MemoryStore, SecretStore};
 use library::Library;
 use parking_lot::Mutex;
 use settings::{load_settings, save_settings, AppSettings};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{Emitter, State};
+use std::thread;
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, State};
 
 /// Warnings about damaged files are shown once per session, not on every refresh
 /// (issues #32 and #51): the file stays on disk and the message stays true.
@@ -44,6 +51,7 @@ impl WarnOnce {
 
 pub struct AppState {
     pub voice: Arc<Mutex<voice::VoiceSession>>,
+    pub lyria: Arc<Mutex<lyria::Session>>,
     pub recovery_notice: Mutex<Option<String>>,
     pub warnings: WarnOnce,
     /// Decoded guitar clips, keyed by file and checked against size and mtime (#44).
@@ -141,7 +149,7 @@ async fn provider_fetch<R: tauri::Runtime>(
     let result = net::provider_fetch_notifying(request, store.as_ref(), &log, |error| {
         let _ = app.emit(
             "app:error",
-            format!("Could not save the usage log: {error}"),
+            format!("Could not save the usage log. {error}"),
         );
     })
     .await;
@@ -202,6 +210,17 @@ async fn audio_set_config(
     let mut eng = state.engine.lock();
     eng.apply_config(config)?;
     let status = eng.status();
+    let key = settings::RecorderSettings::device_key(
+        settings.input_device.as_deref(),
+        settings.output_device.as_deref(),
+        settings.input_channel,
+    );
+    if let Some(stored) = settings.recorder.latency_by_device.get(&key).cloned() {
+        settings.recorder.latency_samples = stored.round_trip_frames;
+        settings.recorder.latency_estimated = stored.estimated;
+        settings.recorder.latency_confidence = stored.confidence;
+        eng.recorder_set_latency_compensation(stored.round_trip_frames as usize);
+    }
     if status.last_error.is_none() {
         save_settings(&settings)?;
     }
@@ -260,6 +279,16 @@ fn keys_delete(provider: String, state: State<'_, AppState>) -> Result<(), Strin
 }
 
 #[tauri::command]
+fn keys_test(provider: String) -> Result<(), String> {
+    if net::provider(&provider).is_none() {
+        return Err("Choose a supported provider.".into());
+    }
+    Err(format!(
+        "A cheapest-endpoint test for {provider} is not configured. Check this key status looks only in the OS keychain. This is not a live provider pass."
+    ))
+}
+
+#[tauri::command]
 fn settings_get() -> Result<AppSettings, String> {
     load_settings()
 }
@@ -305,16 +334,42 @@ fn tuner_set(on: bool, state: State<'_, AppState>) {
 
 #[tauri::command]
 fn audio_get_telemetry(state: State<'_, AppState>) -> EngineTelemetry {
-    state.engine.lock().get_telemetry()
+    let eng = state.engine.lock();
+    let tel = eng.get_telemetry();
+    let now = beats_to_samples(
+        tel.transport.position_beats,
+        tel.transport.bpm,
+        eng.sample_rate(),
+    );
+    let bpm = tel.transport.bpm;
+    let playing = tel.transport.state == "playing";
+    drop(eng);
+    if playing {
+        let _ = state.rig.lock().on_transport_tick(now, bpm);
+    }
+    tel
 }
 
 #[tauri::command]
-fn transport_play(state: State<'_, AppState>) -> Result<(), String> {
+fn transport_play<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    lyria::stop_and_emit(&app, &state);
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
+    let tel = eng.get_telemetry();
+    let now = beats_to_samples(
+        tel.transport.position_beats,
+        tel.transport.bpm,
+        eng.sample_rate(),
+    );
+    let bpm = tel.transport.bpm;
     eng.transport_play();
     // A fresh run should fire the first section's scene again.
-    state.rig.lock().reset_section_tracking();
+    let mut rig = state.rig.lock();
+    rig.reset_section_tracking();
+    rig.on_transport_play(now, bpm)?;
     Ok(())
 }
 
@@ -323,6 +378,8 @@ fn transport_pause(state: State<'_, AppState>) -> Result<(), String> {
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.transport_pause();
+    drop(eng);
+    state.rig.lock().on_transport_pause()?;
     Ok(())
 }
 
@@ -331,6 +388,8 @@ fn transport_stop(state: State<'_, AppState>) -> Result<(), String> {
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.transport_stop();
+    drop(eng);
+    state.rig.lock().on_transport_stop()?;
     Ok(())
 }
 
@@ -403,6 +462,91 @@ fn band_set_style(style_id: String, state: State<'_, AppState>) -> Result<(), St
     Ok(())
 }
 
+fn render_out_path(
+    user_root: &std::path::Path,
+    out_path: Option<String>,
+    style_id: &str,
+    seed: u64,
+) -> Result<PathBuf, String> {
+    let root = user_root.canonicalize().or_else(|_| {
+        std::fs::create_dir_all(user_root).map_err(|e| e.to_string())?;
+        user_root.canonicalize().map_err(|e| e.to_string())
+    })?;
+    if let Some(raw) = out_path {
+        let path = PathBuf::from(raw);
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .ok_or("Offline render path has no folder.")?;
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        let parent = parent.canonicalize().map_err(|e| e.to_string())?;
+        if !parent.starts_with(&root) {
+            return Err("Offline render must stay under JosefinesJamstudio.".into());
+        }
+        return Ok(parent.join(
+            path.file_name()
+                .ok_or("Offline render path has no file name.")?,
+        ));
+    }
+    let safe: String = style_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let dir = root.join("renders");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join(format!("{safe}-{seed}.wav")))
+}
+
+#[tauri::command]
+fn band_render_offline(
+    style_id: Option<String>,
+    chart_id: Option<String>,
+    seed: Option<u64>,
+    bars: Option<u32>,
+    tempo_bpm: Option<f64>,
+    out_path: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let lib = state.library.lock();
+    let chart = match chart_id.as_deref() {
+        Some(id) => Some(lib.chart(id)?),
+        None => None,
+    };
+    let style = if let Some(id) = style_id.as_deref() {
+        lib.style(id)?
+    } else if let Some(chart) = &chart {
+        lib.style_for_chart(chart)?
+    } else {
+        return Err("Offline render needs a styleId or chartId.".into());
+    };
+    let bars = bars.unwrap_or(8);
+    let bpm = tempo_bpm
+        .or_else(|| chart.as_ref().map(|c| c.default_bpm))
+        .filter(|bpm| *bpm > 0.0)
+        .unwrap_or(120.0);
+    let seed = seed.unwrap_or(42);
+    let out = render_out_path(lib.user_root(), out_path, &style.id, seed)?;
+    drop(lib);
+    let resolved = chart.map(|c| c.resolve());
+    let buses = jam_band::offline::bus_rms_db(style.clone(), bars, bpm, seed, resolved.clone())?;
+    let (left, right) = jam_band::offline::render_style(style, bars, bpm, seed, resolved)?;
+    let frames = jam_band::offline::write_wav(&out, &left, &right)?;
+    Ok(serde_json::json!({
+        "path": out.to_string_lossy(),
+        "frames": frames,
+        "drumsRmsDb": buses.0,
+        "bassRmsDb": buses.1,
+        "compRmsDb": buses.2,
+        "onsets": buses.3,
+    }))
+}
+
 #[tauri::command]
 fn band_set_intensity(intensity: f32, state: State<'_, AppState>) {
     state.engine.lock().band_set_intensity(intensity);
@@ -416,7 +560,7 @@ fn band_cue(cue: String, state: State<'_, AppState>) -> Result<(), String> {
         "stop" => Cue::Stop,
         "ending" => Cue::Ending,
         "none" => Cue::None,
-        _ => return Err(format!("Unknown cue: {}", cue)),
+        _ => return Err(format!("The cue {cue} is unknown.")),
     };
     state.engine.lock().band_cue(c);
     Ok(())
@@ -449,8 +593,8 @@ fn recorder_stop(state: State<'_, AppState>) -> Result<jam_audio::recorder::Take
 }
 
 /// Sets the round-trip offset (in samples) trimmed from the start of the guitar stem so
-/// it lines up with the band. Automatic loopback measurement is not built yet, so this
-/// is the honest manual knob; the value is remembered in settings.
+/// it lines up with the band. `audio_calibrate_latency` measures this from a cable loopback;
+/// this command is the manual override.
 #[tauri::command]
 fn recorder_set_latency(samples: u32, state: State<'_, AppState>) -> Result<u32, String> {
     let samples = samples.min(48_000);
@@ -459,7 +603,16 @@ fn recorder_set_latency(samples: u32, state: State<'_, AppState>) -> Result<u32,
         .lock()
         .recorder_set_latency_compensation(samples as usize);
     let mut settings = load_settings()?;
-    settings.recorder.latency_samples = samples;
+    settings.recorder.remember(
+        settings::RecorderSettings::device_key(
+            settings.input_device.as_deref(),
+            settings.output_device.as_deref(),
+            settings.input_channel,
+        ),
+        samples,
+        false,
+        1.0,
+    );
     save_settings(&settings)?;
     Ok(samples)
 }
@@ -467,6 +620,49 @@ fn recorder_set_latency(samples: u32, state: State<'_, AppState>) -> Result<u32,
 #[tauri::command]
 fn recorder_get_latency() -> Result<u32, String> {
     Ok(load_settings()?.recorder.latency_samples)
+}
+
+/// Plays three clicks, listens on the guitar input, and stores the round-trip offset.
+/// Without a loopback this returns `2 × buffer` flagged `estimated`. Synthetic FileInput
+/// never applies an estimate (headless tests keep a zero offset).
+#[tauri::command]
+fn audio_calibrate_latency(state: State<'_, AppState>) -> Result<LatencyCalibration, String> {
+    let engine = Arc::clone(&state.engine);
+    engine.lock().start_latency_calibration()?;
+    let deadline = Instant::now() + Duration::from_secs(8);
+    let result = loop {
+        if let Some(result) = engine.lock().take_latency_calibration() {
+            break result;
+        }
+        if Instant::now() >= deadline {
+            engine.lock().abort_latency_calibration();
+            return Err(
+                "Loopback measurement timed out. Check the output and guitar input, then try again."
+                    .into(),
+            );
+        }
+        thread::sleep(Duration::from_millis(15));
+    };
+    if !result.estimated || engine.lock().status().mode == jam_audio::engine::EngineMode::Hardware {
+        let mut settings = load_settings()?;
+        settings.recorder.remember(
+            settings::RecorderSettings::device_key(
+                settings.input_device.as_deref(),
+                settings.output_device.as_deref(),
+                settings.input_channel,
+            ),
+            result.round_trip_frames,
+            result.estimated,
+            result.confidence,
+        );
+        save_settings(&settings)?;
+        if result.estimated {
+            engine
+                .lock()
+                .recorder_set_latency_compensation(result.round_trip_frames as usize);
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -501,11 +697,11 @@ fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), Strin
                 ));
             }
             std::fs::remove_dir_all(&resolved)
-                .map_err(|e| format!("could not delete take {take_id}: {e}"))?;
+                .map_err(|e| format!("Could not delete take {take_id}. {e}"))?;
         }
         // Files may already be gone; the ghost cache row must still be removed.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(format!("could not inspect take {take_id}: {e}")),
+        Err(e) => return Err(format!("Could not inspect take {take_id}. {e}")),
     }
     state.store.lock().delete_take(&take_id)
 }
@@ -640,6 +836,8 @@ pub struct RigStateDto {
     pub section_mappings: std::collections::HashMap<String, usize>,
     pub control_values: std::collections::HashMap<u8, u8>,
     pub follow_sections: bool,
+    pub send_clock: bool,
+    pub dry_run: bool,
     /// Port name when a real port is open, otherwise `None`.
     pub port: Option<String>,
     pub port_description: String,
@@ -654,6 +852,8 @@ fn rig_state_dto(rig: &jam_rig::RigOrchestrator) -> RigStateDto {
         section_mappings: rig.section_mappings.clone(),
         control_values: rig.control_values.clone(),
         follow_sections: rig.follow_sections,
+        send_clock: rig.send_clock,
+        dry_run: rig.dry_run,
         port: rig.is_live().then(|| rig.port_description()),
         port_description: rig.port_description(),
         live: rig.is_live(),
@@ -670,6 +870,7 @@ fn persist_rig(
     settings.rig.profile_id = Some(rig.profile.id.clone());
     settings.rig.midi_port = rig.is_live().then(|| rig.port_description());
     settings.rig.follow_sections = rig.follow_sections;
+    settings.rig.send_clock = rig.send_clock;
     settings
         .rig
         .section_mappings
@@ -814,6 +1015,104 @@ fn rig_clear_monitor(state: State<'_, AppState>) -> RigStateDto {
     rig.clear_monitor();
     rig_state_dto(&rig)
 }
+
+#[tauri::command]
+fn rig_panic(state: State<'_, AppState>) -> Result<RigStateDto, String> {
+    let mut rig = state.rig.lock();
+    rig.panic()?;
+    Ok(rig_state_dto(&rig))
+}
+
+#[tauri::command]
+fn rig_set_clock(on: bool, state: State<'_, AppState>) -> Result<RigStateDto, String> {
+    let mut rig = state.rig.lock();
+    persist_rig(&rig, |settings| settings.send_clock = on)?;
+    rig.set_clock(on);
+    Ok(rig_state_dto(&rig))
+}
+
+#[tauri::command]
+fn rig_dry_run(on: bool, state: State<'_, AppState>) -> Result<RigStateDto, String> {
+    let mut rig = state.rig.lock();
+    rig.set_dry_run(on);
+    Ok(rig_state_dto(&rig))
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VirtualMonitorCheck {
+    live: bool,
+    port: Option<String>,
+    expected: Vec<Vec<u8>>,
+    monitor: Vec<Vec<u8>>,
+}
+
+#[tauri::command]
+fn rig_virtual_check(state: State<'_, AppState>) -> Result<VirtualMonitorCheck, String> {
+    let expected = {
+        let rig = state.rig.lock();
+        jam_rig::virtual_monitor::expected_bytes(rig.profile.channel_nibble())
+    };
+    if std::env::var("JAM_MIDI_FIXTURE").as_deref() == Ok("1") {
+        let mut rig = state.rig.lock();
+        rig.clear_monitor();
+        for program in jam_rig::virtual_monitor::PROGRAMS {
+            rig.send_program(program)?;
+        }
+        let monitor = rig.monitor().into_iter().map(|m| m.bytes).collect();
+        return Ok(VirtualMonitorCheck {
+            live: false,
+            port: Some("MemorySink".into()),
+            expected,
+            monitor,
+        });
+    }
+    if std::env::var("JAM_LIVE").as_deref() != Ok("1") {
+        return Err(jam_rig::virtual_monitor::NOT_CONFIGURED.into());
+    }
+    let ports = jam_rig::list_output_ports()?;
+    let wanted = std::env::var("JAM_MIDI_VIRTUAL")
+        .ok()
+        .filter(|s| !s.is_empty());
+    let Some(port) = wanted
+        .as_ref()
+        .and_then(|name| {
+            ports
+                .iter()
+                .find(|p| p.name == *name || p.name.contains(name))
+                .map(|p| p.name.clone())
+        })
+        .or_else(|| {
+            ports
+                .iter()
+                .find(|p| jam_rig::virtual_monitor::is_virtual_name(&p.name))
+                .map(|p| p.name.clone())
+        })
+    else {
+        return Err(jam_rig::virtual_monitor::NOT_CONFIGURED.into());
+    };
+    {
+        let mut rig = state.rig.lock();
+        rig.set_sink(Box::new(jam_rig::MidirSink::open(&port)?));
+        rig.clear_monitor();
+        for program in jam_rig::virtual_monitor::PROGRAMS {
+            rig.send_program(program)?;
+        }
+    }
+    let monitor = state
+        .rig
+        .lock()
+        .monitor()
+        .into_iter()
+        .map(|m| m.bytes)
+        .collect();
+    Ok(VirtualMonitorCheck {
+        live: true,
+        port: Some(port),
+        expected,
+        monitor,
+    })
+}
 /// Files are truth, SQLite is a cache: a cache that cannot be read is a warning and
 /// the takes found on disk are still listed.
 pub(crate) fn all_takes(
@@ -827,7 +1126,7 @@ pub(crate) fn all_takes(
         }
         Err(e) => {
             warnings.push(format!(
-                "Take index unavailable: {e}. Showing the takes found on disk; delete index.sqlite to rebuild the cache."
+                "The take index is unavailable. {e}. Showing the takes found on disk; delete index.sqlite to rebuild the cache."
             ));
             Vec::new()
         }
@@ -895,9 +1194,65 @@ async fn takes_analyze(
         .as_object_mut()
         .unwrap()
         .extend(fields.as_object().unwrap().clone());
-    originals::save_take_manifest(&take)
-        .map_err(|e| format!("Cannot save take analysis beside {}: {e}", take.path_input))?;
+    originals::save_take_manifest(&take).map_err(|e| {
+        format!(
+            "Cannot save the take analysis beside {}. {e}",
+            take.path_input
+        )
+    })?;
     Ok(analysis)
+}
+
+#[tauri::command]
+fn takes_review(take_id: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let mut take = find_take(&state, &take_id)?;
+    if let Some(existing) = take.extra.get("review").filter(|v| v.is_object()) {
+        persist_session_review(&take.session_id, existing)?;
+        return Ok(existing.clone());
+    }
+    let analysis = take
+        .extra
+        .get("analysis")
+        .filter(|v| v.is_object())
+        .cloned()
+        .ok_or("Analyze the take first. Review uses those numbers, never audio.")?;
+    let review = net::review::recorded(&analysis)?;
+    take.extra.insert("review".into(), review.clone());
+    originals::save_take_manifest(&take).map_err(|e| {
+        format!(
+            "Cannot save the take review beside {}. {e}",
+            take.path_input
+        )
+    })?;
+    persist_session_review(&take.session_id, &review)?;
+    Ok(review)
+}
+
+fn persist_session_review(session_id: &str, review: &serde_json::Value) -> Result<(), String> {
+    originals::valid_id(session_id)?;
+    let dir = Library::default_user_root()
+        .join("sessions")
+        .join(session_id);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create the session folder. {e}"))?;
+    let path = dir.join("session.json");
+    let mut doc = if path.exists() {
+        serde_json::from_slice::<serde_json::Value>(
+            &std::fs::read(&path).map_err(|e| format!("Cannot read session.json. {e}"))?,
+        )
+        .map_err(|e| format!("session.json is not JSON. {e}"))?
+    } else {
+        serde_json::json!({"schemaVersion": 1, "id": session_id})
+    };
+    if !doc.is_object() {
+        return Err("session.json must be an object.".into());
+    }
+    doc["review"] = review.clone();
+    std::fs::write(
+        &path,
+        serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("Cannot write session.json. {e}"))?;
+    Ok(())
 }
 
 /// Section markers for a chart in playing order: `(name, first bar)`.
@@ -949,6 +1304,29 @@ async fn takes_export_daw(
 
     // Old take manifests may need the rate recovered from the WAV.
     take.sample_rate = sample_rate;
+    let reference = take.snapshot["reference"].is_object();
+    let recorded_tempo_map = take
+        .extra
+        .get("referenceTiming")
+        .map(|raw| {
+            let timing: jam_audio::reference_timing::ReferenceTiming =
+                serde_json::from_value(raw.clone())
+                    .map_err(|e| format!("The reference timing is invalid. {e}"))?;
+            let asset_id = take.snapshot["reference"]["asset_id"]
+                .as_str()
+                .ok_or("Reference timing has no recorded source identity.")?;
+            if asset_id != take.chart_id {
+                return Err("Reference timing source identity does not match the take.".into());
+            }
+            timing.tempo_map(asset_id, sample_rate, take.sample_count as u64)
+        })
+        .transpose()?;
+    if recorded_tempo_map.is_some() && !take.midi.is_empty() {
+        return Err("Reference timing cannot be combined with virtual-band MIDI. Repair the take metadata before exporting.".into());
+    }
+    let time_sig = recorded_tempo_map
+        .as_ref()
+        .map_or(time_sig, |map| map.time_sig);
     let performance_midi = if take.midi.is_empty() {
         None
     } else {
@@ -971,10 +1349,14 @@ async fn takes_export_daw(
         .collect();
     let job = jam_audio::export::ExportJob {
         take_id: &take.id,
-        tempo: take.tempo,
+        reference,
+        recorded_tempo_map: recorded_tempo_map.as_ref(),
+        tempo: recorded_tempo_map
+            .as_ref()
+            .map_or(take.tempo, |map| map.tempos[0].bpm),
         time_sig,
         sample_rate,
-        sections: &sections,
+        sections: if reference { &[] } else { &sections },
         stems: &stems,
     };
     let mut report = jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
@@ -1020,16 +1402,47 @@ async fn takes_export_daw(
         serde_json::from_slice(&std::fs::read(&info_path).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
     info["schemaVersion"] = serde_json::json!(1);
+    info["tempoSource"] = serde_json::json!(if recorded_tempo_map.is_some() {
+        "recorded-reference"
+    } else {
+        "constant-take-tempo"
+    });
+    info["recordedTempoMap"] = serde_json::json!(recorded_tempo_map);
+    if let Some(raw) = take.extra.get("referenceTiming") {
+        info["referenceTiming"] = raw.clone();
+    }
     info["stems"] = serde_json::json!(report.copied_stems);
     info["missingStems"] = serde_json::json!(report.missing_stems);
     info["reaperScript"] = serde_json::json!(report.reaper_script);
     info["howTo"] = serde_json::json!("Import the tempo map first. Put the individual guitar, drums, bass, comp and guitar-layer stems at bar 1. Band and master are reference mixes: mute them while mixing the individual stems. Import band-notes.mid on separate instrument tracks if wanted.");
+    if reference {
+        info["howTo"] = serde_json::json!("Import the tempo map first. Place Guitar DI and Band at time zero with original speed, and mute Master, Drums, Bass and Comp. All WAVs retain recorded timing. Sections follow source playback, including loops; partial bars and lead-ins mean DAW bar numbers can differ from source bars. Edge tempo outside the confirmed grid is extrapolated, not analysed.");
+    }
     std::fs::write(
         info_path,
         serde_json::to_vec_pretty(&info).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
     Ok(report)
+}
+
+#[tauri::command]
+async fn export_logic<R: tauri::Runtime>(
+    take_id: String,
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let report = takes_export_daw(take_id, state).await?;
+    let body = serde_json::json!({
+        "folder": report.dir,
+        "dir": report.dir,
+        "copiedStems": report.copied_stems,
+        "missingStems": report.missing_stems,
+        "midiFile": report.midi_file,
+        "reaperScript": report.reaper_script,
+    });
+    let _ = app.emit("export.state", &body);
+    Ok(body)
 }
 
 /// Restores the rig from settings: the saved profile (HeadRush by default, since that
@@ -1047,6 +1460,7 @@ fn build_rig(settings: &AppSettings, library: &Library) -> jam_rig::RigOrchestra
         .unwrap_or_else(|_| jam_rig::RigProfile::generic());
     let mut rig = jam_rig::RigOrchestrator::with_memory_sink(profile);
     rig.follow_sections = settings.rig.follow_sections;
+    rig.send_clock = settings.rig.send_clock;
     if let Some(map) = settings.rig.section_mappings.get(&rig.profile.id) {
         let n = rig.profile.scenes.len();
         for (section, idx) in map {
@@ -1113,6 +1527,7 @@ pub fn build_state() -> AppState {
 
     AppState {
         voice: Arc::new(Mutex::new(voice::VoiceSession::default())),
+        lyria: Arc::new(Mutex::new(lyria::Session::default())),
         recovery_notice: Mutex::new(recovery_notice),
         warnings: WarnOnce::default(),
         clips: Mutex::new(clips::ClipCache::new(clips::ClipCache::DEFAULT_BUDGET)),
@@ -1151,12 +1566,23 @@ pub fn configure<R: tauri::Runtime>(
             let rig = Arc::clone(&state.rig);
             let app_handle = app.handle().clone();
 
-            // Emit telemetry at 30 Hz; engine status only when it changes.
+            // High-rate telemetry at 30 Hz while the clock is moving; idle
+            // repeats are skipped so a stopped desktop is not a 30 Hz IPC pump.
             std::thread::spawn(move || {
                 let mut last_status: Option<EngineStatus> = None;
                 let mut last_recording_error: Option<String> = None;
+                let mut last_transport: Option<jam_audio::engine::TransportTelemetry> = None;
+                let mut last_band: Option<jam_audio::engine::BandTelemetry> = None;
+                let mut last_out: Option<jam_audio::engine::MeterTelemetry> = None;
+                let mut last_in: Option<jam_audio::engine::MeterTelemetry> = None;
+                let mut last_had_reference = false;
+                let mut last_busy = false;
                 loop {
-                    std::thread::sleep(std::time::Duration::from_millis(33));
+                    std::thread::sleep(std::time::Duration::from_millis(if last_busy {
+                        33
+                    } else {
+                        250
+                    }));
                     let (tel, status, recording_error) = {
                         let eng = eng.lock();
                         eng.poll_stream_errors();
@@ -1171,6 +1597,14 @@ pub fn configure<R: tauri::Runtime>(
                     }
                     // Section-bound rig scenes: the orchestrator de-duplicates, so
                     // calling it every tick is cheap and only sends on a change.
+                    if tel.transport.state == "playing" {
+                        let now = beats_to_samples(
+                            tel.transport.position_beats,
+                            tel.transport.bpm,
+                            tel.status.sample_rate,
+                        );
+                        let _ = rig.lock().on_transport_tick(now, tel.transport.bpm);
+                    }
                     if tel.reference.is_none()
                         && tel.transport.state == "playing"
                         && !tel.band.current_section.is_empty()
@@ -1186,7 +1620,13 @@ pub fn configure<R: tauri::Runtime>(
                             }
                         }
                     }
-                    let _ = app_handle.emit("meters", &tel.output_level);
+                    let clock_busy =
+                        matches!(tel.transport.state.as_str(), "playing" | "counting_in")
+                            || tel.reference.as_ref().is_some_and(|r| r.state == "playing");
+                    if clock_busy || last_out.as_ref() != Some(&tel.output_level) {
+                        let _ = app_handle.emit("meters", &tel.output_level);
+                        last_out = Some(tel.output_level.clone());
+                    }
                     if let Some(input) = controller.lock().as_ref() {
                         for press in input.drain() {
                             if !rig.lock().is_recent_echo(&press) {
@@ -1194,10 +1634,27 @@ pub fn configure<R: tauri::Runtime>(
                             }
                         }
                     }
-                    let _ = app_handle.emit("input:meters", &tel.input_level);
-                    let _ = app_handle.emit("reference:state", &tel.reference);
-                    let _ = app_handle.emit("transport:state", &tel.transport);
-                    let _ = app_handle.emit("band:state", &tel.band);
+                    if clock_busy || last_in.as_ref() != Some(&tel.input_level) {
+                        let _ = app_handle.emit("input:meters", &tel.input_level);
+                        last_in = Some(tel.input_level.clone());
+                    }
+                    let has_ref = tel.reference.is_some();
+                    if clock_busy || last_had_reference != has_ref {
+                        let _ = app_handle.emit("reference:state", &tel.reference);
+                        last_had_reference = has_ref;
+                    }
+                    if clock_busy || last_transport.as_ref() != Some(&tel.transport) {
+                        let _ = app_handle.emit("transport:state", &tel.transport);
+                        last_transport = Some(tel.transport.clone());
+                    }
+                    let mut band = tel.band.clone();
+                    if !clock_busy {
+                        band.current_energy = 0.0;
+                    }
+                    if clock_busy || last_band.as_ref() != Some(&band) {
+                        let _ = app_handle.emit("band:state", &tel.band);
+                        last_band = Some(band);
+                    }
                     if let Some(t) = &tel.tuner {
                         let _ = app_handle.emit("tuner:state", t);
                     }
@@ -1205,6 +1662,7 @@ pub fn configure<R: tauri::Runtime>(
                         let _ = app_handle.emit("engine:status", &status);
                         last_status = Some(status);
                     }
+                    last_busy = clock_busy;
                 }
             });
 
@@ -1216,6 +1674,23 @@ pub fn configure<R: tauri::Runtime>(
             voice::voice_cancel,
             voice::voice_status,
             voice::voice_shortcut,
+            voice::voice_live_latency,
+            lyria::lyria_start,
+            lyria::lyria_set,
+            lyria::lyria_stop,
+            lyria::lyria_status,
+            aliases::lyria_vibe,
+            aliases::transport_locate,
+            aliases::mixer_set_bus,
+            export_logic,
+            aliases::generate_track,
+            assets::assets_status,
+            assets::assets_ensure,
+            logs_export,
+            diagnostics_idle_cpu,
+            diagnostics_sample_stage,
+            diagnostics_report_fps,
+            app_version,
             media::media_list,
             media::media_save,
             media::media_import,
@@ -1227,6 +1702,9 @@ pub fn configure<R: tauri::Runtime>(
             media::stems::media_separate_stems,
             media::stems::media_reference_mix,
             media::media_analyze,
+            media::analysis_start,
+            media::analysis_cancel,
+            media::media_guitar_residual,
             media::media_reference_unload,
             media::media_reference_seek,
             media::media_reference_loop,
@@ -1261,6 +1739,7 @@ pub fn configure<R: tauri::Runtime>(
             keys_set,
             keys_has,
             keys_delete,
+            keys_test,
             provider_fetch,
             providers_list,
             cost_log_list,
@@ -1294,6 +1773,7 @@ pub fn configure<R: tauri::Runtime>(
             transport_set_time_signature,
             transport_set_click_volume,
             band_set_style,
+            band_render_offline,
             band_set_intensity,
             band_cue,
             band_list_styles,
@@ -1304,6 +1784,7 @@ pub fn configure<R: tauri::Runtime>(
             recorder_stop,
             recorder_set_latency,
             recorder_get_latency,
+            audio_calibrate_latency,
             takes_list,
             takes_delete,
             rig_list_profiles,
@@ -1317,7 +1798,12 @@ pub fn configure<R: tauri::Runtime>(
             rig_set_control,
             rig_send_program,
             rig_clear_monitor,
+            rig_panic,
+            rig_set_clock,
+            rig_dry_run,
+            rig_virtual_check,
             takes_analyze,
+            takes_review,
             originals::takes_melody,
             takes_export_daw,
         ])
@@ -1339,8 +1825,35 @@ fn smoke_exit(app: tauri::AppHandle) {
         return;
     };
     std::thread::spawn(move || {
-        use tauri::Manager;
-        std::thread::sleep(std::time::Duration::from_secs(seconds));
+        use tauri::{Emitter, Manager};
+        let start = Instant::now();
+        let budget = Duration::from_secs(seconds);
+        while !app
+            .state::<AppState>()
+            .ui_ready
+            .load(std::sync::atomic::Ordering::SeqCst)
+            && start.elapsed() < budget
+        {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_always_on_top(true);
+            let _ = window.set_focus();
+        }
+        let _ = app.emit("app:open-stage", ());
+        std::thread::sleep(Duration::from_millis(750));
+        // rAF only counts while the clock is live; Space cannot steal focus here.
+        let _ = append_user_log("smoke: transport_play");
+        app.state::<AppState>().engine.lock().transport_play();
+        for _ in 0..3 {
+            let _ = app.emit("app:open-stage", ());
+            std::thread::sleep(Duration::from_millis(750));
+        }
+        if start.elapsed() < budget {
+            std::thread::sleep(budget.saturating_sub(start.elapsed()));
+        }
         let state = app.state::<AppState>();
         let ready = state.ui_ready.load(std::sync::atomic::Ordering::SeqCst);
         eprintln!(
@@ -1359,6 +1872,58 @@ fn smoke_exit(app: tauri::AppHandle) {
 /// `~/JosefinesJamstudio/logs` (or `$JAM_USER_DIR/logs`).
 pub fn logs_dir() -> PathBuf {
     Library::default_user_root().join("logs")
+}
+
+/// Append one line to `jamstudio.log`. Loud if the home folder cannot be created
+/// or written; the log plugin only records `log` crate events and a quiet start
+/// otherwise leaves a stale empty file.
+pub fn append_user_log(line: &str) -> Result<PathBuf, String> {
+    let dir = logs_dir();
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Logs could not be created at {}. {e}", dir.display()))?;
+    let path = dir.join("jamstudio.log");
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| format!("Logs could not be opened at {}. {e}", path.display()))?;
+    use std::io::Write;
+    writeln!(file, "{line}")
+        .map_err(|e| format!("Logs could not be written to {}. {e}", path.display()))?;
+    Ok(path)
+}
+
+pub const LOGS_NOT_CONFIGURED: &str = "Log export is not configured. Run the desktop app once so logs write to ~/JosefinesJamstudio/logs/, then retry.";
+
+#[tauri::command]
+fn diagnostics_idle_cpu() -> platform::cpu::IdleCpuSample {
+    platform::cpu::sample(Duration::from_millis(1000))
+}
+
+#[tauri::command]
+fn diagnostics_sample_stage() -> bool {
+    std::env::var("JAM_SMOKE_SECONDS").is_ok()
+}
+
+#[tauri::command]
+fn diagnostics_report_fps(meter: f32, playhead: f32) -> Result<String, String> {
+    let line = format!("canvas fps meter={meter:.1} playhead={playhead:.1}");
+    let path = append_user_log(&line)?;
+    Ok(format!("{line} ({})", path.display()))
+}
+
+#[tauri::command]
+fn logs_export() -> Result<String, String> {
+    let dir = logs_dir();
+    if !dir.exists() {
+        return Err(LOGS_NOT_CONFIGURED.into());
+    }
+    Ok(dir.display().to_string())
+}
+
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").into()
 }
 
 fn jam_log_level_from(raw: Option<&str>) -> tauri_plugin_log::log::LevelFilter {
@@ -1406,6 +1971,13 @@ pub fn run() {
     )
     .build(tauri::generate_context!())
     .expect("error while building tauri application");
+    if let Err(e) = append_user_log(&format!(
+        "Josefines Jamstudio {} starting",
+        env!("CARGO_PKG_VERSION")
+    )) {
+        use tauri::Manager;
+        *built.state::<AppState>().recovery_notice.lock() = Some(e);
+    }
     smoke_exit(built.handle().clone());
     built.run(|app, event| {
         use tauri::Manager;
@@ -1543,5 +2115,36 @@ mod jam_log {
         assert_eq!(jam_log_level_from(Some("info")), LevelFilter::Info);
         assert_eq!(jam_log_level_from(Some("warn")), LevelFilter::Warn);
         assert_eq!(jam_log_level_from(Some("error")), LevelFilter::Error);
+    }
+}
+
+#[cfg(test)]
+mod home_logs {
+    #[test]
+    fn export_names_the_real_home_logs_folder_when_present() {
+        std::env::remove_var("JAM_USER_DIR");
+        let dir = super::logs_dir();
+        assert!(
+            dir.ends_with("JosefinesJamstudio") || dir.ends_with("logs"),
+            "{}",
+            dir.display()
+        );
+        if dir.is_dir() {
+            assert_eq!(super::logs_export().unwrap(), dir.display().to_string());
+        }
+    }
+
+    #[test]
+    fn append_user_log_writes_a_line() {
+        let root = std::env::temp_dir().join(format!("jam-home-log-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::env::set_var("JAM_USER_DIR", &root);
+        let path = super::append_user_log("canary-log-line").unwrap();
+        assert_eq!(path, root.join("logs").join("jamstudio.log"));
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("canary-log-line"), "{text}");
+        std::env::remove_var("JAM_USER_DIR");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

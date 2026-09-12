@@ -56,7 +56,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
     if (JSON.stringify(shots) === JSON.stringify(media.project.shots))
       return "Shot unchanged. The requested settings already match.";
     media.edit({ shots });
-    return "Shot updated. Undo edit is available in Film; save the video to keep the change.";
+    return "Shot updated. Undo this edit is available in Film. Save the video to keep the change.";
   }
   if (call.name === "analyze_take") {
     const id = String(call.arguments.takeId);
@@ -67,7 +67,18 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
     const analysis = await store.analyzeTake(id);
     if (!analysis)
       throw new Error("Take analysis failed; check the local recording.");
-    return `Local heuristic analysis (not a listening review): ${JSON.stringify(analysis)}`;
+    return "Take analysis is ready in Sessions. Open the take there. This is not a listening review.";
+  }
+  if (call.name === "coach_tip") {
+    const id = String(call.arguments.takeId);
+    if (!store.takes.some((t) => t.id === id))
+      throw new Error("Choose a saved take from the current take list.");
+    const review = await store.reviewTake(id);
+    if (!review)
+      throw new Error(
+        "Take review is not configured. Analyze the take first, then retry with a recorded fixture or a live text-provider key.",
+      );
+    return "Take review is ready in Sessions. Open the take there. This is not a listening pass.";
   }
 
   switch (call.name) {
@@ -79,12 +90,12 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       const name = String(a.name ?? "");
       if (a.action === "keep") {
         await w.keep();
-        return "Idea saved.";
+        return "This idea is saved.";
       }
       if (!w.song) throw new Error("Create or open a song in Write first.");
       if (a.action === "save") {
         await w.save();
-        return "Song saved.";
+        return "This song is saved.";
       }
       if (a.action === "play") {
         await w.play();
@@ -92,7 +103,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       }
       if (a.action === "record") {
         await w.record();
-        return "Recording updated.";
+        return "This recording is updated.";
       }
       if (a.action === "loop" || a.action === "next") {
         if (name) {
@@ -103,7 +114,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
           w.select(section.id);
         }
         await w.rehearse(a.action === "next");
-        return "Section loop ready.";
+        return "Section loop ready. Press Play when ready.";
       }
       if (store.isRecording)
         throw new Error("Save the recording before editing.");
@@ -126,7 +137,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       if (a.action === "undo") {
         if (!w.past.length) throw new Error("No edit to undo.");
         w.undo();
-        return "Last edit undone.";
+        return "This last edit is undone.";
       }
       const section = w.song.body.chart.sections.find((s) =>
         name
@@ -136,14 +147,14 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       if (!section)
         throw new Error("Section not found. Choose its name in Write.");
       w.select(section.id);
-      if (a.action === "select") return "Section selected.";
+      if (a.action === "select") return "This section is selected.";
       if (a.action === "lock") {
         const i = PARTS.findIndex((p) => p.toLowerCase() === a.part);
         if (i < 0) throw new Error("Choose drums, bass or comp.");
         const changed = w.edit((b) => {
           b.sections[section.id].parts[i].locked = a.locked !== false;
         });
-        return editResult(changed, "Part lock updated.");
+        return editResult(changed, "This part lock is updated.");
       }
       if (a.action === "groove") {
         if (!store.styles.some((s) => s.id === a.styleId))
@@ -165,15 +176,15 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
       const action = call.arguments.action as string;
       if (action === "play") {
         requireCommand(await store.transportPlay());
-        return "Started playback";
+        return "This playback is started.";
       }
       if (action === "pause") {
         requireCommand(await store.transportPause());
-        return "Paused playback";
+        return "This playback is paused.";
       }
       if (action === "stop") {
         requireCommand(await store.transportStop());
-        return "Stopped playback";
+        return "This playback is stopped.";
       }
       throw new Error("Unknown transport action. Use play, pause or stop.");
     }
@@ -222,13 +233,13 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         const bpm = requireCommand(
           await store.transportSetTempo(call.arguments.bpm),
         );
-        return `Tempo set to ${bpm} BPM`;
+        return `Tempo set to ${bpm} BPM.`;
       }
       if (typeof call.arguments.delta === "number") {
         const currentBpm = store.telemetry.transport.bpm;
         const targetBpm = currentBpm + call.arguments.delta;
         const bpm = requireCommand(await store.transportSetTempo(targetBpm));
-        return `Tempo set to ${bpm} BPM`;
+        return `Tempo set to ${bpm} BPM.`;
       }
       throw new Error("Set tempo needs a bpm or a delta.");
     }
@@ -241,26 +252,26 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         | "stop"
         | "ending";
       requireCommand(await store.bandCue(cue));
-      return `Queued cue: ${cue}`;
+      return `Cue set to ${cue}.`;
     }
 
     case "set_style": {
       const styleId = call.arguments.styleId as string;
       requireCommand(await store.bandSetStyle(styleId));
-      return `Style change accepted: ${styleId}`;
+      return `Style set to ${styleId}.`;
     }
 
     case "set_intensity": {
       const raw = Number(call.arguments.intensity);
       const intensity = Math.min(1, Math.max(0, raw > 1 ? raw / 100 : raw));
       const applied = requireCommand(await store.bandSetIntensity(intensity));
-      return `Intensity change accepted: ${Math.round(applied * 100)}%`;
+      return `Intensity set to ${Math.round(applied * 100)}%.`;
     }
 
     case "load_chart": {
       const chartId = call.arguments.chartId as string;
       const chart = requireCommand(await store.bandLoadChart(chartId));
-      return `Loaded chart ${chart.name}`;
+      return `Loaded ${chart.name}.`;
     }
 
     case "set_loop": {
@@ -275,7 +286,7 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
           enabled,
         ),
       );
-      return enabled ? "Looping" : "Loop off";
+      return enabled ? "The loop is on." : "The loop is off.";
     }
 
     case "set_parts": {
@@ -286,28 +297,75 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
           muteComp: call.arguments.muteComp as boolean | undefined,
         }),
       );
-      return "Rhythm section change accepted";
+      return "This rhythm section is updated.";
     }
 
     case "toggle_energy_follower": {
       const enabled = call.arguments.enabled as boolean;
       requireCommand(await store.bandSet({ followEnergy: enabled }));
-      return `Energy following ${enabled ? "enabled" : "disabled"}`;
+      return `Energy following is ${enabled ? "on" : "off"}.`;
     }
 
     case "record_take": {
       const action = call.arguments.action as string;
       if (action === "start") {
         const id = requireCommand(await store.startRecording());
-        return `Recording started: ${id}`;
+        return `Recording started. Take ${id}.`;
       }
       if (action === "stop") {
         const take = requireCommand(await store.stopRecording());
-        return `Recording saved: ${take.id}`;
+        return `Recording saved. Take ${take.id}.`;
       }
       throw new Error("Unknown recording action. Use start or stop.");
     }
+
+    case "set_count_in": {
+      const bars = Number(call.arguments.bars);
+      if (bars !== 0 && bars !== 1 && bars !== 2) {
+        throw new Error("Count-in is 0, 1 or 2 bars.");
+      }
+      await store.transportSetCountIn(bars);
+      return bars === 0
+        ? "The count-in is off."
+        : `Count-in is ${bars} bar${bars === 1 ? "" : "s"}.`;
+    }
+
+    case "tap_tempo": {
+      const bpm = await store.tapTempo();
+      return bpm == null
+        ? "Tap again to set tempo."
+        : `Tempo set to ${bpm} BPM.`;
+    }
+
+    case "seek_bar": {
+      const bar = Number(call.arguments.bar);
+      if (!Number.isInteger(bar) || bar < 1) {
+        throw new Error("Jump to a bar number starting at 1.");
+      }
+      await store.transportSeekBar(bar);
+      return `Jumped to bar ${bar}.`;
+    }
+
+    case "transpose_chart": {
+      const semitones = Number(call.arguments.semitones);
+      if (!Number.isInteger(semitones) || semitones === 0) {
+        throw new Error("Transpose by a whole number of semitones.");
+      }
+      await store.transposeCurrentChart(semitones);
+      return semitones > 0
+        ? `Transposed up ${semitones} semitones.`
+        : `Transposed down ${-semitones} semitones.`;
+    }
+
+    case "toggle_tuner": {
+      const enabled =
+        typeof call.arguments.enabled === "boolean"
+          ? call.arguments.enabled
+          : !store.tunerOn;
+      await store.setTuner(enabled);
+      return enabled ? "The tuner is on." : "The tuner is off.";
+    }
   }
 
-  throw new Error(`Unknown tool: ${call.name}`);
+  throw new Error(`The tool ${call.name} is unknown.`);
 }

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-control",
+  "name": "Fixture control map",
+  "kind": "control",
+  "bindings": [
+    {
+      "source": "key",
+      "key": "KeyF",
+      "action": "trigger_cue",
+      "arguments": { "cue": "fill" }
+    },
+    {
+      "source": "midi_pc",
+      "program": 1,
+      "action": "ptt",
+      "arguments": {}
+    }
+  ]
+}

@@ -43,7 +43,7 @@ pub struct State {
 impl Grid {
     pub fn validate(&self, seconds: f64) -> Result<(), String> {
         if self.schema_version != 1
-            || self.origin != "confirmed-local"
+            || !matches!(self.origin.as_str(), "confirmed-local" | "estimated-local")
             || !(2..=12).contains(&self.beats_per_bar)
             || self.beats.len() < self.beats_per_bar + 1
             || self.beats.len() > 5000
@@ -57,7 +57,10 @@ impl Grid {
             })
             || self.sections.len() > 64
         {
-            return Err("Invalid confirmed beat map. Confirm the first downbeat and complete bars again in Songs.".into());
+            return Err(
+                "Invalid beat map. Confirm bars in Songs, or reanalyze for an estimated grid."
+                    .into(),
+            );
         }
         let bars = (self.beats.len() - 1) / self.beats_per_bar;
         if self.sections.iter().enumerate().any(|(i, s)| {
@@ -153,5 +156,9 @@ mod tests {
             }
             assert!(bad.validate(5.0).is_err());
         }
+        let mut estimated = g.clone();
+        estimated.origin = "estimated-local".into();
+        estimated.validate(5.0).unwrap();
+        assert_eq!(estimated.section_bounds("chorus").unwrap(), (2.2, 4.6));
     }
 }

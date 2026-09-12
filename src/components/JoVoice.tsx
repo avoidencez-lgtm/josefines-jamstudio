@@ -10,6 +10,7 @@ import {
   startVoice,
   useVoice,
 } from "../lib/jo/voice";
+import { withNextStep } from "../lib/loudError";
 import { openExternal } from "../lib/openUrl";
 import { openAiSettings } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
@@ -27,18 +28,18 @@ const configSchema = z
   .passthrough();
 type VoiceConfig = z.infer<typeof configSchema>;
 const priceFields = [
-  ["sttUsdPerHour", "Scribe v2 · USD per hour"],
-  ["ttsUsdPer1k", "Flash v2.5 · USD per 1,000 characters"],
+  ["sttUsdPerHour", "Scribe v2 is priced in USD per hour."],
+  ["ttsUsdPer1k", "Flash v2.5 is priced in USD per 1,000 characters."],
 ] as const;
 const labels = {
-  idle: "Ready",
-  opening: "Opening microphone…",
-  cancelling: "Stopping microphone…",
-  listening: "Listening, release to send",
-  transcribing: "Transcribing…",
-  thinking: "Jo is thinking…",
-  synthesizing: "Preparing Jo's voice…",
-  speaking: "Jo is speaking",
+  idle: "This is ready.",
+  opening: "The microphone is opening.",
+  cancelling: "The microphone is stopping.",
+  listening: "This is listening. Release this to send.",
+  transcribing: "This is transcribing.",
+  thinking: "Jo is thinking.",
+  synthesizing: "Preparing Jo's voice.",
+  speaking: "Jo is speaking.",
 };
 
 export function JoVoice() {
@@ -71,7 +72,7 @@ export function JoVoice() {
         setInputs(devices.inputs.map((d) => d.name));
       })
       .catch((e) => {
-        if (mounted) setMessage(String(e));
+        if (mounted) setMessage(withNextStep(String(e)));
       });
     return () => {
       mounted = false;
@@ -84,24 +85,26 @@ export function JoVoice() {
     try {
       await operation();
     } catch (e) {
-      setMessage(String(e));
+      setMessage(withNextStep(String(e)));
     } finally {
       setSaving(false);
     }
   };
   return (
-    <section className="flex flex-col gap-3" aria-label="Jo voice">
+    <section className="flex flex-col gap-3" aria-label="This is the Jo voice.">
       <JoVoiceControls disabled={!saved?.voiceId || saving} />
       <p className="text-sm text-[var(--fg-1)]">
-        Hold the button, Space or Enter while focused. Release to send up to 20
-        seconds to ElevenLabs. A new press interrupts Jo. Provider charges
+        Hold the button, Space or Enter while focused. Release this to send up
+        to 20 seconds to ElevenLabs. A new press interrupts Jo. Provider charges
         apply.
       </p>
       <details>
-        <summary className="cursor-pointer text-sm">Voice setup</summary>
+        <summary className="cursor-pointer text-sm">
+          Open the voice setup.
+        </summary>
         <div className="flex flex-wrap items-end gap-3 py-3">
           <label className="room-tool-field">
-            Microphone
+            Choose the microphone.
             <select
               value={draft.microphone ?? ""}
               disabled={active || saving}
@@ -109,7 +112,7 @@ export function JoVoice() {
                 setDraft({ ...draft, microphone: e.target.value || null })
               }
             >
-              <option value="">System default microphone</option>
+              <option value="">Use the system default microphone.</option>
               {inputs.map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -118,7 +121,7 @@ export function JoVoice() {
             </select>
           </label>
           <label className="room-tool-field">
-            ElevenLabs voice ID
+            Enter the ElevenLabs voice ID.
             <input
               list="jo-voice-options"
               value={draft.voiceId}
@@ -172,10 +175,10 @@ export function JoVoice() {
               })
             }
           >
-            Load voices
+            Load these voices.
           </Button>
           <label className="room-tool-field">
-            Band ducking (dB)
+            Band ducking is in dB.
             <select
               value={draft.duckDb}
               disabled={active || saving}
@@ -211,11 +214,11 @@ export function JoVoice() {
                   settings: { ...settings, voice },
                 });
                 setSaved(voice);
-                setMessage("Voice settings saved.");
+                setMessage("These voice settings are saved.");
               })
             }
           >
-            Save voice setup
+            Save this voice setup.
           </Button>
         </div>
         <div className="flex flex-wrap items-end gap-3 py-2">
@@ -224,7 +227,7 @@ export function JoVoice() {
               {label}
               <input
                 inputMode="decimal"
-                placeholder="Unknown"
+                placeholder="The price is unknown."
                 maxLength={16}
                 value={prices[key]}
                 disabled={active || saving}
@@ -239,20 +242,20 @@ export function JoVoice() {
               void openExternal("https://elevenlabs.io/pricing/api")
             }
           >
-            Check ElevenLabs prices
+            Check these ElevenLabs prices.
           </Button>
         </div>
         <p className="text-sm text-[var(--fg-1)]">
-          Optional estimates: enter your account's rates and Save voice setup.
-          Blank means unknown; 0 means an explicit zero estimate. Settings shows
-          submitted seconds, characters and estimated cost, including
-          interrupted requests. These estimates exclude subscription allowances,
-          taxes and voice-specific charges; the provider's invoice is
-          authoritative.
+          These are optional estimates; enter your account's rates and Save this
+          voice setup. Blank means unknown; 0 means an explicit zero estimate.
+          Settings shows submitted seconds, characters and estimated cost,
+          including interrupted requests. These estimates exclude subscription
+          allowances, taxes and voice-specific charges; the provider's invoice
+          is authoritative.
         </p>
         <div className="flex flex-wrap items-end gap-3 py-3">
           <label className="room-tool-field">
-            Global hold shortcut
+            Enter the global hold shortcut.
             <input
               value={draft.shortcut}
               maxLength={100}
@@ -274,16 +277,16 @@ export function JoVoice() {
             }
           >
             {shortcut
-              ? "Disable global shortcut"
-              : "Enable shortcut for this session"}
+              ? "Disable this global shortcut."
+              : "Enable this shortcut for this session."}
           </Button>
         </div>
         <p className="text-sm text-[var(--fg-1)]">
-          {shortcut ? `Active: ${shortcut}. ` : "Shortcut is off. "}When
+          {shortcut ? `Shortcut ${shortcut} is on. ` : "Shortcut is off. "}When
           enabled, hold it in any app and release to send microphone audio to
-          ElevenLabs. Save voice setup to remember the combination; enabling is
-          session-only. In Write → Hands-free controls, learn Talk / send to Jo
-          for a two-press pedal.
+          ElevenLabs. Save this voice setup to remember the combination;
+          enabling is session-only. In Write → Hands-free controls, learn the
+          two-press pedal.
         </p>
         {message && (
           <output className="text-sm text-[var(--fg-1)]">{message}</output>
@@ -297,7 +300,7 @@ export function JoVoiceControls({
   disabled = false,
   compact = false,
 }: { disabled?: boolean; compact?: boolean }) {
-  const { phase, error } = useVoice();
+  const { phase, error, lastReleaseToFirstAudioMs } = useVoice();
   const hasKey = useEngineStore((s) => Boolean(s.keysPresent.elevenlabs));
   const busy = useJoConversation((s) => s.busy);
   const ready = !isPreview && hasKey && !busy && !disabled;
@@ -309,7 +312,7 @@ export function JoVoiceControls({
         size="sm"
         onClick={() => useEngineStore.getState().setScreen("jo")}
       >
-        Set up Jo voice
+        Open the voice setup.
       </Button>
     );
   return (
@@ -348,25 +351,29 @@ export function JoVoiceControls({
               void cancelVoice();
           }}
         >
-          {phase === "listening" ? "Release to send" : "Hold to talk"}
+          {phase === "listening"
+            ? "Release this to send."
+            : "Hold this to talk."}
         </Button>
         {active && (
           <Button type="button" onClick={() => void cancelVoice()}>
-            Cancel voice
+            Cancel this voice.
           </Button>
         )}
         {(!compact || active) && (
           <output className="text-sm text-[var(--fg-1)]">
             {isPreview
-              ? "Voice requires the desktop app"
+              ? "Voice requires the desktop app."
               : !hasKey
-                ? "Add an ElevenLabs key to enable voice"
+                ? "Add an ElevenLabs key to enable voice."
                 : labels[phase]}
+            {lastReleaseToFirstAudioMs != null &&
+              ` ${lastReleaseToFirstAudioMs} ms.`}
           </output>
         )}
         {!hasKey && (
           <Button type="button" onClick={openAiSettings}>
-            API key settings
+            Open these AI settings.
           </Button>
         )}
       </div>

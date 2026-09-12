@@ -91,9 +91,9 @@ it("routes explicit ramp commands through one native action and rejects stale or
   const html = renderToStaticMarkup(
     createElement(ReferencePlayer, { song: reference }),
   );
-  expect(html).toContain('aria-label="Reference practice ramp"');
-  expect(html).toContain("Complete bars per step");
-  expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Start ramp/);
+  expect(html).toContain('aria-label="Build up the speed."');
+  expect(html).toContain("Use this many complete bars per step.");
+  expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Start the ramp\./);
   expect(html).not.toContain("<audio");
   for (const text of [
     "ramp 50 to 125 by 25 every 1 bars",

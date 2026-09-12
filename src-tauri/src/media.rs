@@ -10,7 +10,7 @@ use std::{
     sync::atomic::{AtomicBool, AtomicU64, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tauri::State;
+use tauri::{AppHandle, Runtime, State};
 mod analysis;
 pub mod grid;
 pub mod songs;
@@ -67,19 +67,19 @@ fn media_extension(ext: &str) -> Result<&str, String> {
 }
 fn read(path: &Path) -> Result<Value, String> {
     if fs::metadata(path)
-        .map_err(|e| format!("Cannot read media document {}: {e}", path.display()))?
+        .map_err(|e| format!("Cannot read media document {}. {e}", path.display()))?
         .len()
         > 2_000_000
     {
         return Err(format!("Media document {} exceeds 2 MB", path.display()));
     }
     let bytes = fs::read(path)
-        .map_err(|e| format!("Cannot read media document {}: {e}", path.display()))?;
+        .map_err(|e| format!("Cannot read media document {}. {e}", path.display()))?;
     jam_core::json::from_slice(&bytes)
-        .map_err(|e| format!("Invalid media document {}: {e}", path.display()))
+        .map_err(|e| format!("Invalid media document {}. {e}", path.display()))
 }
 fn write_err(path: &Path, e: impl std::fmt::Display) -> String {
-    format!("Cannot write media document {}: {e}", path.display())
+    format!("Cannot write media document {}. {e}", path.display())
 }
 
 fn write(path: &Path, value: &Value) -> Result<(), String> {
@@ -136,8 +136,8 @@ struct Project {
     shots: Vec<Shot>,
 }
 fn project(v: &Value) -> Result<Project, String> {
-    let p: Project =
-        serde_json::from_value(v.clone()).map_err(|e| format!("Video project: {e}"))?;
+    let p: Project = serde_json::from_value(v.clone())
+        .map_err(|e| format!("The video project is invalid. {e}"))?;
     valid_id(&p.id)?;
     if p.schema_version != 1
         || p.title.trim().is_empty()
@@ -229,7 +229,10 @@ fn list_media(base: &Path) -> Result<Value, String> {
                 Err(e) => result["warnings"]
                     .as_array_mut()
                     .unwrap()
-                    .push(json!(format!("{}: {e} File left intact.", p.display()))),
+                    .push(json!(format!(
+                        "The file {} is invalid. {e} File left intact.",
+                        p.display()
+                    ))),
             }
         }
     }
@@ -281,7 +284,7 @@ async fn run(executable: &Path, args: &[String], seconds: u64) -> Result<Vec<u8>
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Media tool could not start: {e}"))?;
+        .map_err(|e| format!("The media tool could not start. {e}"))?;
     let stdout = child.stdout.take().ok_or("Missing media tool output")?;
     let stderr = child
         .stderr
@@ -303,7 +306,7 @@ async fn run(executable: &Path, args: &[String], seconds: u64) -> Result<Vec<u8>
         }
         if !status.success() {
             return Err(format!(
-                "Media tool failed: {}",
+                "The media tool failed. {}",
                 String::from_utf8_lossy(&err)
                     .chars()
                     .take(1800)
@@ -395,7 +398,7 @@ async fn import_as(
         .await?;
         return analysis::prepare(base, &saved.id).await.map_err(|e| {
             format!(
-                "Song {} was imported and kept; preparation failed: {e}",
+                "Song {} was imported and kept. Preparation failed. {e}",
                 saved.id
             )
         });
@@ -611,13 +614,34 @@ fn reference_asset(base: &Path, asset_id: &str) -> Result<Asset, String> {
     Ok(source)
 }
 
+fn minus_guitar_mix(base: &Path, source: &Asset) -> Result<PathBuf, String> {
+    let saved = source.extra.get("minusGuitar").ok_or(MINUS_GUITAR_LOAD)?;
+    if saved["schemaVersion"] != 1 || saved["pass"] != true {
+        return Err(MINUS_GUITAR_LOAD.into());
+    }
+    let path = songs::folder(base, &source.id)?.join("minus-guitar.wav");
+    if !path.is_file() {
+        return Err(MINUS_GUITAR_MISSING.into());
+    }
+    Ok(path)
+}
+
 async fn reference_source(
     base: &Path,
     asset_id: &str,
     use_stems: bool,
 ) -> Result<jam_audio::song::ReferenceSong, String> {
+    load_reference_source(base, asset_id, use_stems, false).await
+}
+
+async fn load_reference_source(
+    base: &Path,
+    asset_id: &str,
+    use_stems: bool,
+    use_minus_guitar: bool,
+) -> Result<jam_audio::song::ReferenceSong, String> {
     let mut source = reference_asset(base, asset_id)?;
-    if !use_stems {
+    if use_minus_guitar || !use_stems {
         source.extra.remove("stemSet");
         source.extra.remove("referencePractice");
     }
@@ -628,7 +652,7 @@ async fn reference_source(
     let result = async {
         let original = PathBuf::from(&source.path);
         let before =
-            if source.extra.contains_key("songAnalysis") || source.extra.contains_key("stemSet") || source.extra.contains_key("referenceGrid") || source.extra.contains_key("sourceHash") {
+            if source.extra.contains_key("songAnalysis") || source.extra.contains_key("stemSet") || source.extra.contains_key("referenceGrid") || source.extra.contains_key("estimatedGrid") || source.extra.contains_key("providerAnalysis") || source.extra.contains_key("sourceHash") {
                 let path = original.clone();
                 Some(
                     tauri::async_runtime::spawn_blocking(move || source_hash(&path))
@@ -638,7 +662,18 @@ async fn reference_source(
             } else {
                 None
             };
-        let mut song = if source.extra.contains_key("stemSet") {
+        let mut song = if use_minus_guitar {
+            let mix = minus_guitar_mix(base, &source)?;
+            let id = source.id.clone();
+            let label = source.label.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let (samples, _) =
+                    jam_audio::practice::read_stereo(&mix, 48_000 * 600 + 9600, &CANCEL)?;
+                jam_audio::song::ReferenceSong::new(id, label, samples)
+            })
+            .await
+            .map_err(|_| "Reference loading worker stopped.")??
+        } else if source.extra.contains_key("stemSet") {
             stems::load(base, &source, before.as_deref().unwrap()).await?
         } else {
             decode_audio(&source.path, &decoded, 1200.3).await?;
@@ -655,7 +690,7 @@ async fn reference_source(
         };
         tauri::async_runtime::spawn_blocking(move || {
             if let Some(saved) = source.extra.get("referencePractice") {
-                let error = "Saved practice settings are invalid. Load original mix, then apply valid speed and transpose settings.";
+                let error = "Saved practice settings are invalid. Load this original mix then apply valid speed and transpose settings.";
                 if saved["schemaVersion"] != 1 { return Err(error.into()); }
                 let speed = saved["speed"].as_f64().ok_or(error)?;
                 let semitones = saved["semitones"].as_i64().and_then(|v| i32::try_from(v).ok()).ok_or(error)?;
@@ -689,6 +724,13 @@ async fn reference_source(
                     serde_json::from_value(value.clone()).map_err(|_| "Saved reference grid is unreadable. Confirm it again in Songs.".to_string()).and_then(|grid| song.set_grid(grid))
                 } else {
                     Err("Audio has changed since grid confirmation. Confirm the map again in Songs.".into())
+                };
+                song.info.grid_error = result.err();
+            } else if let Some(value) = source.extra.get("estimatedGrid") {
+                let result = if value["sourceHash"].as_str() == after.as_deref() {
+                    serde_json::from_value(value.clone()).map_err(|_| "Saved estimated grid is unreadable. Analyze the song again.".to_string()).and_then(|grid| song.set_grid(grid))
+                } else {
+                    Err("Audio has changed since the estimated grid. Analyze the song again.".into())
                 };
                 song.info.grid_error = result.err();
             }
@@ -759,6 +801,7 @@ async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
         decode_audio(&source.path, &decoded, 1200.1).await?;
         let path = decoded.clone();
         let original = PathBuf::from(&source.path);
+        let analysis_hash = source_hash.clone();
         let analysis = tauri::async_runtime::spawn_blocking(move || {
             let (samples, _) = jam_audio::practice::read_stereo(&path, 48_000 * 1200, &CANCEL)?;
             let result = jam_audio::offline::analyze(&samples, &CANCEL)?;
@@ -783,7 +826,27 @@ async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
             return Err("Audio asset changed during analysis. Analyze it again.".into());
         }
         source = current;
-        source.extra.insert("songAnalysis".into(), analysis);
+        source.extra.insert("songAnalysis".into(), analysis.clone());
+        if let Ok(parsed) = serde_json::from_value::<jam_audio::offline::SongAnalysis>(analysis) {
+            if let Ok(grid) = jam_audio::offline::estimate_grid(&parsed) {
+                let mut value = serde_json::to_value(grid).map_err(|e| e.to_string())?;
+                value["sourceHash"] = json!(analysis_hash);
+                if let Some(old) = source.extra.get("estimatedGrid") {
+                    if old["schemaVersion"] == 1 {
+                        if let Some(fields) = old.as_object() {
+                            for (key, kept) in fields {
+                                value
+                                    .as_object_mut()
+                                    .unwrap()
+                                    .entry(key.clone())
+                                    .or_insert(kept.clone());
+                            }
+                        }
+                    }
+                }
+                source.extra.insert("estimatedGrid".into(), value);
+            }
+        }
         save_asset(base, &source)?;
         Ok(source)
     }
@@ -791,6 +854,144 @@ async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
     let _ = fs::remove_file(&decoded);
     let _ = fs::remove_dir(&work);
     result
+}
+
+#[tauri::command]
+pub async fn analysis_start(
+    asset_id: String,
+    kinds: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Asset, String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    crate::net::musicai::kinds_ok(&kinds)?;
+    valid_id(&asset_id)?;
+    state.engine.lock().ensure_timing_editable()?;
+    CANCEL.store(false, Ordering::Relaxed);
+    persist_provider_analysis(&root(), &asset_id)
+}
+
+fn persist_provider_analysis(base: &Path, asset_id: &str) -> Result<Asset, String> {
+    let mut analysis = crate::net::musicai::recorded_for_persist()?;
+    let mut source = reference_asset(base, asset_id)?;
+    let grid_before = source.extra.get("referenceGrid").cloned();
+    let hash = source
+        .extra
+        .get("sourceHash")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    analysis.source_hash = hash.clone();
+    analysis.drives_grid = false;
+    let saved = source
+        .extra
+        .entry("providerAnalysis".into())
+        .or_insert(json!({"schemaVersion":1}));
+    if saved["schemaVersion"] != 1 {
+        return Err("Unsupported saved Music.ai analysis version. Song left intact.".into());
+    }
+    let mut next = serde_json::to_value(&analysis).map_err(|e| e.to_string())?;
+    if let Some(fields) = saved.as_object() {
+        for (key, value) in fields {
+            next.as_object_mut()
+                .unwrap()
+                .entry(key.clone())
+                .or_insert(value.clone());
+        }
+    }
+    source.extra.insert("providerAnalysis".into(), next);
+    if source.extra.get("referenceGrid") != grid_before.as_ref() {
+        return Err("Music.ai estimates must not change the confirmed grid.".into());
+    }
+    if CANCEL.load(Ordering::Relaxed) {
+        return Err("Music.ai estimate save canceled.".into());
+    }
+    save_asset(base, &source)?;
+    Ok(source)
+}
+
+#[tauri::command]
+pub fn analysis_cancel() {
+    media_cancel();
+}
+
+const GUITAR_RESIDUAL: &str = "Guitar-removal acceptance is not configured. Import or separate stems, mark the guitar track in Songs, then run this check. Real-song residual at or below -6 dB is not claimed without those stems.";
+const MINUS_GUITAR_LOAD: &str = "Minus-guitar mix is not configured. Import or separate stems, mark the guitar track, then Check this guitar residual, then Load this mix only after that check passes. Real-song residual at or below -6 dB is not claimed.";
+const MINUS_GUITAR_MISSING: &str = "minus-guitar.wav is missing. Run Check this guitar residual again after the check has passed. Real-song residual at or below -6 dB is not claimed.";
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuitarResidual {
+    pub db: f64,
+    pub pass: bool,
+    pub mix_path: String,
+}
+
+#[tauri::command]
+pub async fn media_guitar_residual(
+    asset_id: String,
+    state: State<'_, AppState>,
+) -> Result<GuitarResidual, String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    state.engine.lock().ensure_timing_editable()?;
+    CANCEL.store(false, Ordering::Relaxed);
+    let source = reference_asset(&root(), &asset_id)?;
+    let stems = source
+        .extra
+        .get("stemSet")
+        .and_then(|set| set["stems"].as_array())
+        .ok_or(GUITAR_RESIDUAL)?;
+    let guitar = stems
+        .iter()
+        .find(|stem| stem["guitar"] == true)
+        .ok_or(GUITAR_RESIDUAL)?;
+    let guitar_path = PathBuf::from(guitar["path"].as_str().ok_or(GUITAR_RESIDUAL)?);
+    let others: Vec<PathBuf> = stems
+        .iter()
+        .filter(|stem| stem["guitar"] != true)
+        .map(|stem| PathBuf::from(stem["path"].as_str().unwrap_or("")))
+        .collect();
+    if others.is_empty() {
+        return Err(GUITAR_RESIDUAL.into());
+    }
+    let mix_path = songs::folder(&root(), &asset_id)?.join("minus-guitar.wav");
+    let written = mix_path.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<GuitarResidual, String> {
+        let (guitar, _) = jam_audio::practice::read_stereo(&guitar_path, 48_000 * 600, &CANCEL)?;
+        let mut backing = vec![0.0; guitar.len()];
+        for path in others {
+            let (samples, _) = jam_audio::practice::read_stereo(&path, 48_000 * 600, &CANCEL)?;
+            if samples.len() != backing.len() {
+                return Err("Stem tracks have different lengths. Export aligned tracks.".into());
+            }
+            for (dst, src) in backing.iter_mut().zip(samples) {
+                *dst += src;
+            }
+        }
+        let db = jam_audio::offline::guitar_residual_db(&backing, &guitar)?;
+        jam_audio::practice::write_stereo(&written, &backing, &CANCEL)?;
+        Ok(GuitarResidual {
+            pass: db <= -6.0,
+            db,
+            mix_path: written.to_string_lossy().into_owned(),
+        })
+    })
+    .await
+    .map_err(|_| "Guitar residual worker stopped.")??;
+    let mut saved = reference_asset(&root(), &asset_id)?;
+    saved.extra.insert(
+        "minusGuitar".into(),
+        json!({
+            "schemaVersion": 1,
+            "path": "minus-guitar.wav",
+            "db": result.db,
+            "pass": result.pass,
+        }),
+    );
+    save_asset(&root(), &saved)?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -808,17 +1009,25 @@ pub async fn media_analyze(asset_id: String, state: State<'_, AppState>) -> Resu
 }
 
 #[tauri::command]
-pub async fn media_reference_load(
+pub async fn media_reference_load<R: Runtime>(
     asset_id: String,
     use_stems: Option<bool>,
+    use_minus_guitar: Option<bool>,
+    app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let _gate = GATE
         .try_lock()
         .map_err(|_| "Another media operation is running")?;
+    crate::lyria::stop_and_emit(&app, &state);
     state.engine.lock().ensure_timing_editable()?;
     CANCEL.store(false, Ordering::Relaxed);
-    let song = reference_source(&root(), &asset_id, use_stems.unwrap_or(true)).await?;
+    let use_minus = use_minus_guitar.unwrap_or(false);
+    let song = if use_minus {
+        load_reference_source(&root(), &asset_id, false, true).await?
+    } else {
+        reference_source(&root(), &asset_id, use_stems.unwrap_or(true)).await?
+    };
     if CANCEL.load(Ordering::Relaxed) {
         return Err("Reference loading canceled.".into());
     }

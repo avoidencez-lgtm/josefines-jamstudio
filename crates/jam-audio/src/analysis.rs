@@ -99,11 +99,11 @@ impl TakeAnalyzer {
             None => " No sustained pitched notes were found to judge intonation.".to_string(),
         };
         let timing_text = match timing {
-            Some((distance, bias, spread)) => format!(" Mean distance to the quarter-note grid: {distance:.1} ms; signed bias {bias:+.1} ms (positive is late); spread {spread:.1} ms. Offbeat notes may be intentional."),
+            Some((distance, bias, spread)) => format!(" Mean distance to the quarter-note grid is {distance:.1} ms. Signed bias is {bias:+.1} ms (positive is late). Spread is {spread:.1} ms. Offbeat notes may be intentional."),
             None => " Not enough attacks or valid tempo information for grid timing.".into(),
         };
         let dynamics_text = match level_cv {
-            Some(cv) => format!(" Attack-level variation: {cv:.1}% (RMS coefficient of variation). Accents may be intentional."),
+            Some(cv) => format!(" Attack-level variation is {cv:.1}% (RMS coefficient of variation). Accents may be intentional."),
             None => " At least three attacks are needed to compare dynamics.".into(),
         };
         let summary = format!(

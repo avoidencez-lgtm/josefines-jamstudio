@@ -279,6 +279,7 @@ fn providers_list_mirrors_the_allow_list_and_never_carries_key_material() {
             "runway",
             "gemini",
             "elevenlabs",
+            "musicai",
             "openai",
             "anthropic",
             "openrouter"
@@ -314,6 +315,7 @@ fn providers_list_mirrors_the_allow_list_and_never_carries_key_material() {
             ("runway", false),
             ("gemini", false),
             ("elevenlabs", false),
+            ("musicai", false),
             ("openai", false),
             ("anthropic", false),
             ("openrouter", false)
@@ -444,7 +446,7 @@ fn provider_fetch_is_refused_by_the_live_guard_before_any_byte_leaves() {
 fn provider_fetch_checks_the_allow_list_and_the_key_before_the_live_guard() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
-    let allow_list = "provider \"bogus\" is not on the allow-list";
+    let allow_list = "Provider \"bogus\" is not on the allow-list.";
 
     // An unknown provider is refused by validation, even when the path is wrong too.
     assert_eq!(
@@ -479,7 +481,7 @@ fn provider_fetch_checks_the_allow_list_and_the_key_before_the_live_guard() {
             "provider_fetch",
             json!({"request": fetch_request("openai", "/v1/responses")})
         ),
-        "no API key for \"openai\": add it under Settings → API credentials"
+        "No API key for \"openai\". Add it under Settings → API credentials."
     );
 
     // With a key the guard is the last gate.
@@ -526,25 +528,25 @@ fn provider_fetch_validation_through_ipc_rejects_escapes_methods_headers_and_met
     ] {
         assert_eq!(
             refused(fetch_request("gemini", path)),
-            format!("path must start with a single '/': {path:?}")
+            format!("The path must start with a single '/'. Got {path:?}.")
         );
     }
     for path in ["/a/../b", "/x@y", "/v1beta\\models"] {
         assert_eq!(
             refused(fetch_request("gemini", path)),
-            format!("path may not point outside the provider: {path:?}")
+            format!("The path may not point outside the provider. Got {path:?}.")
         );
     }
     for path in ["/with space", "/line\nbreak", "/tab\t"] {
         assert_eq!(
             refused(fetch_request("gemini", path)),
-            "path contains whitespace or control characters"
+            "The path contains whitespace or control characters."
         );
     }
 
     let mut request = fetch_request("gemini", "/v1beta/models");
     request["method"] = json!("TRACE");
-    assert_eq!(refused(request.clone()), "method TRACE is not allowed");
+    assert_eq!(refused(request.clone()), "Method TRACE is not allowed.");
     request["method"] = json!("patch");
     assert!(refused(request.clone()).starts_with(guard));
 
@@ -558,7 +560,7 @@ fn provider_fetch_validation_through_ipc_rejects_escapes_methods_headers_and_met
         request["headers"] = json!({ header: "stolen" });
         assert_eq!(
             refused(request.clone()),
-            format!("header \"{header}\" is set by the app, not by the caller")
+            format!("Header \"{header}\" is set by the app, not by the caller.")
         );
     }
     request["headers"] = json!({"content-type": "application/json"});
@@ -884,7 +886,7 @@ fn agent_cancel_is_a_harmless_no_op_without_a_running_agent() {
             .as_array()
             .unwrap()
             .len(),
-        7
+        app_lib::net::PROVIDERS.len()
     );
     assert_offline();
 }

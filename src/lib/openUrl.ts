@@ -14,7 +14,7 @@ export async function openExternal(url: string): Promise<void> {
       .getState()
       .notify(
         "error",
-        `Could not open this link. Copy it into your browser: ${url}. ${String(error)}`,
+        `Could not open this link. Copy it into your browser. ${url}. ${String(error).replace(/^Error:\s*/, "")}`,
       );
   }
 }

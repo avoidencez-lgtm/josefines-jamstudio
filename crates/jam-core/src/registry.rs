@@ -114,9 +114,9 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
                                 self.items.insert(item.id().to_string(), item);
                                 count += 1;
                             }
-                            Err(e) => errors.push(format!("{}: {e}", p.display())),
+                            Err(e) => errors.push(format!("Cannot read {}. {e}", p.display())),
                         },
-                        Err(e) => errors.push(format!("{}: {e}", p.display())),
+                        Err(e) => errors.push(format!("Cannot read {}. {e}", p.display())),
                     }
                 }
             }
@@ -184,7 +184,7 @@ mod tests {
         let (count, errors) = charts.load_from_fs_dir(&dir);
         assert_eq!(count, 0);
         assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("broken.json"));
+        assert!(errors[0].starts_with("Cannot read ") && errors[0].contains("broken.json"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

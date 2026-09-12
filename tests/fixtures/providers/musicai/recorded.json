@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "source": "music.ai public docs 2026-09-11, not a live job",
+  "job": {
+    "id": "2e35babc-91c4-4121-89f4-5a2acf956b28",
+    "app": "Your app name",
+    "workflow": "your-workflow-slug",
+    "status": "SUCCEEDED",
+    "batchName": null,
+    "workflowParams": {
+      "inputUrl": "https://your-server.com/audio-input.m4a"
+    },
+    "metadata": {},
+    "result": {
+      "bpm": 120,
+      "beatMap": "https://cdn.music.ai/something/beats.json",
+      "chordMap": "https://cdn.music.ai/something/chords.json",
+      "key": "C Major",
+      "sectionsMap": "https://cdn.music.ai/something/sections.json"
+    },
+    "name": "My job 123",
+    "createdAt": "2022-12-07T19:21:42.170Z",
+    "startedAt": "2022-12-07T19:21:42.307Z",
+    "completedAt": "2022-12-07T19:22:00.325Z"
+  },
+  "failedJob": {
+    "id": "2e35babc-91c4-4121-89f4-5a2acf956b28",
+    "status": "FAILED",
+    "error": {
+      "code": "BAD_INPUT",
+      "title": "Invalid input",
+      "message": "File not found."
+    }
+  },
+  "beats": [
+    { "start": 0, "end": 0.5, "bpm": 120 },
+    { "start": 0.5, "end": 1, "bpm": 120 },
+    { "start": 1, "end": 1.5, "bpm": 120 },
+    { "start": 1.5, "end": 2, "bpm": 120 }
+  ],
+  "beatMap": [
+    { "start": 0, "beat": 1 },
+    { "start": 0.5, "beat": 2 },
+    { "start": 1, "beat": 3 },
+    { "start": 1.5, "beat": 4 }
+  ],
+  "chords": [
+    { "start": 0, "end": 2, "chord": "C" },
+    { "start": 2, "end": 4, "chord": "F" },
+    { "start": 4, "end": 6, "chord": "G" }
+  ],
+  "key": "C Major",
+  "sections": [
+    { "start": 0, "end": 8, "section": "Verse" },
+    { "start": 8, "end": 16, "section": "Chorus" }
+  ]
+}

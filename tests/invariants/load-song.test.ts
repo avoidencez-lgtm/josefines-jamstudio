@@ -97,6 +97,7 @@ it("routes the declared tool from English/Bokmål text through fresh native look
     expect(invoke).toHaveBeenLastCalledWith("media_reference_load", {
       assetId: "song-a",
       useStems: undefined,
+      useMinusGuitar: undefined,
     });
   }
   expect(invoke.mock.calls.map(([name]) => name)).toEqual([
@@ -228,6 +229,7 @@ it("shares original-mix selection with Songs without resetting state on refusal"
   expect(invoke).toHaveBeenLastCalledWith("media_reference_load", {
     assetId: "song-a",
     useStems: false,
+    useMinusGuitar: undefined,
   });
   expect(useEngineStore.getState().loadedOriginal).toBeNull();
 });

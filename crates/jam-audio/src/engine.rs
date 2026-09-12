@@ -8,6 +8,9 @@
 //! what the device actually negotiated and why a fallback happened, so the UI can show
 //! it instead of silently playing to nowhere.
 
+use crate::calibration::{
+    click_train, estimate_round_trip, measure_round_trip, LatencyCalibration, MAX_DELAY_FRAMES,
+};
 use crate::devices::AudioConfig;
 use crate::io::{
     AudioInput, AudioOutput, CpalInput, CpalOutput, FileInput, NullOutput, StreamInfo,
@@ -15,7 +18,7 @@ use crate::io::{
 use jam_band::sequencer::{BandSequencer, Cue};
 use jam_core::chart::ResolvedChart;
 use jam_core::style::Style;
-use jam_core::timeline::{Timeline, TimelineEvent, TransportState};
+use jam_core::timeline::{beats_to_samples, Timeline, TimelineEvent, TransportState};
 use jam_dsp::{calculate_level, EnergyFollower, PitchTracker};
 use parking_lot::Mutex;
 use rtrb::RingBuffer;
@@ -23,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::thread::{self, JoinHandle};
+use std::thread::{self, JoinHandle, Thread};
 use std::time::{Duration, Instant};
 
 /// Frames rendered per pass. Independent from the device buffer: the ring buffer
@@ -45,7 +48,26 @@ struct OutputFrame {
     synthetic: bool,
     take: u64,
     index: u64,
+    /// 1-based index into an in-flight loopback capture; 0 = not a calibration frame.
+    calib: u32,
+    calib_gen: u32,
     reference_position: u64,
+    reference_clock: crate::reference_timing::Clock,
+}
+
+struct CalibRun {
+    gen: u32,
+    play: Vec<f32>,
+    onsets: Vec<usize>,
+    play_i: usize,
+    heard_in: Vec<f32>,
+    needed: usize,
+    got: usize,
+    saved_band: f32,
+    synthetic: bool,
+    buffer_frames: u32,
+    input_latency: u32,
+    output_latency: u32,
 }
 
 struct OutputTap {
@@ -54,6 +76,8 @@ struct OutputTap {
     recorded: rtrb::Producer<OutputFrame>,
     xruns: Arc<AtomicU64>,
     lost: Arc<AtomicBool>,
+    /// Worker sets false while parked idle so silence is not an underrun.
+    filling: Arc<AtomicBool>,
     recording: bool,
     reference_position: Arc<AtomicU64>,
 }
@@ -88,9 +112,11 @@ impl OutputTap {
                 }
                 Err(_) => {
                     stereo.fill(0.0);
-                    underrun = true;
-                    if self.recording {
-                        self.lost.store(true, Ordering::Release);
+                    if self.filling.load(Ordering::Relaxed) {
+                        underrun = true;
+                        if self.recording {
+                            self.lost.store(true, Ordering::Release);
+                        }
                     }
                 }
             }
@@ -126,7 +152,7 @@ pub struct EngineTelemetry {
     pub reference: Option<crate::song::ReferenceState>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct MeterTelemetry {
     pub peak_db: f32,
     pub rms_db: f32,
@@ -140,7 +166,7 @@ pub struct TunerTelemetry {
     pub confidence: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TransportTelemetry {
     pub state: String,
     pub bar: u32,
@@ -175,7 +201,7 @@ impl Default for TransportTelemetry {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BandTelemetry {
     pub style_id: String,
     pub style_name: String,
@@ -193,6 +219,16 @@ pub struct BandTelemetry {
     pub pending_style_id: Option<String>,
     pub pending_intensity: Option<f32>,
     pub is_stopped: bool,
+    #[serde(default)]
+    pub kit_id: String,
+    #[serde(default)]
+    pub kit_source: String,
+    #[serde(default)]
+    pub kit_message: String,
+    #[serde(default)]
+    pub bass_source: String,
+    #[serde(default)]
+    pub bass_message: String,
 }
 
 impl Default for BandTelemetry {
@@ -214,6 +250,11 @@ impl Default for BandTelemetry {
             pending_style_id: None,
             pending_intensity: None,
             is_stopped: false,
+            kit_id: "standard-rock-kit".into(),
+            kit_source: jam_band::kit::SYNTHETIC.into(),
+            kit_message: jam_band::kit::KitStatus::missing("standard-rock-kit").message,
+            bass_source: jam_band::kit::SINE.into(),
+            bass_message: jam_band::kit::SF2_NOT_CONFIGURED.into(),
         }
     }
 }
@@ -290,12 +331,17 @@ pub struct AudioEngine {
     timeline: Arc<Mutex<Timeline>>,
     sequencer: Arc<Mutex<BandSequencer>>,
     recorder: Arc<Mutex<crate::recorder::TakeRecorder>>,
+    calib: Arc<Mutex<Option<CalibRun>>>,
+    calib_epoch: AtomicU64,
     latest_telemetry: Arc<Mutex<EngineTelemetry>>,
     status: Arc<Mutex<EngineStatus>>,
     input_rate_error: Option<String>,
     input_driver: Option<Box<dyn AudioInput>>,
     output_driver: Option<Box<dyn AudioOutput>>,
     render_handle: Option<JoinHandle<()>>,
+    render_thread: Option<Thread>,
+    blocks_filled: Arc<AtomicU64>,
+    filling: Arc<AtomicBool>,
 }
 
 fn default_style() -> Style {
@@ -336,9 +382,104 @@ fn headless_requested() -> bool {
 fn input_rate_mismatch(input_hz: u32, output_hz: u32) -> Option<String> {
     (input_hz != output_hz && input_hz > 0 && output_hz > 0).then(|| {
         format!(
-            "Cannot record: input is {input_hz} Hz and output is {output_hz} Hz. Use one interface for both; a take would be damaged."
+            "Cannot record. Input is {input_hz} Hz and output is {output_hz} Hz. Use one interface for both; a take would be damaged."
         )
     })
+}
+
+fn transport_telemetry(tl: &Timeline) -> TransportTelemetry {
+    let pos = tl.current_position();
+    let (state_str, disp_bar, disp_beat) = match tl.state {
+        TransportState::Stopped => ("stopped", pos.bar, pos.beat),
+        TransportState::CountingIn { bar, beat, .. } => ("counting_in", bar, beat),
+        TransportState::Playing => ("playing", pos.bar, pos.beat),
+        TransportState::Paused => ("paused", pos.bar, pos.beat),
+    };
+    let bpb = tl.time_signature.0.max(1) as f64;
+    TransportTelemetry {
+        state: state_str.into(),
+        bar: disp_bar,
+        beat: disp_beat,
+        position_beats: pos.beats,
+        bar_progress: ((pos.beats / bpb).fract()) as f32,
+        bpm: tl.bpm,
+        time_signature: tl.time_signature,
+        loop_enabled: tl.loop_enabled,
+        loop_start_bar: tl.loop_start_bar,
+        loop_end_bar: tl.loop_end_bar,
+        count_in_bars: tl.count_in_bars,
+    }
+}
+
+fn cue_name(c: Cue) -> &'static str {
+    match c {
+        Cue::None => "none",
+        Cue::Fill => "fill",
+        Cue::Crash => "crash",
+        Cue::Stop => "stop",
+        Cue::Ending => "ending",
+    }
+}
+
+fn band_telemetry(seq: &BandSequencer) -> BandTelemetry {
+    BandTelemetry {
+        style_id: seq.style.id.clone(),
+        style_name: seq.style.name.clone(),
+        intensity: seq.intensity,
+        active_cue: cue_name(seq.active_cue).into(),
+        pending_cue: cue_name(seq.pending_cue).into(),
+        current_chord: seq.current_chord.clone(),
+        next_chord: seq.next_chord.clone(),
+        current_section: seq.current_section.clone(),
+        mute_drums: seq.mute_drums,
+        mute_bass: seq.mute_bass,
+        mute_comp: seq.mute_comp,
+        follow_energy: seq.follow_energy,
+        current_energy: seq.current_energy,
+        pending_style_id: seq.pending_style.as_ref().map(|s| s.id.clone()),
+        pending_intensity: seq.pending_intensity,
+        is_stopped: seq.is_stopped,
+        kit_id: seq.kit_status.kit_id.clone(),
+        kit_source: seq.kit_status.source.into(),
+        kit_message: seq.kit_status.message.clone(),
+        bass_source: seq.bass_source().0.into(),
+        bass_message: seq.bass_source().1,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_ahead_needed(
+    tone: &AtomicBool,
+    tuner: &AtomicBool,
+    clock: &RecordingClock,
+    mix: &Mutex<MixParams>,
+    capture: &Mutex<crate::workstation::Capture>,
+    timeline: &Mutex<Timeline>,
+    reference: &Mutex<Option<crate::song::ReferenceSong>>,
+    voice: &Mutex<crate::voice::VoiceBus>,
+    audition: &Mutex<Option<crate::workstation::Audition>>,
+    calib: &Mutex<Option<CalibRun>>,
+) -> bool {
+    if tone.load(Ordering::Relaxed)
+        || tuner.load(Ordering::Relaxed)
+        || clock.active.load(Ordering::Acquire)
+    {
+        return true;
+    }
+    if mix.lock().input_monitor > 0.0 || capture.lock().seconds > 0 {
+        return true;
+    }
+    if !matches!(timeline.lock().state, TransportState::Stopped) {
+        return true;
+    }
+    if reference
+        .lock()
+        .as_ref()
+        .is_some_and(|s| s.info.state == "playing")
+    {
+        return true;
+    }
+    voice.lock().speaking() || audition.lock().is_some() || calib.lock().is_some()
 }
 
 impl AudioEngine {
@@ -362,7 +503,7 @@ impl AudioEngine {
             config: config.clone(),
             running: Arc::new(AtomicBool::new(false)),
             tone_active: Arc::new(AtomicBool::new(false)),
-            tuner_active: Arc::new(AtomicBool::new(true)),
+            tuner_active: Arc::new(AtomicBool::new(false)),
             xruns: Arc::new(AtomicU64::new(0)),
             input_gaps: Arc::new(AtomicU64::new(0)),
             mix: Arc::new(Mutex::new(MixParams {
@@ -374,6 +515,8 @@ impl AudioEngine {
             timeline: Arc::new(Mutex::new(Timeline::new(sample_rate, 120.0, (4, 4)))),
             sequencer: Arc::new(Mutex::new(sequencer)),
             recorder: Arc::new(Mutex::new(recorder)),
+            calib: Arc::new(Mutex::new(None)),
+            calib_epoch: AtomicU64::new(0),
             latest_telemetry: Arc::new(Mutex::new(EngineTelemetry::default())),
             status: Arc::new(Mutex::new(EngineStatus {
                 sample_rate: config.sample_rate,
@@ -383,6 +526,9 @@ impl AudioEngine {
             input_driver: None,
             output_driver: None,
             render_handle: None,
+            render_thread: None,
+            blocks_filled: Arc::new(AtomicU64::new(0)),
+            filling: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -399,10 +545,26 @@ impl AudioEngine {
     pub fn set_tone(&self, on: bool, hz: f32) {
         self.tone_active.store(on, Ordering::SeqCst);
         self.mix.lock().tone_hz = hz.clamp(20.0, 20_000.0);
+        if on {
+            self.wake_render();
+        }
     }
 
     pub fn set_tuner(&self, on: bool) {
         self.tuner_active.store(on, Ordering::SeqCst);
+        if on {
+            self.wake_render();
+        }
+    }
+
+    pub fn blocks_filled(&self) -> u64 {
+        self.blocks_filled.load(Ordering::Relaxed)
+    }
+
+    pub fn wake_render(&self) {
+        if let Some(thread) = &self.render_thread {
+            thread.unpark();
+        }
     }
 
     pub fn set_click_volume(&self, vol: f32) {
@@ -413,10 +575,18 @@ impl AudioEngine {
         self.mix.lock().band_volume = vol.clamp(0.0, 1.0);
     }
 
+    pub fn mix_levels(&self) -> (f32, f32) {
+        let mix = self.mix.lock();
+        (mix.band_volume, mix.click_volume)
+    }
+
     /// Gain for passing the guitar input to the output (0 = off; the guitarist
     /// normally monitors through the amp/modeler, not through us).
     pub fn set_input_monitor(&self, gain: f32) {
         self.mix.lock().input_monitor = gain.clamp(0.0, 1.0);
+        if gain > 0.0 {
+            self.wake_render();
+        }
     }
 
     // ----- transport -------------------------------------------------------
@@ -425,9 +595,16 @@ impl AudioEngine {
         self.audition.lock().take();
         if let Some(song) = self.reference.lock().as_mut() {
             song.play();
+            self.wake_render();
             return;
         }
+        {
+            let mut seq = self.sequencer.lock();
+            seq.refresh_kit_if_needed();
+            seq.refresh_sf2_if_needed();
+        }
         self.timeline.lock().play();
+        self.wake_render();
     }
 
     pub fn transport_pause(&self) {
@@ -456,6 +633,15 @@ impl AudioEngine {
     pub fn transport_seek_bar(&self, bar: u32) {
         let _gate = self.render_gate.lock();
         self.timeline.lock().seek_bar(bar);
+        self.sequencer.lock().reset();
+    }
+
+    pub fn transport_locate(&self, beats: f64) {
+        let _gate = self.render_gate.lock();
+        let mut timeline = self.timeline.lock();
+        let sample = beats_to_samples(beats.max(0.0), timeline.bpm, timeline.sample_rate);
+        timeline.seek_sample(sample);
+        drop(timeline);
         self.sequencer.lock().reset();
     }
 
@@ -665,6 +851,9 @@ impl AudioEngine {
         if !self.status().running {
             return Err("Start a working audio device before recording.".into());
         }
+        if self.calibrating() {
+            return Err("Finish latency calibration before recording.".into());
+        }
         self.ensure_recordable_input()?;
         self.audition.lock().take();
         let (mut style_id, mut chart_id) = {
@@ -714,6 +903,13 @@ impl AudioEngine {
                 }
             }
             recorder.snapshot["reference"] = serde_json::json!(reference);
+            recorder.reference_timing = song.grid.clone().map(|grid| {
+                crate::reference_timing::ReferenceTiming::new(
+                    song.info.asset_id.clone(),
+                    song.info.seconds,
+                    grid,
+                )
+            });
         }
         let id = recorder.start_take(session_id, style_id, chart_id, tempo)?;
         Ok((recorder, id))
@@ -726,6 +922,7 @@ impl AudioEngine {
         self.recording_clock.take.fetch_add(1, Ordering::SeqCst);
         self.recording_clock.lost.store(false, Ordering::Release);
         self.recording_clock.active.store(true, Ordering::Release);
+        self.wake_render();
         id
     }
 
@@ -859,6 +1056,115 @@ impl AudioEngine {
             .set_latency_compensation(offset_samples);
     }
 
+    pub fn calibrating(&self) -> bool {
+        self.calib.lock().is_some()
+    }
+
+    pub fn start_latency_calibration(&self) -> Result<(), String> {
+        let _operation = self.recording_operation.lock();
+        if self.recorder_is_recording() {
+            return Err("Save the recording before measuring latency.".into());
+        }
+        if !self.status().running {
+            return Err("Start a working audio device before measuring latency.".into());
+        }
+        if self.calibrating() {
+            return Err("Latency measurement is already running.".into());
+        }
+        self.transport_stop();
+        self.set_tone(false, 440.0);
+        let saved_band = {
+            let mut mix = self.mix.lock();
+            let volume = mix.band_volume;
+            mix.band_volume = 0.0;
+            volume
+        };
+        let rate = self.sample_rate();
+        let (play, onsets) = click_train(rate);
+        let needed = play.len();
+        let status = self.status();
+        let synthetic = self
+            .input_driver
+            .as_ref()
+            .is_none_or(|driver| driver.is_synthetic());
+        let gen = (self.calib_epoch.fetch_add(1, Ordering::AcqRel) + 1) as u32;
+        *self.calib.lock() = Some(CalibRun {
+            gen,
+            play,
+            onsets,
+            play_i: 0,
+            heard_in: vec![0.0; needed],
+            needed,
+            got: 0,
+            saved_band,
+            synthetic,
+            buffer_frames: status
+                .output
+                .as_ref()
+                .and_then(|info| info.buffer_frames)
+                .unwrap_or(status.buffer_size),
+            input_latency: status
+                .input
+                .as_ref()
+                .and_then(|info| info.buffer_frames)
+                .unwrap_or(0),
+            output_latency: status
+                .output
+                .as_ref()
+                .and_then(|info| info.buffer_frames)
+                .unwrap_or(0),
+        });
+        self.wake_render();
+        Ok(())
+    }
+
+    pub fn take_latency_calibration(&self) -> Option<LatencyCalibration> {
+        let mut slot = self.calib.lock();
+        if !slot.as_ref().is_some_and(|run| run.got >= run.needed) {
+            return None;
+        }
+        let run = slot.take()?;
+        drop(slot);
+        self.mix.lock().band_volume = run.saved_band;
+        Some(self.finish_calibration(run))
+    }
+
+    pub fn abort_latency_calibration(&self) {
+        if let Some(run) = self.calib.lock().take() {
+            self.mix.lock().band_volume = run.saved_band;
+        }
+    }
+
+    fn finish_calibration(&self, run: CalibRun) -> LatencyCalibration {
+        let estimated = LatencyCalibration {
+            round_trip_frames: estimate_round_trip(
+                run.buffer_frames,
+                run.input_latency,
+                run.output_latency,
+            ),
+            confidence: 0.0,
+            estimated: true,
+        };
+        if run.synthetic {
+            return estimated;
+        }
+        match measure_round_trip(self.sample_rate(), &run.onsets, &run.heard_in) {
+            Some((frames, confidence)) => {
+                let frames = (frames as u32).min(MAX_DELAY_FRAMES);
+                self.recorder_set_latency_compensation(frames as usize);
+                LatencyCalibration {
+                    round_trip_frames: frames,
+                    confidence,
+                    estimated: false,
+                }
+            }
+            None => {
+                self.recorder_set_latency_compensation(estimated.round_trip_frames as usize);
+                estimated
+            }
+        }
+    }
+
     pub fn recorder_is_recording(&self) -> bool {
         self.recorder.lock().is_recording()
     }
@@ -875,6 +1181,11 @@ impl AudioEngine {
     pub fn get_telemetry(&self) -> EngineTelemetry {
         let mut tel = self.latest_telemetry.lock().clone();
         tel.status = self.status.lock().clone();
+        if !self.tuner_active.load(Ordering::Relaxed) {
+            tel.tuner = None;
+        }
+        tel.transport = transport_telemetry(&self.timeline.lock());
+        tel.band = band_telemetry(&self.sequencer.lock());
         tel.reference = self
             .reference
             .lock()
@@ -931,12 +1242,15 @@ impl AudioEngine {
         let ring_capacity = (RENDER_BLOCK * 2 * (RENDER_AHEAD_BLOCKS + 2)).max(16_384);
         self.xruns.store(0, Ordering::SeqCst);
         self.input_gaps.store(0, Ordering::SeqCst);
+        self.blocks_filled.store(0, Ordering::SeqCst);
+        self.filling.store(false, Ordering::SeqCst);
         self.recording_clock.end.store(0, Ordering::Release);
         self.recording_clock.drained.store(0, Ordering::Release);
 
         // A failed `start` consumes its callback, so each attempt gets a fresh ring.
         let xruns = Arc::clone(&self.xruns);
         let lost = Arc::clone(&self.recording_clock.lost);
+        let filling = Arc::clone(&self.filling);
         let reference_position = Arc::clone(&self.reference_position);
         let make_output = move || {
             let (prod, playback) = RingBuffer::new(ring_capacity / 2);
@@ -948,6 +1262,7 @@ impl AudioEngine {
                 recorded,
                 xruns: Arc::clone(&xruns),
                 lost: Arc::clone(&lost),
+                filling: Arc::clone(&filling),
                 recording: false,
                 reference_position: Arc::clone(&reference_position),
             };
@@ -977,7 +1292,9 @@ impl AudioEngine {
             match cpal_out.start(cb) {
                 Ok(()) => (Box::new(cpal_out), prod, input, captured),
                 Err(e) => {
-                    problems.push(format!("output: {e}; running headless"));
+                    problems.push(format!(
+                        "The output audio device failed. {e} Running headless."
+                    ));
                     status.mode = EngineMode::Headless;
                     let (prod, cb, input, captured) = make_output();
                     let mut null = NullOutput::new(requested_rate, requested_buffer as usize);
@@ -1023,7 +1340,9 @@ impl AudioEngine {
             (Some(path), _) => match FileInput::from_wav_file(path, requested_buffer as usize) {
                 Ok(f) => Box::new(f),
                 Err(e) => {
-                    problems.push(format!("JAM_FAKE_INPUT {path}: {e}; using 440 Hz sine"));
+                    problems.push(format!(
+                        "JAM_FAKE_INPUT {path} failed. {e} Using 440 Hz sine."
+                    ));
                     Box::new(FileInput::sine_440(
                         requested_buffer as usize,
                         effective_rate,
@@ -1044,7 +1363,9 @@ impl AudioEngine {
         let mut input_driver: Box<dyn AudioInput> = match input_driver.start(input_callback) {
             Ok(()) => input_driver,
             Err(e) => {
-                problems.push(format!("input: {e}; tuner and recording input are silent"));
+                problems.push(format!(
+                    "The input audio device failed. {e} Tuner and recording input are silent."
+                ));
                 // The failed driver consumed the callback; the silent input needs none
                 // because nothing reads from it.
                 Box::new(FileInput::silent(requested_buffer as usize, effective_rate))
@@ -1136,6 +1457,9 @@ impl AudioEngine {
         let reference = Arc::clone(&self.reference);
         let telemetry = Arc::clone(&self.latest_telemetry);
         let status_arc = Arc::clone(&self.status);
+        let calib = Arc::clone(&self.calib);
+        let filling = Arc::clone(&self.filling);
+        let blocks_filled = Arc::clone(&self.blocks_filled);
 
         let handle = thread::Builder::new()
             .name("jam-render".into())
@@ -1154,9 +1478,22 @@ impl AudioEngine {
                     let _gate = gate.lock();
                     let mut frames = Vec::with_capacity(block_len);
                     let mut notes = Vec::new();
+                    let mut reference_clocks = Vec::with_capacity(block_len);
                     let mut heard = Vec::with_capacity(block_len);
                     let mut drained = clock.drained.load(Ordering::Relaxed);
                     while let Ok(frame) = captured.pop() {
+                        if frame.calib > 0 {
+                            let mut slot = calib.lock();
+                            if let Some(run) = slot.as_mut() {
+                                if frame.calib_gen == run.gen {
+                                    let i = frame.calib as usize - 1;
+                                    if i < run.heard_in.len() {
+                                        run.heard_in[i] = frame.stems[0];
+                                        run.got += 1;
+                                    }
+                                }
+                            }
+                        }
                         heard.push(frame.stems);
                         let keep =
                             frame.take != 0 && frame.take == clock.take.load(Ordering::Acquire);
@@ -1172,6 +1509,7 @@ impl AudioEngine {
                         }
                         if keep {
                             frames.push(frame.stems);
+                            reference_clocks.push(frame.reference_clock);
                         }
                         drained = frame.index + 1;
                         if heard.len() == block_len {
@@ -1186,18 +1524,64 @@ impl AudioEngine {
                                 .interrupt("Audio input, output or the capture queue lost frames.");
                         }
                         if !frames.is_empty() {
-                            recorder.push_frames(frames, notes);
+                            recorder.push_frames(frames, notes, &reference_clocks);
                         }
                     }
                     clock.drained.store(drained, Ordering::Release);
                     drop(_gate);
+
+                    while let Ok(s) = input_cons.pop() {
+                        input_queue.push_back(s);
+                    }
+                    // Bound the backlog so a drifting input clock cannot add latency
+                    // forever; keep two blocks so the recorder sees continuous audio.
+                    if input_queue.len() > block_len * 16 {
+                        let drop = input_queue.len() - block_len * 2;
+                        input_queue.drain(..drop);
+                    }
+                    if !primed && input_queue.len() >= block_len * 2 {
+                        primed = true;
+                    }
+
+                    if !render_ahead_needed(
+                        &tone_active,
+                        &tuner_active,
+                        &clock,
+                        &mix,
+                        &capture,
+                        &timeline_arc,
+                        &reference,
+                        &voice_bus,
+                        &audition,
+                        &calib,
+                    ) {
+                        filling.store(false, Ordering::Release);
+                        if primed && input_queue.len() >= block_len {
+                            for s in ctx.in_block.iter_mut() {
+                                *s = input_queue.pop_front().unwrap_or(0.0);
+                            }
+                            let in_lvl = calculate_level(&ctx.in_block);
+                            let mut tel = telemetry.lock();
+                            tel.xruns = xruns.load(Ordering::Relaxed);
+                            tel.input_level = MeterTelemetry {
+                                peak_db: in_lvl.peak_db,
+                                rms_db: in_lvl.rms_db,
+                            };
+                            tel.output_level = MeterTelemetry {
+                                peak_db: -180.0,
+                                rms_db: -180.0,
+                            };
+                        }
+                        thread::park_timeout(Duration::from_millis(5));
+                        continue;
+                    }
+
+                    filling.store(true, Ordering::Release);
                     let mut rendered = false;
                     while prod.slots() >= block_len {
                         while let Ok(s) = input_cons.pop() {
                             input_queue.push_back(s);
                         }
-                        // Bound the backlog so a drifting input clock cannot add latency
-                        // forever; keep two blocks so the recorder sees continuous audio.
                         if input_queue.len() > block_len * 16 {
                             let drop = input_queue.len() - block_len * 2;
                             input_queue.drain(..drop);
@@ -1236,6 +1620,8 @@ impl AudioEngine {
                         );
                         let reference_loaded = {
                             ctx.reference_positions.fill(0);
+                            ctx.reference_clocks
+                                .fill(crate::reference_timing::Clock::default());
                             let mut reference = reference.lock();
                             if let Some(song) = reference.as_mut() {
                                 ctx.render_reference(song);
@@ -1271,6 +1657,21 @@ impl AudioEngine {
                         }
                         drop(preview);
                         ctx.render_voice(&mut voice_bus.lock());
+                        let mut calib_idx = [0u32; RENDER_BLOCK];
+                        let mut calib_gen = 0u32;
+                        if let Some(run) = calib.lock().as_mut() {
+                            calib_gen = run.gen;
+                            #[allow(clippy::needless_range_loop)]
+                            for i in 0..block_len {
+                                if run.play_i < run.play.len() {
+                                    let sample = run.play[run.play_i];
+                                    ctx.out_left[i] += sample;
+                                    ctx.out_right[i] += sample;
+                                    calib_idx[i] = run.play_i as u32 + 1;
+                                    run.play_i += 1;
+                                }
+                            }
+                        }
                         let (mut parts, mut notes) = {
                             let seq = sequencer_arc.lock();
                             (seq.part_audio.clone(), seq.note_events.clone())
@@ -1321,7 +1722,10 @@ impl AudioEngine {
                                 synthetic: wait_for_input,
                                 take,
                                 index: output_index + i as u64,
+                                calib: calib_idx[i],
+                                calib_gen: if calib_idx[i] == 0 { 0 } else { calib_gen },
                                 reference_position: ctx.reference_positions[i],
+                                reference_clock: ctx.reference_clocks[i],
                             });
                         }
                         output_index += block_len as u64;
@@ -1329,6 +1733,7 @@ impl AudioEngine {
                             clock.end.store(output_index, Ordering::Release);
                         }
                         rendered = true;
+                        blocks_filled.fetch_add(1, Ordering::Relaxed);
 
                         let out_lvl = calculate_level(&ctx.out_left);
                         let in_lvl = calculate_level(&ctx.in_block);
@@ -1360,11 +1765,17 @@ impl AudioEngine {
             })
             .expect("spawn render thread");
 
+        self.render_thread = Some(handle.thread().clone());
         self.render_handle = Some(handle);
     }
 
     pub fn stop(&mut self) -> Result<(), String> {
+        self.abort_latency_calibration();
         self.running.store(false, Ordering::SeqCst);
+        self.filling.store(false, Ordering::Release);
+        if let Some(thread) = self.render_thread.take() {
+            thread.unpark();
+        }
         if let Some(handle) = self.render_handle.take() {
             let _ = handle.join();
         }
@@ -1417,6 +1828,7 @@ impl Drop for AudioEngine {
 struct RenderContext {
     sample_rate: u32,
     reference_positions: Vec<u64>,
+    reference_clocks: Vec<crate::reference_timing::Clock>,
     band_volume: f32,
     voice_audio: Vec<f32>,
     voice_duck: Vec<f32>,
@@ -1457,6 +1869,7 @@ impl RenderContext {
             &mut self.band_left,
             &mut self.band_right,
             &mut self.reference_positions,
+            &mut self.reference_clocks,
         );
         for i in 0..self.out_left.len() {
             self.out_left[i] += self.band_left[i] * self.band_volume;
@@ -1482,6 +1895,7 @@ impl RenderContext {
         Self {
             sample_rate,
             reference_positions: vec![0; RENDER_BLOCK],
+            reference_clocks: vec![crate::reference_timing::Clock::default(); RENDER_BLOCK],
             band_volume: 0.0,
             voice_audio: vec![0.0; RENDER_BLOCK],
             voice_duck: vec![1.0; RENDER_BLOCK],
@@ -1547,32 +1961,8 @@ impl RenderContext {
         let (events, spans, transport) = {
             let mut tl = timeline.lock();
             let (events, spans) = tl.advance_with_spans(frames);
-            let pos = tl.current_position();
-            let (state_str, disp_bar, disp_beat) = match tl.state {
-                TransportState::Stopped => ("stopped", pos.bar, pos.beat),
-                TransportState::CountingIn { bar, beat, .. } => ("counting_in", bar, beat),
-                TransportState::Playing => ("playing", pos.bar, pos.beat),
-                TransportState::Paused => ("paused", pos.bar, pos.beat),
-            };
-            let bpb = tl.time_signature.0.max(1) as f64;
-            let bar_progress = ((pos.beats / bpb).fract()) as f32;
-            (
-                events,
-                spans,
-                TransportTelemetry {
-                    state: state_str.into(),
-                    bar: disp_bar,
-                    beat: disp_beat,
-                    position_beats: pos.beats,
-                    bar_progress,
-                    bpm: tl.bpm,
-                    time_signature: tl.time_signature,
-                    loop_enabled: tl.loop_enabled,
-                    loop_start_bar: tl.loop_start_bar,
-                    loop_end_bar: tl.loop_end_bar,
-                    count_in_bars: tl.count_in_bars,
-                },
-            )
+            let transport = transport_telemetry(&tl);
+            (events, spans, transport)
         };
         self.spans = spans.clone();
         let samples_per_beat = 60.0 / transport.bpm * self.sample_rate as f64;
@@ -1618,33 +2008,7 @@ impl RenderContext {
                 }
             }
             let ending_done = seq.take_ending_complete();
-
-            let cue_to_str = |c: Cue| match c {
-                Cue::None => "none",
-                Cue::Fill => "fill",
-                Cue::Crash => "crash",
-                Cue::Stop => "stop",
-                Cue::Ending => "ending",
-            };
-            let telem = BandTelemetry {
-                style_id: seq.style.id.clone(),
-                style_name: seq.style.name.clone(),
-                intensity: seq.intensity,
-                active_cue: cue_to_str(seq.active_cue).into(),
-                pending_cue: cue_to_str(seq.pending_cue).into(),
-                current_chord: seq.current_chord.clone(),
-                next_chord: seq.next_chord.clone(),
-                current_section: seq.current_section.clone(),
-                mute_drums: seq.mute_drums,
-                mute_bass: seq.mute_bass,
-                mute_comp: seq.mute_comp,
-                follow_energy: seq.follow_energy,
-                current_energy: seq.current_energy,
-                pending_style_id: seq.pending_style.as_ref().map(|s| s.id.clone()),
-                pending_intensity: seq.pending_intensity,
-                is_stopped: seq.is_stopped,
-            };
-            (telem, ending_done)
+            (band_telemetry(&seq), ending_done)
         };
         if ending_done {
             timeline.lock().stop();
@@ -1886,8 +2250,34 @@ mod tests {
             assert_eq!(song.info.ramp.unwrap().completed_bars, 1);
         }
         engine.record_song("ramp".into()).unwrap();
-        thread::sleep(Duration::from_millis(50));
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while engine.recorder.lock().frames_written < 24_000 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "headless recording stalled"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
         let take = engine.recorder_stop().unwrap();
+        let timing: crate::reference_timing::ReferenceTiming =
+            serde_json::from_value(take.extra["referenceTiming"].clone()).unwrap();
+        let map = timing
+            .tempo_map("ramp", take.sample_rate, take.sample_count as u64)
+            .unwrap();
+        assert_eq!(map.tempos[0].bpm, 600.0);
+        assert_eq!(map.tempos[1].bpm, 660.0);
+        assert!(map.tempos[1].frame.abs_diff(19_200) <= 1);
+        let saved: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(
+                std::path::Path::new(&take.path_input)
+                    .parent()
+                    .unwrap()
+                    .join("take.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(saved["referenceTiming"], take.extra["referenceTiming"]);
         assert_eq!(take.snapshot["reference"]["ramp"]["completed_bars"], 0);
         assert_eq!(take.snapshot["reference"]["ramp"]["active"], true);
         assert_eq!(
@@ -2022,6 +2412,7 @@ mod tests {
                     recorded,
                     xruns: Arc::new(AtomicU64::new(0)),
                     lost: Arc::new(AtomicBool::new(false)),
+                    filling: Arc::new(AtomicBool::new(true)),
                     recording: false,
                     reference_position: Arc::clone(&position),
                 };
@@ -2036,7 +2427,7 @@ mod tests {
                         let mut left = [0.0; 256];
                         let mut right = left;
                         let mut stamps = [0; 256];
-                        song.render_timed(rate, &mut left, &mut right, &mut stamps);
+                        song.render_timed(rate, &mut left, &mut right, &mut stamps, &mut []);
                         for i in 0..256 {
                             playback
                                 .push(OutputFrame {
@@ -2105,6 +2496,7 @@ mod tests {
             recorded,
             xruns: Arc::new(AtomicU64::new(0)),
             lost: Arc::clone(&lost),
+            filling: Arc::new(AtomicBool::new(true)),
             recording: false,
             reference_position: Arc::new(AtomicU64::new(0)),
         };
@@ -2119,6 +2511,11 @@ mod tests {
                     index,
                     synthetic: false,
                     reference_position: (23 << 32) | index,
+                    reference_clock: crate::reference_timing::Clock {
+                        position: index as f64 / 48_000.0,
+                        speed: 0.75,
+                    },
+                    ..Default::default()
                 })
                 .unwrap();
         }
@@ -2141,6 +2538,11 @@ mod tests {
                 let expected = if (position + i) % 997 == 0 { 0.25 } else { 0.0 };
                 assert_eq!(frame.index, (position + i) as u64);
                 assert_eq!(frame.take, 7);
+                assert_eq!(
+                    frame.reference_clock.position,
+                    (position + i) as f64 / 48_000.0
+                );
+                assert_eq!(frame.reference_clock.speed, 0.75);
                 assert_eq!(
                     frame.stems,
                     [
@@ -2282,6 +2684,44 @@ mod tests {
     }
 
     #[test]
+    fn headless_loopback_calibration_returns_an_estimate_without_moving_a_zero_offset() {
+        let mut engine = headless_engine();
+        engine.start().unwrap();
+        engine.recorder_set_latency_compensation(0);
+        engine.start_latency_calibration().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(8);
+        let result = loop {
+            if let Some(result) = engine.take_latency_calibration() {
+                break result;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "headless calibration did not finish"
+            );
+            thread::sleep(Duration::from_millis(15));
+        };
+        assert!(result.estimated);
+        assert_eq!(result.round_trip_frames, 512);
+        assert_eq!(result.confidence, 0.0);
+        engine.stop().unwrap();
+    }
+
+    #[test]
+    fn calibration_refuses_an_active_take() {
+        let mut engine = headless_engine();
+        let root = std::env::temp_dir().join(format!("jam-calib-rec-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        *engine.recorder.lock() = crate::recorder::TakeRecorder::new(48_000, root.clone());
+        engine.start().unwrap();
+        engine.recorder_start("calib".into()).unwrap();
+        let err = engine.start_latency_calibration().unwrap_err();
+        assert!(err.contains("recording"), "{err}");
+        let _ = engine.recorder_stop();
+        engine.stop().unwrap();
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn test_engine_live_steering_and_parts_toggle() {
         let mut engine = headless_engine();
         assert!(engine.start().is_ok());
@@ -2307,6 +2747,43 @@ mod tests {
         assert!(tel.band.follow_energy);
         assert!(engine.stop().is_ok());
         assert!(!engine.status().running);
+    }
+
+    #[test]
+    fn stopped_render_worker_does_not_fill_the_output_ring() {
+        let mut engine = headless_engine();
+        engine.start().unwrap();
+        thread::sleep(Duration::from_millis(40));
+        assert_eq!(
+            engine.blocks_filled(),
+            0,
+            "stopped worker must not push render-ahead blocks"
+        );
+        engine.stop().unwrap();
+    }
+
+    #[test]
+    fn play_wakes_the_stopped_render_worker() {
+        let mut engine = headless_engine();
+        engine.start().unwrap();
+        thread::sleep(Duration::from_millis(20));
+        assert_eq!(engine.blocks_filled(), 0);
+        engine.transport_set_count_in(0);
+        engine.transport_play();
+        let deadline = Instant::now() + Duration::from_millis(250);
+        while engine.blocks_filled() == 0 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        let filled = engine.blocks_filled();
+        assert!(filled > 0, "play must start filling, filled={filled}");
+        let tel = engine.get_telemetry();
+        assert_eq!(tel.transport.state, "playing");
+        assert!(
+            tel.transport.position_beats > 0.0,
+            "clock should advance: {:?}",
+            tel.transport
+        );
+        engine.stop().unwrap();
     }
 
     #[test]
@@ -2367,6 +2844,164 @@ mod tests {
         assert!((t.hz - 440.0).abs() < 5.0, "got {} Hz", t.hz);
         assert!(t.note.starts_with('A'));
         engine.stop().unwrap();
+    }
+
+    #[test]
+    fn four_bar_loop_at_120_wraps_within_one_sample_on_null_output() {
+        // ARCHITECTURE §9.1: 4 bars at 120 bpm with NullOutput; wrap ±1 sample.
+        // Drive the same render_block the headless worker uses so the wrap is
+        // sample-accurate (wall-clock NullOutput cannot assert ±1).
+        let mut engine = headless_engine();
+        engine.start().unwrap();
+        assert_eq!(engine.status().mode, EngineMode::Headless);
+        assert_eq!(
+            engine
+                .status()
+                .output
+                .as_ref()
+                .map(|o| o.device_name.as_str()),
+            Some("headless")
+        );
+        engine.stop().unwrap();
+
+        engine.transport_set_count_in(0);
+        engine.transport_set_tempo(120.0);
+        engine.transport_set_loop(1, 5, true);
+        engine.transport_play();
+
+        let mut ctx = RenderContext::new(48_000);
+        let loop_samples = 4 * 4 * 24_000; // 4 bars × 4 beats × 24000 samples/beat
+        assert_eq!(loop_samples % RENDER_BLOCK, 0);
+        for _ in 0..(loop_samples / RENDER_BLOCK) {
+            ctx.render_block(
+                &engine.timeline,
+                &engine.sequencer,
+                &engine.mix,
+                false,
+                false,
+            );
+        }
+        let sample = engine.timeline.lock().current_sample;
+        assert!(
+            sample.abs_diff(0) <= 1,
+            "4-bar wrap landed at sample {sample}, expected 0 ±1"
+        );
+    }
+
+    #[test]
+    fn file_input_impulse_and_click_align_within_one_sample_after_offset() {
+        // ARCHITECTURE §9.1: FileInput impulse at 24000 while the band renders a
+        // click; after the recorder offset they sit within ±1 sample.
+        let mut wav = vec![0.0f32; 48_000];
+        wav[24_000] = 1.0;
+        let collected = Arc::new(Mutex::new(Vec::<f32>::new()));
+        let sink = Arc::clone(&collected);
+        let mut input = FileInput::from_samples(wav, 256);
+        input
+            .start(Box::new(move |buf| sink.lock().extend_from_slice(buf)))
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let samples = loop {
+            let got = collected.lock().clone();
+            if got.len() >= 24_000 + 256 {
+                break got;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "FileInput did not reach sample 24000"
+            );
+            thread::sleep(Duration::from_millis(5));
+        };
+        input.stop().unwrap();
+        assert!(
+            samples[24_000].abs() > 0.5,
+            "FileInput sample 24000 must be the impulse, got {}",
+            samples[24_000]
+        );
+
+        let engine = AudioEngine::new(AudioConfig::default());
+        engine.transport_set_count_in(0);
+        engine.transport_set_tempo(120.0);
+        engine.set_click_volume(1.0);
+        engine.mix.lock().band_volume = 0.0;
+        engine.band_set(BandPatch {
+            mute_drums: Some(true),
+            mute_bass: Some(true),
+            mute_comp: Some(true),
+            ..Default::default()
+        });
+        engine.transport_play();
+
+        let offset = 480usize;
+        let root = std::env::temp_dir().join(format!(
+            "jam-align-engine-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let mut rec = crate::recorder::TakeRecorder::new(48_000, root.clone());
+        rec.set_latency_compensation(offset);
+        rec.start_take("align".into(), "click".into(), "verse".into(), 120.0)
+            .unwrap();
+
+        let mut ctx = RenderContext::new(48_000);
+        let need = 24_000 + offset + 256;
+        for start in (0..need).step_by(RENDER_BLOCK) {
+            for i in 0..RENDER_BLOCK {
+                ctx.in_block[i] = samples.get(start + i).copied().unwrap_or(0.0);
+            }
+            ctx.render_block(
+                &engine.timeline,
+                &engine.sequencer,
+                &engine.mix,
+                false,
+                false,
+            );
+            let frames: Vec<crate::workstation::Frame> = (0..RENDER_BLOCK)
+                .map(|i| {
+                    let src = start + i;
+                    let guitar = src
+                        .checked_sub(offset)
+                        .and_then(|i| samples.get(i).copied())
+                        .unwrap_or(0.0);
+                    [
+                        guitar,
+                        ctx.band_left[i],
+                        ctx.band_right[i],
+                        ctx.out_left[i],
+                        ctx.out_right[i],
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                    ]
+                })
+                .collect();
+            rec.push_frames(frames, vec![], &[]);
+        }
+        let take = rec.stop_and_save().unwrap();
+        let guitar = crate::recorder::read_wav_mono(std::path::Path::new(&take.path_input))
+            .unwrap()
+            .0;
+        let master = crate::recorder::read_wav_mono(std::path::Path::new(&take.path_master))
+            .unwrap()
+            .0;
+        let impulse = guitar.iter().position(|s| s.abs() > 0.5).expect("impulse");
+        let click = master
+            .iter()
+            .enumerate()
+            .skip(24_000 - 8)
+            .find(|(_, s)| s.abs() > 0.05)
+            .map(|(i, _)| i)
+            .expect("click");
+        assert!(
+            impulse.abs_diff(click) <= 1,
+            "guitar {impulse} click {click}"
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
