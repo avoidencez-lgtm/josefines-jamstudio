@@ -20,6 +20,7 @@ import {
   deleteSection,
   duplicateSection,
   harmonyChoices,
+  uniqueSectionName,
   setSectionEnergy,
   transformPhrase,
 } from "../lib/writingTools";
@@ -60,7 +61,7 @@ export function ArrangementDesk() {
               w.edit((b) => {
                 b.chart.sections.push({
                   id,
-                  name: "This is a new section.",
+                  name: uniqueSectionName(b.chart.sections.map((s) => s.name)),
                   bars: structuredClone(selected.bars),
                 });
                 b.sections[id] = defaultSection();

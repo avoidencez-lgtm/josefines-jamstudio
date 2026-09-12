@@ -2694,8 +2694,11 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).not.toContain(
     'name: "New section"',
   );
+  expect(readFileSync("src/lib/writingTools.ts", "utf8")).toContain(
+    'const first = "This is a new section.";',
+  );
   expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).toContain(
-    'name: "This is a new section."',
+    "uniqueSectionName(b.chart.sections.map((s) => s.name))",
   );
   expect(readFileSync("src/lib/jo/songLab.ts", "utf8")).not.toContain(
     'chords: "Alternative chords"',

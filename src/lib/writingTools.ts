@@ -51,6 +51,18 @@ export function checkWritingForm(body: SongBody): void {
     );
 }
 
+/** Distinct sentence names so chartToText/parseChartText can round-trip additions. */
+export function uniqueSectionName(existing: string[]): string {
+  const used = new Set(existing);
+  const first = "This is a new section.";
+  if (!used.has(first)) return first;
+  for (let n = 2; n <= 64; n++) {
+    const name = `This is a new section ${n}.`;
+    if (!used.has(name)) return name;
+  }
+  throw new Error("Keep the song within 64 sections.");
+}
+
 export function duplicateSection(
   body: SongBody,
   sectionId: string,
