@@ -183,9 +183,15 @@ pub fn decode(input: &Path, max_frames: usize, cancel: &AtomicBool) -> Result<Ve
         return Err("Choose a local audio file up to 512 MB.".into());
     }
     let mut hint = Hint::new();
-    if let Some(ext) = input.extension().and_then(|s| s.to_str()) {
-        hint.with_extension(ext);
+    let ext = input
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !ext.is_empty() {
+        hint.with_extension(&ext);
     }
+    let exact_container = matches!(ext.as_str(), "wav" | "flac" | "aiff" | "aif");
     let mut format = symphonia::default::get_probe().probe(&hint, MediaSourceStream::new(Box::new(file), Default::default()), Default::default(), Default::default()).map_err(|e| format!("Unsupported or damaged audio. {e}. Export WAV, FLAC, MP3, AAC/ALAC M4A, AIFF or Ogg Vorbis."))?;
     let track = format
         .default_track(TrackType::Audio)
@@ -287,18 +293,34 @@ pub fn decode(input: &Path, max_frames: usize, cancel: &AtomicBool) -> Result<Ve
         decoded = end;
     }
     let converter = converter.ok_or("No decodable audio samples")?;
-    if expected.is_some_and(|frames| {
-        if window.is_some() {
-            decoded < frames || decoded - frames >= last_packet
-        } else {
-            frames != decoded
-        }
-    }) {
+    if decoded_length_mismatch(
+        expected,
+        decoded,
+        last_packet,
+        window.is_some(),
+        exact_container,
+    ) {
         return Err(
             "Decoded audio length differs from the container. The file may be truncated.".into(),
         );
     }
     converter.finish(cancel)
+}
+
+fn decoded_length_mismatch(
+    expected: Option<u64>,
+    decoded: u64,
+    last_packet: u64,
+    m4a: bool,
+    exact: bool,
+) -> bool {
+    expected.is_some_and(|frames| {
+        if m4a || !exact {
+            decoded < frames || decoded.saturating_sub(frames) >= last_packet.max(1)
+        } else {
+            frames != decoded
+        }
+    })
 }
 
 pub fn normalize(
@@ -343,6 +365,76 @@ pub fn normalize(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn packetized_import_allows_one_packet_of_padding_or_estimate_slack() {
+        assert!(!decoded_length_mismatch(
+            Some(100_000),
+            100_224,
+            1152,
+            false,
+            false
+        ));
+        assert!(decoded_length_mismatch(
+            Some(100_000),
+            102_304,
+            1152,
+            false,
+            false
+        ));
+        assert!(decoded_length_mismatch(
+            Some(48_000),
+            48_001,
+            0,
+            false,
+            true
+        ));
+        assert!(!decoded_length_mismatch(
+            Some(48_000),
+            48_000,
+            0,
+            false,
+            true
+        ));
+    }
+
+    #[test]
+    fn decode_accepts_a_complete_wav_and_rejects_a_truncated_one() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-import-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let wav = root.join("input.wav");
+        let mut writer = hound::WavWriter::create(
+            &wav,
+            hound::WavSpec {
+                channels: 2,
+                sample_rate: 48_000,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .unwrap();
+        for i in 0..4800 {
+            let s = ((i as f32 * 0.01).sin() * 1000.0) as i16;
+            writer.write_sample(s).unwrap();
+            writer.write_sample(-s).unwrap();
+        }
+        writer.finalize().unwrap();
+        let samples = decode(&wav, 48_000, &AtomicBool::new(false)).unwrap();
+        assert_eq!(samples.len(), 9600);
+        let truncated = root.join("bad.wav");
+        let mut bytes = std::fs::read(&wav).unwrap();
+        bytes.truncate(64);
+        std::fs::write(&truncated, bytes).unwrap();
+        assert!(decode(&truncated, 48_000, &AtomicBool::new(false)).is_err());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
     #[test]
     #[ignore = "uses locally generated synthetic codec fixtures in JAM_IMPORT_FIXTURES"]
     fn native_decoders_preserve_synthetic_codec_timing_and_channels() {
