@@ -134,7 +134,11 @@ export function sessionProgress(
 /** Sum take lengths, treating missing or non-finite durations as zero. */
 export function totalRecordedSecs(takes: { durationSecs: number }[]): number {
   return takes.reduce(
-    (acc, t) => acc + (Number.isFinite(t.durationSecs) ? t.durationSecs : 0),
+    (acc, t) =>
+      acc +
+      (Number.isFinite(t.durationSecs) && t.durationSecs > 0
+        ? t.durationSecs
+        : 0),
     0,
   );
 }

@@ -175,6 +175,7 @@ describe("jam time", () => {
         { durationSecs: 60 },
         { durationSecs: Number.NaN },
         { durationSecs: Number.POSITIVE_INFINITY },
+        { durationSecs: -100 },
         { durationSecs: 15 },
       ]),
     ).toBe(75);
