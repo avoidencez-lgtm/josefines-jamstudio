@@ -485,8 +485,10 @@ fn convert_output<T: SizedSample + FromSample<f32>>(
             .zip(tmp.as_chunks::<2>().0.iter())
         {
             frame.fill(T::from_sample(0.0_f32));
-            frame[0] = T::from_sample(stereo[0]);
-            if channels > 1 {
+            if channels == 1 {
+                frame[0] = T::from_sample(0.5 * (stereo[0] + stereo[1]));
+            } else {
+                frame[0] = T::from_sample(stereo[0]);
                 frame[1] = T::from_sample(stereo[1]);
             }
         }
@@ -830,5 +832,16 @@ mod conversion_tests {
         let mut mono = [0_i16; 1];
         super::convert_output(&mut mono, 1, &mut |block| block.fill(0.5));
         assert!(mono[0] > 16_000);
+        let mut panned = [0_i16; 1];
+        super::convert_output(&mut panned, 1, &mut |block| {
+            for frame in block.as_chunks_mut::<2>().0 {
+                frame[0] = 0.0;
+                frame[1] = 1.0;
+            }
+        });
+        assert!(
+            panned[0] > 16_000,
+            "mono output must downmix 0.5*(L+R) so a right-panned signal is heard"
+        );
     }
 }
