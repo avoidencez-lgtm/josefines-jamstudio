@@ -932,6 +932,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
           const trainer = get().tempoTrainer;
           const boundary =
             transport.bar === prev.bar + 1 ||
+            (transport.bar === 1 &&
+              prev.bar > 1 &&
+              transport.bar_progress < prev.bar_progress) ||
             (transport.loop_enabled &&
               prev.loop_enabled &&
               prev.bar === transport.loop_end_bar - 1 &&

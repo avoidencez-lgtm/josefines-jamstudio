@@ -452,6 +452,61 @@ describe("desktop startup against the preview engine", () => {
     expect(store().tempoTrainer.playedBars).toBe(1);
   });
 
+  it("counts a chart form wrap as a TempoTrainer bar when no loop is armed", async () => {
+    await startDesktop();
+    expect(
+      await store().playChartInline({
+        schemaVersion: 1,
+        id: "four-bar-wrap",
+        name: "Four",
+        keyTonic: 9,
+        mode: "major",
+        timeSig: [4, 4],
+        defaultBpm: 240,
+        defaultStyleId: "blues-shuffle",
+        sections: [
+          {
+            id: "a",
+            name: "A",
+            bars: [
+              [{ chord: "A7", beats: 4 }],
+              [{ chord: "D7", beats: 4 }],
+              [{ chord: "A7", beats: 4 }],
+              [{ chord: "E7", beats: 4 }],
+            ],
+          },
+        ],
+        arrangement: [{ sectionId: "a", repeats: 1 }],
+      }),
+    ).toBe(true);
+    await store().transportSetCountIn(0);
+    await store().transportSetLoop(1, 5, false);
+    store().setTempoTrainer({
+      enabled: true,
+      startBpm: 240,
+      targetBpm: 280,
+      stepBpm: 10,
+      everyBars: 4,
+      playedBars: 0,
+    });
+    await store().transportPlay();
+    engine.tick(0.01);
+    expect(store().telemetry.transport).toMatchObject({
+      state: "playing",
+      bar: 1,
+      loop_enabled: false,
+      bpm: 240,
+    });
+
+    // Bars 1->2, 2->3, 3->4, then the form wrap 4->1.
+    advance(engine, 4.05);
+    await Promise.resolve();
+    engine.tick(0);
+    expect(store().telemetry.transport.bar).toBe(1);
+    expect(store().telemetry.transport.bpm).toBe(250);
+    expect(store().tempoTrainer.playedBars).toBe(0);
+  });
+
   it("clamps count-in and tempo to the engine's range before they reach the store", async () => {
     await startDesktop();
     await store().transportSetCountIn(9);
