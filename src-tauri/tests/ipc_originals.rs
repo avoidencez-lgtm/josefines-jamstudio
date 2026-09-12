@@ -203,13 +203,14 @@ fn save_refuses_invalid_ids_without_touching_the_disk() {
     }
     let longest = "a".repeat(100);
     let mut boundary = song(&longest);
+    boundary["body"]["chart"]["id"] = json!("c".repeat(121));
     assert_eq!(
         studio.err("originals_save", json!({ "document": boundary })),
         "Chart id may only contain letters, numbers, hyphens and underscores.",
-        "the fixture's appended -chart exceeds the separate chart ID limit"
+        "the chart has its own 120-character ID limit"
     );
     assert!(!song_file(&longest).exists());
-    boundary["body"]["chart"]["id"] = json!("boundary-chart");
+    boundary["body"]["chart"]["id"] = json!("c".repeat(120));
     assert_eq!(
         studio.ok("originals_save", json!({ "document": boundary }))["id"],
         longest,

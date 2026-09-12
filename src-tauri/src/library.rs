@@ -368,7 +368,7 @@ pub fn validate_chart(chart: &Chart) -> Result<(), String> {
     if chart.id.trim().is_empty() {
         return Err("chart id is empty".into());
     }
-    if chart.id.len() > 100
+    if chart.id.len() > 120
         || !chart
             .id
             .bytes()
