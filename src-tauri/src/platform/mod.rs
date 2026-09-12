@@ -43,17 +43,10 @@ pub async fn open_https(url: &str) -> Result<(), String> {
     open_with_os(url).await
 }
 
-#[cfg(windows)]
-fn windows_media_open_command(path: &std::path::Path) -> Result<tokio::process::Command, String> {
-    let file = path
-        .to_str()
-        .ok_or_else(|| "Media path is not valid Unicode.".to_string())?;
-    let mut opener = command(std::path::Path::new("cmd.exe"));
-    opener.args(["/C", "start", "", file]);
-    Ok(opener)
-}
-
 pub async fn open_media(path: &std::path::Path) -> Result<(), String> {
+    if !path.is_file() {
+        return Err("The media file is missing or is not a regular file.".into());
+    }
     #[cfg(target_os = "macos")]
     {
         let mut opener = command(std::path::Path::new("/usr/bin/open"));
@@ -61,15 +54,10 @@ pub async fn open_media(path: &std::path::Path) -> Result<(), String> {
     }
     #[cfg(windows)]
     {
-        // explorer.exe <file> selects the file; `cmd /c start "" <file>` opens the player.
-        let mut opener = windows_media_open_command(path)?;
-        let status = opener.status().await.map_err(|e| e.to_string())?;
-        if !status.success() {
-            return Err(
-                "The system could not open this item. Check the default application.".into(),
-            );
-        }
-        Ok(())
+        // Pass the file directly to the OS opener, without cmd.exe interpreting
+        // metacharacters or environment variables in an imported filename.
+        let target = path.to_str().ok_or("Media path is not valid Unicode.")?;
+        open_with_os(target).await
     }
     #[cfg(not(any(target_os = "macos", windows)))]
     {
@@ -94,14 +82,13 @@ async fn open_with_os(target: &str) -> Result<(), String> {
     launch_opener(opener.arg(target)).await
 }
 
-/// ShellExecuteW is how a user double-clicking an https shortcut opens the
-/// default browser. `explorer.exe` plus CREATE_NO_WINDOW often does nothing.
+/// Open a URL or document with its default application.
 #[cfg(windows)]
 fn windows_shell_open(target: &str) -> Result<(), String> {
     let failed = || -> String {
         "The system could not open this item. Check the default application.".into()
     };
-    if target.is_empty() {
+    if target.is_empty() || target.contains('\0') {
         return Err(failed());
     }
     use std::os::windows::ffi::OsStrExt;
@@ -423,31 +410,30 @@ mod url_tests {
             .await
             .is_err());
     }
+
+    #[tokio::test]
+    async fn missing_media_and_directories_fail_before_the_os_opener() {
+        let dir = std::env::temp_dir();
+        let missing = dir.join(format!(
+            "jam-missing-media-{}-{}.wav",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        for path in [&missing, &dir] {
+            let result =
+                tokio::time::timeout(std::time::Duration::from_secs(3), super::open_media(path))
+                    .await
+                    .expect("invalid media must not wait for a system dialog");
+            assert!(result.unwrap_err().contains("not a regular file"));
+        }
+    }
 }
 
 #[cfg(all(test, windows))]
 mod tests {
-    #[test]
-    fn windows_play_uses_cmd_start_not_explorer() {
-        let path = std::path::Path::new(r"C:\Users\Public\song.wav");
-        let cmd = super::windows_media_open_command(path).unwrap();
-        let debug = format!("{cmd:?}");
-        assert!(debug.to_ascii_lowercase().contains("cmd.exe"), "{debug}");
-        assert!(debug.contains("start"), "{debug}");
-        assert!(
-            !debug.to_ascii_lowercase().contains("explorer.exe"),
-            "{debug}"
-        );
-    }
-
-    #[tokio::test]
-    async fn windows_play_errors_when_the_os_cannot_open_the_file() {
-        let missing =
-            std::env::temp_dir().join(format!("jam-missing-media-{}.wav", std::process::id()));
-        let _ = std::fs::remove_file(&missing);
-        assert!(super::open_media(&missing).await.is_err());
-    }
-
     #[test]
     fn windows_accepts_native_exe_and_npm_cmd_shim_only() {
         let dir = std::env::temp_dir().join(format!("jam-agent-shim-{}", std::process::id()));
@@ -512,6 +498,7 @@ mod tests {
     fn windows_shell_open_reports_failure_instead_of_hidden_explorer() {
         let err = super::windows_shell_open("").unwrap_err();
         assert!(err.contains("could not open"), "{err}");
+        assert!(super::windows_shell_open("https://ffmpeg.org/\0other").is_err());
         let src = include_str!("mod.rs");
         let https = src
             .split("pub async fn open_https")
