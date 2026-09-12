@@ -451,7 +451,10 @@ describe("browser preview engine", () => {
     await expect(
       engine.invoke("mixer_set_bus", { id: "drums", patch: { gain: 0.5 } }),
     ).rejects.toThrow(/no gain/);
-    await engine.invoke("mixer_set_bus", { id: "drums", patch: { muted: true } });
+    await engine.invoke("mixer_set_bus", {
+      id: "drums",
+      patch: { muted: true },
+    });
     await engine.invoke("mixer_set_bus", {
       id: "band",
       patch: { muted: true },

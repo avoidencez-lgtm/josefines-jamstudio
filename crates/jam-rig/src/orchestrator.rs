@@ -759,10 +759,8 @@ mod tests {
 
     #[test]
     fn send_failure_closes_the_port_and_clears_live() {
-        let mut orch = RigOrchestrator::new(
-            quad_cortex_like(),
-            Box::new(DisconnectSink { live: true }),
-        );
+        let mut orch =
+            RigOrchestrator::new(quad_cortex_like(), Box::new(DisconnectSink { live: true }));
         assert!(orch.is_live());
         let err = orch.send_program(1).unwrap_err();
         assert!(err.contains("failed"), "{err}");

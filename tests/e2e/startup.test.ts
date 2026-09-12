@@ -233,6 +233,7 @@ describe("desktop startup against the preview engine", () => {
       chartsDir: "(preview) ~/JosefinesJamstudio/charts",
       userChartIds: [],
       loadErrors: [],
+      controlMaps: ["default", "black-spirit-200"],
     });
     expect(store().notices).toEqual([]);
   });
@@ -286,6 +287,7 @@ describe("desktop startup against the preview engine", () => {
     ).toEqual({ chartId: "blues-12-bar", followChart: true });
     expect(listen.mock.calls.map(([event]) => event).sort()).toEqual([
       "app.error",
+      "assets.state",
       "band.state",
       "engine.status",
       "input.meters",

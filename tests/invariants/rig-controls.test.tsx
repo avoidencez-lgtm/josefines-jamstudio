@@ -2,10 +2,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import {
-  ProgramChangeControls,
   clampProgramNumber,
   committedSliderValue,
-} from "../../src/screens/Rig";
+} from "../../src/lib/rigControls";
+import { ProgramChangeControls } from "../../src/screens/Rig";
 
 it("keeps a freeform 0-127 program input when named presets exist", () => {
   const html = renderToStaticMarkup(

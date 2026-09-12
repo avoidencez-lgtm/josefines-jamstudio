@@ -591,7 +591,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
               body: { ...loaded.body, chart: moved },
             };
         const result = await command("The transpose song", () =>
-          ipc.invoke("originals_load", { document, keepPlayback: true }),
+          ipc.invoke<void>("originals_load", { document, keepPlayback: true }),
         );
         if (result.ok) {
           if (source) {
@@ -607,7 +607,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
         return result;
       }
       const result = await command("The play chart", () =>
-        ipc.invoke("band_load_chart_inline", { chart: moved }),
+        ipc.invoke<void>("band_load_chart_inline", { chart: moved }),
       );
       if (result.ok) set({ currentChart: moved, loadedOriginal: null });
       return result;

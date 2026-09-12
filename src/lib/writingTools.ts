@@ -63,9 +63,7 @@ export function checkWritingForm(body: SongBody): void {
         clip.trimEnd <= clip.trimStart,
     )
   )
-    throw new Error(
-      "Each guitar layer needs a trim end after its trim start.",
-    );
+    throw new Error("Each guitar layer needs a trim end after its trim start.");
 }
 
 /** Distinct sentence names so chartToText/parseChartText can round-trip additions. */

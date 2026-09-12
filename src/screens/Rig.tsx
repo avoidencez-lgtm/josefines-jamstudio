@@ -13,6 +13,7 @@ import { StatusPill } from "../components/States";
 import { Toggle } from "../components/Toggle";
 import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import type { RigControl, RigProfile } from "../ipc/contract";
+import { clampProgramNumber, committedSliderValue } from "../lib/rigControls";
 import { useEngineStore } from "../store/engine";
 
 const FALLBACK_SECTIONS = [
@@ -455,10 +456,6 @@ function sceneSummary(profile: RigProfile, idx: number): string {
     .join(" · ");
 }
 
-export function clampProgramNumber(raw: string): number {
-  return Math.min(127, Math.max(0, Number.parseInt(raw || "0", 10) || 0));
-}
-
 /** Named presets never hide freeform MIDI program entry (0–127). */
 export const ProgramChangeControls: React.FC<{
   programs: { number: number; name: string }[];
@@ -498,11 +495,6 @@ export const ProgramChangeControls: React.FC<{
     </Button>
   </>
 );
-
-/** Read a range input from the event target so pointer-up is not a stale closure. */
-export function committedSliderValue(value: string): number {
-  return Number.parseInt(value, 10);
-}
 
 function formatMs(ms: number): string {
   const s = Math.floor(ms / 1000);

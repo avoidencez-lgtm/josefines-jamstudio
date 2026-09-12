@@ -5773,7 +5773,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "Send PC {programInput}",
   );
   expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
-    "Send this PC {programInput}.",
+    "Send this PC {value}.",
   );
   expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).not.toContain(
     "Theme, images, rhyme ideas",
@@ -9554,7 +9554,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "Cannot write {}. {e}",
   );
   expect(readFileSync("src-tauri/src/net.rs", "utf8")).toContain(
-    "The {} request failed.",
+    "The {provider} request failed.",
   );
   expect(readFileSync("src-tauri/src/net.rs", "utf8")).not.toContain(
     "path must start with a single '/':",

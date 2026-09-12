@@ -1,6 +1,10 @@
 import { afterEach, expect, it } from "vitest";
 import { __setIpcForTests, ipc } from "../../src/ipc/client";
-import { type Original, newOriginal, useWriting } from "../../src/lib/originals";
+import {
+  type Original,
+  newOriginal,
+  useWriting,
+} from "../../src/lib/originals";
 import { useEngineStore } from "../../src/store/engine";
 
 const originalIpc = { ...ipc };

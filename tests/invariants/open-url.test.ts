@@ -60,8 +60,9 @@ describe("desktop opener", () => {
     expect(src).toContain("ShellExecuteW");
     expect(src).toContain("windows_shell_open");
     const https =
-      src.split("pub async fn open_https")[1]?.split("pub async fn open_media")[0] ??
-      "";
+      src
+        .split("pub async fn open_https")[1]
+        ?.split("pub async fn open_media")[0] ?? "";
     expect(https).not.toMatch(/explorer\.exe/);
   });
 

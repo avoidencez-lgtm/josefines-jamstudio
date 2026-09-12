@@ -737,10 +737,7 @@ export function createPreviewEngine(
       }
     },
     transport_pause: () => {
-      if (
-        transport.state === "playing" ||
-        transport.state === "counting_in"
-      ) {
+      if (transport.state === "playing" || transport.state === "counting_in") {
         transport.state = "paused";
         if (rig.sendClock) {
           rigSend([0xfc], "clock");
@@ -775,7 +772,7 @@ export function createPreviewEngine(
         gainDb?: number;
         muted?: boolean;
       };
-      let gain =
+      const gain =
         typeof patch.gain === "number"
           ? Math.min(1, Math.max(0, patch.gain))
           : typeof patch.gainDb === "number"
