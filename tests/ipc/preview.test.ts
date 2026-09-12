@@ -367,6 +367,24 @@ describe("browser preview engine", () => {
     ]);
   });
 
+  it("refuses unknown mixer buses and gain-only drum patches", async () => {
+    await expect(
+      engine.invoke("mixer_set_bus", { id: "reverb", patch: { gain: 0.5 } }),
+    ).rejects.toThrow(/Unknown mixer bus/);
+    await expect(
+      engine.invoke("mixer_set_bus", { id: "drums", patch: { gain: 0.5 } }),
+    ).rejects.toThrow(/no gain/);
+    await engine.invoke("mixer_set_bus", { id: "drums", patch: { muted: true } });
+    await engine.invoke("mixer_set_bus", {
+      id: "band",
+      patch: { muted: true },
+    });
+    const buses = await engine.invoke<
+      { id: string; muted: boolean; gainDb: number }[]
+    >("mixer_set_bus", { id: "band", patch: { muted: false } });
+    expect(buses[0].muted).toBe(false);
+  });
+
   it("clamps knobs to the declared range and remembers them", async () => {
     await engine.invoke("rig_select_profile", { profileId: "quad-cortex" });
     const s = await engine.invoke<RigState>("rig_set_control", {

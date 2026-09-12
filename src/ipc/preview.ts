@@ -756,9 +756,31 @@ export function createPreviewEngine(
           : typeof patch.gainDb === "number"
             ? Math.min(1, 10 ** (patch.gainDb / 20))
             : undefined;
-      if (patch.muted) gain = 0;
-      if (id === "band" && gain !== undefined) bandVolume = gain;
-      if (id === "click" && gain !== undefined) clickVolume = gain;
+      if (id === "band") {
+        if (gain !== undefined) bandVolume = patch.muted ? 0 : gain;
+        else if (patch.muted === true) bandVolume = 0;
+        else if (patch.muted === false && bandVolume === 0) bandVolume = 1;
+      } else if (id === "click") {
+        if (gain !== undefined) clickVolume = patch.muted ? 0 : gain;
+        else if (patch.muted === true) clickVolume = 0;
+        else if (patch.muted === false && clickVolume === 0) clickVolume = 1;
+      } else if (id === "drums" || id === "bass" || id === "comp") {
+        if (gain !== undefined && patch.muted === undefined) {
+          throw new Error(
+            `Mixer bus '${id}' has no gain control. Mute it with muted, or use band_set for parts.`,
+          );
+        }
+        if (id === "drums" && patch.muted !== undefined)
+          band.mute_drums = patch.muted;
+        if (id === "bass" && patch.muted !== undefined)
+          band.mute_bass = patch.muted;
+        if (id === "comp" && patch.muted !== undefined)
+          band.mute_comp = patch.muted;
+      } else {
+        throw new Error(
+          `Unknown mixer bus '${id}'. Use band, click, drums, bass or comp.`,
+        );
+      }
       return [
         {
           id: "band",
