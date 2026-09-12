@@ -5,8 +5,11 @@
 
 use jam_core::chart::Chart;
 use jam_core::registry::{SeamRegistry, BUNDLED_CHARTS, BUNDLED_RIGS, BUNDLED_STYLES};
-use jam_core::style::Style;
+use jam_core::style::{
+    BassPattern, CompPattern, DrumHit, DrumPattern, PatternEntry, Style, StyleFeel, StyleHumanize,
+};
 use jam_rig::RigProfile;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub struct Library {
@@ -150,7 +153,7 @@ impl Library {
                 .into_iter()
                 .find(|s| s.feel.time_sig == chart.time_sig)
                 .cloned()
-                .ok_or("No style matches this chart's meter.")?,
+                .unwrap_or_else(|| metronome_fallback(chart.time_sig)),
         };
         if style.feel.time_sig != chart.time_sig {
             return Err(
@@ -202,10 +205,12 @@ impl Library {
             .open(&temp)
             .and_then(|f| f.sync_all())
             .map_err(|e| e.to_string())?;
-        if file.exists() {
-            std::fs::copy(&file, file.with_extension("json.bak")).map_err(|e| e.to_string())?;
+        let bak = file.with_extension("json.bak");
+        let had_file = file.exists();
+        if had_file {
+            std::fs::copy(&file, &bak).map_err(|e| e.to_string())?;
         }
-        std::fs::rename(temp, &file).map_err(|e| e.to_string())?;
+        finish_atomic_replace(&temp, &file, &bak, had_file)?;
         self.charts.insert(chart.clone());
         if !self.user_chart_ids.contains(&chart.id) {
             self.user_chart_ids.push(chart.id.clone());
@@ -246,6 +251,85 @@ impl Library {
     }
 }
 
+/// Windows `fs::rename` cannot replace an existing file. Remove the destination
+/// first so a chart save overwrites in place on every platform.
+pub(crate) fn replace_rename(from: &Path, to: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    if to.exists() {
+        std::fs::remove_file(to).map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(from, to).map_err(|e| e.to_string())
+}
+
+fn finish_atomic_replace(
+    temp: &Path,
+    dest: &Path,
+    bak: &Path,
+    had_file: bool,
+) -> Result<(), String> {
+    if let Err(e) = replace_rename(temp, dest) {
+        let _ = std::fs::remove_file(temp);
+        if had_file && !dest.exists() {
+            let _ = std::fs::copy(bak, dest);
+        }
+        return Err(e);
+    }
+    Ok(())
+}
+
+fn metronome_fallback(time_sig: (u8, u8)) -> Style {
+    let beats = f64::from(time_sig.0);
+    let hits = (0..time_sig.0)
+        .map(|beat| DrumHit {
+            instrument: if beat == 0 {
+                "kick".into()
+            } else {
+                "sidestick".into()
+            },
+            at_beats: f64::from(beat),
+            velocity: if beat == 0 { 0.8 } else { 0.45 },
+            prob: None,
+        })
+        .collect();
+    Style {
+        schema_version: 1,
+        id: format!("metronome-{}-{}", time_sig.0, time_sig.1),
+        name: format!("{}/{} Metronome", time_sig.0, time_sig.1),
+        genre: "Metronome".into(),
+        feel: StyleFeel {
+            swing: 0.0,
+            time_sig,
+            bpm_range: (40.0, 240.0),
+        },
+        kit_id: "standard-rock-kit".into(),
+        bass_program: "finger-bass".into(),
+        comp_program: "clean-guitar".into(),
+        patterns: vec![PatternEntry {
+            intensity: (0.0, 1.0),
+            drums: DrumPattern {
+                length_beats: beats,
+                hits,
+            },
+            bass: BassPattern {
+                length_beats: beats,
+                notes: vec![],
+            },
+            comp: CompPattern {
+                length_beats: beats,
+                voicing: "shell".into(),
+                strums: vec![],
+            },
+        }],
+        fills: vec![],
+        endings: vec![],
+        humanize: StyleHumanize {
+            timing_ms: 0.0,
+            velocity: 0.0,
+        },
+        extra: HashMap::new(),
+    }
+}
+
 fn safe_file_stem(id: &str) -> String {
     let stem: String = id
         .chars()
@@ -266,6 +350,13 @@ fn safe_file_stem(id: &str) -> String {
 
 /// Structural checks a chart must pass before the band will play it.
 pub fn validate_chart(chart: &Chart) -> Result<(), String> {
+    if chart.schema_version > jam_core::registry::SUPPORTED_SCHEMA_VERSION {
+        return Err(format!(
+            "schemaVersion {} is newer than this app supports ({}). Update the app before loading this file.",
+            chart.schema_version,
+            jam_core::registry::SUPPORTED_SCHEMA_VERSION
+        ));
+    }
     if !chart.default_bpm.is_finite() || !(40.0..=240.0).contains(&chart.default_bpm) {
         return Err("Chart tempo must be within 40–240 BPM.".into());
     }
@@ -344,7 +435,7 @@ mod tests {
     fn bundled_content_is_available_without_a_user_dir() {
         let lib = Library::load_from(temp_root("bundled"));
         assert!(lib.load_errors().is_empty(), "{:?}", lib.load_errors());
-        assert_eq!(lib.styles().len(), 6);
+        assert_eq!(lib.styles().len(), 8);
         assert_eq!(lib.charts().len(), 9);
         assert_eq!(lib.rigs().len(), 6);
         assert!(lib.style("blues-shuffle").is_ok());
@@ -370,6 +461,26 @@ mod tests {
 
         lib.delete_user_chart("blues-12-bar").unwrap();
         assert_ne!(lib.chart("blues-12-bar").unwrap().name, "My Blues");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn save_chart_keeps_unknown_chart_and_section_fields() {
+        let root = temp_root("extra-chart");
+        let mut lib = Library::load_from(root.clone());
+        let mut value = serde_json::to_value(lib.chart("blues-12-bar").unwrap()).unwrap();
+        value["rigSceneId"] = serde_json::json!("verse-clean");
+        value["sections"][0]["intensity"] = serde_json::json!(0.7);
+        let chart: Chart = serde_json::from_value(value).unwrap();
+        let file = lib.save_chart(&chart).unwrap();
+        let on_disk: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        assert_eq!(on_disk["rigSceneId"], "verse-clean");
+        assert_eq!(on_disk["sections"][0]["intensity"], 0.7);
+        lib.reload();
+        let reloaded = lib.chart("blues-12-bar").unwrap();
+        assert_eq!(reloaded.extra.get("rigSceneId").unwrap(), "verse-clean");
+        assert_eq!(reloaded.sections[0].extra.get("intensity").unwrap(), 0.7);
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -410,5 +521,85 @@ mod tests {
         chart.sections[0].bars[0][0].beats = f64::NAN;
         assert!(validate_chart(&chart).is_err());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn style_for_chart_loads_three_four_and_five_four_or_a_metronome_fallback() {
+        let lib = Library::load_from(temp_root("meters"));
+        let mut waltz = lib.chart("blues-12-bar").unwrap();
+        waltz.default_style_id = None;
+        waltz.time_sig = (3, 4);
+        waltz.sections[0].bars = vec![vec![jam_core::chart::BarChord {
+            chord: "G".into(),
+            beats: 3.0,
+        }]];
+        let style = lib.style_for_chart(&waltz).unwrap();
+        assert_eq!(style.id, "waltz-34");
+        assert_eq!(style.feel.time_sig, (3, 4));
+
+        let mut five = waltz.clone();
+        five.time_sig = (5, 4);
+        five.sections[0].bars = vec![vec![jam_core::chart::BarChord {
+            chord: "Em".into(),
+            beats: 5.0,
+        }]];
+        let style = lib.style_for_chart(&five).unwrap();
+        assert_eq!(style.id, "five-four");
+        assert_eq!(style.feel.time_sig, (5, 4));
+
+        let mut odd = five.clone();
+        odd.time_sig = (7, 8);
+        odd.sections[0].bars = vec![vec![jam_core::chart::BarChord {
+            chord: "Am".into(),
+            beats: 7.0,
+        }]];
+        let style = lib.style_for_chart(&odd).unwrap();
+        assert_eq!(style.id, "metronome-7-8");
+        assert_eq!(style.feel.time_sig, (7, 8));
+        assert!(!style.patterns.is_empty());
+    }
+
+    #[test]
+    fn replace_rename_overwrites_an_existing_file() {
+        let root = temp_root("replace-rename");
+        std::fs::create_dir_all(&root).unwrap();
+        let from = root.join("from.json");
+        let to = root.join("to.json");
+        std::fs::write(&from, b"new").unwrap();
+        std::fs::write(&to, b"old").unwrap();
+        replace_rename(&from, &to).unwrap();
+        assert_eq!(std::fs::read(&to).unwrap(), b"new");
+        assert!(!from.exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn save_chart_cleans_up_temp_and_restores_bak_when_rename_fails() {
+        let root = temp_root("chart-rename-fail");
+        std::fs::create_dir_all(&root).unwrap();
+        let dest = root.join("blues-12-bar.json");
+        let bak = root.join("blues-12-bar.json.bak");
+        let temp = root.join("blues-12-bar.json.tmp");
+        std::fs::write(&bak, b"previous-good").unwrap();
+        // Missing temp makes rename fail after a Windows replace has already
+        // removed the destination; bak must come back and temp must not linger.
+        std::fs::write(&dest, b"current").unwrap();
+        std::fs::remove_file(&dest).unwrap();
+        let err = finish_atomic_replace(&temp, &dest, &bak, true).unwrap_err();
+        assert!(!err.is_empty(), "{err}");
+        assert!(!temp.exists(), "orphaned json.tmp must be unlinked");
+        assert_eq!(std::fs::read(&dest).unwrap(), b"previous-good");
+        let mut lib = Library::load_from(root.clone());
+        let chart = lib.chart("blues-12-bar").unwrap();
+        std::fs::create_dir_all(lib.charts_dir()).unwrap();
+        let file = lib.charts_dir().join("blues-12-bar.json");
+        std::fs::create_dir(&file).unwrap();
+        let err = lib.save_chart(&chart).unwrap_err();
+        assert!(!err.is_empty(), "{err}");
+        assert!(
+            !file.with_extension("json.tmp").exists(),
+            "save_chart unlinks json.tmp after a failed rename"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
