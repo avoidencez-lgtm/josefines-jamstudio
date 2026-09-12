@@ -315,10 +315,12 @@ fn decoded_length_mismatch(
     exact: bool,
 ) -> bool {
     expected.is_some_and(|frames| {
-        if m4a || !exact {
+        if m4a {
             decoded < frames || decoded.saturating_sub(frames) >= last_packet.max(1)
-        } else {
+        } else if exact {
             frames != decoded
+        } else {
+            decoded.abs_diff(frames) > last_packet.max(1)
         }
     })
 }
@@ -381,6 +383,10 @@ mod tests {
             false,
             false
         ));
+        assert!(
+            !decoded_length_mismatch(Some(101_152), 100_000, 1152, false, false),
+            "Xing-less CBR estimates may sit one MPEG frame above the decode"
+        );
         assert!(decoded_length_mismatch(
             Some(48_000),
             48_001,
