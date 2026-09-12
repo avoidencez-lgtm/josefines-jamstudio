@@ -43,6 +43,36 @@ fn mixer_set_bus_changes_band_gain_and_keeps_volume_commands() {
 }
 
 #[test]
+fn mixer_set_bus_unmutes_band_when_gain_is_omitted() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok("mixer_set_bus", json!({"id":"band","patch":{"muted":true}}));
+    let muted = studio.ok("audio_get_telemetry", json!({}));
+    // Band volume is not in telemetry; mixer payload carries muted.
+    let buses = studio.ok(
+        "mixer_set_bus",
+        json!({"id":"band","patch":{"muted":false}}),
+    );
+    assert_eq!(buses[0]["muted"], false);
+    assert!(buses[0]["gainDb"].as_f64().unwrap() > -1.0, "{buses}");
+    let _ = muted;
+}
+
+#[test]
+fn mixer_set_bus_refuses_unknown_buses_and_gain_only_part_patches() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let err = studio.err("mixer_set_bus", json!({"id":"reverb","patch":{"gain":0.5}}));
+    assert!(err.contains("Unknown mixer bus"), "{err}");
+    let err = studio.err("mixer_set_bus", json!({"id":"drums","patch":{"gain":0.5}}));
+    assert!(err.contains("no gain"), "{err}");
+    studio.ok(
+        "mixer_set_bus",
+        json!({"id":"drums","patch":{"muted":true}}),
+    );
+}
+
+#[test]
 fn generate_track_and_lyria_vibe_stay_gated() {
     let _scenario = common::scenario();
     std::env::remove_var("JAM_LYRIA_FIXTURE");
@@ -63,6 +93,34 @@ fn generate_track_and_lyria_vibe_stay_gated() {
         vibe.contains("Start Lyria") || vibe.contains("not configured"),
         "{vibe}"
     );
+}
+
+#[test]
+fn lyria_vibe_patches_prompts_only_and_keeps_bpm() {
+    let _scenario = common::scenario();
+    std::env::set_var("JAM_LYRIA_FIXTURE", "1");
+    let studio = Studio::boot();
+    studio.ok("lyria_start", json!({}));
+    studio.ok(
+        "lyria_set",
+        json!({"patch":{
+            "prompts":[{"text":"Original instrumental funk rhythm section, space for lead guitar","weight":1.0}],
+            "bpm":110.0,
+            "scale":"G_MAJOR_E_MINOR",
+            "density":0.5,
+            "brightness":0.5,
+            "muteBass":false,
+            "muteDrums":false
+        }}),
+    );
+    let vibe = studio.ok(
+        "lyria_vibe",
+        json!({"prompts":[{"text":"dry funk pocket, space for guitar","weight":1.0}]}),
+    );
+    assert_eq!(vibe["requestedBpm"], 110.0);
+    assert_eq!(vibe["scale"], "G_MAJOR_E_MINOR");
+    studio.ok("lyria_stop", json!({}));
+    std::env::remove_var("JAM_LYRIA_FIXTURE");
 }
 
 #[test]
