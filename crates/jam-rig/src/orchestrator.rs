@@ -251,7 +251,7 @@ impl RigOrchestrator {
             return Ok(None);
         }
         self.last_section = Some(section.to_string());
-        if self.song_mappings.is_none() && !self.follow_sections {
+        if !self.follow_sections {
             return Ok(None);
         }
         let mappings = self
@@ -414,6 +414,15 @@ mod tests {
         orch.set_section_mapping("Solo".into(), 4);
         orch.follow_sections = false;
         assert_eq!(orch.on_section_change("Solo").unwrap(), None);
+        assert!(orch.monitor().is_empty());
+    }
+
+    #[test]
+    fn follow_sections_off_is_silent_even_when_song_mappings_exist() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.song_mappings = Some([("Chorus".into(), 2)].into());
+        orch.follow_sections = false;
+        assert_eq!(orch.on_section_change("Chorus").unwrap(), None);
         assert!(orch.monitor().is_empty());
     }
 
