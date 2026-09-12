@@ -567,6 +567,13 @@ export const useEngineStore = create<EngineState>((set, get) => {
     transposeCurrentChart: async (semitones) => {
       const current = get().currentChart;
       if (!current) return;
+      if (get().telemetry.reference) {
+        get().notify(
+          "error",
+          "Cannot transpose the band while a reference is loaded. Open Songs to change key on the reference player, or return to the band.",
+        );
+        return;
+      }
       const moved = transposeChart(current, semitones);
       const loaded = get().loadedOriginal;
       if (loaded) {

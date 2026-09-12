@@ -91,6 +91,44 @@ it("Stage transpose reloads a loaded original instead of inlining the chart", as
   expect(lastLoad?.keepPlayback).toBe(true);
 });
 
+it("bracket transpose refuses to unload a loaded reference", async () => {
+  const song = newOriginal();
+  const commands: string[] = [];
+  useEngineStore.setState({
+    currentChart: song.body.chart,
+    loadedOriginal: null,
+    telemetry: {
+      ...useEngineStore.getState().telemetry,
+      reference: {
+        asset_id: "song-1",
+        label: "Practice",
+        seconds: 4,
+        position: 0,
+        state: "stopped",
+        loop_start: 0,
+        loop_end: 4,
+        loop_enabled: false,
+      },
+    },
+  });
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      commands.push(command);
+      return undefined as T;
+    },
+  });
+  const tonic = song.body.chart.keyTonic;
+  await useEngineStore.getState().transposeCurrentChart(1);
+  expect(commands).toEqual([]);
+  expect(useEngineStore.getState().currentChart?.keyTonic).toBe(tonic);
+  expect(useEngineStore.getState().telemetry.reference?.asset_id).toBe(
+    "song-1",
+  );
+  expect(
+    useEngineStore.getState().notices.some((n) => n.text.includes("reference")),
+  ).toBe(true);
+});
+
 it("Stage transpose still inlines a jam chart when no original is loaded", async () => {
   const song = newOriginal();
   const commands: string[] = [];
