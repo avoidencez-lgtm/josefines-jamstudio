@@ -325,6 +325,7 @@ impl BandSequencer {
     /// Transport stop: silence everything and forget queued state.
     pub fn reset(&mut self) {
         self.section_applied.clear();
+        self.applied_pattern_range = None;
         self.sampler.all_off();
         self.synth.all_notes_off();
         self.pending_note_offs.clear();
@@ -360,6 +361,11 @@ impl BandSequencer {
             if self.applied_pattern_range != Some(p.intensity) {
                 self.current_pattern = p.clone();
                 self.applied_pattern_range = Some(p.intensity);
+                // A fill's return to the plain pattern must restore the section's
+                // independently chosen bass and comp on the next render span.
+                if self.section_bands.contains_key(&self.section_applied) {
+                    self.section_applied.clear();
+                }
             }
         }
     }
@@ -385,6 +391,7 @@ impl BandSequencer {
                     return;
                 }
 
+                self.apply_song_section(*bar);
                 if let Some(st) = self.pending_style.take() {
                     self.set_style(st);
                 }
@@ -440,6 +447,7 @@ impl BandSequencer {
                     }
                     Cue::Ending => {
                         self.is_stopped = false;
+                        self.is_playing_fill = false;
                         if let Some(ending) = self.style.endings.first() {
                             self.current_pattern.drums = ending.clone();
                             self.applied_pattern_range = None;
@@ -619,9 +627,8 @@ impl BandSequencer {
         if id == self.section_applied {
             return;
         }
-        self.section_applied = id.clone();
         if let Some(settings) = self.section_bands.get(&id).cloned() {
-            self.style = settings.styles[0].clone();
+            self.set_style(settings.styles[0].clone());
             self.style.feel.swing = settings.swing;
             let selected: Vec<_> = settings
                 .styles
@@ -652,9 +659,7 @@ impl BandSequencer {
             self.intensity = 0.5;
             self.part_gains = settings.gains;
             self.set_parts(settings.muted[0], settings.muted[1], settings.muted[2]);
-            return;
-        }
-        if let Some(style) = self.section_styles.get(&id) {
+        } else if let Some(style) = self.section_styles.get(&id) {
             if style.id != self.style.id {
                 self.set_style(style.clone());
             }
@@ -663,6 +668,7 @@ impl BandSequencer {
                 self.set_style(default.clone());
             }
         }
+        self.section_applied = id;
     }
 
     fn render_tails(&mut self, left: &mut [f32], right: &mut [f32]) {
@@ -1500,7 +1506,7 @@ mod tests {
     }
 
     #[test]
-    fn non_ending_cues_cancel_a_playing_ending() {
+    fn cues_do_not_leave_a_previous_fill_or_ending_active() {
         let mut style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
         style.fills.push(DrumPattern {
             length_beats: 4.0,
@@ -1531,26 +1537,64 @@ mod tests {
                 "{cue:?} then Cue::None must not auto-stop"
             );
         }
+        let mut seq = BandSequencer::new(style, 48_000, 1);
+        seq.cue(Cue::Fill);
+        seq.handle_timeline_event(&bar(2));
+        seq.cue(Cue::Ending);
+        seq.handle_timeline_event(&bar(3));
+        assert!(seq.is_playing_ending);
+        assert!(
+            !seq.is_playing_fill,
+            "Ending must replace the previous Fill"
+        );
+        seq.handle_timeline_event(&bar(4));
+        assert!(
+            seq.take_ending_complete(),
+            "Ending must finish after its own bar"
+        );
     }
 
     #[test]
-    fn fill_lasts_the_bar_when_a_song_section_is_installed() {
+    fn fill_keeps_section_parts_and_restores_them_after_its_bar() {
         let _lock = crate::kit::lock_test_env();
         use jam_core::chart::{BarChord, ResolvedBar, ResolvedChart};
         let mut style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
         style.fills.push(DrumPattern {
             length_beats: 4.0,
             hits: vec![{
-                let mut h = kick(1.0);
+                let mut h = kick(0.0);
                 h.instrument = "snare".into();
                 h
             }],
         });
+        let bass = style_with(
+            0.5,
+            vec![],
+            vec![BassNote {
+                degree: 1,
+                octave: 0,
+                at_beats: 0.0,
+                dur_beats: 2.0,
+                velocity: 0.8,
+            }],
+            vec![],
+        );
+        let comp = style_with(
+            0.5,
+            vec![],
+            vec![],
+            vec![CompStrum {
+                at_beats: 0.0,
+                dur_beats: 2.0,
+                velocity: 0.8,
+                direction: "down".into(),
+            }],
+        );
         let mut seq = BandSequencer::new(style.clone(), 48_000, 1);
         seq.section_bands.insert(
             "verse".into(),
             SectionBand {
-                styles: [style.clone(), style.clone(), style.clone()],
+                styles: [style.clone(), bass, comp],
                 intensity: [0.5; 3],
                 gains: [1.0; 3],
                 muted: [false; 3],
@@ -1563,52 +1607,67 @@ mod tests {
             key_tonic: 0,
             time_sig: (4, 4),
             default_bpm: 120.0,
-            bars: vec![ResolvedBar {
-                bar_index: 1,
-                section_id: "verse".into(),
-                section_name: "Verse".into(),
-                chords: vec![BarChord {
-                    chord: "C".into(),
-                    beats: 4.0,
-                }],
-                style_override_id: None,
-            }],
+            bars: (1..=2)
+                .map(|bar_index| ResolvedBar {
+                    bar_index,
+                    section_id: "verse".into(),
+                    section_name: "Verse".into(),
+                    chords: vec![BarChord {
+                        chord: "C".into(),
+                        beats: 4.0,
+                    }],
+                    style_override_id: None,
+                })
+                .collect(),
         });
-        let mut l = vec![0.0f32; 256];
-        let mut r = vec![0.0f32; 256];
-        seq.render_span(
-            &Span {
-                offset: 0,
-                frames: 256,
-                start_beats: 0.0,
-            },
-            24_000.0,
-            4.0,
-            &mut l,
-            &mut r,
+        let render = |seq: &mut BandSequencer, start_beats| {
+            seq.begin_block();
+            // Long enough to include every staggered comp note, so a later bar
+            // cannot pass by emitting a pending onset from this one.
+            seq.render_span(
+                &Span {
+                    offset: 0,
+                    frames: 2400,
+                    start_beats,
+                },
+                24_000.0,
+                4.0,
+                &mut [0.0; 2400],
+                &mut [0.0; 2400],
+            );
+            seq.note_events
+                .iter()
+                .filter(|n| n.bytes[0] & 0xf0 == 0x90)
+                .map(|n| n.bytes)
+                .collect::<Vec<_>>()
+        };
+        for (bar, cue, drum) in [(1, Cue::Fill, 38), (2, Cue::None, 36)] {
+            seq.cue(cue);
+            seq.handle_timeline_event(&TimelineEvent::Bar {
+                bar,
+                is_count_in: false,
+            });
+            let notes = render(&mut seq, f64::from(bar - 1) * 4.0);
+            assert!(
+                notes.iter().any(|n| n[0] == 0x99 && n[1] == drum),
+                "bar {bar}: {notes:?}"
+            );
+            assert!(
+                notes.iter().any(|n| n[0] == 0x90),
+                "bar {bar}: missing section bass: {notes:?}"
+            );
+            assert!(
+                notes.iter().any(|n| n[0] == 0x91),
+                "bar {bar}: missing section comp: {notes:?}"
+            );
+            assert_eq!(seq.is_playing_fill, bar == 1);
+        }
+        seq.clear_song();
+        let notes = render(&mut seq, 0.0);
+        assert!(
+            notes.iter().all(|n| n[0] == 0x99),
+            "section parts leaked into the plain style: {notes:?}"
         );
-        seq.cue(Cue::Fill);
-        seq.handle_timeline_event(&TimelineEvent::Bar {
-            bar: 1,
-            is_count_in: false,
-        });
-        assert_eq!(seq.current_pattern.drums.hits[0].instrument, "snare");
-        seq.render_span(
-            &Span {
-                offset: 0,
-                frames: 256,
-                start_beats: 0.0,
-            },
-            24_000.0,
-            4.0,
-            &mut l,
-            &mut r,
-        );
-        assert_eq!(
-            seq.current_pattern.drums.hits[0].instrument, "snare",
-            "section groove must not wipe a fill that lasts this bar"
-        );
-        assert!(seq.is_playing_fill);
     }
 
     #[test]

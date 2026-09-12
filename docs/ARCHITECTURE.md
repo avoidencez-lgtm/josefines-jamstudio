@@ -600,6 +600,10 @@ reusing `Chart` for chords/arrangement and the existing style registry for each
 section's three independent parts. `src/lib/originals.ts` holds editable state,
 50 body-level undo steps and named versions. Changes reach audio on Play or Record.
 Locks preserve a part's settings when trying another groove; direct edits remain available.
+The sequencer selects the current section before applying a Fill or Ending cue.
+The section's independent bass and comp remain active during the fill and return
+with its normal drum groove afterward. Ending replaces a prior Fill and stops
+after its own bar. Leaving an original clears its composed pattern from the cache.
 
 `originals_save/list/load/record`, `capture_arm/keep` and `takes_favourite` are
 additive commands. `src-tauri/src/originals.rs` bounds and validates documents,
