@@ -1,4 +1,47 @@
+import { bundledStyles } from "../../ipc/preview";
+import { useEngineStore } from "../../store/engine";
 import type { JoToolCall } from "./persona";
+
+const STYLE_NOISE = new Set([
+  "groove",
+  "notes",
+  "note",
+  "16th",
+  "8th",
+  "slow",
+  "the",
+  "and",
+  "for",
+  "some",
+  "with",
+]);
+
+function listedStyles() {
+  const live = useEngineStore.getState().styles;
+  return live.length ? live : bundledStyles();
+}
+
+function styleFromUtterance(lower: string) {
+  let best: { id: string; name: string; score: number } | undefined;
+  for (const style of listedStyles()) {
+    const name = style.name.toLowerCase();
+    const genre = style.genre.toLowerCase();
+    const idText = style.id.replaceAll("-", " ");
+    let score = 0;
+    if (lower.includes(name)) score += 4;
+    if (lower.includes(idText)) score += 4;
+    if (genre.length > 2 && lower.includes(genre)) score += 3;
+    const meter = style.feel?.timeSig;
+    if (meter && lower.includes(`${meter[0]}/${meter[1]}`)) score += 2;
+    for (const token of `${name} ${idText}`.split(/[^a-z0-9/]+/)) {
+      if (token.length < 4 || STYLE_NOISE.has(token)) continue;
+      if (lower.includes(token)) score += 1;
+    }
+    if (score > 0 && score > (best?.score ?? 0))
+      best = { id: style.id, name: style.name, score };
+  }
+  return best;
+}
 
 /** Strip wrap-quotes, a trailing play request, then trailing punctuation. */
 export function cleanSongQuery(raw: string): string {
@@ -25,7 +68,7 @@ export function parseNaturalIntent(
 } {
   const lower = text.toLowerCase().trim();
   const toolCalls: JoToolCall[] = [];
-  const reply = "This is understood.";
+  const reply = "I didn't catch that. Try blues in A at 90.";
   const load = /^(?:load song|last(?: inn)? sang(?:en)?)\s+(.+)$/i.exec(
     text.trim(),
   );
@@ -227,43 +270,14 @@ export function parseNaturalIntent(
     };
   }
 
-  // 2. Styles (e.g. "play some funk" shouldn't just trigger generic "play")
-  if (lower.includes("shuffle") || lower.includes("blues shuffle")) {
+  // 2. Styles from the registry (never match hard-coded style ids).
+  const style = styleFromUtterance(lower);
+  if (style) {
     toolCalls.push({
       name: "set_style",
-      arguments: { styleId: "blues-shuffle" },
+      arguments: { styleId: style.id },
     });
-    return { reply: "Switching to Blues Shuffle.", toolCalls };
-  }
-  if (lower.includes("funk") || lower.includes("funky")) {
-    toolCalls.push({ name: "set_style", arguments: { styleId: "funk-16" } });
-    return { reply: "Locking in the 16th-note funk groove.", toolCalls };
-  }
-  if (lower.includes("jazz") || lower.includes("swing")) {
-    toolCalls.push({ name: "set_style", arguments: { styleId: "jazz-swing" } });
-    return { reply: "Stepping into Jazz Swing.", toolCalls };
-  }
-  if (
-    lower.includes("metal") ||
-    lower.includes("gallop") ||
-    lower.includes("heavy")
-  ) {
-    toolCalls.push({
-      name: "set_style",
-      arguments: { styleId: "metal-gallop" },
-    });
-    return { reply: "Locked in for a heavy metal gallop.", toolCalls };
-  }
-  if (lower.includes("ballad") || lower.includes("6/8")) {
-    toolCalls.push({ name: "set_style", arguments: { styleId: "ballad-68" } });
-    return { reply: "Slowing down for the 6/8 ballad.", toolCalls };
-  }
-  if (lower.includes("straight rock")) {
-    toolCalls.push({
-      name: "set_style",
-      arguments: { styleId: "rock-straight" },
-    });
-    return { reply: "This is driving a straight 8th rock groove.", toolCalls };
+    return { reply: `This is switching to ${style.name}.`, toolCalls };
   }
 
   // 3. Cues

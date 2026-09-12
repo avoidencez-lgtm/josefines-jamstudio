@@ -253,9 +253,9 @@ it("strips trailing punctuation and and-play so the library title still matches"
   expect(parseNaturalIntent("load song Blå natt and play").toolCalls).toEqual([
     call("Blå natt"),
   ]);
-  expect(parseNaturalIntent("last inn sangen Blå natt og spill").toolCalls).toEqual(
-    [call("Blå natt")],
-  );
+  expect(
+    parseNaturalIntent("last inn sangen Blå natt og spill").toolCalls,
+  ).toEqual([call("Blå natt")]);
   expect(parseNaturalIntent("load song.").toolCalls).toEqual([]);
   expect(parseNaturalIntent("load song and play").toolCalls).toEqual([]);
   expect(await handleJoQuery("load song Blå natt.")).toContain("Blå natt");

@@ -2785,13 +2785,13 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     'run("Tuner"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
-    'run("The tuner"',
+    'command("The tuner"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'run("Count-in"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
-    'run("The count-in"',
+    'command("The count-in"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'run("Time signature"',
@@ -2914,7 +2914,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     'runOk("Transpose song"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
-    'runOk("The transpose song"',
+    'command("The transpose song"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'command("Record"',
@@ -3786,8 +3786,11 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "This is rolling.",
   );
   expect(readFileSync("src/lib/jo/intent.ts", "utf8")).not.toContain("Got it.");
-  expect(readFileSync("src/lib/jo/intent.ts", "utf8")).toContain(
+  expect(readFileSync("src/lib/jo/intent.ts", "utf8")).not.toContain(
     "This is understood.",
+  );
+  expect(readFileSync("src/lib/jo/intent.ts", "utf8")).toContain(
+    "I didn't catch that.",
   );
   expect(readFileSync("src/lib/jo/gemini.ts", "utf8")).not.toContain("On it.");
   expect(readFileSync("src/lib/jo/gemini.ts", "utf8")).toContain(
@@ -3839,7 +3842,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "Driving straight 8th rock groove.",
   );
   expect(readFileSync("src/lib/jo/intent.ts", "utf8")).toContain(
-    "This is driving a straight 8th rock groove.",
+    "This is switching to",
   );
   expect(readFileSync("src/screens/Jo.tsx", "utf8")).not.toContain('"Ready."');
   expect(readFileSync("src/screens/Jo.tsx", "utf8")).toContain(

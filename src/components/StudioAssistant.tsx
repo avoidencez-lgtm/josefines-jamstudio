@@ -28,6 +28,23 @@ const studioFingerprint = () =>
 
 const field =
   "w-full min-w-0 rounded-[var(--radius-m)] border border-[var(--line)] bg-[var(--bg-2)] p-2 text-sm";
+
+/** Drop an in-flight request so Send is usable again before the proxy times out. */
+export function dismissStudioAssistantTurn(work: {
+  cancelled: { current: boolean };
+  running: { current: boolean };
+  generation: { current: number };
+}): { busy: false; message: string } {
+  work.cancelled.current = true;
+  work.running.current = false;
+  work.generation.current += 1;
+  return {
+    busy: false,
+    message:
+      "Request dismissed. Any provider usage already incurred still counts.",
+  };
+}
+
 export const StudioAssistant = memo(function StudioAssistant() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -38,6 +55,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
   const cancelled = useRef(false);
+  const generation = useRef(0);
   const activeLocal = useRef(false);
   const [message, setMessage] = useState("");
   const { preferences, save, loaded } = useAi();
@@ -57,6 +75,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
   const send = async () => {
     if (!ready || engine.isRecording || !query.trim() || running.current)
       return;
+    const gen = ++generation.current;
     running.current = true;
     activeLocal.current = Boolean(brain.local);
     cancelled.current = false;
@@ -73,7 +92,7 @@ export const StudioAssistant = memo(function StudioAssistant() {
     };
     try {
       const result = await askBrain(input, preferences);
-      if (cancelled.current) return;
+      if (cancelled.current || gen !== generation.current) return;
       setAnswer(result);
       setActions(JSON.stringify(result.toolCalls, null, 2));
       setBase(snapshot);
@@ -85,11 +104,13 @@ export const StudioAssistant = memo(function StudioAssistant() {
       );
       setQuery("");
     } catch (e) {
-      if (!cancelled.current)
+      if (!cancelled.current && gen === generation.current)
         setMessage(withNextStep(String(e).replace(/^Error:\s*/, "")));
     } finally {
-      running.current = false;
-      setBusy(false);
+      if (gen === generation.current) {
+        running.current = false;
+        setBusy(false);
+      }
     }
   };
   const apply = async () => {
@@ -324,10 +345,13 @@ export const StudioAssistant = memo(function StudioAssistant() {
                 <Button
                   type="button"
                   onClick={() => {
-                    cancelled.current = true;
-                    setMessage(
-                      "Request dismissed. Any provider usage already incurred still counts.",
-                    );
+                    const dismissed = dismissStudioAssistantTurn({
+                      cancelled,
+                      running,
+                      generation,
+                    });
+                    setBusy(dismissed.busy);
+                    setMessage(dismissed.message);
                     if (activeLocal.current)
                       void ipc
                         .invoke("agent_cancel")

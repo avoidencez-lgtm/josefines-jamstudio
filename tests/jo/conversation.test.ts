@@ -33,6 +33,39 @@ it("shares real command outcomes across rooms without erasing another draft", as
   expect(useJoConversation.getState().messages.at(-1)?.text).toMatch(/stop/i);
 });
 
+it("does not execute offline transport after a provider failure", async () => {
+  const engine = useEngineStore.getState();
+  const ai = useAi.getState();
+  const conversation = useJoConversation.getState();
+  useEngineStore.setState({ ...engine, isPreview: false }, true);
+  useAi.setState({
+    ...ai,
+    loaded: true,
+    preferences: { ...ai.preferences, selected: "codex" },
+  });
+  useJoConversation.setState({
+    ...conversation,
+    busy: false,
+    messages: [],
+    pending: null,
+  });
+  const invoke = vi.spyOn(ipc, "invoke");
+  vi.spyOn(providers, "askBrain").mockRejectedValue(
+    new Error("HTTP 401 unauthorized"),
+  );
+  try {
+    await handleJoQuery("why does it stop playing");
+    expect(invoke).not.toHaveBeenCalled();
+    const last = useJoConversation.getState().messages.at(-1);
+    expect(last?.sender).toBe("jo");
+    expect(last?.text).not.toMatch(/rolling|This is understood|Got it/i);
+  } finally {
+    useEngineStore.setState(engine, true);
+    useAi.setState(ai, true);
+    useJoConversation.setState(conversation, true);
+  }
+});
+
 it("pairs a provider failure with an assistant turn so later requests keep alternating", async () => {
   const engine = useEngineStore.getState();
   const ai = useAi.getState();
@@ -125,7 +158,8 @@ it("collapses a discarded proposal so Anthropic never sees two assistant turns",
     ctx,
   ).messages.map((m) => m.role);
   expect(roles).toEqual(["user", "assistant", "user"]);
-  for (let i = 1; i < roles.length; i++) expect(roles[i]).not.toBe(roles[i - 1]);
+  for (let i = 1; i < roles.length; i++)
+    expect(roles[i]).not.toBe(roles[i - 1]);
 });
 
 it("keeps song edits behind review and ignores a cancelled request before dispatch", async () => {
