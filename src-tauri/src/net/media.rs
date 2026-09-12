@@ -201,21 +201,30 @@ pub async fn fetch(
         if !response.status().is_success() { return Err(format!("{} returned HTTP {status}. Check model access, credits and prompt in your provider account.", m.name)); }
         read_bounded(response, 192 * 1024 * 1024).await
     }.await;
-    let _ = log.append(&CostEntry {
-        at_ms: super::now_ms(),
-        provider: m.provider.clone(),
-        method: if body.is_some() { "POST" } else { "GET" }.into(),
-        path: super::strip_query(path),
-        status,
-        duration_ms: started.elapsed().as_millis() as u64,
-        bytes_out: body.map_or(0, |v| v.to_string().len() as u64),
-        bytes_in: result.as_ref().map_or(0, |v| v.len() as u64),
-        error: result.as_ref().err().cloned(),
-        model: Some(m.model.clone()),
-        estimated_cost_usd: None,
-        ..CostEntry::default()
-    });
+    record_media_usage(
+        log,
+        CostEntry {
+            at_ms: super::now_ms(),
+            provider: m.provider.clone(),
+            method: if body.is_some() { "POST" } else { "GET" }.into(),
+            path: super::strip_query(path),
+            status,
+            duration_ms: started.elapsed().as_millis() as u64,
+            bytes_out: body.map_or(0, |v| v.to_string().len() as u64),
+            bytes_in: result.as_ref().map_or(0, |v| v.len() as u64),
+            error: result.as_ref().err().cloned(),
+            model: Some(m.model.clone()),
+            estimated_cost_usd: None,
+            ..CostEntry::default()
+        },
+    )?;
     result
+}
+
+fn record_media_usage(log: &CostLog, entry: CostEntry) -> Result<(), String> {
+    log.append(&entry).map_err(|_| {
+        "Could not save media usage. Check the data folder; do not retry automatically."
+    })
 }
 async fn read_bounded(mut response: reqwest::Response, limit: usize) -> Result<Vec<u8>, String> {
     if response.content_length().is_some_and(|n| n > limit as u64) {
@@ -722,5 +731,30 @@ mod tests {
             serde_json::to_vec(&json!({"base_resp":{"status_code":1000}})).unwrap()
         )
         .is_err());
+    }
+
+    #[test]
+    fn paid_media_fetch_fails_loud_when_usage_cannot_be_appended() {
+        let dir = std::env::temp_dir().join(format!("jam-media-cost-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let blocker = dir.join("not-a-folder");
+        std::fs::write(&blocker, b"x").unwrap();
+        let log = CostLog::new(blocker.join("usage.jsonl"));
+        let err = record_media_usage(
+            &log,
+            CostEntry {
+                provider: "runway".into(),
+                path: "/v1/generate".into(),
+                status: 200,
+                ..CostEntry::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Could not save media usage. Check the data folder; do not retry automatically."
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
