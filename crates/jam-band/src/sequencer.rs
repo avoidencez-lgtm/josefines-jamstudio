@@ -128,6 +128,7 @@ pub struct BandSequencer {
     ending_complete: bool,
     pending_note_offs: Vec<PendingNoteOff>,
     pending_note_ons: Vec<PendingNoteOn>,
+    applied_pattern_range: Option<(f32, f32)>,
     /// Position (absolute beats) up to which pattern events have been scheduled.
     cursor_beats: Option<f64>,
     sample_rate: u32,
@@ -176,6 +177,7 @@ impl BandSequencer {
             ending_complete: false,
             pending_note_offs: Vec::with_capacity(64),
             pending_note_ons: Vec::with_capacity(16),
+            applied_pattern_range: None,
             cursor_beats: None,
             sample_rate,
         };
@@ -274,7 +276,7 @@ impl BandSequencer {
     pub fn update_energy(&mut self, energy: f32) {
         self.current_energy = energy;
         if self.follow_energy && !self.is_playing_fill && !self.is_playing_ending {
-            self.set_intensity(energy);
+            self.queue_intensity_at_next_bar(energy);
         }
     }
 
@@ -347,7 +349,10 @@ impl BandSequencer {
             .or_else(|| self.style.patterns.first());
 
         if let Some(p) = entry {
-            self.current_pattern = p.clone();
+            if self.applied_pattern_range != Some(p.intensity) {
+                self.current_pattern = p.clone();
+                self.applied_pattern_range = Some(p.intensity);
+            }
         }
     }
 
@@ -390,6 +395,7 @@ impl BandSequencer {
                         self.is_playing_ending = false;
                         if let Some(fill) = self.style.fills.first() {
                             self.current_pattern.drums = fill.clone();
+                            self.applied_pattern_range = None;
                             self.is_playing_fill = true;
                         }
                     }
@@ -419,6 +425,7 @@ impl BandSequencer {
                         self.is_stopped = false;
                         if let Some(ending) = self.style.endings.first() {
                             self.current_pattern.drums = ending.clone();
+                            self.applied_pattern_range = None;
                             self.is_playing_ending = true;
                         }
                     }
@@ -620,6 +627,7 @@ impl BandSequencer {
                 bass: selected[1].bass.clone(),
                 comp: selected[2].comp.clone(),
             };
+            self.applied_pattern_range = Some(self.current_pattern.intensity);
             // Keep note timing and velocity stable when trying other parts.
             self.style.humanize.timing_ms = 0.0;
             self.style.humanize.velocity = 0.0;
@@ -1565,6 +1573,54 @@ mod tests {
             "section groove must not wipe a fill that lasts this bar"
         );
         assert!(seq.is_playing_fill);
+    }
+
+    #[test]
+    fn follow_energy_waits_for_the_next_bar() {
+        let _lock = crate::kit::lock_test_env();
+        let mut style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
+        let mut loud = kick(0.0);
+        loud.instrument = "snare".into();
+        style.patterns = vec![
+            PatternEntry {
+                intensity: (0.0, 0.67),
+                drums: DrumPattern {
+                    length_beats: 4.0,
+                    hits: vec![kick(0.0)],
+                },
+                bass: Default::default(),
+                comp: Default::default(),
+            },
+            PatternEntry {
+                intensity: (0.67, 1.0),
+                drums: DrumPattern {
+                    length_beats: 4.0,
+                    hits: vec![loud],
+                },
+                bass: Default::default(),
+                comp: Default::default(),
+            },
+        ];
+        let mut seq = BandSequencer::new(style, 48_000, 1);
+        seq.set_intensity(0.5);
+        seq.set_follow_energy(true);
+        seq.handle_timeline_event(&TimelineEvent::Bar {
+            bar: 1,
+            is_count_in: false,
+        });
+        assert_eq!(seq.current_pattern.drums.hits[0].instrument, "kick");
+        seq.update_energy(0.9);
+        assert_eq!(
+            seq.current_pattern.drums.hits[0].instrument, "kick",
+            "energy crossing 0.67 at beat 2 must not switch the groove mid-bar"
+        );
+        assert_eq!(seq.pending_intensity, Some(0.9));
+        seq.handle_timeline_event(&TimelineEvent::Bar {
+            bar: 2,
+            is_count_in: false,
+        });
+        assert_eq!(seq.current_pattern.drums.hits[0].instrument, "snare");
+        assert_eq!(seq.pending_intensity, None);
     }
 
     #[test]
