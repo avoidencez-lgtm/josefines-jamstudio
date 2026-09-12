@@ -889,7 +889,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
               ? "song"
               : state.lyriaStatus.phase !== "idle"
                 ? "lyria"
-                : state.telemetry.reference
+                : state.activeSource === "song"
                   ? "band"
                   : state.activeSource,
           }));

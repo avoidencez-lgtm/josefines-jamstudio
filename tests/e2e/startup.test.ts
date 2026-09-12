@@ -284,6 +284,20 @@ describe("desktop startup against the preview engine", () => {
     expect(store().activeSource).toBe("band");
   });
 
+  it("restores activeSource to band when reference.state is null while already unloaded", async () => {
+    const listen = vi.spyOn(ipc, "listen");
+    await startDesktop();
+    const onReference = listen.mock.calls.find(
+      ([event]) => event === "reference.state",
+    )?.[1] as ((reference: unknown) => void) | undefined;
+    expect(onReference).toBeDefined();
+    expect(store().telemetry.reference == null).toBe(true);
+    useEngineStore.setState({ activeSource: "song" });
+    onReference?.(null);
+    expect(store().telemetry.reference).toBeNull();
+    expect(store().activeSource).toBe("band");
+  });
+
   it("delivers live telemetry to the store only once the engine ticks", async () => {
     await startDesktop();
     // Nothing has ticked: the store still shows its own defaults, not the chart's.
