@@ -59,13 +59,13 @@ const EngineStatusView: React.FC<{
     [
       "This is the output.",
       status.output
-        ? `${status.output.device_name}. ${status.output.channels} channels. ${status.output.sample_format}.`
+        ? `${status.output.device_name}. ${status.output.sample_rate} Hz. ${status.output.channels} channels. ${status.output.sample_format}.`
         : "No output device.",
     ],
     [
       "This is the input.",
       status.input
-        ? `${status.input.device_name}. ${status.input.channels} channels. ${status.input.sample_format}.`
+        ? `${status.input.device_name}. ${status.input.sample_rate} Hz. ${status.input.channels} channels. ${status.input.sample_format}.`
         : "No input device. Tuner and recording are silent.",
     ],
     [

@@ -327,7 +327,7 @@ fn audio_set_config_restarts_the_headless_engine_and_persists_the_devices() {
     let status = studio.ok("audio_set_config", json!({ "config": config }));
     assert_eq!(status["mode"], "Headless");
     assert_eq!(status["running"], true);
-    assert_eq!(status["sample_rate"], 44100);
+    assert_eq!(status["sample_rate"], 48000);
     assert_eq!(status["buffer_size"], 128);
     assert_eq!(
         status["last_error"],
@@ -338,14 +338,14 @@ fn audio_set_config_restarts_the_headless_engine_and_persists_the_devices() {
         status["output"],
         json!({
             "device_name": "headless",
-            "sample_rate": 44100,
+            "sample_rate": 48000,
             "channels": 2,
             "buffer_frames": 128,
             "sample_format": "f32"
         })
     );
     assert_eq!(status["input"]["device_name"], "file");
-    assert_eq!(status["input"]["sample_rate"], 44100);
+    assert_eq!(status["input"]["sample_rate"], 48000);
 
     assert_eq!(studio.ok("audio_get_config", json!({})), config);
     let mut current = studio.ok("engine_status", json!({}));
@@ -376,12 +376,12 @@ fn audio_set_config_restarts_the_headless_engine_and_persists_the_devices() {
     let relaunched = Studio::boot();
     assert_eq!(relaunched.ok("audio_get_config", json!({})), config);
     let status = relaunched.ok("engine_status", json!({}));
-    assert_eq!(status["sample_rate"], 44100);
+    assert_eq!(status["sample_rate"], 48000);
     assert_eq!(status["buffer_size"], 128);
 }
 
 #[test]
-fn audio_set_config_floors_the_rate_and_buffer_the_engine_can_run_at() {
+fn audio_set_config_keeps_48k_internal_and_floors_the_buffer() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let tiny = json!({
@@ -394,18 +394,18 @@ fn audio_set_config_floors_the_rate_and_buffer_the_engine_can_run_at() {
     let status = studio.ok("audio_set_config", json!({ "config": tiny }));
     assert_eq!(status["mode"], "Headless");
     assert_eq!(status["running"], true);
-    assert_eq!(status["sample_rate"], 8000, "8 kHz is the lowest rate");
+    assert_eq!(status["sample_rate"], 48000);
     assert_eq!(
         status["buffer_size"], 32,
         "32 frames is the smallest buffer"
     );
-    assert_eq!(status["output"]["sample_rate"], 8000);
+    assert_eq!(status["output"]["sample_rate"], 48000);
     assert_eq!(status["output"]["buffer_frames"], 32);
     // The requested values are what gets stored; the status says what runs.
     assert_eq!(studio.ok("audio_get_config", json!({})), tiny);
     assert_eq!(studio.ok("settings_get", json!({}))["sample_rate"], 100);
     let telemetry = telemetry(&studio);
-    assert_eq!(telemetry["status"]["sample_rate"], 8000);
+    assert_eq!(telemetry["status"]["sample_rate"], 48000);
 
     // Zero is the extreme of the same rule and must not break the next launch.
     let zero = json!({
@@ -416,13 +416,13 @@ fn audio_set_config_floors_the_rate_and_buffer_the_engine_can_run_at() {
         "buffer_size": 0
     });
     let status = studio.ok("audio_set_config", json!({ "config": zero }));
-    assert_eq!(status["sample_rate"], 8000);
+    assert_eq!(status["sample_rate"], 48000);
     assert_eq!(status["buffer_size"], 32);
     let relaunched = Studio::boot();
     let status = relaunched.ok("engine_status", json!({}));
     assert_eq!(status["mode"], "Headless");
     assert_eq!(status["running"], true);
-    assert_eq!(status["sample_rate"], 8000);
+    assert_eq!(status["sample_rate"], 48000);
     assert_eq!(status["buffer_size"], 32);
     assert_eq!(relaunched.ok("audio_get_config", json!({})), zero);
 }

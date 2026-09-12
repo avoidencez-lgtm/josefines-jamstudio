@@ -771,7 +771,7 @@ describe("rooms, end to end through the preview engine", () => {
     expect(useEngineStore.getState().telemetry.transport.state).toBe("stopped");
   });
 
-  it("describes the buffer from the engine's clock after applying an audio config and deep-links into AI settings", async () => {
+  it("keeps the engine clock at 48 kHz after applying an audio config and deep-links into AI settings", async () => {
     const store = useEngineStore.getState();
     await store.refreshDevices();
     await store.loadSettings();
@@ -790,15 +790,15 @@ describe("rooms, end to end through the preview engine", () => {
       sample_rate: 96_000,
       buffer_size: 128,
     });
-    expect(applied?.sample_rate).toBe(96_000);
+    expect(applied?.sample_rate).toBe(48_000);
     expect(applied?.buffer_size).toBe(128);
     settings = useEngineStore.getState().settings;
     status = useEngineStore.getState().engineStatus;
     expect(settings?.sample_rate).toBe(96_000);
     expect(settings?.buffer_size).toBe(128);
-    expect(status?.sample_rate).toBe(96_000);
+    expect(status?.sample_rate).toBe(48_000);
     expect(bufferMs(settings?.buffer_size ?? 0, status?.sample_rate ?? 0)).toBe(
-      "1.3",
+      "2.7",
     );
     expect(await ipc.invoke<AudioConfig>("audio_get_config")).toEqual({
       ...BASELINE_AUDIO,

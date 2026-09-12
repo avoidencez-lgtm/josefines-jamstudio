@@ -5584,13 +5584,13 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "use Restart this audio.;",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
-    "use Restart this audio; the refusal clears after a matching restart.",
+    "The timeline, instruments and recorder always run at 48 kHz.",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "bruk Restart this audio.;",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
-    "bruk Restart this audio; sperren fjernes etter en omstart med samsvarende frekvenser.",
+    "Tidslinjen, instrumentene og opptakeren kjører alltid ved 48 kHz.",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Loop off. disables",
@@ -8873,7 +8873,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(settings).toContain("This is the clock.");
   expect(settings).not.toContain("} ch · ${status.output.sample_format}");
   expect(settings).toContain(
-    "${status.output.device_name}. ${status.output.channels} channels. ${status.output.sample_format}.",
+    "${status.output.device_name}. ${status.output.sample_rate} Hz. ${status.output.channels} channels. ${status.output.sample_format}.",
   );
   expect(settings).not.toContain("Hz · driver buffer");
   expect(settings).toContain(

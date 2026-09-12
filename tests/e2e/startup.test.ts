@@ -625,7 +625,7 @@ describe("desktop startup against the preview engine", () => {
     expect(store().settings).toEqual(original);
   });
 
-  it("opening the settings room lists the simulated devices and applies a device change to the engine clock", async () => {
+  it("keeps the engine at 48 kHz when a device requests another rate", async () => {
     await startDesktop();
     expect(previous.devices).toEqual({ inputs: [], outputs: [] });
     await store().refreshDevices();
@@ -656,9 +656,9 @@ describe("desktop startup against the preview engine", () => {
       buffer_size: 128,
     };
     const status = await store().applyAudioConfig(config);
-    expect(status?.sample_rate).toBe(44_100);
+    expect(status?.sample_rate).toBe(48_000);
     expect(status?.buffer_size).toBe(128);
-    expect(store().engineStatus?.sample_rate).toBe(44_100);
+    expect(store().engineStatus?.sample_rate).toBe(48_000);
     expect(store().settings).toEqual({ schemaVersion: 1, ...config });
     // The preview's status carries a last_error, and the room shows it as a toast.
     expect(store().notices.map((n) => [n.kind, n.text])).toEqual([
