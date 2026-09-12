@@ -577,8 +577,22 @@ async fn install(pack: &Pack, mut on_state: impl FnMut(&PackStatus)) -> Result<(
     downloading.message = "Downloading this sample pack.".into();
     if let Ok(path) = std::env::var("JAM_ASSETS_LOCAL") {
         let local = PathBuf::from(path);
-        if !local.is_file() {
-            return Err("JAM_ASSETS_LOCAL does not point at a zip.".into());
+        let metadata = match local.metadata() {
+            Ok(metadata) if metadata.is_file() => metadata,
+            _ => return Err("JAM_ASSETS_LOCAL does not point at a zip.".into()),
+        };
+        if pack.bytes > MAX_ZIP {
+            return Err("Sample pack is larger than 64 MB.".into());
+        }
+        let len = metadata.len();
+        if len > MAX_ZIP {
+            return Err("Sample pack is larger than 64 MB.".into());
+        }
+        if pack.bytes > 0 && len != pack.bytes {
+            return Err(format!(
+                "Sample pack size failed. Expected {} bytes, got {len}.",
+                pack.bytes
+            ));
         }
         fs::create_dir_all(dest.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
         fs::copy(&local, &part).map_err(|e| e.to_string())?;
@@ -1004,6 +1018,24 @@ mod tests {
             pack.sha256
         );
         assert!(!dest.with_extension("zip.part").exists());
+    }
+
+    #[test]
+    fn oversized_local_pack_is_rejected_before_touching_the_partial_download() {
+        let _root = test_root();
+        let zip = _root.dir.join("oversized.zip");
+        tiny_kit_zip(&zip);
+        let mut pack = kit_pack("oversized-kit", &zip);
+        pack.bytes -= 1;
+        let part = pack_dir(&pack.id).with_extension("zip.part");
+        fs::create_dir_all(part.parent().unwrap()).unwrap();
+        fs::write(&part, b"previous partial").unwrap();
+        std::env::set_var("JAM_ASSETS_LOCAL", &zip);
+
+        let err = tauri::async_runtime::block_on(install(&pack, |_| {})).unwrap_err();
+
+        assert!(err.contains("size"), "{err}");
+        assert_eq!(fs::read(part).unwrap(), b"previous partial");
     }
 
     #[test]
