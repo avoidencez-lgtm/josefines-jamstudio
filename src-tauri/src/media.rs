@@ -26,6 +26,32 @@ static SAVE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 static CANCEL: AtomicBool = AtomicBool::new(false);
 static SERIAL: AtomicU64 = AtomicU64::new(0);
 
+struct DirGuard {
+    path: PathBuf,
+    persist: bool,
+}
+
+impl DirGuard {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            persist: false,
+        }
+    }
+
+    fn persist(&mut self) {
+        self.persist = true;
+    }
+}
+
+impl Drop for DirGuard {
+    fn drop(&mut self) {
+        if !self.persist {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
 fn nested_version_ok(extra: &BTreeMap<String, Value>, key: &str) -> Result<(), String> {
     if extra.get(key).is_some_and(|old| old["schemaVersion"] != 1) {
         return Err(format!(
@@ -1369,18 +1395,7 @@ async fn render(base: &Path, document: &Value) -> Result<String, String> {
             "Fit the storyboard to the soundtrack before exporting (within 0.1 seconds).".into(),
         );
     }
-    let exe = platform::find_agent("ffmpeg", "")
-        .map_err(|_| "Install FFmpeg and restart Jamstudio to render videos.")?;
-    let output = base.join("exports").join(id());
-    fs::create_dir_all(&output).map_err(|e| e.to_string())?;
-    write(&output.join("project.json"), document)?;
-    let (w, h) = if p.ratio == "9:16" {
-        (720, 1280)
-    } else {
-        (1280, 720)
-    };
-    let mut concat = String::new();
-    // Render each shot separately: bounded memory independent of the number of clips.
+    let mut clips = Vec::with_capacity(p.shots.len());
     for (i, shot) in p.shots.iter().enumerate() {
         let clip = asset(
             base,
@@ -1394,6 +1409,23 @@ async fn render(base: &Path, document: &Value) -> Result<String, String> {
         {
             return Err(format!("Check video and trim offset for shot {}", i + 1));
         }
+        clips.push(clip);
+    }
+    let exe = platform::find_agent("ffmpeg", "")
+        .map_err(|_| "Install FFmpeg and restart Jamstudio to render videos.")?;
+    let output = base.join("exports").join(id());
+    fs::create_dir_all(&output).map_err(|e| e.to_string())?;
+    let mut guard = DirGuard::new(output.clone());
+    write(&output.join("project.json"), document)?;
+    let (w, h) = if p.ratio == "9:16" {
+        (720, 1280)
+    } else {
+        (1280, 720)
+    };
+    let mut concat = String::new();
+    // Render each shot separately: bounded memory independent of the number of clips.
+    for (i, shot) in p.shots.iter().enumerate() {
+        let clip = &clips[i];
         let frames = ((p.shots[..=i].iter().map(|s| s.seconds).sum::<f64>() * 30.0).round()
             - (p.shots[..i].iter().map(|s| s.seconds).sum::<f64>() * 30.0).round())
             as u64;
@@ -1410,7 +1442,7 @@ async fn render(base: &Path, document: &Value) -> Result<String, String> {
             "-ss".into(),
             shot.trim_start.to_string(),
             "-i".into(),
-            clip.path,
+            clip.path.clone(),
             "-an".into(),
             "-vf".into(),
             filter,
@@ -1466,6 +1498,7 @@ async fn render(base: &Path, document: &Value) -> Result<String, String> {
         target.to_string_lossy().into_owned(),
     ];
     run(&exe, &args, 300).await?;
+    guard.persist();
     Ok(target.to_string_lossy().into_owned())
 }
 #[tauri::command]
@@ -1676,6 +1709,77 @@ mod tests {
         CANCEL.store(false, Ordering::Relaxed);
         assert!(err.contains("canceled"), "{err}");
         assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn dir_guard_removes_folder_unless_persisted() {
+        let base = std::env::temp_dir().join(format!("jam-dir-guard-{}", id()));
+        let removed = base.join("removed");
+        let kept = base.join("kept");
+        fs::create_dir_all(&removed).unwrap();
+        fs::create_dir_all(&kept).unwrap();
+        {
+            let _guard = DirGuard::new(removed.clone());
+        }
+        assert!(!removed.exists());
+        {
+            let mut guard = DirGuard::new(kept.clone());
+            guard.persist();
+        }
+        assert!(kept.exists());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[tokio::test]
+    async fn render_validates_shots_before_creating_export_dir() {
+        let home = std::env::temp_dir().join(format!("jam-render-validate-{}", id()));
+        let base = home.join("music-videos");
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let audio_path = base.join("assets/song.wav");
+        let video_path = base.join("assets/clip.mp4");
+        fs::write(&audio_path, b"x").unwrap();
+        fs::write(&video_path, b"x").unwrap();
+        let audio = Asset {
+            schema_version: 1,
+            id: "song".into(),
+            kind: "audio".into(),
+            path: audio_path.to_string_lossy().into_owned(),
+            seconds: 8.0,
+            label: "song".into(),
+            extra: BTreeMap::new(),
+        };
+        let video = Asset {
+            schema_version: 1,
+            id: "clip".into(),
+            kind: "video".into(),
+            path: video_path.to_string_lossy().into_owned(),
+            seconds: 10.0,
+            label: "clip".into(),
+            extra: BTreeMap::new(),
+        };
+        write(
+            &base.join("assets/song.json"),
+            &serde_json::to_value(&audio).unwrap(),
+        )
+        .unwrap();
+        write(
+            &base.join("assets/clip.json"),
+            &serde_json::to_value(&video).unwrap(),
+        )
+        .unwrap();
+        let doc = json!({
+            "schemaVersion": 1,
+            "id": "film",
+            "revision": 0,
+            "title": "Film",
+            "audioId": "song",
+            "ratio": "16:9",
+            "shots": [{"id": "a", "seconds": 8.0, "assetId": "clip", "trimStart": 9.0}]
+        });
+        let err = render(&base, &doc).await.unwrap_err();
+        assert!(err.contains("Check video and trim offset"), "{err}");
+        assert!(!base.join("exports").exists());
+        fs::remove_dir_all(home).unwrap();
     }
 
     #[tokio::test]
