@@ -377,18 +377,6 @@ export function parseNaturalIntent(
   }
 
   // 8. General Playback / Transport
-  if (
-    lower.includes("play") ||
-    lower.includes("start") ||
-    lower.includes("let's jam") ||
-    lower === "go"
-  ) {
-    toolCalls.push({
-      name: "transport_control",
-      arguments: { action: "play" },
-    });
-    return { reply: "This is rolling.", toolCalls };
-  }
   if (lower.includes("pause") || lower.includes("hold on")) {
     toolCalls.push({
       name: "transport_control",
@@ -402,6 +390,18 @@ export function parseNaturalIntent(
       arguments: { action: "stop" },
     });
     return { reply: "This playback is stopping.", toolCalls };
+  }
+  if (
+    /\bplay\b/.test(lower) ||
+    lower.includes("start") ||
+    lower.includes("let's jam") ||
+    lower === "go"
+  ) {
+    toolCalls.push({
+      name: "transport_control",
+      arguments: { action: "play" },
+    });
+    return { reply: "This is rolling.", toolCalls };
   }
 
   return { reply, toolCalls };

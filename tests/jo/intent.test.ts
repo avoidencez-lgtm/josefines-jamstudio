@@ -15,6 +15,21 @@ describe("Jo Natural Intent Parser", () => {
       name: "transport_control",
       arguments: { action: "stop" },
     });
+
+    for (const text of ["stop playing", "stop playback"]) {
+      expect(parseNaturalIntent(text).toolCalls[0]).toEqual({
+        name: "transport_control",
+        arguments: { action: "stop" },
+      });
+    }
+    expect(parseNaturalIntent("pause playing").toolCalls[0]).toEqual({
+      name: "transport_control",
+      arguments: { action: "pause" },
+    });
+    expect(parseNaturalIntent("play").toolCalls[0]).toEqual({
+      name: "transport_control",
+      arguments: { action: "play" },
+    });
   });
 
   it("parses tempo adjustments", () => {
