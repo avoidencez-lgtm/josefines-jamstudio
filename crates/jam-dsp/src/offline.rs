@@ -142,9 +142,22 @@ pub fn onsets(input: &[f32]) -> Vec<f64> {
     if peak < 1e-6 {
         return Vec::new();
     }
+    pick_peaks(&flux, peak)
+        .into_iter()
+        .map(|i| i as f64 * HOP as f64 / RATE as f64)
+        .collect()
+}
+
+fn pick_peaks(flux: &[f64], peak: f64) -> Vec<usize> {
     let mut hops = Vec::new();
     for (i, value) in flux.iter().enumerate() {
         if *value < peak * 0.2 {
+            continue;
+        }
+        if i > 0 && *value < flux[i - 1] {
+            continue;
+        }
+        if i + 1 < flux.len() && *value < flux[i + 1] {
             continue;
         }
         if hops.last().is_some_and(|last: &usize| i - *last < 5) {
@@ -156,9 +169,7 @@ pub fn onsets(input: &[f32]) -> Vec<f64> {
             hops.push(i);
         }
     }
-    hops.into_iter()
-        .map(|i| i as f64 * HOP as f64 / RATE as f64)
-        .collect()
+    hops
 }
 
 fn canceled(cancel: &AtomicBool) -> Result<(), String> {
@@ -290,20 +301,7 @@ fn tempo(onset: &[f64], seconds: f64) -> (Option<f64>, Vec<f64>) {
     if best.1 < 0.2 {
         return (None, vec![]);
     }
-    let mut peaks = Vec::new();
-    for (i, value) in onset.iter().enumerate() {
-        if *value < peak * 0.2 {
-            continue;
-        }
-        if peaks.last().is_some_and(|last: &usize| i - *last < 5) {
-            let last = peaks.last_mut().unwrap();
-            if *value > onset[*last] {
-                *last = i;
-            }
-        } else {
-            peaks.push(i);
-        }
-    }
+    let peaks = pick_peaks(onset, peak);
     let period = best.0 as f64 * dt;
     let intervals: Vec<f64> = peaks
         .windows(2)
@@ -524,6 +522,33 @@ mod tests {
                 "onset {got} expected {want} (±12 ms)"
             );
         }
+    }
+
+    #[test]
+    fn decaying_attack_does_not_emit_periodic_phantom_onsets() {
+        // Positive energy-flux that falls slowly stays above 0.2*peak for more
+        // than 5 hops. Without a local-max gate, pick_peaks pushed a phantom
+        // every 5 hops. Tolerance: one onset within 12 ms of the attack.
+        let frames = RATE * 2;
+        let mut input = vec![0.0f32; frames * 2];
+        let tau = 0.5_f64;
+        // 187.5 Hz is one cycle per 256-sample hop, so hop RMS is monotonic.
+        for i in 0..frames {
+            let t = i as f64 / RATE as f64;
+            let env = 1.0 - (-t / tau).exp();
+            let v = (i as f64 * 187.5 * std::f64::consts::TAU / RATE as f64).sin() as f32
+                * 0.4
+                * env as f32;
+            input[i * 2] = v;
+            input[i * 2 + 1] = v;
+        }
+        let found = onsets(&input);
+        assert_eq!(
+            found.len(),
+            1,
+            "phantom onsets on a monotonic attack: {found:?}"
+        );
+        assert!(found[0] <= 0.012, "onset {} expected at 0 ±12 ms", found[0]);
     }
 
     #[test]
