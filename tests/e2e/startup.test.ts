@@ -27,6 +27,7 @@ import type {
   TransportTelemetry,
 } from "../../src/ipc/contract";
 import type { PreviewEngine } from "../../src/ipc/preview";
+import { SHORTCUTS } from "../../src/lib/shortcuts";
 import { useEngineStore } from "../../src/store/engine";
 
 const PREVIEW_KEY = "__jamPreviewEngine";
@@ -407,6 +408,48 @@ describe("desktop startup against the preview engine", () => {
     expect(transport.position_beats).toBe(0);
     expect(band.current_chord).toBe("A7");
     expect(output_level.peak_db).toBe(-180);
+  });
+
+  it("keeps TempoTrainer progress when Space resumes from pause", async () => {
+    await startDesktop();
+    await store().transportSetCountIn(0);
+    store().setTempoTrainer({
+      enabled: true,
+      startBpm: 240,
+      targetBpm: 280,
+      stepBpm: 10,
+      everyBars: 2,
+      playedBars: 0,
+    });
+    await store().transportPlay();
+    engine.tick(0.01);
+    expect(store().telemetry.transport).toMatchObject({
+      state: "playing",
+      bpm: 240,
+    });
+
+    // Two bar boundaries at 240 BPM step the tempo; the next bar leaves progress.
+    advance(engine, 2.05);
+    await Promise.resolve();
+    engine.tick(0);
+    expect(store().telemetry.transport.bpm).toBe(250);
+    expect(store().tempoTrainer.playedBars).toBe(0);
+    advance(engine, 1);
+    expect(store().tempoTrainer.playedBars).toBe(1);
+    expect(store().telemetry.transport.bpm).toBe(250);
+
+    await store().transportPause();
+    engine.tick(0);
+    expect(store().telemetry.transport.state).toBe("paused");
+
+    const space = SHORTCUTS.find((s) => s.keys === "Space");
+    await space?.run(store());
+    engine.tick(0);
+    expect(store().telemetry.transport).toMatchObject({
+      state: "playing",
+      bpm: 250,
+    });
+    expect(store().tempoTrainer.playedBars).toBe(1);
   });
 
   it("clamps count-in and tempo to the engine's range before they reach the store", async () => {
