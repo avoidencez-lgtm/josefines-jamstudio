@@ -1,7 +1,7 @@
 /** Invariant 7: a loud error names what happened and the next step. */
 
 const HAS_NEXT_STEP =
-  /settings|first run|retry|free space|save the partial|not configured|delete index|check (the |your |provider|key|~\/|disk)|reconnect|rescan|pick (another|the |a |input|output|one |a scene|a listed)|analyze |import |open |then |restore |fix |choose |add a |press |use (one interface|a cc)|finish the |move (the |it |that )|copy (it|the)|left intact|browser preview|no audio is produced|requires the desktop|reopen |select a section|loopback|measure again|type an offset/i;
+  /settings|first run|retry|free space|save the partial|not configured|delete index|check (the |your |provider|key|~\/|disk)|reconnect|rescan|pick (another|the |a |input|output|one |a scene|a listed)|analyze |import |open |then |restore |fix |choose |add a |press |use (one interface|a cc|save copy)|finish the |move (the |it |that )|copy (it|the)|left intact|browser preview|no audio is produced|requires the desktop|reopen |select a section|loopback|measure again|type an offset/i;
 
 export function withNextStep(text: string): string {
   const t = text.replace(/\s+/g, " ").trim();
