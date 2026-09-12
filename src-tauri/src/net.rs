@@ -330,6 +330,12 @@ fn strip_query(path: &str) -> String {
     path.split('?').next().unwrap_or(path).to_string()
 }
 
+/// Transport failures must not persist `reqwest::Error` Display (it includes the URL).
+fn map_transport_error(provider: &str, err: reqwest::Error) -> String {
+    let _ = err;
+    format!("The {provider} request failed. Check your connection; it was not retried.")
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -422,7 +428,7 @@ pub async fn provider_fetch_notifying(
         let mut resp = builder
             .send()
             .await
-            .map_err(|e| format!("The {} request failed. {e}", entry.id))?;
+            .map_err(|e| map_transport_error(entry.id, e))?;
         let status = resp.status().as_u16();
         let headers: HashMap<String, String> = resp
             .headers()
@@ -434,7 +440,7 @@ pub async fn provider_fetch_notifying(
         while let Some(chunk) = resp
             .chunk()
             .await
-            .map_err(|e| format!("The {} request failed. {e}", entry.id))?
+            .map_err(|e| map_transport_error(entry.id, e))?
         {
             if bytes.len() + chunk.len() > 2 * 1024 * 1024 {
                 return Err("Provider response exceeds the 2 MB text limit.".into());
@@ -787,6 +793,37 @@ mod tests {
         assert_eq!(g.failures, 1);
         assert_eq!(g.bytes_in, 600);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn transport_failures_do_not_persist_the_reqwest_url() {
+        let err = reqwest::Client::builder()
+            .timeout(Duration::from_millis(1))
+            .build()
+            .unwrap()
+            .get("http://127.0.0.1:1/v1/x?key=SECRET")
+            .send()
+            .await
+            .unwrap_err();
+        let display = err.to_string();
+        assert!(
+            display.contains("http") || display.contains("SECRET") || display.contains("127.0.0.1"),
+            "reqwest Display includes the URL: {display}"
+        );
+        let mapped = map_transport_error("gemini", err);
+        assert!(!mapped.contains("SECRET"), "{mapped}");
+        assert!(!mapped.contains("http://"), "{mapped}");
+        assert!(!mapped.contains("127.0.0.1"), "{mapped}");
+        assert!(mapped.contains("gemini"), "{mapped}");
+        let mut cost = CostEntry {
+            provider: "gemini".into(),
+            path: strip_query("/v1/x?key=SECRET"),
+            error: Some(mapped),
+            ..CostEntry::default()
+        };
+        assert_eq!(cost.path, "/v1/x");
+        assert!(!serde_json::to_string(&cost).unwrap().contains("SECRET"));
+        cost.error = None;
     }
 
     #[test]
