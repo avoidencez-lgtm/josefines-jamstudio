@@ -17,6 +17,8 @@ pub enum ChordQuality {
     Sus2,
     /// 7sus / 9sus: sus4 plus a minor seventh.
     Sus7,
+    /// aug / +: major triad with a raised fifth.
+    Augmented,
 }
 
 /// Chart tokens that mean "no chord": keep drums, skip bass and comp.
@@ -117,22 +119,39 @@ fn classify_quality(suffix: &str) -> ChordQuality {
     if q.is_empty() {
         return ChordQuality::Major;
     }
-    let has_seventh_ext =
-        |s: &str| s.contains('7') || s.contains('9') || s.contains("11") || s.contains("13");
+    let has_seventh_ext = |s: &str| {
+        // "add9" / "add11" are colour tones, not sevenths (#363).
+        if s.contains("add") {
+            return s.contains('7');
+        }
+        s.contains('7') || s.contains('9') || s.contains("11") || s.contains("13")
+    };
 
-    if q.starts_with("m7b5") || q.starts_with('ø') || q.starts_with("min7b5") {
+    if q.starts_with("m7b5")
+        || q.starts_with("min7b5")
+        || q.starts_with("-7b5")
+        || q.starts_with('ø')
+        || q.starts_with("h7")
+        || (q.starts_with('h') && q.contains('7'))
+    {
         return ChordQuality::HalfDiminished;
     }
     if q.starts_with("dim") || q.starts_with('o') || q.starts_with('°') {
         return ChordQuality::Diminished;
     }
+    if q.starts_with("aug") || q.starts_with('+') {
+        return ChordQuality::Augmented;
+    }
     // "Min" / "Min7" are minor; a bare "M" / "M7" is major (#325).
+    // "ma7" is major-seventh, not minor; "madd9" is still minor add (#363).
     if q.starts_with("maj")
         || q.starts_with('Δ')
         || (q.starts_with('M') && !q.starts_with("Min"))
+        || (q.starts_with("ma") && !q.starts_with("madd"))
     {
         let ext = q
             .trim_start_matches("maj")
+            .trim_start_matches("ma")
             .trim_start_matches('Δ')
             .trim_start_matches('M');
         return if has_seventh_ext(ext) {
@@ -196,11 +215,13 @@ pub fn voice_chord(chord_symbol: &str, voicing_kind: &str) -> Vec<u8> {
         ("shell", ChordQuality::Sus4) => &[0, 5, 7],
         ("shell", ChordQuality::Sus2) => &[0, 2, 7],
         ("shell", ChordQuality::Sus7) => &[0, 5, 10],
+        ("shell", ChordQuality::Augmented) => &[0, 4, 8],
         ("power", _) => &[0, 7, 12], // Root, 5, 8ve
         ("triad", ChordQuality::Minor) | ("triad", ChordQuality::Minor7) => &[0, 3, 7],
         ("triad", ChordQuality::Diminished) | ("triad", ChordQuality::HalfDiminished) => &[0, 3, 6],
         ("triad", ChordQuality::Sus4) | ("triad", ChordQuality::Sus7) => &[0, 5, 7],
         ("triad", ChordQuality::Sus2) => &[0, 2, 7],
+        ("triad", ChordQuality::Augmented) => &[0, 4, 8],
         ("triad", _) => &[0, 4, 7],
         ("drop2", ChordQuality::Dominant7) => &[0, 10, 16, 19], // Root, b7, 3, 5
         ("drop2", ChordQuality::Major7) => &[0, 11, 16, 19],
@@ -212,6 +233,7 @@ pub fn voice_chord(chord_symbol: &str, voicing_kind: &str) -> Vec<u8> {
         ("drop2", ChordQuality::Sus4) => &[0, 7, 12, 17],
         ("drop2", ChordQuality::Sus2) => &[0, 7, 12, 14],
         ("drop2", ChordQuality::Sus7) => &[0, 10, 17, 19],
+        ("drop2", ChordQuality::Augmented) => &[0, 8, 12, 16],
         (_, ChordQuality::Major) => &[0, 4, 7],
         (_, ChordQuality::Minor) => &[0, 3, 7],
         (_, ChordQuality::Minor7) => &[0, 3, 7, 10],
@@ -221,6 +243,7 @@ pub fn voice_chord(chord_symbol: &str, voicing_kind: &str) -> Vec<u8> {
         (_, ChordQuality::Sus4) => &[0, 5, 7],
         (_, ChordQuality::Sus2) => &[0, 2, 7],
         (_, ChordQuality::Sus7) => &[0, 5, 7, 10],
+        (_, ChordQuality::Augmented) => &[0, 4, 8],
         (_, ChordQuality::Power5) => &[0, 7, 12],
         (_, ChordQuality::Dominant7) => &[0, 4, 7, 10],
     };
@@ -291,6 +314,8 @@ pub fn bass_note_for_chord(
                 ChordQuality::Diminished | ChordQuality::HalfDiminished
             ) {
                 6
+            } else if quality == ChordQuality::Augmented {
+                8
             } else {
                 7
             }
@@ -404,6 +429,30 @@ mod tests {
         assert_eq!(seventh_sus, vec![0, 5, 7, 10]);
         assert!(!relative("Csus2", "triad").contains(&5), "sus2 must not voice a 4th");
         assert!(!seventh_sus.contains(&4), "7sus must not voice a major 3rd");
+    }
+
+    #[test]
+    fn aug_ma7_madd9_and_half_dim_spellings_keep_their_family() {
+        assert_eq!(parse_chord("Caug"), Some((0, ChordQuality::Augmented)));
+        assert_eq!(parse_chord("C+"), Some((0, ChordQuality::Augmented)));
+        assert_eq!(parse_chord("C+7"), Some((0, ChordQuality::Augmented)));
+        assert_eq!(relative("Caug", "shell"), vec![0, 4, 8]);
+        assert_eq!(relative("C+", "triad"), vec![0, 4, 8]);
+        assert!(!relative("Caug", "triad").contains(&7), "aug must raise the 5th");
+
+        assert_eq!(parse_chord("Cma7"), Some((0, ChordQuality::Major7)));
+        assert_eq!(parse_chord("Cma9"), Some((0, ChordQuality::Major7)));
+        assert_eq!(relative("Cma7", "shell"), vec![0, 4, 11]);
+
+        assert_eq!(parse_chord("Cmadd9"), Some((0, ChordQuality::Minor)));
+        assert_eq!(parse_chord("Cmadd11"), Some((0, ChordQuality::Minor)));
+        assert_eq!(relative("Cmadd9", "shell"), vec![0, 3, 7]);
+        assert!(!relative("Cmadd9", "shell").contains(&10), "add9 is not a seventh");
+
+        assert_eq!(parse_chord("C-7b5"), Some((0, ChordQuality::HalfDiminished)));
+        assert_eq!(parse_chord("Ch7"), Some((0, ChordQuality::HalfDiminished)));
+        assert_eq!(relative("C-7b5", "shell"), vec![0, 3, 10]);
+        assert_eq!(relative("Ch7", "drop2"), relative("Cm7b5", "drop2"));
     }
 
     #[test]
