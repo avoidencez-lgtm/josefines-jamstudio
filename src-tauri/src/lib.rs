@@ -908,11 +908,11 @@ fn rig_select_profile(
     let saved = load_settings()?
         .rig
         .section_mappings
-        .remove(&profile_id)
+        .get(&profile_id)
+        .cloned()
         .unwrap_or_default();
     let mut rig = state.rig.lock();
-    let mut mappings = rig.section_mappings.clone();
-    mappings.retain(|_, idx| *idx < profile.scenes.len());
+    let mut mappings = std::collections::HashMap::new();
     for (section, idx) in saved {
         if idx < profile.scenes.len() {
             mappings.insert(section, idx);

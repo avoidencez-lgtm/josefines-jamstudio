@@ -859,7 +859,7 @@ fn section_mappings_and_follow_sections_reach_state_and_settings() {
 }
 
 #[test]
-fn switching_profiles_keeps_fitting_mappings_and_a_fresh_studio_restores_them() {
+fn switching_profiles_loads_only_the_target_profile_mappings() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     studio.ok("rig_select_profile", json!({"profileId": "quad-cortex"}));
@@ -874,12 +874,16 @@ fn switching_profiles_keeps_fitting_mappings_and_a_fresh_studio_restores_them() 
         json!({"section": low, "sceneIdx": 1}),
     );
 
-    // The Black Spirit has five scenes: index 7 no longer fits, index 1 does.
+    // Black Spirit has no saved mappings yet; do not keep Quad Cortex scenes.
     let state = studio.ok(
         "rig_select_profile",
         json!({"profileId": "black-spirit-200"}),
     );
-    assert_eq!(state["sectionMappings"][&low], 1);
+    assert!(
+        state["sectionMappings"].get(&low).is_none(),
+        "a new profile must not inherit the previous hardware map: {}",
+        state["sectionMappings"]
+    );
     assert!(
         state["sectionMappings"].get(&high).is_none(),
         "{}",
@@ -887,9 +891,11 @@ fn switching_profiles_keeps_fitting_mappings_and_a_fresh_studio_restores_them() 
     );
     let saved = settings_on_disk();
     assert_eq!(saved["rig"]["profile_id"], "black-spirit-200");
-    assert_eq!(
-        saved["rig"]["section_mappings"]["black-spirit-200"][&low],
-        1
+    assert!(
+        saved["rig"]["section_mappings"]["black-spirit-200"]
+            .get(&low)
+            .is_none(),
+        "unsaved Black Spirit mappings stay empty"
     );
     assert_eq!(
         saved["rig"]["section_mappings"]["quad-cortex"][&high], 7,
@@ -899,7 +905,7 @@ fn switching_profiles_keeps_fitting_mappings_and_a_fresh_studio_restores_them() 
     let fresh = Studio::boot();
     let restored = fresh.ok("rig_get_state", json!({}));
     assert_eq!(restored["currentProfile"]["id"], "black-spirit-200");
-    assert_eq!(restored["sectionMappings"][&low], 1);
+    assert!(restored["sectionMappings"].get(&low).is_none());
     assert!(restored["sectionMappings"].get(&high).is_none());
     assert_eq!(restored["currentScene"], 0);
     assert_eq!(restored["monitor"], json!([]));
