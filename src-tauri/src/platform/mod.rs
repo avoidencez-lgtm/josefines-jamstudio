@@ -151,6 +151,142 @@ fn windows_batch_shim(executable: &std::path::Path) -> bool {
         .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "cmd" | "bat"))
 }
 
+/// On Windows, closing this handle kills the whole process tree (`cmd.exe` and `node.exe`).
+pub struct KillTree {
+    #[cfg(windows)]
+    job: Option<isize>,
+}
+
+impl KillTree {
+    pub fn bind(child: &tokio::process::Child) -> Self {
+        #[cfg(windows)]
+        {
+            Self {
+                job: win_job::assign(child),
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = child;
+            Self {}
+        }
+    }
+}
+
+impl Drop for KillTree {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        win_job::close(self.job.take());
+    }
+}
+
+#[cfg(windows)]
+mod win_job {
+    use std::os::windows::io::AsRawHandle;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateJobObjectW(
+            attr: *mut core::ffi::c_void,
+            name: *const u16,
+        ) -> *mut core::ffi::c_void;
+        fn SetInformationJobObject(
+            job: *mut core::ffi::c_void,
+            class: i32,
+            info: *mut core::ffi::c_void,
+            len: u32,
+        ) -> i32;
+        fn AssignProcessToJobObject(
+            job: *mut core::ffi::c_void,
+            process: *mut core::ffi::c_void,
+        ) -> i32;
+        fn CloseHandle(handle: *mut core::ffi::c_void) -> i32;
+    }
+
+    const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION: i32 = 9;
+    const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x2000;
+
+    #[repr(C)]
+    pub struct ExtendedLimit {
+        per_process_user_time_limit: i64,
+        per_job_user_time_limit: i64,
+        limit_flags: u32,
+        _pad0: u32,
+        minimum_working_set_size: usize,
+        maximum_working_set_size: usize,
+        active_process_limit: u32,
+        _pad1: u32,
+        affinity: usize,
+        priority_class: u32,
+        scheduling_class: u32,
+        read_operation_count: u64,
+        write_operation_count: u64,
+        other_operation_count: u64,
+        read_transfer_count: u64,
+        write_transfer_count: u64,
+        other_transfer_count: u64,
+        process_memory_limit: usize,
+        job_memory_limit: usize,
+        peak_process_memory_used: usize,
+        peak_job_memory_used: usize,
+    }
+
+    pub fn assign(child: &tokio::process::Child) -> Option<isize> {
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
+            if job.is_null() {
+                return None;
+            }
+            let mut info = ExtendedLimit {
+                per_process_user_time_limit: 0,
+                per_job_user_time_limit: 0,
+                limit_flags: JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                _pad0: 0,
+                minimum_working_set_size: 0,
+                maximum_working_set_size: 0,
+                active_process_limit: 0,
+                _pad1: 0,
+                affinity: 0,
+                priority_class: 0,
+                scheduling_class: 0,
+                read_operation_count: 0,
+                write_operation_count: 0,
+                other_operation_count: 0,
+                read_transfer_count: 0,
+                write_transfer_count: 0,
+                other_transfer_count: 0,
+                process_memory_limit: 0,
+                job_memory_limit: 0,
+                peak_process_memory_used: 0,
+                peak_job_memory_used: 0,
+            };
+            if SetInformationJobObject(
+                job,
+                JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                (&mut info as *mut ExtendedLimit).cast(),
+                std::mem::size_of::<ExtendedLimit>() as u32,
+            ) == 0
+            {
+                CloseHandle(job);
+                return None;
+            }
+            if AssignProcessToJobObject(job, child.as_raw_handle()) == 0 {
+                CloseHandle(job);
+                return None;
+            }
+            Some(job as isize)
+        }
+    }
+
+    pub fn close(job: Option<isize>) {
+        if let Some(job) = job {
+            unsafe {
+                CloseHandle(job as *mut core::ffi::c_void);
+            }
+        }
+    }
+}
+
 /// Windows executables the app will start: a native `.exe`, or the `.cmd` shim npm
 /// writes for `npm install -g @openai/codex` / `@anthropic-ai/claude-code`. The shim
 /// runs through cmd.exe with the standard library's argument escaping; the prompt
@@ -176,6 +312,11 @@ pub fn find_agent(name: &str, configured: &str) -> Result<PathBuf, String> {
             return Err(
                 "Choose the native .exe or the npm .cmd shim, not another script type.".into(),
             );
+        }
+        if !agent_stem_matches(&path, name) {
+            return Err(format!(
+                "Choose the {name} executable, not a different program."
+            ));
         }
         return Ok(path);
     }
@@ -208,6 +349,12 @@ pub fn find_agent(name: &str, configured: &str) -> Result<PathBuf, String> {
         .flat_map(|d| filenames.iter().map(move |f| d.join(f)))
         .find(|p| p.is_file())
         .ok_or_else(|| format!("{name} is not installed or not on PATH. Install and sign in once, or set its full executable path."))
+}
+
+fn agent_stem_matches(path: &std::path::Path, name: &str) -> bool {
+    path.file_stem()
+        .and_then(|s| s.to_str())
+        .is_some_and(|stem| stem.eq_ignore_ascii_case(name))
 }
 
 #[cfg(test)]
@@ -262,7 +409,16 @@ mod tests {
         assert!(super::find_agent("codex", &path("codex.cmd")).is_ok());
         assert!(super::find_agent("claude", &path("claude.EXE")).is_ok());
         assert!(super::find_agent("codex", &path("codex.ps1")).is_err());
+        assert!(
+            super::find_agent("codex", &path("claude.EXE")).is_err(),
+            "configured path stem must equal the agent name"
+        );
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn job_object_extended_limit_is_the_x64_windows_layout() {
+        assert_eq!(std::mem::size_of::<super::win_job::ExtendedLimit>(), 144);
     }
 
     #[test]
@@ -317,5 +473,66 @@ mod tests {
             "https open must not launch explorer.exe"
         );
         assert!(https.contains("open_with_os"));
+    }
+
+    #[tokio::test]
+    async fn dropping_the_job_kills_the_cmd_shim_child_tree() {
+        let dir = std::env::temp_dir().join(format!("jam-job-tree-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let child_script = dir.join("jam-child.cmd");
+        let parent = dir.join("jam-shim.cmd");
+        let heartbeat = dir.join("heartbeat.txt");
+        std::fs::write(
+            &child_script,
+            format!(
+                "@echo off\r\n:loop\r\necho alive>\"{}\"\r\nping -n 2 127.0.0.1 >nul\r\ngoto loop\r\n",
+                heartbeat.display()
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            &parent,
+            format!("@echo off\r\ncmd /c \"{}\"\r\n", child_script.display()),
+        )
+        .unwrap();
+        let mut child = super::command(&parent).spawn().expect("shim must spawn");
+        let tree = super::KillTree::bind(&child);
+        let mut saw_heartbeat = false;
+        for _ in 0..40 {
+            if heartbeat.exists() {
+                saw_heartbeat = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert!(saw_heartbeat, "child process never started");
+        drop(tree);
+        let _ = child.kill().await;
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        let first = std::fs::metadata(&heartbeat).unwrap().modified().unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+        let second = std::fs::metadata(&heartbeat).unwrap().modified().unwrap();
+        assert_eq!(
+            first, second,
+            "cmd.exe child kept running after the job closed"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod agent_path_tests {
+    #[test]
+    fn configured_executable_stem_must_match_the_agent() {
+        let dir = std::env::temp_dir().join(format!("jam-agent-stem-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wrong = if cfg!(windows) {
+            dir.join("other.exe")
+        } else {
+            dir.join("other")
+        };
+        std::fs::write(&wrong, b"x").unwrap();
+        assert!(super::find_agent("codex", &wrong.to_string_lossy()).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

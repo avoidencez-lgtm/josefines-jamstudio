@@ -161,6 +161,21 @@ pub fn parse_reply(name: &str, stdout: &[u8]) -> Result<Value, String> {
     }
     serde_json::from_str(&final_text.ok_or_else(invalid)?).map_err(|_| invalid())
 }
+fn unsuccessful_agent_message(name: &str, stderr: &[u8]) -> String {
+    let tail = String::from_utf8_lossy(stderr);
+    let tail = tail.trim();
+    if tail.is_empty() {
+        format!("{name} exited unsuccessfully. Check login, usage limits and CLI version; no studio actions applied.")
+    } else {
+        let n = tail.chars().count();
+        let clipped: String = if n <= 400 {
+            tail.to_string()
+        } else {
+            tail.chars().skip(n - 400).collect()
+        };
+        format!("{name} exited unsuccessfully. {clipped} No studio actions applied.")
+    }
+}
 impl AgentRunner {
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::Relaxed);
@@ -235,6 +250,7 @@ impl AgentRunner {
         let mut child = command.spawn().map_err(|_| {
             format!("Could not start {name}. Install its native CLI and check the path.")
         })?;
+        let _tree = platform::KillTree::bind(&child);
         let stdin = child.stdin.take().ok_or("Agent stdin unavailable")?;
         let stdout = child.stdout.take().ok_or("Agent stdout unavailable")?;
         let stderr = child.stderr.take().ok_or("Agent stderr unavailable")?;
@@ -255,10 +271,10 @@ impl AgentRunner {
                         .await
                         .map_err(|_| "Could not wait for agent".to_string())
                 };
-                let (_, out, _, status) =
+                let (_, out, err, status) =
                     tokio::try_join!(write, read_bounded(stdout), read_bounded(stderr), wait)?;
                 if !status.success() {
-                    return Err(format!("{name} exited unsuccessfully. Check login, usage limits and CLI version; no studio actions applied."));
+                    return Err(unsuccessful_agent_message(name, &err));
                 }
                 parse_reply(name, &out)
             };
@@ -336,6 +352,13 @@ mod tests {
             reply
         );
         assert!(parse_reply("claude", b"{\"is_error\":true}").is_err());
+        assert!(unsuccessful_agent_message("codex", b"").contains("Check login"));
+        assert!(unsuccessful_agent_message("claude", b"not signed in\n").contains("not signed in"));
+        let src = include_str!("agents.rs");
+        assert!(
+            src.contains("KillTree::bind"),
+            "cancel must kill the Windows process tree, not only cmd.exe"
+        );
     }
     #[tokio::test]
     async fn bounded_output_and_missing_agent_fail_without_a_model_call() {

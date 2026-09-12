@@ -285,6 +285,7 @@ async fn run(executable: &Path, args: &[String], seconds: u64) -> Result<Vec<u8>
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("The media tool could not start. {e}"))?;
+    let _tree = platform::KillTree::bind(&child);
     let stdout = child.stdout.take().ok_or("Missing media tool output")?;
     let stderr = child
         .stderr
