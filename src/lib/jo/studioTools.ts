@@ -73,7 +73,7 @@ export const STUDIO_TOOLS: Record<string, StudioTool> = {
           rows: {
             type: "string",
             description:
-              "One section per line: Name | bars | energy 0–100. Example: Verse | 8 | 40",
+              "Write one section per line as Name | bars | energy 0–100. For example, Verse | 8 | 40",
           },
         },
         required: ["sectionId", "reference", "rows"],

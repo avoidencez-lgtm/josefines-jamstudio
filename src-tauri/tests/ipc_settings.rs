@@ -35,6 +35,7 @@ fn default_settings() -> Value {
             "profile_id": null,
             "midi_port": null,
             "follow_sections": true,
+            "send_clock": false,
             "section_mappings": {}
         },
         "recorder": { "latency_samples": 0 }
@@ -149,6 +150,7 @@ fn settings_set_round_trips_through_the_file_and_keeps_the_previous_version_as_b
             "profile_id": "hx-stomp",
             "midi_port": "HX Stomp MIDI 1",
             "follow_sections": false,
+            "send_clock": false,
             "section_mappings": { "hx-stomp": { "Chorus": 2, "Verse": 0 } }
         },
         "recorder": { "latency_samples": 96 },
@@ -242,13 +244,13 @@ fn a_corrupt_settings_file_is_never_overwritten_and_the_next_start_recovers_the_
 
     let read = studio.err("settings_get", json!({}));
     assert!(
-        read.starts_with(&format!("Cannot read {path_text}:"))
+        read.starts_with(&format!("Cannot read {path_text}."))
             && read.contains("Restore settings.json.bak"),
         "{read}"
     );
     let write = studio.err("settings_set", json!({ "settings": good }));
     assert!(
-        write.starts_with(&format!("Cannot read {path_text}:")),
+        write.starts_with(&format!("Cannot read {path_text}.")),
         "{write}"
     );
     assert_eq!(
@@ -657,7 +659,8 @@ fn audio_get_telemetry_has_the_documented_shape_and_meters_the_headless_input() 
 fn tone_and_tuner_show_up_in_the_telemetry_and_switch_off_again() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
-    // Tuner on by default, tracking the 440 Hz sine the headless input plays.
+    studio.ok("tuner_set", json!({ "on": true }));
+    // Tuner tracks the 440 Hz sine the headless input plays.
     // Startup input gaps can skew the first pitch window. Wait for the same
     // accuracy required below, retaining the snapshot that met it.
     let mut tuner = Value::Null;

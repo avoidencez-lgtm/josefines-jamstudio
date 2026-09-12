@@ -329,14 +329,14 @@ export function generationBrief(
     const s = c.sections.find((s) => s.id === a.sectionId);
     if (!s) throw new Error("Section is missing from this song.");
     const parts = body.sections[s.id]?.parts;
-    return `${s.name}: ${s.bars.length * a.repeats} bars; chords ${s.bars.map((b) => b.map((c) => c.chord).join("/")).join(" | ")}; band intensity ${
+    return `${s.name} has ${s.bars.length * a.repeats} bars. Chords are ${s.bars.map((b) => b.map((c) => c.chord).join("/")).join(" | ")}. Band intensity is ${
       parts
         ?.filter((p) => !p.muted)
         .map((p) => Math.round(p.intensity * 100))
         .join("/") ?? "unspecified"
-    }%${!instrumental && body.lyrics?.[s.id] ? `; lyrics: ${body.lyrics[s.id]}` : ""}.`;
+    }%.${!instrumental && body.lyrics?.[s.id] ? ` Lyrics are ${body.lyrics[s.id]}.` : ""}`;
   });
-  const prompt = `Original song: ${c.name}. ${c.defaultBpm} BPM, ${keyName(c.keyTonic, c.mode)}, ${c.timeSig.join("/")}. ${instrumental ? "Instrumental; no vocals." : "Use the supplied original lyrics where present."}\nDirection: ${direction.trim().slice(0, 2000)}\nArrangement intent (adapt to the selected generation duration):\n${form.join("\n")}\nLeave space for the guitarist. Preserve the contrast between sections.`;
+  const prompt = `The original song is ${c.name}. The tempo is ${c.defaultBpm} BPM, ${keyName(c.keyTonic, c.mode)}, ${c.timeSig.join("/")}. ${instrumental ? "This is instrumental with no vocals." : "Use the supplied original lyrics where present."}\nThe direction is ${direction.trim().slice(0, 2000)}.\nThe arrangement intent is adapted to the selected generation duration.\n${form.join("\n")}\nLeave space for the guitarist. Preserve the contrast between sections.`;
   if (prompt.length > 4000)
     throw new Error(
       "This brief exceeds 4,000 characters. Use an instrumental brief or shorten the form/lyrics first.",

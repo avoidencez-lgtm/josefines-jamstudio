@@ -24,7 +24,7 @@ export default function BeatCutsTool() {
         tempo grid, not automatic beat detection.
       </p>
       <div className="room-tool-row">
-        <Field label="Soundtrack BPM">
+        <Field label="Soundtrack tempo is in BPM.">
           <input
             type="number"
             min="40"
@@ -36,7 +36,7 @@ export default function BeatCutsTool() {
             }}
           />
         </Field>
-        <Field label="Cut grid (beats)">
+        <Field label="Cut grid is in beats.">
           <select
             value={beats}
             onChange={(e) => {
@@ -51,7 +51,7 @@ export default function BeatCutsTool() {
             ))}
           </select>
         </Field>
-        <Field label="First beat (seconds)">
+        <Field label="First beat is in seconds.">
           <input
             type="number"
             min="0"
@@ -77,7 +77,7 @@ export default function BeatCutsTool() {
             })
           }
         >
-          Preview aligned cuts
+          Preview these aligned cuts.
         </Button>
       </div>
       {proposal && (
@@ -85,8 +85,8 @@ export default function BeatCutsTool() {
           <ul>
             {proposal.shots.map((s, i) => (
               <li key={s.id}>
-                {s.title}: {proposal.before[i].toFixed(3)}s →{" "}
-                {s.seconds.toFixed(3)}s
+                {s.title} goes from {proposal.before[i].toFixed(3)}s to{" "}
+                {s.seconds.toFixed(3)}s.
               </li>
             ))}
           </ul>
@@ -106,7 +106,7 @@ export default function BeatCutsTool() {
               })
             }
           >
-            Apply aligned cuts
+            Apply these aligned cuts.
           </Button>
         </>
       )}

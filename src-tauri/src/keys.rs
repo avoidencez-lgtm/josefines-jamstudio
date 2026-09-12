@@ -21,7 +21,7 @@ pub trait SecretStore: Send + Sync {
         match self.get(provider)? {
             Some(secret) => Ok(secret),
             None => Err(format!(
-                "no API key for \"{provider}\": add it under Settings → API credentials"
+                "No API key for \"{provider}\". Add it under Settings → API credentials."
             )),
         }
     }
@@ -35,7 +35,7 @@ fn keychain_unavailable(err: keyring::Error) -> String {
         keyring::Error::Ambiguous(_) => "multiple matching credentials",
         _ => "secure storage operation failed",
     };
-    format!("keychain unavailable: {reason}. Unlock or allow access to the OS keychain, then retry in Settings.")
+    format!("The keychain is unavailable ({reason}). Unlock or allow access to the OS keychain, then retry in Settings.")
 }
 
 fn delete_result(result: keyring::Result<()>) -> Result<(), String> {
@@ -162,9 +162,11 @@ mod tests {
             std::io::Error::other("secret platform details"),
         ))))
         .unwrap_err();
+        assert!(err.starts_with("The keychain is unavailable"), "{err}");
         assert!(err.contains("access denied"), "{err}");
         assert!(!err.contains("secret"), "{err}");
         let err = keychain_unavailable(keyring::Error::BadEncoding(b"secret".to_vec()));
+        assert!(err.starts_with("The keychain is unavailable"), "{err}");
         assert!(!err.contains("secret"), "{err}");
     }
 
@@ -178,7 +180,7 @@ mod tests {
         assert!(err.contains("keychain unavailable"), "{err}");
         let err = store.require("gemini").unwrap_err();
         assert!(err.contains("keychain unavailable"), "{err}");
-        assert!(!err.contains("no API key"), "{err}");
+        assert!(!err.contains("No API key"), "{err}");
         assert!(!err.contains("secret"), "{err}");
     }
 
@@ -186,7 +188,7 @@ mod tests {
     fn require_missing_key_tells_the_user_to_add_one() {
         let store = MemoryStore::default();
         let err = store.require("gemini").unwrap_err();
-        assert!(err.contains("no API key for \"gemini\""), "{err}");
+        assert!(err.contains("No API key for \"gemini\""), "{err}");
     }
 
     #[test]

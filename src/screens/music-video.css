@@ -37,7 +37,7 @@
   min-width: 0;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-m);
   padding: 9px 11px;
   color: var(--fg-0);
   font-size: 14px;
@@ -48,7 +48,7 @@
 }
 .video-studio :is(input, select, textarea, button, summary):focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 .video-studio summary {
   cursor: pointer;
@@ -263,7 +263,7 @@
   aspect-ratio: 16 / 9;
   object-fit: contain;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-m);
 }
 .video-empty-frame {
   display: flex;

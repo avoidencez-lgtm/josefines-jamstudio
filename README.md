@@ -6,13 +6,13 @@ the app owns the arrangement, accompaniment, recording and DAW handoff.
 
 > **Stabilised preview, with owner acceptance still pending.** Write, Stage,
 > Library, typed Jo, recording/export and file-based media workflows are implemented.
-> Native Jo voice is implemented; live voice acceptance, automatic stem analysis/stretch and Lyria RealTime remain pending.
+> Native Jo voice, offline practice stretch and local song estimates are implemented; live voice acceptance, stem separation, analysed-grid playback and Lyria RealTime remain pending.
 > See the [build closeout](docs/reviews/build-closeout.md) and
 > [milestone board](docs/plan/00-README.md) for tested scope and remaining gates.
 
 ## User manuals
 
-Open **Help & guides** in the sidebar (or press **?**) for searchable help inside the app.
+**Open help and guides.** in the sidebar (or press **?**) for searchable help inside the app.
 Read the complete [English manual](docs/guide/manual-en.md) or [norsk bokmål](docs/guide/manual-nb.md).
 Write → **Finish** adds a structural review, transition experiments and section-based guitar comping.
 See the [verification report](docs/reviews/studio-verification-2026-09-05.md) for evidence and limits.
@@ -39,9 +39,9 @@ Guitar ─► HeadRush ─► Black Spirit 200 ─► Vox 4x12
 | Practice tools | Working | Tap tempo, tempo trainer, keyboard shortcuts and searchable bilingual in-app help. |
 | Jo | Text tools working | Offline band commands, configurable text providers and installed-agent proposals. Song edits require review. Optional native microphone input, ElevenLabs STT/TTS and band ducking are available in Jo AI; see Voice setup. Live latency acceptance remains pending. |
 | Rig over MIDI | Working, hardware gate open | Data-driven profiles for HeadRush Pedalboard, Black Spirit 200, Quad Cortex, Helix, Kemper and Axe-Fx III; real MIDI out through `midir`; section-bound scene changes as the band plays; knobs, program changes and a MIDI monitor. Verified against the real rig: not yet (owner gate). |
-| Recorder and export | Working | Every take is written as 24-bit WAV stems (guitar DI, band, master). Analysis measures pick timing against the take's tempo grid, dynamic consistency and intonation on the real DI file. Export writes the stems, a Standard MIDI File tempo map with the chart's section markers, and a JSON sidecar. Latency offset is a manual setting; automatic loopback measurement is not built. |
+| Recorder and export | Working | Every take is written as 24-bit WAV stems (guitar DI, band, master). Analysis measures pick timing against the take's tempo grid, dynamic consistency and intonation on the real DI file. Export writes the stems, a Standard MIDI File tempo map with the chart's section markers, and a JSON sidecar. Latency offset is measured with a three-click cable loopback (`audio_calibrate_latency`) or typed by hand; without a loopback the app reports a 2× buffer estimate. |
 | Network | Working | An allow-listed proxy in Rust injects API keys from the OS keychain (keys never reach the UI) and keeps a local usage log shown on the Settings screen. |
-| Songs / real songs (M3) | Partial | Local audio import, reference playback, pitch-preserving speed/transpose practice copies and Film soundtrack selection. Native playback, seconds loops and reference recording are available. Stems and automatic beats/chords remain unbuilt. |
+| Songs / real songs (M3) | Partial | Local audio import, native playback/recording, seconds loops and pitch-preserving practice copies. Saved low-confidence tempo/chord/key estimates follow output position in Songs and Stage. Stems, provider analysis and beat/section loop controls remain unbuilt. |
 | AI music (M4) | Partial | Music-generation catalog, editable prompts, local ComfyUI workflows and saved job receipts. Lyria RealTime remains unbuilt; provider/GPU owner acceptance is pending. |
 | Installers (M7) | Partly | `release.yml` builds macOS and Windows bundles on a tag; code signing and notarisation are not set up, so first launch needs the usual unsigned-app steps. |
 

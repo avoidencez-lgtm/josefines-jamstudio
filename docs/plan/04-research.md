@@ -79,7 +79,7 @@ Sources: https://ai.google.dev/gemini-api/docs/pricing ✅ · https://developers
 | `symphonia` 0.6.x | decode wav/mp3/flac/aac/aiff | MPL-2.0 | record the MPL exception in `deny.toml` with a comment; alternative `hound` (wav only) + `minimp3`-class crates if MPL is refused |
 | `hound` | WAV write | Apache-2.0 | recorder |
 | `rubato` | resampling | MIT | device edge, 16 kHz STT feed |
-| `oxisynth` | SF2 synth | MIT | bass and comp; alternative `rustysynth` (MIT) |
+| `oxisynth` | SF2 synth | LGPL-2.1 | banned; do not add. Use `rustysynth` (MIT) |
 | `signalsmith-stretch` / `ssstretch` | time-stretch and pitch-shift (Signalsmith Stretch, MIT, cxx) | MIT | **S3** decides which binding builds on both |
 | `midir` | MIDI I/O | MIT | `jam-rig` |
 | `midly` | Standard MIDI File write/read | MIT ❓ verify | Logic export |
@@ -122,3 +122,57 @@ JUCE 8 offers WebView UIs, a mature audio graph and VST3/AU hosting. Its licence
 | Black Spirit CC map against the official H&K manual PDF | M5 task and owner gate 5 |
 | Scarlett 2i2 generation on the Mac; Apple Silicon | Vegar |
 | Whether the HeadRush enumerates any USB-MIDI endpoint (believed no) | Owner gate 5 |
+
+### Music.ai format verification, 2026-09-06
+
+The public [API reference](https://music.ai/docs/api/reference/) documents signed
+upload URLs and asynchronous workflow jobs. The [Beats module](https://music.ai/modules/transcription/beats/)
+describes `beatMap` annotations with a start time and beat number, whereas the
+generic [file formats page](https://music.ai/docs/api/file-formats/) shows a beats
+example with `start`, `end` and `bpm`. The [Sections module](https://music.ai/modules/transcription/sections/)
+returns `sectionsMap` and takes a beat-map URL. These descriptions do not by
+themselves establish an exact complete beat/downbeat response schema. The
+official [Python SDK](https://github.com/weAreMusicAI/python-sdk) documents job
+submission/download, not a verified downbeat fixture for this app.
+
+No provider request or credential access was made. Documented public shapes
+are now recorded under `tests/fixtures/providers/musicai/` and parsed as
+unverified estimates. A live SUCCEEDED job fixture, workflow output
+contracts and real-song acceptance remain open before a provider adapter
+can claim to drive the transport. The confirmed-local grid implementation
+is explicitly user-authored beat grouping/sections over existing estimates, not
+a replacement for automatic Music.ai analysis or proof of its quality.
+
+### Native import verification, 2026-09-06
+
+[Symphonia 0.6.1](https://docs.rs/symphonia/0.6.1/symphonia/) provides the planned
+WAV/FLAC/MP3/AIFF/Vorbis and AAC/ALAC MP4 decoding, under MPL-2.0. The installed
+`symphonia-format-isomp4` source explicitly states that edit lists are not applied;
+its frame count includes AAC priming. A generated one-second AAC/M4A fixture
+therefore reproduced a duration mismatch before the timing fix. The
+[QuickTime edit-list specification](https://developer.apple.com/documentation/quicktime-file-format/playing_with_edit_lists)
+defines movie-scale segment duration and media-scale start time, including empty
+edits. The implementation handles one static content range with optional leading
+silence and refuses complex/rate-changing edits. It does not assume AAC's delay
+is always 1024 samples; versioned synthetic metadata also tests 2112 samples.
+
+[Rubato 5.0.0](https://docs.rs/rubato/5.0.0/rubato/) documents FFT conversion and
+output delay. Numeric tests found a fractional-frame offset with odd rational
+FFT blocks; using even input/output FFT sizes eliminates it. Seven locally
+generated codecs now produce 48,000 frames from one second at 44.1 kHz;
+worst phase/amplitude RMSE is 0.00707 (MP3), below the 0.015 acceptance bound.
+These are synthetic accuracy checks, not listening tests with real songs.
+
+A further M4A boundary test uses a 1,000 Hz movie clock over 44.1 kHz audio.
+FFmpeg's local `ipod` muxer help documents `movie_timescale`; a 10,000-frame
+source produces a 226 ms edit (9,967 source frames, 10,849 normalized frames).
+Synthetic version-0/1 metadata also reproduces an edit rounded just beyond
+declared media EOF. The decoder accepts at most one quantized movie tick there,
+clamps to the media's frame count, and still verifies the decoded packet count.
+An edit beyond that bound remains an error.
+
+[Tauri Dialog](https://v2.tauri.app/plugin/dialog/) provides a callback-based
+native picker; [WebView drag/drop](https://v2.tauri.app/reference/javascript/api/namespacewebview/)
+provides local paths and a listener cleanup function. The Rust dialog is called
+through the existing command registry; no JS dialog/filesystem plugin permission
+is granted. Source versions and licence notices are bundled with the app.

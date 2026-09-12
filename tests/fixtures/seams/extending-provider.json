@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-llm",
+  "name": "Fixture LLM",
+  "kind": "provider",
+  "baseUrl": "https://example.invalid",
+  "auth": "bearer",
+  "description": "Synthetic provider used only by the extensibility proof."
+}

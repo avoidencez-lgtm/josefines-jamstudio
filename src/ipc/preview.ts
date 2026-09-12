@@ -184,6 +184,13 @@ export function createPreviewEngine(
     pending_style_id: null,
     pending_intensity: null,
     is_stopped: false,
+    kit_id: "standard-rock-kit",
+    kit_source: "synthetic",
+    kit_message:
+      "Drum kit 'standard-rock-kit' is not unpacked. Run Settings → Check these sample packs with JAM_LIVE=1. Playing the bundled synthetic kit.",
+    bass_source: "sine",
+    bass_message:
+      "SoundFont is not unpacked. Run Settings → Check these sample packs with JAM_LIVE=1. Bass and comp use sine voices until freepats-bass-comp is installed.",
   };
   const status: EngineStatus = {
     mode: "Headless",
@@ -192,7 +199,8 @@ export function createPreviewEngine(
     input: null,
     sample_rate: 48_000,
     buffer_size: 256,
-    last_error: "Browser preview: simulated engine, no audio is produced",
+    last_error:
+      "This browser preview is a simulated engine. No audio is produced.",
     stream_errors: 0,
     input_gaps: 0,
   };
@@ -203,9 +211,10 @@ export function createPreviewEngine(
     sample_rate: 48_000,
     buffer_size: 256,
   };
-  let tunerOn = true;
+  let tunerOn = false;
   let toneOn = false;
   let clickVolume = 0.7;
+  let bandVolume = 0.8;
   let countInRemainingBeats = 0;
   let lastBar = -1;
   let takes: TakeMetadata[] = [];
@@ -221,13 +230,17 @@ export function createPreviewEngine(
     sectionMappings: {},
     controlValues: {},
     followSections: true,
+    sendClock: false,
+    dryRun: false,
     port: null,
-    portDescription: "no MIDI port open (browser preview: MIDI is simulated)",
+    portDescription:
+      "No MIDI port is open. Browser preview only logs messages.",
     live: false,
     monitor: [],
   };
   let rigLastSection: string | null = null;
   let rigLastSentScene: number | null = null;
+  let rigClockPaused = false;
   const resetRigControls = () => {
     rig.controlValues = Object.fromEntries(
       rig.currentProfile.controls.map((c) => [String(c.cc), c.default]),
@@ -278,9 +291,9 @@ export function createPreviewEngine(
     beatInBar: number,
   ): { now: string; next: string | null; section: string } {
     const b = bars[((barIdx % barCount()) + barCount()) % barCount()];
-    if (!b) return { now: "—", next: null, section: "" };
+    if (!b) return { now: "", next: null, section: "" };
     let acc = 0;
-    let now = b.chords[0]?.chord ?? "—";
+    let now = b.chords[0]?.chord ?? "";
     let idx = 0;
     for (let i = 0; i < b.chords.length; i++) {
       acc += b.chords[i].beats;
@@ -515,7 +528,7 @@ export function createPreviewEngine(
     keys_has: () => false,
     provider_fetch: () => {
       throw new Error(
-        "Browser preview: network is disabled (provider_fetch only exists in the desktop app)",
+        "This browser preview cannot reach the network. provider_fetch exists only in the desktop app.",
       );
     },
     providers_list: () => [
@@ -527,6 +540,7 @@ export function createPreviewEngine(
       { id: "runway", description: "Runway · video", hasKey: false },
       { id: "gemini", description: "Google Gemini", hasKey: false },
       { id: "elevenlabs", description: "ElevenLabs", hasKey: false },
+      { id: "musicai", description: "Music.ai", hasKey: false },
       { id: "openai", description: "OpenAI", hasKey: false },
       { id: "anthropic", description: "Anthropic Claude", hasKey: false },
       { id: "openrouter", description: "OpenRouter", hasKey: false },
@@ -542,10 +556,107 @@ export function createPreviewEngine(
     cost_log_list: () => [],
     cost_log_totals: () => [],
     keys_delete: () => undefined,
+    keys_test: () => {
+      throw new Error(
+        "A cheapest-endpoint test is not configured. Check this key status looks only in the OS keychain. This is not a live provider pass.",
+      );
+    },
+    analysis_start: () => {
+      throw new Error(
+        "Music.ai analysis is not configured. Add a Music.ai key in the desktop app, set JAM_LIVE=1, and record a SUCCEEDED job before upload. Local Analyze tempo and chords stays available.",
+      );
+    },
+    lyria_start: () => {
+      throw new Error(
+        "Lyria RealTime is not configured. Add a Google Gemini key in Settings, set JAM_LIVE=1, and record a provider session before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.",
+      );
+    },
+    lyria_set: () => {
+      throw new Error(
+        "Lyria RealTime is not configured. Add a Google Gemini key in Settings, set JAM_LIVE=1, and record a provider session before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.",
+      );
+    },
+    lyria_vibe: () => {
+      throw new Error(
+        "Lyria RealTime is not configured. Add a Google Gemini key in Settings, set JAM_LIVE=1, and record a provider session before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.",
+      );
+    },
+    lyria_stop: () => ({
+      phase: "idle",
+      requestedBpm: 0,
+      scale: "",
+      buffering: false,
+      live: false,
+      drivesClock: false,
+      outbound: 0,
+    }),
+    lyria_status: () => ({
+      phase: "idle",
+      requestedBpm: 0,
+      scale: "",
+      buffering: false,
+      live: false,
+      drivesClock: false,
+      outbound: 0,
+    }),
+    assets_status: () => [
+      {
+        id: "standard-rock-kit",
+        name: "Standard Rock Kit",
+        state: "recorded",
+        live: false,
+        message:
+          "Hash is recorded on the assets-v1 release. Download needs JAM_LIVE=1.",
+      },
+      {
+        id: "freepats-bass-comp",
+        name: "FreePats bass and piano",
+        state: "recorded",
+        live: false,
+        message:
+          "Hash is recorded on the assets-v1 release. Download needs JAM_LIVE=1.",
+      },
+    ],
+    assets_ensure: () => {
+      throw new Error(
+        "Sample pack download needs the desktop app and JAM_LIVE=1.",
+      );
+    },
+    logs_export: () => {
+      throw new Error(
+        "Log export is not configured. Run the desktop app once so logs write to ~/JosefinesJamstudio/logs/, then retry.",
+      );
+    },
+    diagnostics_idle_cpu: () => ({
+      percent: null,
+      seconds: 0,
+      headless: true,
+      proven: false,
+      message:
+        "Idle CPU is not proven. The browser preview has no desktop WebView+engine process to sample.",
+    }),
+    diagnostics_sample_stage: () => false,
+    diagnostics_report_fps: () =>
+      "canvas fps is not written in the browser preview.",
+    app_version: () => "preview",
+    analysis_cancel: () => undefined,
+    media_guitar_residual: () => {
+      throw new Error(
+        "Guitar-removal acceptance is not configured. Import or separate stems in the desktop app, mark the guitar track, then run this check. Real-song residual at or below -6 dB is not claimed without those stems.",
+      );
+    },
+    media_reference_load: (a) => {
+      if (a.useMinusGuitar) {
+        throw new Error(
+          "Minus-guitar mix is not configured. Import or separate stems in the desktop app, mark the guitar track, then Check this guitar residual, then Load this mix only after that check passes. Real-song residual at or below -6 dB is not claimed.",
+        );
+      }
+      throw new Error("Open the desktop app to load reference audio.");
+    },
     audio_list_devices: () => ({
       inputs: [
         {
-          name: "Preview Input (simulated)",
+          name: "Preview Input is simulated.",
           is_default: true,
           channels: 2,
           supported_sample_rates: [48_000],
@@ -553,7 +664,7 @@ export function createPreviewEngine(
       ],
       outputs: [
         {
-          name: "Preview Output (simulated)",
+          name: "Preview Output is simulated.",
           is_default: true,
           channels: 2,
           supported_sample_rates: [48_000],
@@ -567,7 +678,9 @@ export function createPreviewEngine(
       status.buffer_size = config.buffer_size;
       return status;
     },
-    audio_set_band_volume: () => undefined,
+    audio_set_band_volume: (a) => {
+      bandVolume = Math.min(1, Math.max(0, Number(a.volume)));
+    },
     audio_set_input_monitor: () => undefined,
     engine_status: () => status,
     engine_restart: () => status,
@@ -583,6 +696,11 @@ export function createPreviewEngine(
       if (transport.state === "playing" || transport.state === "counting_in")
         return;
       rigLastSection = null;
+      if (rig.sendClock) {
+        rigSend([rigClockPaused ? 0xfb : 0xfa], "clock");
+        if (!rigClockPaused) rigSend([0xf8], "clock");
+        rigClockPaused = false;
+      }
       if (transport.state === "paused") {
         transport.state = "playing";
         return;
@@ -597,10 +715,65 @@ export function createPreviewEngine(
       }
     },
     transport_pause: () => {
-      if (transport.state === "playing") transport.state = "paused";
+      if (transport.state === "playing") {
+        transport.state = "paused";
+        if (rig.sendClock) {
+          rigSend([0xfc], "clock");
+          rigClockPaused = true;
+        }
+      }
     },
-    transport_stop: () => stop(),
+    transport_stop: () => {
+      if (
+        rig.sendClock &&
+        (transport.state === "playing" ||
+          transport.state === "paused" ||
+          rigClockPaused)
+      ) {
+        rigSend([0xfc], "clock");
+      }
+      rigClockPaused = false;
+      stop();
+    },
     transport_seek_bar: (a) => seekBar(Number(a.bar)),
+    transport_locate: (a) => {
+      const beats = Number(a.beats);
+      if (!Number.isFinite(beats) || beats < 0) {
+        throw new Error("Locate needs a non-negative beat position.");
+      }
+      seekBar(Math.floor(beats / beatsPerBar()) + 1);
+    },
+    mixer_set_bus: (a) => {
+      const id = String(a.id ?? "");
+      const patch = (a.patch ?? {}) as {
+        gain?: number;
+        gainDb?: number;
+        muted?: boolean;
+      };
+      let gain =
+        typeof patch.gain === "number"
+          ? Math.min(1, Math.max(0, patch.gain))
+          : typeof patch.gainDb === "number"
+            ? Math.min(1, 10 ** (patch.gainDb / 20))
+            : undefined;
+      if (patch.muted) gain = 0;
+      if (id === "band" && gain !== undefined) bandVolume = gain;
+      if (id === "click" && gain !== undefined) clickVolume = gain;
+      return [
+        {
+          id: "band",
+          gainDb: 20 * Math.log10(Math.max(bandVolume, 1e-6)),
+          muted: bandVolume === 0,
+          soloed: false,
+        },
+        {
+          id: "click",
+          gainDb: 20 * Math.log10(Math.max(clickVolume, 1e-6)),
+          muted: clickVolume === 0,
+          soloed: false,
+        },
+      ];
+    },
     transport_set_loop: (a) => {
       transport.loop_start_bar = Math.max(1, Number(a.startBar));
       transport.loop_end_bar = Math.max(
@@ -629,6 +802,11 @@ export function createPreviewEngine(
         band.style_id = s.id;
         band.style_name = s.name;
       }
+    },
+    band_render_offline: () => {
+      throw new Error(
+        "Offline band render needs the desktop app. Preview does not write WAV files.",
+      );
     },
     band_set_intensity: (a) => {
       band.intensity = Math.max(0, Math.min(1, Number(a.intensity)));
@@ -775,6 +953,11 @@ export function createPreviewEngine(
       return previewLatency;
     },
     recorder_get_latency: () => previewLatency,
+    audio_calibrate_latency: () => ({
+      roundTripFrames: 2 * (config.buffer_size || 256),
+      confidence: 0,
+      estimated: true,
+    }),
     takes_list: () => takes,
     takes_delete: (a) => {
       takes = takes.filter((t) => t.id !== a.takeId);
@@ -795,7 +978,7 @@ export function createPreviewEngine(
         intonationAccuracyPct: 0,
         detectedTransients: 0,
         summary:
-          "Analysis needs the desktop app: no audio was recorded in browser preview.",
+          "Analysis needs the desktop app. No audio was recorded in this browser preview.",
       };
       take.analysis = {
         ...analysis,
@@ -808,8 +991,21 @@ export function createPreviewEngine(
       };
       return analysis;
     },
+    takes_review: () => {
+      throw new Error(
+        "Take review is not configured. Analyze the take first in the desktop app, add a text-provider key, and set JAM_LIVE=1. JAM_REVIEW_FIXTURE=1 writes the recorded review from analysis numbers only. This is not a listening review and does not measure Logic Pro drift.",
+      );
+    },
     takes_export_daw: () => {
       throw new Error("export is only available in the desktop app");
+    },
+    export_logic: () => {
+      throw new Error("export is only available in the desktop app");
+    },
+    generate_track: () => {
+      throw new Error(
+        "Track generation is not configured in preview. Use the desktop app with a lyria3 or elevenlabs key.",
+      );
     },
     rig_list_profiles: () => rigProfiles,
     rig_select_profile: (a) => {
@@ -856,17 +1052,22 @@ export function createPreviewEngine(
       return rigSnapshot();
     },
     rig_get_state: () => rigSnapshot(),
-    rig_list_ports: () => [{ name: "Preview MIDI Out (simulated)" }],
+    rig_virtual_check: () => {
+      throw new Error(
+        "Virtual MIDI monitor is not configured. Create a loopMIDI port named Jam Virtual (Windows) or enable the IAC Driver (macOS), set JAM_MIDI_VIRTUAL to that port name, and set JAM_LIVE=1. Headless CI uses JAM_MIDI_FIXTURE=1. This does not claim HeadRush or Black Spirit.",
+      );
+    },
+    rig_list_ports: () => [{ name: "Preview MIDI Out is simulated." }],
     rig_open_port: (a) => {
       if (a.port === null || a.port === undefined) {
         rig.port = null;
         rig.live = false;
         rig.portDescription =
-          "no MIDI port open (browser preview: MIDI is simulated)";
+          "No MIDI port is open. Browser preview only logs messages.";
       } else {
         rig.port = String(a.port);
         rig.live = false;
-        rig.portDescription = `${a.port} (browser preview: nothing is sent)`;
+        rig.portDescription = `${a.port} is open in browser preview. Nothing is sent.`;
       }
       return rigSnapshot();
     },
@@ -905,6 +1106,20 @@ export function createPreviewEngine(
     },
     rig_clear_monitor: () => {
       rig.monitor = [];
+      return rigSnapshot();
+    },
+    rig_panic: () => {
+      const ch = rig.currentProfile.midiChannel & 0x0f;
+      rigSend([0xb0 | ch, 123, 0], "panic");
+      rigSend([0xb0 | ch, 121, 0], "panic");
+      return rigSnapshot();
+    },
+    rig_set_clock: (a) => {
+      rig.sendClock = Boolean(a.on);
+      return rigSnapshot();
+    },
+    rig_dry_run: (a) => {
+      rig.dryRun = Boolean(a.on);
       return rigSnapshot();
     },
   };

@@ -13,9 +13,17 @@ import { SoloHelper } from "../components/SoloHelper";
 import { StatusPill } from "../components/States";
 import { Toggle } from "../components/Toggle";
 import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
+import { ipc } from "../ipc/client";
+import type { PackStatus } from "../ipc/contract";
 import { keyName } from "../lib/chart/notes";
 import { sectionPassages } from "../lib/chart/passages";
+import {
+  lastMeterFps,
+  lastPlayheadFps,
+  transportClockLive,
+} from "../lib/meterFps";
 import { committedNumber } from "../lib/numberField";
+import { openSettings } from "../lib/settingsView";
 import { stylesInMeter } from "../lib/styles";
 import { useEngineStore } from "../store/engine";
 
@@ -46,6 +54,11 @@ export const Stage: React.FC = () => {
     togglePart,
     toggleFollowEnergy,
     transposeCurrentChart,
+    activeSource,
+    lyriaStatus,
+    lyriaStart,
+    lyriaStop,
+    engineStatus,
   } = useEngineStore(
     useShallow((s) => ({
       tunerOn: s.tunerOn,
@@ -73,12 +86,59 @@ export const Stage: React.FC = () => {
       togglePart: s.togglePart,
       toggleFollowEnergy: s.toggleFollowEnergy,
       transposeCurrentChart: s.transposeCurrentChart,
+      activeSource: s.activeSource,
+      lyriaStatus: s.lyriaStatus,
+      lyriaStart: s.lyriaStart,
+      lyriaStop: s.lyriaStop,
+      engineStatus: s.engineStatus,
     })),
   );
 
   const [view, setView] = useState("Perform");
   const [showSolo, setShowSolo] = useState(true);
   const [lastTap, setLastTap] = useState<number | null>(null);
+  const [packNote, setPackNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    void ipc
+      .invoke<PackStatus[]>("assets_status")
+      .then((packs) => {
+        const missing = packs.find((pack) => pack.state === "missing");
+        if (missing) setPackNote(missing.message);
+      })
+      .catch((e) => useEngineStore.getState().notify("error", String(e)));
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    let liveSince: number | null = null;
+    const id = window.setInterval(() => {
+      if (cancelled) return;
+      const live = transportClockLive(
+        useEngineStore.getState().telemetry.transport.state,
+      );
+      if (!live) {
+        liveSince = null;
+        return;
+      }
+      if (liveSince === null) liveSince = performance.now();
+      if (performance.now() - liveSince < 1200) return;
+      const meter = lastMeterFps();
+      const playhead = lastPlayheadFps();
+      void ipc
+        .invoke("diagnostics_report_fps", { meter, playhead })
+        .catch(() => undefined);
+      if (
+        (meter > 0 && playhead > 0) ||
+        performance.now() - liveSince > 15_000
+      ) {
+        window.clearInterval(id);
+      }
+    }, 500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   const tunerData = telemetry.tuner;
   const transport = telemetry.transport;
@@ -89,6 +149,7 @@ export const Stage: React.FC = () => {
     band.pending_style_id ?? band.style_id,
   );
   const isCountingIn = transport.state === "counting_in";
+  const clockLive = transportClockLive(transport.state);
 
   const currentStyle = styles.find((s) => s.id === band.style_id);
   const bpmRange = currentStyle?.feel.bpmRange;
@@ -102,7 +163,7 @@ export const Stage: React.FC = () => {
         <WorkspaceHeader
           screen="stage"
           title="Play alongside your song."
-          description="A reference track through your studio output. Its saved pitch and speed stay intact."
+          description="Rehearse through your studio output with the reference speed, key and mix you choose."
         />
         <JoStage />
         <ReferencePlayer
@@ -120,6 +181,53 @@ export const Stage: React.FC = () => {
         description="Steer the band live, loop a passage, or build up a difficult part."
       />
       <JoStage />
+      {packNote && (
+        <div className="text-xs font-mono text-[var(--fg-2)] border border-[var(--line)] rounded-[var(--radius-m)] p-3 workspace-stack">
+          <p>
+            {packNote} Sample packs are missing. Settings → First run has the
+            next step.
+          </p>
+          <Button size="sm" onClick={() => openSettings("First run")}>
+            Open this First run.
+          </Button>
+        </div>
+      )}
+      {engineStatus?.last_error && (
+        <div
+          role="alert"
+          className="text-xs font-mono text-[var(--record)] border border-[var(--record)] rounded-[var(--radius-m)] p-3 workspace-stack"
+        >
+          <p>
+            Audio device lost. {engineStatus.last_error} Reconnect or pick
+            another device in Settings.
+          </p>
+          <Button size="sm" onClick={() => openSettings("Audio devices")}>
+            Open these audio devices.
+          </Button>
+        </div>
+      )}
+      {!currentChart && activeSource !== "lyria" && (
+        <div className="workspace-stack">
+          <p className="workspace-note">
+            Pick a chart or a song. Or hold PTT and tell Jo. Live PTT is not
+            configured.
+          </p>
+          <div className="workspace-actions">
+            <Button
+              size="sm"
+              onClick={() => useEngineStore.getState().setScreen("library")}
+            >
+              Go to this Library.
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => useEngineStore.getState().setScreen("songs")}
+            >
+              Open these Songs.
+            </Button>
+          </div>
+        </div>
+      )}
       <WorkspaceViews
         labels={["Perform", "Practice", "Levels"]}
         value={view}
@@ -127,38 +235,77 @@ export const Stage: React.FC = () => {
       />
       <details className="stage-setup">
         <summary>
-          Chart & band settings{" "}
+          These are the chart and band settings.{" "}
           <span>
-            {currentChart?.name ?? "Choose a chart"} · {band.style_name}
+            {currentChart?.name ?? "Choose this chart"}. {band.style_name}.
           </span>
         </summary>
         {/* Configuration row: Chart, Style, Intensity, Click, Tuner */}
         <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] p-4 rounded-[var(--radius-m)] border border-[var(--line)]">
           <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs uppercase font-mono text-[var(--fg-2)] tracking-wider">
-                Source
+                Choose the source.
               </span>
-              <StatusPill status="live" label="Jam Band" />
+              <Button
+                size="sm"
+                variant={activeSource !== "lyria" ? "primary" : "secondary"}
+                onClick={() => void lyriaStop()}
+              >
+                Band
+              </Button>
+              <Button
+                size="sm"
+                variant={activeSource === "lyria" ? "primary" : "secondary"}
+                onClick={() => void lyriaStart()}
+              >
+                Lyria
+              </Button>
+              <StatusPill
+                status={
+                  lyriaStatus.live
+                    ? "live"
+                    : activeSource === "lyria"
+                      ? "idle"
+                      : "ok"
+                }
+                label={
+                  activeSource === "lyria"
+                    ? "Lyria is not live."
+                    : activeSource === "song"
+                      ? "This is the song."
+                      : "This is the jam band."
+                }
+              />
+              <p className="basis-full m-0 text-xs text-[var(--fg-2)]">
+                Lyria needs a Gemini key, JAM_LIVE=1 and a recorded provider
+                session before it may open a WebSocket. Provider off until those
+                are set. BPM is a request, not the band clock.
+              </p>
+              <Button size="sm" onClick={() => openSettings("AI & models")}>
+                Open these AI settings.
+              </Button>
             </div>
 
             <div className="h-4 w-px bg-[var(--line)]" />
 
             <div className="flex items-center gap-2">
               <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
-                Chart
+                Choose the chart.
               </span>
               <select
-                aria-label="Chart"
+                aria-label="Choose the chart."
                 value={currentChart?.id ?? ""}
                 onChange={(e) => bandLoadChart(e.target.value)}
-                className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1 rounded text-xs font-mono cursor-pointer max-w-[220px]"
+                className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] text-xs font-mono cursor-pointer max-w-[220px]"
               >
-                {charts.length === 0 && <option value="">Loading…</option>}
+                {charts.length === 0 && (
+                  <option value="">The charts are loading.</option>
+                )}
                 {currentChart &&
                   !charts.some((c) => c.id === currentChart.id) && (
                     <option value={currentChart.id}>
-                      {currentChart.name} (unsaved)
+                      {currentChart.name} is unsaved.
                     </option>
                   )}
                 {charts.map((c) => (
@@ -176,7 +323,8 @@ export const Stage: React.FC = () => {
                 size="sm"
                 variant="ghost"
                 onClick={() => transposeCurrentChart(-1)}
-                title="Transpose down ([)"
+                title="Transpose this down a semitone with [."
+                aria-label="Transpose this down."
               >
                 ♭
               </Button>
@@ -184,7 +332,8 @@ export const Stage: React.FC = () => {
                 size="sm"
                 variant="ghost"
                 onClick={() => transposeCurrentChart(1)}
-                title="Transpose up (])"
+                title="Transpose this up a semitone with ]."
+                aria-label="Transpose this up."
               >
                 ♯
               </Button>
@@ -194,13 +343,13 @@ export const Stage: React.FC = () => {
 
             <div className="flex items-center gap-2">
               <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
-                Style
+                Choose the style.
               </span>
               <select
-                aria-label="Band style"
+                aria-label="Choose the style."
                 value={band.pending_style_id ?? band.style_id}
                 onChange={(e) => bandSetStyle(e.target.value)}
-                className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1 rounded text-xs font-mono cursor-pointer"
+                className="bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] text-xs font-mono cursor-pointer"
               >
                 {grooves.length === 0 && (
                   <option value={band.style_id}>{band.style_name}</option>
@@ -217,14 +366,14 @@ export const Stage: React.FC = () => {
 
             <div className="flex items-center gap-2">
               <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
-                Intensity
+                Choose the intensity.
               </span>
               <input
                 type="range"
                 min={0}
                 max={1}
                 step={0.05}
-                aria-label="Band intensity"
+                aria-label="Choose the intensity."
                 value={band.pending_intensity ?? band.intensity}
                 onChange={(e) =>
                   bandSetIntensity(Number.parseFloat(e.target.value))
@@ -232,22 +381,26 @@ export const Stage: React.FC = () => {
                 className="w-20 accent-[var(--accent)] cursor-pointer"
               />
               <span className="text-xs font-mono tabular-nums text-[var(--fg-1)]">
-                {((band.pending_intensity ?? band.intensity) * 100).toFixed(0)}%
+                {((band.pending_intensity ?? band.intensity) * 100).toFixed(0)}
+                %.
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2" title="Band volume">
+            <div
+              className="flex items-center gap-2"
+              title="Choose the band volume."
+            >
               <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
-                Band
+                Choose the band volume.
               </span>
               <input
                 type="range"
                 min={0}
                 max={1}
                 step={0.05}
-                aria-label="Band volume"
+                aria-label="Choose the band volume."
                 value={bandVolume}
                 onChange={(e) =>
                   setBandVolume(Number.parseFloat(e.target.value))
@@ -255,16 +408,19 @@ export const Stage: React.FC = () => {
                 className="w-16 accent-[var(--accent)] cursor-pointer"
               />
             </div>
-            <div className="flex items-center gap-2" title="Click volume">
+            <div
+              className="flex items-center gap-2"
+              title="Choose the click volume."
+            >
               <span className="text-xs uppercase font-mono text-[var(--fg-2)]">
-                Click
+                Choose the click volume.
               </span>
               <input
                 type="range"
                 min={0}
                 max={1}
                 step={0.05}
-                aria-label="Click volume"
+                aria-label="Choose the click volume."
                 value={clickVolume}
                 onChange={(e) =>
                   setClickVolume(Number.parseFloat(e.target.value))
@@ -272,11 +428,15 @@ export const Stage: React.FC = () => {
                 className="w-16 accent-[var(--accent)] cursor-pointer"
               />
             </div>
-            <Toggle checked={tunerOn} onChange={setTuner} label="Tuner" />
+            <Toggle
+              checked={tunerOn}
+              onChange={setTuner}
+              label="Hear the tuner."
+            />
             <Toggle
               checked={toneOn}
               onChange={(c) => setTone(c, 440)}
-              label="Tone"
+              label="Hear the reference tone."
             />
           </div>
         </div>
@@ -287,19 +447,21 @@ export const Stage: React.FC = () => {
           <Panel className="flex flex-col items-center justify-center min-h-[180px]">
             {isCountingIn ? (
               <BigReadout
-                value={`${transport.bar} : ${transport.beat}`}
-                label="Count-In (Get Ready)"
+                value={`${transport.bar} · ${transport.beat}`}
+                label="This is the count-in. Get ready."
+                kind="tempo"
                 highlight
               />
             ) : (
               <BigReadout
-                value={band.current_chord || "—"}
-                subValue={band.next_chord ? `Next: ${band.next_chord}` : ""}
+                value={band.current_chord || "This is a rest or no chord."}
+                subValue={band.next_chord ? `Next is ${band.next_chord}` : ""}
                 label={
                   band.is_stopped
-                    ? "Band stopped (S to resume)"
-                    : "Active Chord"
+                    ? "The band is stopped. Press S to resume."
+                    : "This is the active chord."
                 }
+                kind="chord"
                 highlight={!band.is_stopped}
               />
             )}
@@ -309,12 +471,13 @@ export const Stage: React.FC = () => {
             {tunerOn ? (
               <BigReadout
                 value={tunerData?.note ?? "--"}
-                label="Guitar Tuner (DI Input)"
+                label="This is the guitar tuner. The input is the DI."
+                kind="tempo"
                 cents={tunerData?.cents}
                 subValue={
                   tunerData
                     ? `${tunerData.hz.toFixed(1)} Hz`
-                    : "play a single note"
+                    : "Play a single note."
                 }
                 highlight={tunerData ? Math.abs(tunerData.cents) < 5 : false}
               />
@@ -322,8 +485,14 @@ export const Stage: React.FC = () => {
               <>
                 <BigReadout
                   value={`${transport.bpm.toFixed(0)}`}
-                  subValue="BPM"
-                  label="Tempo"
+                  subValue="BPM. The range is 20–300."
+                  label="This is the tempo."
+                  kind="tempo"
+                />
+                <BigReadout
+                  value={`${transport.bar} · ${transport.beat}`}
+                  label="This is the bar."
+                  kind="tempo"
                 />
                 {outOfRange && bpmRange && (
                   <span className="text-[10px] font-mono text-[var(--accent)] -mt-2">
@@ -348,7 +517,7 @@ export const Stage: React.FC = () => {
                     size="sm"
                     variant="primary"
                     onClick={async () => setLastTap(await tapTempo())}
-                    title="Tap on the beat (T)"
+                    title="Tap on the beat with T."
                   >
                     Tap{lastTap ? ` ${lastTap}` : ""}
                   </Button>
@@ -379,31 +548,40 @@ export const Stage: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-1)] px-4 py-2.5 rounded-[var(--radius-m)] border border-[var(--line)]">
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase font-mono text-[var(--fg-2)] tracking-wider mr-1">
-              Parts
+              These are the parts.
             </span>
             <Button
               size="sm"
               variant={band.mute_drums ? "secondary" : "primary"}
               onClick={() => togglePart("drums")}
               title="M"
+              aria-label={
+                band.mute_drums ? "Drums are muted." : "Drums are playing."
+              }
             >
-              {band.mute_drums ? "Drums [Muted]" : "Drums"}
+              {band.mute_drums ? "Drums are muted." : "Drums are playing."}
             </Button>
             <Button
               size="sm"
               variant={band.mute_bass ? "secondary" : "primary"}
               onClick={() => togglePart("bass")}
               title="B"
+              aria-label={
+                band.mute_bass ? "Bass is muted." : "Bass is playing."
+              }
             >
-              {band.mute_bass ? "Bass [Muted]" : "Bass"}
+              {band.mute_bass ? "Bass is muted." : "Bass is playing."}
             </Button>
             <Button
               size="sm"
               variant={band.mute_comp ? "secondary" : "primary"}
               onClick={() => togglePart("comp")}
               title="P"
+              aria-label={
+                band.mute_comp ? "Comp is muted." : "Comp is playing."
+              }
             >
-              {band.mute_comp ? "Comp [Muted]" : "Comp"}
+              {band.mute_comp ? "Comp is muted." : "Comp is playing."}
             </Button>
           </div>
 
@@ -416,15 +594,15 @@ export const Stage: React.FC = () => {
               onClick={toggleFollowEnergy}
             >
               {band.follow_energy
-                ? "Follows your playing: ON"
-                : "Follows your playing: OFF"}
+                ? "This follows your playing."
+                : "This is fixed intensity."}
             </Button>
             {band.follow_energy && (
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] uppercase font-mono text-[var(--fg-2)]">
-                  DI Dynamics
+                  DI dynamics.
                 </span>
-                <div className="w-16 h-2 bg-[var(--bg-2)] rounded overflow-hidden border border-[var(--line)]">
+                <div className="w-16 h-2 bg-[var(--bg-2)] rounded-[var(--radius-s)] overflow-hidden border border-[var(--line)]">
                   <div
                     className="h-full bg-[var(--accent)] origin-left transition-transform duration-150"
                     style={{ transform: `scaleX(${band.current_energy})` }}
@@ -438,7 +616,7 @@ export const Stage: React.FC = () => {
 
           <div className="stage-cues flex items-center gap-2">
             <span className="text-xs uppercase font-mono text-[var(--fg-2)] tracking-wider mr-1">
-              Cues
+              These are the cues.
             </span>
             <CueButton
               cue="fill"
@@ -475,8 +653,8 @@ export const Stage: React.FC = () => {
             band.pending_style_id != null ||
             band.pending_intensity != null) && (
             <div className="flex items-center gap-2 ml-auto">
-              <span className="text-xs font-mono text-[var(--accent)] animate-pulse bg-[var(--bg-2)] px-2 py-0.5 rounded border border-[var(--accent)]">
-                Next bar:{" "}
+              <span className="text-xs font-mono text-[var(--accent)] animate-pulse bg-[var(--bg-2)] px-2 py-0.5 rounded-[var(--radius-m)] border border-[var(--accent)]">
+                Next bar is{" "}
                 <strong className="uppercase">
                   {band.pending_cue !== "none"
                     ? band.pending_cue
@@ -485,26 +663,49 @@ export const Stage: React.FC = () => {
                           ?.name ?? band.pending_style_id)
                       : `intensity ${Math.round((band.pending_intensity ?? 0) * 100)}%`}
                 </strong>
+                .
               </span>
             </div>
           )}
         </div>
 
         {/* Chord strip: the whole form, current bar lit */}
+        <Panel title="This is the signal.">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <Meter
+              label="This is the guitar input. The source is the DI."
+              peakDb={telemetry.input_level.peak_db}
+              rmsDb={telemetry.input_level.rms_db}
+              width="w-full"
+              live={clockLive && view === "Perform"}
+            />
+            <Meter
+              label="This is the master output."
+              peakDb={telemetry.output_level.peak_db}
+              rmsDb={telemetry.output_level.rms_db}
+              width="w-full"
+              live={clockLive && view === "Perform"}
+            />
+          </div>
+        </Panel>
+
         <Panel className="py-2 px-3">
           <div className="flex items-center justify-between px-1">
-            <div className="text-[10px] uppercase tracking-wider font-mono text-[var(--fg-2)]">
-              Form{band.current_section ? ` · ${band.current_section}` : ""}
+            <div className="text-[10px] font-mono text-[var(--fg-2)]">
+              {band.current_section
+                ? `The form is ${band.current_section}.`
+                : "The form has no current section."}
             </div>
             <div className="text-[10px] font-mono text-[var(--fg-2)]">
-              click a bar to jump · shift-click to set the loop · 1–9 jump to
-              bar
+              Click a bar to jump. Shift-click to set the loop. 1–9 jump to a
+              bar.
             </div>
           </div>
           <ChordStrip
             chart={currentChart}
             currentBar={isCountingIn ? 0 : transport.bar}
             barProgress={transport.bar_progress}
+            live={clockLive}
             loop={{
               enabled: transport.loop_enabled,
               startBar: transport.loop_start_bar,
@@ -517,7 +718,7 @@ export const Stage: React.FC = () => {
       </div>
       <section hidden={view !== "Practice"} className="workspace-stack">
         <div>
-          <h2 className="text-lg mb-3">Rehearse a section</h2>
+          <h2 className="text-lg mb-3">Rehearse this section.</h2>
           <div className="stage-passages">
             {sectionPassages(currentChart).map((p) => (
               <button
@@ -535,7 +736,7 @@ export const Stage: React.FC = () => {
               >
                 {p.label}
                 <small>
-                  Bars {p.start}–{p.end - 1}
+                  Bars {p.start} to {p.end - 1}.
                 </small>
               </button>
             ))}
@@ -549,22 +750,26 @@ export const Stage: React.FC = () => {
                 )
               }
             >
-              Exit loop
+              Exit this loop.
             </Button>
           </div>
         </div>
         {/* Practice: tempo trainer */}
-        <Panel title="Tempo Trainer">
+        <Panel title="This is the tempo trainer.">
           <div className="flex flex-wrap items-center gap-4">
             <Toggle
               checked={tempoTrainer.enabled}
               onChange={(enabled) =>
                 setTempoTrainer({ enabled, playedBars: 0 })
               }
-              label={tempoTrainer.enabled ? "On" : "Off"}
+              label={
+                tempoTrainer.enabled
+                  ? "The trainer is on."
+                  : "The trainer is off."
+              }
             />
             <NumberField
-              label="Start"
+              label="Choose the start tempo."
               value={tempoTrainer.startBpm}
               min={20}
               max={300}
@@ -572,7 +777,7 @@ export const Stage: React.FC = () => {
               suffix="BPM"
             />
             <NumberField
-              label="Target"
+              label="Choose the target tempo."
               value={tempoTrainer.targetBpm}
               min={20}
               max={300}
@@ -580,7 +785,7 @@ export const Stage: React.FC = () => {
               suffix="BPM"
             />
             <NumberField
-              label="Step"
+              label="Choose the tempo step."
               value={tempoTrainer.stepBpm}
               min={1}
               max={20}
@@ -588,7 +793,7 @@ export const Stage: React.FC = () => {
               suffix="BPM"
             />
             <NumberField
-              label="Every"
+              label="Change every this many bars."
               value={tempoTrainer.everyBars}
               min={1}
               max={32}
@@ -596,7 +801,7 @@ export const Stage: React.FC = () => {
               suffix="bars"
             />
             <span className="text-[10px] font-mono text-[var(--fg-2)] max-w-xs">
-              Press play: the band starts at the start tempo and creeps toward
+              Press play. The band starts at the start tempo and creeps toward
               the target. Loop a hard passage (shift-click two bars) to drill
               it.
             </span>
@@ -606,14 +811,14 @@ export const Stage: React.FC = () => {
         {/* Soloing helper */}
         <div className="flex items-center justify-between -mb-3">
           <span className="text-xs uppercase font-mono text-[var(--fg-2)] tracking-wider">
-            Soloing Helper
+            This is the soloing helper.
           </span>
           <Button
             size="sm"
             variant="ghost"
             onClick={() => setShowSolo((v) => !v)}
           >
-            {showSolo ? "Hide" : "Show"}
+            {showSolo ? "Hide the helper." : "Show the helper."}
           </Button>
         </div>
         {showSolo && (
@@ -626,20 +831,21 @@ export const Stage: React.FC = () => {
         )}
       </section>
       <section hidden={view !== "Levels"}>
-        {/* Meters */}
-        <Panel title="Signal Telemetry">
+        <Panel title="This is the signal telemetry.">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
             <Meter
-              label="Input (Guitar DI)"
+              label="This is the guitar input. The source is the DI."
               peakDb={telemetry.input_level.peak_db}
               rmsDb={telemetry.input_level.rms_db}
               width="w-full"
+              live={clockLive && view === "Levels"}
             />
             <Meter
-              label="Master Output"
+              label="This is the master output."
               peakDb={telemetry.output_level.peak_db}
               rmsDb={telemetry.output_level.rms_db}
               width="w-full"
+              live={clockLive && view === "Levels"}
             />
           </div>
         </Panel>
@@ -697,7 +903,7 @@ const NumberField: React.FC<{
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
         }}
-        className="w-16 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded text-xs font-mono tabular-nums"
+        className="w-16 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded-[var(--radius-m)] text-xs font-mono tabular-nums"
       />
       {suffix && <span>{suffix}</span>}
     </label>

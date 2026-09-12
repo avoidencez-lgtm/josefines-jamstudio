@@ -1,11 +1,14 @@
 //! net: the only road from the WebView to an AI provider. TypeScript hands over a
 //! provider *name*, a path and a body; Rust checks the provider against an
 //! allow-list, injects the key from the keychain, performs the request and writes
-//! one line to a local usage log (provider, path, status, bytes, duration; never a
-//! body, never a key).
+//! one line to a local usage log (provider, path, status, bytes, duration and
+//! optional token/speech units; never a body, never a key).
 
 use crate::keys::SecretStore;
+pub mod lyria;
 pub mod media;
+pub mod musicai;
+pub mod review;
 pub mod voice;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -55,6 +58,12 @@ pub const PROVIDERS: &[ProviderEntry] = &[
         base_url: "https://api.elevenlabs.io",
         auth: AuthScheme::HeaderKey("xi-api-key"),
         description: "ElevenLabs (Jo's voice, speech to text)",
+    },
+    ProviderEntry {
+        id: "musicai",
+        base_url: "https://api.music.ai",
+        auth: AuthScheme::HeaderKey("Authorization"),
+        description: "Music.ai (beats, chords, key, sections)",
     },
     ProviderEntry {
         id: "openai",
@@ -160,25 +169,29 @@ pub fn validate(req: &FetchRequest) -> Result<(&'static ProviderEntry, String), 
         return Err("Provider request exceeds the text limit or has invalid cost metadata.".into());
     }
     let entry = provider(&req.provider)
-        .ok_or_else(|| format!("provider \"{}\" is not on the allow-list", req.provider))?;
+        .ok_or_else(|| format!("Provider \"{}\" is not on the allow-list.", req.provider))?;
     let path = req.path.as_str();
     if !path.starts_with('/') || path.starts_with("//") {
-        return Err(format!("path must start with a single '/': {path:?}"));
+        return Err(format!(
+            "The path must start with a single '/'. Got {path:?}."
+        ));
     }
     if path.contains("://") || path.contains('@') || path.contains("..") || path.contains('\\') {
-        return Err(format!("path may not point outside the provider: {path:?}"));
+        return Err(format!(
+            "The path may not point outside the provider. Got {path:?}."
+        ));
     }
     if path.chars().any(|c| c.is_control() || c.is_whitespace()) {
-        return Err("path contains whitespace or control characters".into());
+        return Err("The path contains whitespace or control characters.".into());
     }
     match req.method.to_ascii_uppercase().as_str() {
         "GET" | "POST" | "PUT" | "PATCH" | "DELETE" => {}
-        m => return Err(format!("method {m} is not allowed")),
+        m => return Err(format!("Method {m} is not allowed.")),
     }
     for k in req.headers.keys() {
         if RESERVED_HEADERS.contains(&k.to_ascii_lowercase().as_str()) {
             return Err(format!(
-                "header \"{k}\" is set by the app, not by the caller"
+                "Header \"{k}\" is set by the app, not by the caller."
             ));
         }
     }
@@ -210,6 +223,13 @@ pub struct CostEntry {
     pub stt_seconds: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tts_characters: Option<u64>,
+    /// Provider-reported LLM tokens. Absent on speech/media and older log lines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_tokens: Option<u64>,
 }
 
 pub struct CostLog {
@@ -231,13 +251,14 @@ impl CostLog {
 
     pub fn append(&self, entry: &CostEntry) -> Result<(), String> {
         if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Cannot create {}. {e}", parent.display()))?;
         }
         let mut f = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)
-            .map_err(|e| format!("{}: {e}", self.path.display()))?;
+            .map_err(|e| format!("Cannot write {}. {e}", self.path.display()))?;
         let line = serde_json::to_string(entry).map_err(|e| e.to_string())?;
         writeln!(f, "{line}").map_err(|e| e.to_string())
     }
@@ -270,6 +291,9 @@ impl CostLog {
             t.bytes_out += e.bytes_out;
             t.stt_seconds += e.stt_seconds.unwrap_or(0.0);
             t.tts_characters += e.tts_characters.unwrap_or(0);
+            t.prompt_tokens += e.prompt_tokens.unwrap_or(0);
+            t.completion_tokens += e.completion_tokens.unwrap_or(0);
+            t.total_tokens += e.total_tokens.unwrap_or(0);
             if let Some(cost) = e.estimated_cost_usd.filter(|v| v.is_finite() && *v >= 0.0) {
                 *t.estimated_cost_usd.get_or_insert(0.0) += cost;
             } else {
@@ -295,6 +319,9 @@ pub struct CostTotal {
     pub bytes_out: u64,
     pub stt_seconds: f64,
     pub tts_characters: u64,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
     pub estimated_cost_usd: Option<f64>,
     pub unpriced_calls: u64,
 }
@@ -395,7 +422,7 @@ pub async fn provider_fetch_notifying(
         let mut resp = builder
             .send()
             .await
-            .map_err(|e| format!("{}: {e}", entry.id))?;
+            .map_err(|e| format!("The {} request failed. {e}", entry.id))?;
         let status = resp.status().as_u16();
         let headers: HashMap<String, String> = resp
             .headers()
@@ -407,7 +434,7 @@ pub async fn provider_fetch_notifying(
         while let Some(chunk) = resp
             .chunk()
             .await
-            .map_err(|e| format!("{}: {e}", entry.id))?
+            .map_err(|e| format!("The {} request failed. {e}", entry.id))?
         {
             if bytes.len() + chunk.len() > 2 * 1024 * 1024 {
                 return Err("Provider response exceeds the 2 MB text limit.".into());
@@ -429,11 +456,59 @@ pub async fn provider_fetch_notifying(
         Ok(r) => {
             cost.status = r.status;
             cost.bytes_in = r.body.len() as u64;
+            let tokens = llm_tokens(&r.body);
+            cost.prompt_tokens = tokens.prompt;
+            cost.completion_tokens = tokens.completion;
+            cost.total_tokens = tokens.total;
         }
         Err(e) => cost.error = Some(e.clone()),
     }
     persist_cost(log, &cost, on_log_error);
     result
+}
+
+#[derive(Default)]
+struct LlmTokens {
+    prompt: Option<u64>,
+    completion: Option<u64>,
+    total: Option<u64>,
+}
+
+/// Reads provider-reported token counts. The body is not stored.
+fn llm_tokens(body: &str) -> LlmTokens {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
+        return LlmTokens::default();
+    };
+    if let Some(usage) = value.get("usageMetadata") {
+        return LlmTokens {
+            prompt: usage.get("promptTokenCount").and_then(|v| v.as_u64()),
+            completion: usage.get("candidatesTokenCount").and_then(|v| v.as_u64()),
+            total: usage.get("totalTokenCount").and_then(|v| v.as_u64()),
+        };
+    }
+    let Some(usage) = value.get("usage") else {
+        return LlmTokens::default();
+    };
+    let prompt = usage
+        .get("prompt_tokens")
+        .or_else(|| usage.get("input_tokens"))
+        .and_then(|v| v.as_u64());
+    let completion = usage
+        .get("completion_tokens")
+        .or_else(|| usage.get("output_tokens"))
+        .and_then(|v| v.as_u64());
+    let total = usage
+        .get("total_tokens")
+        .and_then(|v| v.as_u64())
+        .or_else(|| match (prompt, completion) {
+            (Some(p), Some(c)) => Some(p.saturating_add(c)),
+            _ => None,
+        });
+    LlmTokens {
+        prompt,
+        completion,
+        total,
+    }
 }
 
 fn persist_cost(log: &CostLog, cost: &CostEntry, on_log_error: impl FnOnce(&str)) {
@@ -456,6 +531,9 @@ mod tests {
         let old: CostEntry = serde_json::from_str(old).unwrap();
         assert_eq!(old.stt_seconds, None);
         assert_eq!(old.tts_characters, None);
+        assert_eq!(old.prompt_tokens, None);
+        assert_eq!(old.completion_tokens, None);
+        assert_eq!(old.total_tokens, None);
         for entry in [
             old,
             CostEntry {
@@ -486,6 +564,44 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    #[test]
+    fn provider_token_counts_are_read_without_keeping_the_body() {
+        let gemini = llm_tokens(
+            r#"{"candidates":[{"content":{"parts":[{"text":"secret prompt copy"}]}}],"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":3,"totalTokenCount":15}}"#,
+        );
+        assert_eq!(
+            (gemini.prompt, gemini.completion, gemini.total),
+            (Some(12), Some(3), Some(15))
+        );
+        let openai = llm_tokens(r#"{"usage":{"input_tokens":8,"output_tokens":2}}"#);
+        assert_eq!(
+            (openai.prompt, openai.completion, openai.total),
+            (Some(8), Some(2), Some(10))
+        );
+        let chat =
+            llm_tokens(r#"{"usage":{"prompt_tokens":4,"completion_tokens":6,"total_tokens":10}}"#);
+        assert_eq!(chat.total, Some(10));
+        assert_eq!(llm_tokens("not-json").total, None);
+        assert_eq!(llm_tokens(r#"{"ok":true}"#).prompt, None);
+        let dir = std::env::temp_dir().join(format!("jam-token-cost-{}", std::process::id()));
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        log.append(&CostEntry {
+            provider: "gemini".into(),
+            status: 200,
+            prompt_tokens: Some(12),
+            completion_tokens: Some(3),
+            total_tokens: Some(15),
+            estimated_cost_usd: Some(0.0),
+            ..CostEntry::default()
+        })
+        .unwrap();
+        let line = std::fs::read_to_string(log.path()).unwrap();
+        assert!(!line.contains("secret"));
+        assert!(line.contains("promptTokens"));
+        assert_eq!(log.totals()[0].total_tokens, 15);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     fn req(provider: &str, path: &str) -> FetchRequest {
         FetchRequest {
             provider: provider.into(),
@@ -507,6 +623,7 @@ mod tests {
         oversized.body = Some("x".repeat(128 * 1024 + 1));
         assert!(validate(&oversized).is_err());
         assert!(validate(&req("gemini", "/v1beta/models")).is_ok());
+        assert!(validate(&req("musicai", "/v1/upload")).is_ok());
         let (_, url) = validate(&req("gemini", "/v1beta/models?x=1")).unwrap();
         assert_eq!(
             url,
@@ -576,7 +693,7 @@ mod tests {
         let err = provider_fetch(req("gemini", "/v1beta/models"), &store, &log)
             .await
             .unwrap_err();
-        assert!(err.contains("no API key"), "{err}");
+        assert!(err.contains("No API key"), "{err}");
         assert!(
             log.list(10).is_empty(),
             "nothing is logged when nothing was sent"
@@ -596,7 +713,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("keychain unavailable"), "{err}");
-        assert!(!err.contains("no API key"), "{err}");
+        assert!(!err.contains("No API key"), "{err}");
         assert!(
             log.list(10).is_empty(),
             "nothing is logged when the keychain cannot be read"
@@ -701,7 +818,8 @@ mod tests {
         );
         let err = reported.expect("append failure is reported");
         assert!(
-            err.contains("not-a-folder") || err.contains("usage.jsonl"),
+            err.starts_with("Cannot ")
+                && (err.contains("not-a-folder") || err.contains("usage.jsonl")),
             "{err}"
         );
         let _ = std::fs::remove_dir_all(&dir);

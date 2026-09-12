@@ -1,11 +1,25 @@
 import type React from "react";
 
+/** DESIGN §1: chord 96–160 px; tempo and bar 48 px. Visual two-metre check stays open. */
+export const CHORD_MIN_PX = 96;
+export const CHORD_MAX_PX = 160;
+export const CHORD_VW = 10;
+export const TEMPO_BAR_PX = 48;
+
+export function chordSizePx(viewportWidth: number): number {
+  return Math.min(
+    CHORD_MAX_PX,
+    Math.max(CHORD_MIN_PX, (viewportWidth * CHORD_VW) / 100),
+  );
+}
+
 export interface BigReadoutProps {
   value: string;
   subValue?: string;
   label: string;
   cents?: number;
   highlight?: boolean;
+  kind?: "chord" | "tempo";
 }
 
 export const BigReadout: React.FC<BigReadoutProps> = ({
@@ -14,7 +28,12 @@ export const BigReadout: React.FC<BigReadoutProps> = ({
   label,
   cents,
   highlight = false,
+  kind = "chord",
 }) => {
+  const fontSize =
+    kind === "tempo"
+      ? `${TEMPO_BAR_PX}px`
+      : `clamp(${CHORD_MIN_PX}px, ${CHORD_VW}vw, ${CHORD_MAX_PX}px)`;
   return (
     <div className="flex flex-col items-center justify-center p-4">
       <span className="text-xs uppercase tracking-widest text-[var(--fg-2)] mb-1 font-mono">
@@ -25,14 +44,24 @@ export const BigReadout: React.FC<BigReadoutProps> = ({
           className={`font-semibold font-mono tracking-tight tabular-nums select-none ${
             highlight ? "text-[var(--accent)]" : "text-[var(--fg-0)]"
           }`}
-          style={{ fontSize: "clamp(48px, 8vw, 120px)", lineHeight: 1 }}
+          style={{ fontSize, lineHeight: 1 }}
         >
           {value}
         </span>
-        {subValue && (
-          <span className="text-2xl text-[var(--fg-1)] font-medium">
-            {subValue}
+        {kind === "chord" ? (
+          <span
+            className="text-2xl text-[var(--fg-1)] font-medium"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {subValue ?? ""}
           </span>
+        ) : (
+          subValue && (
+            <span className="text-2xl text-[var(--fg-1)] font-medium">
+              {subValue}
+            </span>
+          )
         )}
       </div>
       {cents !== undefined && (

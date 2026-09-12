@@ -37,7 +37,7 @@ export function applySongIdea(body: SongBody, base: string, label: string) {
     throw new Error(
       "Remove an unused version to preserve the current song first.",
     );
-  w.version(`Before ${label}`);
+  w.version(`This is before ${label}.`);
   w.edit((b) => Object.assign(b, structuredClone(body)));
   useWriting.setState({
     message: `${label} applied. Undo and Versions preserve the previous song. Save to keep it on disk.`,
@@ -107,7 +107,7 @@ export async function recallRig(value: unknown) {
       await invoke("rig_set_control", { cc: Number(cc), value });
   } catch (e) {
     throw new Error(
-      `Rig recall stopped: ${String(e)}. Earlier MIDI commands may already have reached the rig; inspect its controls before retrying.`,
+      `Could not finish recalling the rig. ${String(e).replace(/^Error:\s*/, "")} Earlier MIDI commands may already have reached the rig; inspect its controls before retrying.`,
     );
   }
 }

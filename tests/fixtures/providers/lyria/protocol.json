@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "provenance": "Synthetic protocol specimen derived from Google's Live Music WebSocket reference and official SDK; not captured from a provider session.",
+  "verifiedOn": "2026-09-06",
+  "source": "https://ai.google.dev/api/live_music",
+  "endpoint": "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic",
+  "setup": { "setup": { "model": "models/lyria-realtime-exp" } },
+  "setupReply": { "setupComplete": {} },
+  "prompts": {
+    "clientContent": {
+      "weightedPrompts": [
+        {
+          "text": "Original instrumental funk rhythm section, space for lead guitar",
+          "weight": 1.0
+        }
+      ]
+    }
+  },
+  "config": {
+    "musicGenerationConfig": {
+      "bpm": 100,
+      "scale": "G_MAJOR_E_MINOR",
+      "density": 0.5,
+      "brightness": 0.5,
+      "guidance": 4.0,
+      "muteBass": false,
+      "muteDrums": false
+    }
+  },
+  "play": { "playbackControl": "PLAY" },
+  "pause": { "playbackControl": "PAUSE" },
+  "stop": { "playbackControl": "STOP" },
+  "reset": { "playbackControl": "RESET_CONTEXT" },
+  "audio": {
+    "serverContent": {
+      "audioChunks": [
+        { "data": "AEAAwA==", "mimeType": "audio/pcm;rate=48000" },
+        { "data": "ACAA4A==", "mimeType": "audio/pcm;rate=48000" }
+      ]
+    }
+  }
+}

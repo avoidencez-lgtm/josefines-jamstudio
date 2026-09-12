@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "minCorrect": 27,
+  "stt": "mocked transcript; no audio",
+  "fixture": "../providers/gemini/jo-script.json",
+  "utterances": [
+    {
+      "id": "01-blues-ninety-shuffle",
+      "stt": "blues in A, ninety, shuffle",
+      "expected": [
+        { "name": "set_style", "arguments": { "styleId": "blues-shuffle" } },
+        { "name": "set_tempo", "arguments": { "bpm": 90 } },
+        { "name": "load_chart", "arguments": { "chartId": "blues-12-bar" } }
+      ]
+    },
+    {
+      "id": "02-twelve-bar-g-100-rock",
+      "stt": "twelve-bar blues in G, one hundred, rock",
+      "expected": [
+        { "name": "set_style", "arguments": { "styleId": "rock-straight" } },
+        { "name": "set_tempo", "arguments": { "bpm": 100 } },
+        { "name": "load_chart", "arguments": { "chartId": "blues-12-bar" } },
+        { "name": "transport_control", "arguments": { "action": "play" } }
+      ]
+    },
+    {
+      "id": "03-lets-jam",
+      "stt": "let's jam",
+      "expected": [
+        { "name": "transport_control", "arguments": { "action": "play" } }
+      ]
+    },
+    {
+      "id": "04-stop",
+      "stt": "stop",
+      "expected": [
+        { "name": "transport_control", "arguments": { "action": "stop" } }
+      ]
+    },
+    {
+      "id": "05-pause",
+      "stt": "pause",
+      "expected": [
+        { "name": "transport_control", "arguments": { "action": "pause" } }
+      ]
+    },
+    {
+      "id": "06-tempo-135",
+      "stt": "set tempo to 135 bpm",
+      "expected": [{ "name": "set_tempo", "arguments": { "bpm": 135 } }]
+    },
+    {
+      "id": "07-faster",
+      "stt": "pick it up, a bit faster",
+      "expected": [{ "name": "set_tempo", "arguments": { "delta": 5 } }]
+    },
+    {
+      "id": "08-slower",
+      "stt": "slow down",
+      "expected": [{ "name": "set_tempo", "arguments": { "delta": -5 } }]
+    },
+    {
+      "id": "09-fill",
+      "stt": "give me a drum fill",
+      "expected": [{ "name": "trigger_cue", "arguments": { "cue": "fill" } }]
+    },
+    {
+      "id": "10-crash",
+      "stt": "crash",
+      "expected": [{ "name": "trigger_cue", "arguments": { "cue": "crash" } }]
+    },
+    {
+      "id": "11-ending",
+      "stt": "bring it home with an ending",
+      "expected": [{ "name": "trigger_cue", "arguments": { "cue": "ending" } }]
+    },
+    {
+      "id": "12-funk",
+      "stt": "let's play some funk",
+      "expected": [
+        { "name": "set_style", "arguments": { "styleId": "funk-16" } }
+      ]
+    },
+    {
+      "id": "13-metal",
+      "stt": "give me heavy metal",
+      "expected": [
+        { "name": "set_style", "arguments": { "styleId": "metal-gallop" } }
+      ]
+    },
+    {
+      "id": "14-jazz",
+      "stt": "jazz swing",
+      "expected": [
+        { "name": "set_style", "arguments": { "styleId": "jazz-swing" } }
+      ]
+    },
+    {
+      "id": "15-ballad",
+      "stt": "6/8 ballad",
+      "expected": [
+        { "name": "set_style", "arguments": { "styleId": "ballad-68" } }
+      ]
+    },
+    {
+      "id": "16-drop-bass",
+      "stt": "drop the bass for now",
+      "expected": [{ "name": "set_parts", "arguments": { "muteBass": true } }]
+    },
+    {
+      "id": "17-bring-bass",
+      "stt": "bring in bass",
+      "expected": [{ "name": "set_parts", "arguments": { "muteBass": false } }]
+    },
+    {
+      "id": "18-mute-drums",
+      "stt": "mute drums",
+      "expected": [{ "name": "set_parts", "arguments": { "muteDrums": true } }]
+    },
+    {
+      "id": "19-follow-energy",
+      "stt": "follow my energy",
+      "expected": [
+        { "name": "toggle_energy_follower", "arguments": { "enabled": true } }
+      ]
+    },
+    {
+      "id": "20-record",
+      "stt": "record a take",
+      "expected": [
+        { "name": "record_take", "arguments": { "action": "start" } }
+      ]
+    },
+    {
+      "id": "21-stop-recording",
+      "stt": "stop recording",
+      "expected": [{ "name": "record_take", "arguments": { "action": "stop" } }]
+    },
+    {
+      "id": "22-load-chart",
+      "stt": "load the quick change blues",
+      "expected": [
+        {
+          "name": "load_chart",
+          "arguments": { "chartId": "blues-quick-change" }
+        }
+      ]
+    },
+    {
+      "id": "23-loop-1-5",
+      "stt": "loop bars 1 to 5",
+      "expected": [
+        {
+          "name": "set_loop",
+          "arguments": { "enabled": true, "startBar": 1, "endBar": 5 }
+        }
+      ]
+    },
+    {
+      "id": "24-intensity",
+      "stt": "play at full intensity",
+      "expected": [{ "name": "set_intensity", "arguments": { "intensity": 1 } }]
+    },
+    {
+      "id": "25-straight-rock",
+      "stt": "straight rock",
+      "expected": [
+        { "name": "set_style", "arguments": { "styleId": "rock-straight" } }
+      ]
+    },
+    {
+      "id": "26-cut-it",
+      "stt": "cut it",
+      "expected": [
+        { "name": "transport_control", "arguments": { "action": "stop" } }
+      ]
+    },
+    {
+      "id": "27-load-song",
+      "stt": "load song Autumn Leaves",
+      "expected": [
+        { "name": "load_song", "arguments": { "query": "Autumn Leaves" } }
+      ]
+    },
+    {
+      "id": "28-next-section",
+      "stt": "next section",
+      "expected": [{ "name": "songwriting", "arguments": { "action": "next" } }]
+    },
+    {
+      "id": "29-save-song",
+      "stt": "save song",
+      "expected": [{ "name": "songwriting", "arguments": { "action": "save" } }]
+    },
+    {
+      "id": "30-undo",
+      "stt": "undo",
+      "expected": [{ "name": "songwriting", "arguments": { "action": "undo" } }]
+    }
+  ]
+}

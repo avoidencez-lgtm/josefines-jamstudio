@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "lyria-realtime",
+  "name": "Lyria RealTime",
+  "origin": "synthetic-protocol",
+  "drivesClock": false,
+  "exclusiveWith": ["band", "song"],
+  "liveRequires": ["gemini-key", "JAM_LIVE=1", "recorded-provider-session"]
+}

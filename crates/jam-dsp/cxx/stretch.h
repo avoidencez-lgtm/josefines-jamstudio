@@ -9,6 +9,7 @@ class Stretch {
     double speed;
 public:
     Stretch(double speed, double semitones);
+    void set_parameters(double speed, double semitones) noexcept;
     std::size_t seek_length() const;
     void seek(rust::Slice<const float> input);
     void process(rust::Slice<const float> input, rust::Slice<float> output);

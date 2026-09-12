@@ -45,6 +45,16 @@ fn voice_commands_are_registered_guarded_and_cancelled_by_generation() {
         )
         .is_err());
     assert_eq!(std::env::var_os("JAM_LIVE"), None);
+    let gate = studio.err("voice_live_latency", json!({}));
+    assert!(
+        gate.contains("not configured") && gate.contains("JAM_LIVE=1"),
+        "{gate}"
+    );
+    assert_eq!(
+        initial["lastReleaseToFirstAudioMs"],
+        serde_json::Value::Null
+    );
+    assert_eq!(initial["liveTurns"], 0);
     let mut settings = studio.ok("settings_get", json!({}));
     settings["voice"] =
         json!({"voiceId":"fixture","sttUsdPerHour":0.22,"ttsUsdPer1k":0.05,"futureField":true});

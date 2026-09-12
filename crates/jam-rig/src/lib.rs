@@ -5,10 +5,15 @@ pub mod controller;
 pub mod midi;
 pub mod orchestrator;
 pub mod profiles;
+pub mod scheduler;
+pub mod virtual_monitor;
 
 pub use midi::*;
 pub use orchestrator::*;
 pub use profiles::*;
+pub use scheduler::{
+    tick_interval_samples, MidiScheduler, CLOCK, CONTINUE, LOOKAHEAD_MS, PPQN, START, STOP,
+};
 
 use jam_core::registry::{SeamRegistry, BUNDLED_RIGS};
 
@@ -56,6 +61,26 @@ mod tests {
             "first message is a Program Change on ch2"
         );
         assert!(bytes.iter().any(|m| m[0] == 0xB1 && m[1] == 20));
+    }
+
+    #[test]
+    fn fixture_rig_sends_program_change_through_memory_sink() {
+        let mut raw: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/seams/extending-rig.json"
+        ))
+        .unwrap();
+        raw.as_object_mut().unwrap().remove("kind");
+        let profile: RigProfile = serde_json::from_value(raw).expect("fixture rig parses");
+        assert_eq!(profile.id, "fixture-rig");
+        assert!(bundled_profiles()
+            .unwrap()
+            .iter()
+            .all(|p| p.id != profile.id));
+        profile.validate().expect("fixture rig validates");
+        let mut rig = RigOrchestrator::with_memory_sink(profile);
+        rig.send_program(3).unwrap();
+        let sent = rig.monitor();
+        assert_eq!(sent.last().unwrap().bytes, vec![0xC0, 3]);
     }
 
     #[test]

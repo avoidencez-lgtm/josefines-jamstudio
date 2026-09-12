@@ -10,7 +10,7 @@ import { Button } from "./Button";
 export function JoStage() {
   const { messages, inputValue, busy, pending } = useJoConversation();
   return (
-    <section className="flex flex-col gap-2" aria-label="Jo on Stage">
+    <section className="flex flex-col gap-2" aria-label="This is Jo on Stage.">
       <div className="flex flex-wrap items-center gap-3">
         <strong>Jo</strong>
         <Button
@@ -18,8 +18,8 @@ export function JoStage() {
           onClick={() => useEngineStore.getState().setScreen("jo")}
         >
           {pending
-            ? "Review Jo's proposed edits"
-            : "Conversation & voice setup"}
+            ? "Review these studio changes."
+            : "Open the conversation and voice setup."}
         </Button>
       </div>
       <div className="max-h-20 overflow-y-auto text-sm" aria-live="polite">
@@ -28,13 +28,13 @@ export function JoStage() {
           .slice(-2)
           .map((m) => (
             <p key={m.id}>
-              <strong>{m.sender === "user" ? "You" : "Jo"}: </strong>
+              <strong>{m.sender === "user" ? "You" : "Jo"} </strong>
               {m.text}
             </p>
           ))}
       </div>
       <details>
-        <summary className="cursor-pointer text-sm">Type a command</summary>
+        <summary className="cursor-pointer text-sm">Type a command.</summary>
         <form
           className="flex gap-2"
           onSubmit={(e) => {
@@ -43,11 +43,11 @@ export function JoStage() {
           }}
         >
           <label className="room-tool-field flex-1">
-            Message Jo
+            Message Jo.
             <input
               value={inputValue}
               disabled={busy}
-              placeholder="Set tempo to 100"
+              placeholder="Set tempo to 100."
               onChange={(e) => setInputValue(e.target.value)}
             />
           </label>
