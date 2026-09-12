@@ -99,7 +99,12 @@ export function validateToolCall(call: {
     if (!(name in call.arguments))
       throw new Error(`Missing ${name} for ${call.name}.`);
   }
+  const required = new Set(tool.parameters.required ?? []);
   for (const [name, value] of Object.entries(call.arguments)) {
+    if ((value === null || value === undefined) && !required.has(name)) {
+      delete call.arguments[name];
+      continue;
+    }
     const property = tool.parameters.properties[name];
     const actualType = typeof value;
     if (

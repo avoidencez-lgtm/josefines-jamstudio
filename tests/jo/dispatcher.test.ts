@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ipc } from "../../src/ipc/client";
 import { dispatchJoToolCall } from "../../src/lib/jo/dispatcher";
 import type { JoToolCall } from "../../src/lib/jo/persona";
+import { validateToolCall } from "../../src/lib/jo/tools";
 import { newShot, newVideo, useMedia } from "../../src/lib/media";
 import { newOriginal, useWriting } from "../../src/lib/originals";
 import { useEngineStore } from "../../src/store/engine";
@@ -35,6 +36,21 @@ const calls: JoToolCall[] = [
   { name: "record_take", arguments: { action: "start" } },
   { name: "record_take", arguments: { action: "stop" } },
 ];
+
+it("skips null and undefined optional tool arguments at the shared validator", () => {
+  const call = {
+    name: "songwriting",
+    arguments: { action: "save", name: null, part: undefined },
+  };
+  expect(() => validateToolCall(call)).not.toThrow();
+  expect(call.arguments).toEqual({ action: "save" });
+  expect(() =>
+    validateToolCall({
+      name: "songwriting",
+      arguments: { action: null },
+    }),
+  ).toThrow(/Invalid action/);
+});
 
 describe("Jo reports accepted actions", () => {
   it.each(calls)(
