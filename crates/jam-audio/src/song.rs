@@ -334,6 +334,13 @@ impl ReferenceSong {
             let mut c = s.chars();
             matches!(c.next(), Some('A'..='G')) && matches!(c.as_str(), "" | "#" | "b")
         };
+        fn chord_root(s: &str) -> &str {
+            s.strip_suffix("maj7")
+                .or_else(|| s.strip_suffix("m7"))
+                .or_else(|| s.strip_suffix('7'))
+                .or_else(|| s.strip_suffix('m'))
+                .unwrap_or(s)
+        }
         if analysis.schema_version != 1
             || analysis.analyzer != "local-chroma-v1"
             || analysis.confidence != "low"
@@ -358,9 +365,7 @@ impl ReferenceSong {
                     || c.end <= c.start
                     || c.end > analysis.seconds
                     || (i > 0 && c.start < analysis.chords[i - 1].end)
-                    || c.chord
-                        .as_ref()
-                        .is_some_and(|s| !valid_note(s.strip_suffix('m').unwrap_or(s)))
+                    || c.chord.as_ref().is_some_and(|s| !valid_note(chord_root(s)))
             })
             || analysis.key.as_ref().is_some_and(|s| {
                 !s.strip_suffix(" major")
@@ -1025,6 +1030,34 @@ mod tests {
             corrupt(&mut invalid);
             assert!(song.set_analysis(invalid).is_err());
         }
+    }
+
+    #[test]
+    fn set_analysis_accepts_seventh_chords_from_the_offline_analyzer() {
+        let mut song =
+            ReferenceSong::new("sevenths".into(), "Sevenths".into(), vec![0.2; 384_000]).unwrap();
+        let analysis = jam_dsp::offline::SongAnalysis {
+            schema_version: 1,
+            analyzer: "local-chroma-v1".into(),
+            confidence: "low".into(),
+            seconds: 4.0,
+            bpm: Some(120.0),
+            beats: vec![0.0, 1.0, 2.0, 3.0],
+            chords: ["C7", "Gmaj7", "Am7", "Dm"]
+                .iter()
+                .enumerate()
+                .map(|(i, c)| jam_dsp::offline::ChordEstimate {
+                    start: i as f64,
+                    end: i as f64 + 1.0,
+                    chord: Some((*c).into()),
+                })
+                .collect(),
+            key: Some("C major".into()),
+        };
+        song.set_analysis(analysis).unwrap();
+        let mut invalid = song.analysis.clone().unwrap();
+        invalid.chords[0].chord = Some("C9".into());
+        assert!(song.set_analysis(invalid).is_err());
     }
     #[test]
     fn stereo_reference_uses_output_frames_and_obeys_pause_seek_loop_and_end() {
