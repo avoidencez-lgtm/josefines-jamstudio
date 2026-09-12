@@ -802,8 +802,11 @@ fn record_without_a_loaded_song_records_the_default_band() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let take_id = studio.ok("originals_record", json!({ "sessionId": "free-play" }));
-    wait_until("playback", || {
+    let state = studio.app().state::<app_lib::AppState>();
+    // Transport telemetry can lead the output callback and its recorded frames.
+    wait_until("recorded playback", || {
         telemetry(&studio)["transport"]["state"] == "playing"
+            && state.engine.lock().recorder.lock().frames_written > 0
     });
     let take = studio.ok("recorder_stop", json!({}));
     assert_eq!(take["id"], take_id);
