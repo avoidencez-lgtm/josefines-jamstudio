@@ -262,9 +262,6 @@ fn keys_set(provider: String, key: String, state: State<'_, AppState>) -> Result
     if net::provider(&provider).is_none() || key.trim().is_empty() {
         return Err("Choose a supported provider and enter a non-empty API key.".into());
     }
-    if key.len() > 4096 {
-        return Err("API key is too long. The limit is 4096 bytes.".into());
-    }
     state.secret_store.set(&provider, &key)
 }
 
@@ -705,6 +702,23 @@ fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), Strin
     }
     state.store.lock().delete_take(&take_id)
 }
+
+#[tauri::command]
+fn takes_reindex(state: State<'_, AppState>) -> Result<usize, String> {
+    let (files, _) = originals::file_takes()?;
+    let store = state.store.lock();
+    let (cached, _) = store.list_takes()?;
+    let file_ids: std::collections::BTreeSet<_> = files.iter().map(|t| t.id.clone()).collect();
+    for t in cached {
+        if !file_ids.contains(&t.id) {
+            store.delete_take(&t.id)?;
+        }
+    }
+    for t in &files {
+        store.insert_take(t)?;
+    }
+    Ok(files.len())
+}
 #[tauri::command]
 fn band_set(args: BandSetArgs, state: State<'_, AppState>) -> Result<(), String> {
     let style = match &args.style_id {
@@ -1114,7 +1128,8 @@ fn rig_virtual_check(state: State<'_, AppState>) -> Result<VirtualMonitorCheck, 
     })
 }
 /// Files are truth, SQLite is a cache: a cache that cannot be read is a warning and
-/// the takes found on disk are still listed.
+/// the takes found on disk are still listed. Missing cache rows are inserted;
+/// cached rows whose folder is gone are pruned.
 pub(crate) fn all_takes(
     state: &AppState,
 ) -> Result<(Vec<jam_audio::recorder::TakeMetadata>, Vec<String>), String> {
@@ -1131,12 +1146,33 @@ pub(crate) fn all_takes(
             Vec::new()
         }
     };
-    let mut takes: std::collections::BTreeMap<_, _> =
-        cached.into_iter().map(|t| (t.id.clone(), t)).collect();
     let (files, file_warnings) = originals::file_takes()?;
     warnings.extend(file_warnings);
-    for t in files {
-        takes.insert(t.id.clone(), t);
+    let file_ids: std::collections::BTreeSet<_> = files.iter().map(|t| t.id.clone()).collect();
+    let mut takes: std::collections::BTreeMap<_, _> = std::collections::BTreeMap::new();
+    {
+        let store = state.store.lock();
+        for t in cached {
+            if file_ids.contains(&t.id) {
+                takes.insert(t.id.clone(), t);
+            } else if let Err(e) = store.delete_take(&t.id) {
+                warnings.push(format!(
+                    "Could not drop vanished take {} from the index. {e}.",
+                    t.id
+                ));
+            }
+        }
+        for t in files {
+            if !takes.contains_key(&t.id) {
+                if let Err(e) = store.insert_take(&t) {
+                    warnings.push(format!(
+                        "Could not cache take {}. {e}. The take on disk is still listed.",
+                        t.id
+                    ));
+                }
+            }
+            takes.insert(t.id.clone(), t);
+        }
     }
     let mut list: Vec<_> = takes.into_values().collect();
     list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
@@ -1200,6 +1236,7 @@ async fn takes_analyze(
             take.path_input
         )
     })?;
+    state.store.lock().insert_take(&take)?;
     Ok(analysis)
 }
 
@@ -1224,6 +1261,7 @@ fn takes_review(take_id: String, state: State<'_, AppState>) -> Result<serde_jso
             take.path_input
         )
     })?;
+    state.store.lock().insert_take(&take)?;
     persist_session_review(&take.session_id, &review)?;
     Ok(review)
 }
@@ -1787,6 +1825,7 @@ pub fn configure<R: tauri::Runtime>(
             audio_calibrate_latency,
             takes_list,
             takes_delete,
+            takes_reindex,
             rig_list_profiles,
             rig_select_profile,
             rig_select_scene,
@@ -2035,6 +2074,7 @@ mod chart_timing {
             default_style_id: None,
             sections: vec![],
             arrangement: vec![],
+            extra: std::collections::HashMap::new(),
         }
     }
 
