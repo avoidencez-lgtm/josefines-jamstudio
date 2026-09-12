@@ -228,7 +228,10 @@ impl Library {
         let bak = file.with_extension("json.bak");
         let had_file = file.exists();
         if had_file {
-            std::fs::copy(&file, &bak).map_err(|e| e.to_string())?;
+            if let Err(e) = std::fs::copy(&file, &bak) {
+                let _ = std::fs::remove_file(&temp);
+                return Err(e.to_string());
+            }
         }
         finish_atomic_replace(&temp, &file, &bak, had_file)?;
         self.charts.insert(chart.clone());
