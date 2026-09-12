@@ -604,6 +604,22 @@ fn cost_log_list_and_totals_mirror_the_usage_log_on_disk_and_honour_the_limit() 
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let path = cost_log_path(&studio);
+    // Exercise the result fields with real rows; an empty log cannot prove them.
+    for i in 0..3 {
+        studio
+            .app()
+            .state::<app_lib::AppState>()
+            .cost_log
+            .append(&app_lib::net::CostEntry {
+                at_ms: i,
+                provider: if i == 0 { "gemini" } else { "elevenlabs" }.into(),
+                status: if i == 2 { 500 } else { 200 },
+                bytes_in: i + 10,
+                bytes_out: 5,
+                ..Default::default()
+            })
+            .unwrap();
+    }
     let on_disk = entries_on_disk(&path);
 
     let all = full_log(&studio);
@@ -613,34 +629,31 @@ fn cost_log_list_and_totals_mirror_the_usage_log_on_disk_and_honour_the_limit() 
         "cost_log_list returns exactly the parseable lines of {}",
         path.display()
     );
-    if !path.exists() {
-        assert!(all.is_empty(), "no file, no entries");
-    }
-    if let Some(entry) = all.first() {
-        let mut keys: Vec<&str> = entry
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect();
-        keys.sort_unstable();
-        assert_eq!(
-            keys,
-            [
-                "atMs",
-                "bytesIn",
-                "bytesOut",
-                "durationMs",
-                "error",
-                "estimatedCostUsd",
-                "method",
-                "model",
-                "path",
-                "provider",
-                "status"
-            ]
-        );
-    }
+    let mut keys: Vec<&str> = all
+        .first()
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        [
+            "atMs",
+            "bytesIn",
+            "bytesOut",
+            "durationMs",
+            "error",
+            "estimatedCostUsd",
+            "method",
+            "model",
+            "path",
+            "provider",
+            "status"
+        ]
+    );
 
     // No limit (or a null one) means the newest 50; the limit counts from the end.
     let newest_50 = on_disk[on_disk.len().saturating_sub(50)..].to_vec();
@@ -674,9 +687,6 @@ fn cost_log_list_and_totals_mirror_the_usage_log_on_disk_and_honour_the_limit() 
         .map(|t| t["provider"].as_str().unwrap())
         .collect();
     assert_eq!(listed, providers);
-    if on_disk.is_empty() {
-        assert!(totals.is_empty(), "no entries, no totals");
-    }
     for total in totals {
         let mine: Vec<&Value> = on_disk
             .iter()
@@ -706,7 +716,8 @@ fn cost_log_list_and_totals_mirror_the_usage_log_on_disk_and_honour_the_limit() 
             sum("bytesOut"),
             "{total}"
         );
-        assert_eq!(total.as_object().unwrap().len(), 5, "{total}");
+        assert_eq!(total["unpricedCalls"], mine.len() as u64, "{total}");
+        assert!(total["estimatedCostUsd"].is_null(), "{total}");
     }
 
     // The limit is a count: negative or non-numeric values are refused by the IPC layer.
@@ -717,6 +728,43 @@ fn cost_log_list_and_totals_mirror_the_usage_log_on_disk_and_honour_the_limit() 
     );
     let err = studio.err("cost_log_list", json!({"limit": "ten"}));
     assert!(err.contains("invalid type"), "{err}");
+    assert_offline();
+}
+
+#[test]
+fn cost_totals_cover_the_recent_window_without_deleting_older_entries() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let path = cost_log_path(&studio);
+    let old = serde_json::to_string(&app_lib::net::CostEntry {
+        provider: "openai".into(),
+        estimated_cost_usd: Some(1000.0),
+        status: 200,
+        ..Default::default()
+    })
+    .unwrap();
+    let recent = serde_json::to_string(&app_lib::net::CostEntry {
+        provider: "gemini".into(),
+        estimated_cost_usd: Some(0.25),
+        status: 200,
+        ..Default::default()
+    })
+    .unwrap();
+    let content = format!(
+        "{old}\n{}invalid-json\n",
+        format!("{recent}\n").repeat(10_000)
+    );
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, &content).unwrap();
+
+    let totals = studio.ok("cost_log_totals", json!({}));
+    assert_eq!(totals.as_array().unwrap().len(), 1);
+    assert_eq!(totals[0]["provider"], "gemini");
+    assert_eq!(totals[0]["calls"], 10_000);
+    assert_eq!(totals[0]["estimatedCostUsd"], 2500.0);
+    assert_eq!(totals[0]["unpricedCalls"], 0);
+    assert_eq!(full_log(&studio).len(), 10_001);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), content);
     assert_offline();
 }
 

@@ -861,6 +861,10 @@ Rust snapshots the estimate into each request's existing log entry; editing a
 rate never rewrites history. STT uses seconds / 3600 and TTS uses characters / 1000.
 `cost:state` refreshes the existing Settings usage view. Unknown entries are counted
 separately from the known estimate subtotal. No account budget or invoice is implied.
+`cost_log_totals` summarizes the latest 10,000 valid log entries across all providers;
+Settings names this window explicitly. Older entries remain in `usage-log.jsonl`.
+Reads scan backwards and stop after enough valid rows. Malformed rows and rows
+over 64 KiB are skipped; request bodies do not belong in this metadata-only log.
 
 Provider `generateContent` / Responses / Messages replies may include token counts.
 `provider_fetch` copies `promptTokens`, `completionTokens` and `totalTokens` from

@@ -11,8 +11,8 @@ pub mod musicai;
 pub mod review;
 pub mod voice;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
-use std::io::{BufRead, Write};
+use std::collections::HashMap;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -256,6 +256,61 @@ pub struct CostLog {
     path: PathBuf,
 }
 
+// ponytail: cap a body-free usage row at 64 KiB; raise only if the usage schema needs it.
+const MAX_COST_LINE: usize = 64 * 1024;
+
+fn cost_tail(mut file: impl Read + Seek, limit: usize) -> Vec<CostEntry> {
+    let mut entries = Vec::new();
+    if limit == 0 {
+        return entries;
+    }
+    let Ok(mut end) = file.seek(SeekFrom::End(0)) else {
+        return entries;
+    };
+    let mut block = [0u8; 8192];
+    let mut line = Vec::new();
+    let mut oversized = false;
+    let parse = |line: &mut [u8], oversized| {
+        if oversized {
+            return None;
+        }
+        line.reverse();
+        serde_json::from_slice::<CostEntry>(line).ok()
+    };
+    while end > 0 {
+        let n = end.min(block.len() as u64) as usize;
+        let start = end - n as u64;
+        if file.seek(SeekFrom::Start(start)).is_err() || file.read_exact(&mut block[..n]).is_err() {
+            break;
+        }
+        end = start;
+        for byte in block[..n].iter().rev() {
+            if *byte == b'\n' {
+                if let Some(entry) = parse(&mut line, oversized) {
+                    entries.push(entry);
+                    if entries.len() == limit {
+                        entries.reverse();
+                        return entries;
+                    }
+                }
+                line.clear();
+                oversized = false;
+            } else if line.len() < MAX_COST_LINE {
+                line.push(*byte);
+            } else {
+                oversized = true;
+            }
+        }
+    }
+    if end == 0 {
+        if let Some(entry) = parse(&mut line, oversized) {
+            entries.push(entry);
+        }
+    }
+    entries.reverse();
+    entries
+}
+
 impl CostLog {
     pub fn new(path: PathBuf) -> Self {
         Self { path }
@@ -283,48 +338,13 @@ impl CostLog {
         writeln!(f, "{line}").map_err(|e| e.to_string())
     }
 
-    /// Newest last. Invalid UTF-8 and unparseable lines are skipped so a torn
-    /// or binary line cannot hide later entries. Only the last `limit` valid
-    /// rows are kept, so Settings does not buffer the whole log.
+    /// Newest last. Read backwards until `limit` valid rows are found, skipping
+    /// malformed or oversized lines without buffering the whole log.
     pub fn list(&self, limit: usize) -> Vec<CostEntry> {
-        if limit == 0 {
-            return Vec::new();
-        }
         let Ok(f) = std::fs::File::open(&self.path) else {
             return Vec::new();
         };
-        let mut reader = std::io::BufReader::new(f);
-        let mut buf = Vec::new();
-        let mut entries: VecDeque<CostEntry> = VecDeque::new();
-        loop {
-            buf.clear();
-            match reader.read_until(b'\n', &mut buf) {
-                Ok(0) => break,
-                Ok(_) => {
-                    if buf.last() == Some(&b'\n') {
-                        buf.pop();
-                    }
-                    if buf.last() == Some(&b'\r') {
-                        buf.pop();
-                    }
-                    if buf.is_empty() {
-                        continue;
-                    }
-                    let Ok(line) = std::str::from_utf8(&buf) else {
-                        continue;
-                    };
-                    let Ok(entry) = serde_json::from_str(line) else {
-                        continue;
-                    };
-                    if entries.len() == limit {
-                        entries.pop_front();
-                    }
-                    entries.push_back(entry);
-                }
-                Err(_) => break,
-            }
-        }
-        entries.into_iter().collect()
+        cost_tail(f, limit)
     }
 
     const TOTALS_TAIL: usize = 10_000;
@@ -594,6 +614,58 @@ mod tests {
     use super::*;
     use crate::keys::{FailingStore, MemoryStore};
     use std::io::Write;
+
+    #[test]
+    fn cost_tail_stops_after_enough_rows_and_bounds_damaged_lines() {
+        struct Counted {
+            cursor: std::io::Cursor<Vec<u8>>,
+            bytes: usize,
+        }
+        impl Read for Counted {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let n = self.cursor.read(buf)?;
+                self.bytes += n;
+                Ok(n)
+            }
+        }
+        impl Seek for Counted {
+            fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+                self.cursor.seek(pos)
+            }
+        }
+        let older = CostEntry {
+            at_ms: 1,
+            provider: "gemini".into(),
+            path: format!("/{}", "ø".repeat(5000)),
+            ..CostEntry::default()
+        };
+        let oversized = CostEntry {
+            at_ms: 2,
+            path: "x".repeat(MAX_COST_LINE + 1),
+            ..CostEntry::default()
+        };
+        let newest = CostEntry {
+            at_ms: 3,
+            provider: "gemini".into(),
+            ..CostEntry::default()
+        };
+        let data = format!(
+            "{}{}\r\n{}\n{}",
+            "invalid\n".repeat(20_000),
+            serde_json::to_string(&older).unwrap(),
+            serde_json::to_string(&oversized).unwrap(),
+            serde_json::to_string(&newest).unwrap()
+        );
+        let mut file = Counted {
+            cursor: std::io::Cursor::new(data.into_bytes()),
+            bytes: 0,
+        };
+        assert_eq!(cost_tail(&mut file, 1), vec![newest.clone()]);
+        assert!(file.bytes <= 8192, "read {} bytes for one row", file.bytes);
+        // Reassemble UTF-8 across blocks; skip the oversized row and keep order.
+        assert_eq!(cost_tail(&mut file, 2), vec![older, newest]);
+        assert!(cost_tail(&mut file, 0).is_empty());
+    }
 
     #[test]
     fn speech_units_include_uncertain_requests_and_old_logs_stay_readable() {

@@ -710,9 +710,10 @@ const UsageLog: React.FC = () => {
         </Button>
       </div>
       <p className="text-xs text-[var(--fg-1)] mb-3">
-        All-time submitted usage, including failed or interrupted requests.
-        Estimates use the price saved for each request, exclude unknown costs,
-        and are not invoices or spending limits. LLM token counts are
+        Totals cover the latest 10,000 valid log entries across all providers,
+        including failed or interrupted requests. Older entries remain in the
+        log. Estimates use the price saved for each request, exclude unknown
+        costs, and are not invoices or spending limits. LLM token counts are
         provider-reported when present. Set speech prices in Jo AI → Voice
         setup; check your provider dashboard for actual charges.
       </p>
