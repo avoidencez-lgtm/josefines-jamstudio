@@ -1388,7 +1388,10 @@ async fn render(base: &Path, document: &Value) -> Result<String, String> {
                 .as_deref()
                 .ok_or_else(|| format!("Shot {} needs a clip", i + 1))?,
         )?;
-        if clip.kind != "video" || shot.trim_start >= clip.seconds {
+        if clip.kind != "video"
+            || shot.trim_start < 0.0
+            || shot.trim_start + shot.seconds > clip.seconds + 1e-3
+        {
             return Err(format!("Check video and trim offset for shot {}", i + 1));
         }
         let frames = ((p.shots[..=i].iter().map(|s| s.seconds).sum::<f64>() * 30.0).round()
