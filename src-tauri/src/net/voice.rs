@@ -231,10 +231,11 @@ mod tests {
             );
             server.join().unwrap();
         }
-        let entries = log.list(10);
+        let entries = log.list(10).unwrap();
         assert_eq!(entries.len(), 4);
-        assert_eq!(log.totals()[0].tts_characters, 12);
-        assert_eq!(log.totals()[0].unpriced_calls, 0);
+        let totals = log.totals().unwrap();
+        assert_eq!(totals[0].tts_characters, 12);
+        assert_eq!(totals[0].unpriced_calls, 0);
         assert!(!serde_json::to_string(&entries)
             .unwrap()
             .contains("private transcript"));

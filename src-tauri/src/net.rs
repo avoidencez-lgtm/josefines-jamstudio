@@ -259,14 +259,12 @@ pub struct CostLog {
 // ponytail: cap a body-free usage row at 64 KiB; raise only if the usage schema needs it.
 const MAX_COST_LINE: usize = 64 * 1024;
 
-fn cost_tail(mut file: impl Read + Seek, limit: usize) -> Vec<CostEntry> {
+fn cost_tail(mut file: impl Read + Seek, limit: usize) -> std::io::Result<Vec<CostEntry>> {
     let mut entries = Vec::new();
     if limit == 0 {
-        return entries;
+        return Ok(entries);
     }
-    let Ok(mut end) = file.seek(SeekFrom::End(0)) else {
-        return entries;
-    };
+    let mut end = file.seek(SeekFrom::End(0))?;
     let mut block = [0u8; 8192];
     let mut line = Vec::new();
     let mut oversized = false;
@@ -280,9 +278,8 @@ fn cost_tail(mut file: impl Read + Seek, limit: usize) -> Vec<CostEntry> {
     while end > 0 {
         let n = end.min(block.len() as u64) as usize;
         let start = end - n as u64;
-        if file.seek(SeekFrom::Start(start)).is_err() || file.read_exact(&mut block[..n]).is_err() {
-            break;
-        }
+        file.seek(SeekFrom::Start(start))?;
+        file.read_exact(&mut block[..n])?;
         end = start;
         for byte in block[..n].iter().rev() {
             if *byte == b'\n' {
@@ -290,7 +287,7 @@ fn cost_tail(mut file: impl Read + Seek, limit: usize) -> Vec<CostEntry> {
                     entries.push(entry);
                     if entries.len() == limit {
                         entries.reverse();
-                        return entries;
+                        return Ok(entries);
                     }
                 }
                 line.clear();
@@ -308,7 +305,7 @@ fn cost_tail(mut file: impl Read + Seek, limit: usize) -> Vec<CostEntry> {
         }
     }
     entries.reverse();
-    entries
+    Ok(entries)
 }
 
 impl CostLog {
@@ -340,19 +337,26 @@ impl CostLog {
 
     /// Newest last. Read backwards until `limit` valid rows are found, skipping
     /// malformed or oversized lines without buffering the whole log.
-    pub fn list(&self, limit: usize) -> Vec<CostEntry> {
-        let Ok(f) = std::fs::File::open(&self.path) else {
-            return Vec::new();
+    pub fn list(&self, limit: usize) -> Result<Vec<CostEntry>, String> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let f = match std::fs::File::open(&self.path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => {
+                return Err(format!("Cannot read {}. {error}", self.path.display()));
+            }
         };
-        cost_tail(f, limit)
+        cost_tail(f, limit).map_err(|error| format!("Cannot read {}. {error}", self.path.display()))
     }
 
     const TOTALS_TAIL: usize = 10_000;
 
     /// Totals per provider for the summary line in Settings.
-    pub fn totals(&self) -> Vec<CostTotal> {
+    pub fn totals(&self) -> Result<Vec<CostTotal>, String> {
         let mut by: HashMap<String, CostTotal> = HashMap::new();
-        for e in self.list(Self::TOTALS_TAIL) {
+        for e in self.list(Self::TOTALS_TAIL)? {
             let t = by.entry(e.provider.clone()).or_insert_with(|| CostTotal {
                 provider: e.provider.clone(),
                 ..CostTotal::default()
@@ -399,7 +403,7 @@ impl CostLog {
         }
         let mut v: Vec<CostTotal> = by.into_values().collect();
         v.sort_by(|a, b| a.provider.cmp(&b.provider));
-        v
+        Ok(v)
     }
 }
 
@@ -686,11 +690,33 @@ mod tests {
             cursor: std::io::Cursor::new(data.into_bytes()),
             bytes: 0,
         };
-        assert_eq!(cost_tail(&mut file, 1), vec![newest.clone()]);
+        assert_eq!(cost_tail(&mut file, 1).unwrap(), vec![newest.clone()]);
         assert!(file.bytes <= 8192, "read {} bytes for one row", file.bytes);
         // Reassemble UTF-8 across blocks; skip the oversized row and keep order.
-        assert_eq!(cost_tail(&mut file, 2), vec![older, newest]);
-        assert!(cost_tail(&mut file, 0).is_empty());
+        assert_eq!(cost_tail(&mut file, 2).unwrap(), vec![older, newest]);
+        assert!(cost_tail(&mut file, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn cost_tail_reports_io_errors_instead_of_returning_partial_totals() {
+        struct BrokenRead;
+        impl Read for BrokenRead {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("fixture read failure"))
+            }
+        }
+        impl Seek for BrokenRead {
+            fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+                Ok(if matches!(pos, SeekFrom::End(_)) {
+                    1
+                } else {
+                    0
+                })
+            }
+        }
+
+        let error = cost_tail(BrokenRead, 1).unwrap_err();
+        assert!(error.to_string().contains("fixture read failure"));
     }
 
     #[test]
@@ -765,7 +791,7 @@ mod tests {
         })
         .unwrap();
         let before = std::fs::read(log.path()).unwrap();
-        let totals = serde_json::to_value(log.totals()).unwrap();
+        let totals = serde_json::to_value(log.totals().unwrap()).unwrap();
         for total in totals.as_array().unwrap() {
             assert!(total["sttSeconds"].as_f64().unwrap().is_finite());
             assert_eq!(
@@ -823,7 +849,7 @@ mod tests {
         ] {
             log.append(&entry).unwrap();
         }
-        let totals = log.totals();
+        let totals = log.totals().unwrap();
         assert_eq!(totals[0].calls, 3);
         assert_eq!(totals[0].failures, 1);
         assert_eq!(totals[0].unpriced_calls, 1);
@@ -878,7 +904,7 @@ mod tests {
         let line = std::fs::read_to_string(log.path()).unwrap();
         assert!(!line.contains("secret"));
         assert!(line.contains("promptTokens"));
-        assert_eq!(log.totals()[0].total_tokens, 15);
+        assert_eq!(log.totals().unwrap()[0].total_tokens, 15);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -977,7 +1003,7 @@ mod tests {
             .unwrap_err();
         assert!(err.contains("No API key"), "{err}");
         assert!(
-            log.list(10).is_empty(),
+            log.list(10).unwrap().is_empty(),
             "nothing is logged when nothing was sent"
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -997,7 +1023,7 @@ mod tests {
         assert!(err.contains("keychain unavailable"), "{err}");
         assert!(!err.contains("No API key"), "{err}");
         assert!(
-            log.list(10).is_empty(),
+            log.list(10).unwrap().is_empty(),
             "nothing is logged when the keychain cannot be read"
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -1017,7 +1043,10 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("Headless tests cannot call"), "{err}");
-        assert!(log.list(10).is_empty(), "the refused request is not logged");
+        assert!(
+            log.list(10).unwrap().is_empty(),
+            "the refused request is not logged"
+        );
         assert!(live_guard("x").is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1052,7 +1081,7 @@ mod tests {
             .write_all(b"{ torn")
             .unwrap();
 
-        let last2 = log.list(2);
+        let last2 = log.list(2).unwrap();
         assert_eq!(last2.len(), 2);
         assert_eq!(last2[1].at_ms, 1004);
         assert_eq!(last2[1].path, "/v1/x");
@@ -1062,7 +1091,7 @@ mod tests {
             .unwrap()
             .contains("SECRET"));
 
-        let totals = log.totals();
+        let totals = log.totals().unwrap();
         assert_eq!(totals.len(), 2);
         let g = totals.iter().find(|t| t.provider == "gemini").unwrap();
         assert_eq!(g.calls, 3);
@@ -1133,13 +1162,13 @@ mod tests {
             ..CostEntry::default()
         })
         .unwrap();
-        let listed = log.list(10);
+        let listed = log.list(10).unwrap();
         assert_eq!(listed.len(), 2, "{listed:?}");
         assert_eq!(listed[0].at_ms, 1);
         assert_eq!(listed[1].at_ms, 2);
         assert_eq!(listed[1].path, "/v1/later");
-        assert_eq!(log.totals()[0].calls, 2);
-        assert_eq!(log.list(1)[0].at_ms, 2);
+        assert_eq!(log.totals().unwrap()[0].calls, 2);
+        assert_eq!(log.list(1).unwrap()[0].at_ms, 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

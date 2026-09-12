@@ -154,8 +154,22 @@ async fn provider_fetch<R: tauri::Runtime>(
         );
     })
     .await;
-    let _ = app.emit("cost:state", &log.totals());
+    emit_cost_state(&app, &log);
     result
+}
+
+pub(crate) fn emit_cost_state<R: tauri::Runtime>(app: &AppHandle<R>, log: &net::CostLog) {
+    match log.totals() {
+        Ok(totals) => {
+            let _ = app.emit("cost:state", totals);
+        }
+        Err(error) => {
+            let _ = app.emit(
+                "app:error",
+                format!("Could not read the usage log. {error}"),
+            );
+        }
+    }
 }
 
 #[tauri::command]
@@ -164,12 +178,15 @@ fn providers_list(state: State<'_, AppState>) -> Vec<net::ProviderInfo> {
 }
 
 #[tauri::command]
-fn cost_log_list(limit: Option<usize>, state: State<'_, AppState>) -> Vec<net::CostEntry> {
+fn cost_log_list(
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<net::CostEntry>, String> {
     state.cost_log.list(limit.unwrap_or(50))
 }
 
 #[tauri::command]
-fn cost_log_totals(state: State<'_, AppState>) -> Vec<net::CostTotal> {
+fn cost_log_totals(state: State<'_, AppState>) -> Result<Vec<net::CostTotal>, String> {
     state.cost_log.totals()
 }
 

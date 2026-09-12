@@ -1,11 +1,11 @@
 //! One bounded, cancellable Jo voice turn. Cancellation invalidates late results;
 //! a request already sent may still be billed and is never automatically retried.
-use crate::{net, AppState};
+use crate::{emit_cost_state, net, AppState};
 use jam_audio::{engine::EngineMode, io::CpalInput, voice::Microphone};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
-use tauri::{Emitter, State};
+use tauri::State;
 
 const LIVE_TURNS: usize = 10;
 const LIVE_MEDIAN_MS: u64 = 2500;
@@ -222,7 +222,7 @@ pub async fn voice_ptt<R: tauri::Runtime>(
         .await
     }
     .await;
-    let _ = app.emit("cost:state", state.cost_log.totals());
+    emit_cost_state(&app, &state.cost_log);
     let mut session = state.voice.lock();
     if session.generation != generation {
         return Err("Voice turn cancelled.".into());
@@ -259,7 +259,7 @@ pub async fn voice_speak<R: tauri::Runtime>(
         &state.cost_log,
     )
     .await;
-    let _ = app.emit("cost:state", state.cost_log.totals());
+    emit_cost_state(&app, &state.cost_log);
     let mut session = state.voice.lock();
     if session.generation != generation {
         return Err("Voice turn cancelled.".into());

@@ -785,6 +785,23 @@ fn cost_log_lives_under_the_user_root_and_starts_empty() {
 }
 
 #[test]
+fn cost_log_read_failures_are_reported_instead_of_looking_empty() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let path = cost_log_path(&studio);
+    std::fs::create_dir_all(&path).unwrap();
+
+    for command in ["cost_log_list", "cost_log_totals"] {
+        let err = studio.err(command, json!({}));
+        assert!(
+            err.contains("Cannot read") && err.contains("usage-log"),
+            "{err}"
+        );
+    }
+    assert_offline();
+}
+
+#[test]
 fn agent_status_reports_unknown_and_missing_agents_without_launching_anything() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

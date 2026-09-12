@@ -824,7 +824,7 @@ mod tests {
             None,
         ))
         .unwrap();
-        let listed = log.list(1);
+        let listed = log.list(1).unwrap();
         assert_eq!(listed[0].method, "GET");
         assert_eq!(listed[0].bytes_in, 50_000);
         assert_eq!(listed[0].path, "/v1beta/files/abc");
