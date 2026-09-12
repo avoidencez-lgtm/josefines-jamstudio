@@ -28,7 +28,7 @@ export function withNextStep(text: string): string {
     return `${t}. Open Jo. Open the voice setup and choose a microphone, or add an ElevenLabs key in Settings.`;
   }
   if (/audio|device|engine status|input:|output:|headless|\bhz\b/i.test(t)) {
-    return `${t}. Open Settings → Audio devices and pick the same interface for input and output.`;
+    return `${t}. Open Settings → Audio devices and pick valid, connected interfaces for input and output.`;
   }
   if (/chart|library|style|bundled/i.test(t)) {
     return `${t}. Open Library; fix the file or restore the bundled copy.`;

@@ -14,11 +14,12 @@ it("leaves an error that already names the next step", () => {
 
 it("adds a concrete next step when the loud error has none", () => {
   expect(withNextStep("Disk unavailable")).toMatch(/Free disk space/);
-  expect(
-    withNextStep(
-      "The output audio device failed. device gone. Running headless.",
-    ),
-  ).toMatch(/Audio devices/);
+  const audio = withNextStep(
+    "The output audio device failed. device gone. Running headless.",
+  );
+  expect(audio).toMatch(/Audio devices/);
+  expect(audio).toMatch(/connected interfaces for input and output/);
+  expect(audio).not.toMatch(/same interface/);
   expect(withNextStep("The bundled styles could not load. bad json")).toMatch(
     /Open Library/,
   );
