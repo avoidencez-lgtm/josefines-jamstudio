@@ -2,7 +2,9 @@
 mod common;
 use common::Studio;
 use serde_json::{json, Value};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tauri::Listener;
 
 fn wait_bar(studio: &Studio, bar: i64) -> Value {
     let deadline = Instant::now() + Duration::from_secs(2);
@@ -36,10 +38,29 @@ fn transport_locate_moves_by_beats_and_seek_bar_still_works() {
 fn mixer_set_bus_changes_band_gain_and_keeps_volume_commands() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
+    let seen: Arc<Mutex<Vec<Value>>> = Arc::default();
+    let sink = Arc::clone(&seen);
+    studio.app().listen_any("mixer:state", move |event| {
+        sink.lock()
+            .unwrap()
+            .push(serde_json::from_str(event.payload()).unwrap());
+    });
     let buses = studio.ok("mixer_set_bus", json!({"id":"band","patch":{"gain":0.25}}));
     assert_eq!(buses[0]["id"], "band");
     assert!(buses[0]["gainDb"].as_f64().unwrap() < -10.0);
     studio.ok("audio_set_band_volume", json!({"volume": 0.8}));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if !seen.lock().unwrap().is_empty() {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no mixer:state event from mixer_set_bus"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(seen.lock().unwrap()[0][0]["id"], "band");
 }
 
 #[test]

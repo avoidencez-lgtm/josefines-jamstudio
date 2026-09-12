@@ -1473,7 +1473,7 @@ async fn export_logic<R: tauri::Runtime>(
         "midiFile": report.midi_file,
         "reaperScript": report.reaper_script,
     });
-    let _ = app.emit("export.state", &body);
+    let _ = app.emit("export:state", &body);
     Ok(body)
 }
 

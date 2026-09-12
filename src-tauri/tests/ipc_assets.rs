@@ -2,6 +2,9 @@
 mod common;
 use common::{user_dir, Studio};
 use serde_json::json;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tauri::Listener;
 
 #[test]
 fn assets_ensure_needs_live_after_the_release_hash_is_recorded() {
@@ -36,6 +39,36 @@ fn assets_fixture_reports_the_synthetic_kit_only() {
             .contains("No GitHub Release zip"),
         "{packs}"
     );
+    std::env::remove_var("JAM_ASSETS_FIXTURE");
+}
+
+#[test]
+fn assets_ensure_emits_colon_wire_event() {
+    let _scenario = common::scenario();
+    std::env::set_var("JAM_ASSETS_FIXTURE", "1");
+    let studio = Studio::boot();
+    let seen: Arc<Mutex<Vec<serde_json::Value>>> = Arc::default();
+    let sink = Arc::clone(&seen);
+    studio.app().listen_any("assets:state", move |event| {
+        sink.lock()
+            .unwrap()
+            .push(serde_json::from_str(event.payload()).unwrap());
+    });
+    studio.ok("assets_ensure", json!({}));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if !seen.lock().unwrap().is_empty() {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no assets:state event from assets_ensure"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let payload = seen.lock().unwrap()[0].clone();
+    assert_eq!(payload[0]["id"], "standard-rock-kit");
+    assert_eq!(payload[0]["state"], "synthetic");
     std::env::remove_var("JAM_ASSETS_FIXTURE");
 }
 

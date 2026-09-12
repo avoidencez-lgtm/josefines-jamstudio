@@ -134,6 +134,7 @@ export const Settings: React.FC = () => {
     isRecording,
     calibrateLatency,
     ensureAssets,
+    assetPacks,
     exportLogs,
     xruns,
     kitMessage,
@@ -155,6 +156,7 @@ export const Settings: React.FC = () => {
       isRecording: s.isRecording,
       calibrateLatency: s.calibrateLatency,
       ensureAssets: s.ensureAssets,
+      assetPacks: s.assetPacks,
       exportLogs: s.exportLogs,
       xruns: s.telemetry.xruns,
       kitMessage: s.telemetry.band.kit_message,
@@ -336,6 +338,15 @@ export const Settings: React.FC = () => {
           <p className="text-xs font-mono text-[var(--fg-2)] mb-3">
             {bassMessage}
           </p>
+          {assetPacks.map((pack) => (
+            <p
+              key={pack.id}
+              className="text-xs font-mono text-[var(--fg-0)] mb-1"
+            >
+              {pack.name}: {pack.state}
+              {pack.state === "downloading" ? ` ${pack.percent ?? 0}%` : ""}
+            </p>
+          ))}
           <Button size="sm" onClick={() => void ensureAssets()}>
             Check these sample packs.
           </Button>
