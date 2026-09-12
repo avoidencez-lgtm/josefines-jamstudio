@@ -66,7 +66,7 @@ export function duplicateSection(
   body.chart.sections.push({
     ...structuredClone(source),
     id,
-    name: `${source.name.slice(0, 60)} variation ${body.chart.sections.length + 1}`,
+    name: `This is ${source.name.slice(0, 60)} variation ${body.chart.sections.length + 1}.`,
   });
   body.sections[id] = structuredClone(body.sections[sectionId]);
   if (body.lyrics?.[sectionId]) body.lyrics[id] = body.lyrics[sectionId];
@@ -97,9 +97,9 @@ export function deleteSection(body: SongBody, id: string): void {
 }
 
 export const PHRASE_MOVES = {
-  rotate: "Rotate bars",
-  reverse: "Reverse bars",
-  repeat: "Repeat phrase",
+  rotate: "Rotate these bars.",
+  reverse: "Reverse these bars.",
+  repeat: "Repeat this phrase.",
 } as const;
 export function transformPhrase(
   body: SongBody,
@@ -172,14 +172,14 @@ export function harmonyChoices(
         degree: family === "dominant" ? `V7/${degrees[i]}` : degrees[i],
         reason:
           family === "dominant"
-            ? `Resolve to ${target}`
+            ? `This resolves to ${target}.`
             : family === "borrowed"
-              ? `From parallel ${mode}`
+              ? `This is from the parallel ${mode}.`
               : i === 0
-                ? "Home"
+                ? "This is home."
                 : i === 4
-                  ? "Pull toward home"
-                  : "In your key",
+                  ? "This pulls toward home."
+                  : "This is in your key.",
         shared: chordNotes(chord).filter((n) => previousPcs.has(Note.chroma(n)))
           .length,
       };

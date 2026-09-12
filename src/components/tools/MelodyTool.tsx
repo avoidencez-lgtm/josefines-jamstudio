@@ -45,11 +45,11 @@ export default function MelodyTool() {
       </p>
       <div className="room-tool-row">
         <TakeSelect
-          label="Melody recording"
+          label="Choose a melody recording."
           value={takeId}
           onChange={setTake}
         />
-        <Field label="Start (seconds)">
+        <Field label="Start is in seconds.">
           <input
             type="number"
             min="0"
@@ -58,7 +58,7 @@ export default function MelodyTool() {
             onChange={(e) => setStart(e.target.valueAsNumber)}
           />
         </Field>
-        <Field label="Length (seconds)">
+        <Field label="Length is in seconds.">
           <input
             type="number"
             min="0.1"
@@ -70,7 +70,8 @@ export default function MelodyTool() {
         </Field>
         <Button
           disabled={!takeId || isPreview}
-          onClick={() =>
+          aria-label="Extract these notes."
+          onClick={() => {
             void run(async () => {
               const notes = melodySchema.parse(
                 await ipc.invoke("takes_melody", {
@@ -91,13 +92,13 @@ export default function MelodyTool() {
               return notes.length
                 ? `Sketched ${notes.length} notes. Correct any pitch or timing before previewing harmony.`
                 : "No sustained notes found. Try a clearer, louder single-note recording.";
-            })
-          }
+            });
+          }}
         >
-          Extract notes{isPreview ? " · desktop" : ""}
+          Extract these notes.{isPreview ? " Desktop only." : ""}
         </Button>
       </div>
-      <Field label="Editable melody · note, start seconds, duration seconds">
+      <Field label="Editable melody. Note, start seconds, and duration seconds.">
         <textarea
           rows={4}
           value={text}
@@ -142,7 +143,7 @@ export default function MelodyTool() {
             })
           }
         >
-          Preview chord choices
+          Preview these chord choices.
         </Button>
       </div>
       {proposal && (
@@ -151,7 +152,7 @@ export default function MelodyTool() {
             {proposal.rows.map((row, i) => (
               <Field
                 key={row.bar}
-                label={`Bar ${row.bar}${row.silent ? " · no notes" : ""}`}
+                label={`Bar ${row.bar}${row.silent ? ". No notes." : "."}`}
               >
                 <select
                   value={proposal.chords[i]}
@@ -196,7 +197,7 @@ export default function MelodyTool() {
               })
             }
           >
-            Keep as a section variation
+            Keep this as a section variation.
           </Button>
         </>
       )}

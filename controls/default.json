@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "id": "default",
+  "name": "Default Stage map",
+  "kind": "control",
+  "bindings": [
+    {
+      "source": { "kind": "key", "combo": "Space" },
+      "action": "transport_control",
+      "args": { "action": "play" }
+    },
+    {
+      "source": { "kind": "key", "combo": "Enter" },
+      "action": "transport_control",
+      "args": { "action": "stop" }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyL" },
+      "action": "set_loop",
+      "args": { "enabled": true }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyC" },
+      "action": "set_count_in",
+      "args": { "bars": 1 }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyT" },
+      "action": "tap_tempo",
+      "args": {}
+    },
+    {
+      "source": { "kind": "key", "combo": "ArrowRight" },
+      "action": "set_tempo",
+      "args": { "delta": 1 }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyR" },
+      "action": "record_take",
+      "args": { "action": "start" }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyF" },
+      "action": "trigger_cue",
+      "args": { "cue": "fill" }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyK" },
+      "action": "trigger_cue",
+      "args": { "cue": "crash" }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyS" },
+      "action": "trigger_cue",
+      "args": { "cue": "stop" }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyE" },
+      "action": "trigger_cue",
+      "args": { "cue": "ending" }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyM" },
+      "action": "set_parts",
+      "args": { "muteDrums": true }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyB" },
+      "action": "set_parts",
+      "args": { "muteBass": true }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyP" },
+      "action": "set_parts",
+      "args": { "muteComp": true }
+    },
+    {
+      "source": { "kind": "key", "combo": "ArrowUp" },
+      "action": "set_intensity",
+      "args": { "intensity": 0.5 }
+    },
+    {
+      "source": { "kind": "key", "combo": "Digit1" },
+      "action": "seek_bar",
+      "args": { "bar": 1 }
+    },
+    {
+      "source": { "kind": "key", "combo": "]" },
+      "action": "transpose_chart",
+      "args": { "semitones": 1 }
+    },
+    {
+      "source": { "kind": "key", "combo": "KeyU" },
+      "action": "toggle_tuner",
+      "args": {}
+    },
+    {
+      "source": { "kind": "midi_pc", "program": 1 },
+      "action": "ptt",
+      "args": {}
+    }
+  ]
+}

@@ -4,6 +4,7 @@
  * the request and reading the reply are exported so they can be tested offline.
  */
 
+import type { ReferenceState } from "../../ipc/contract";
 import { JO_SYSTEM_PROMPT, type JoMessage, type JoToolCall } from "./persona";
 import { JO_TOOLS } from "./tools";
 
@@ -21,6 +22,17 @@ export interface JoContext {
   muted: { drums: boolean; bass: boolean; comp: boolean };
   styles: Array<{ id: string; name: string }>;
   charts: Array<{ id: string; name: string }>;
+  reference?: {
+    assetId: string;
+    label: string;
+    position: number;
+    seconds: number;
+    speed: number;
+    semitones: number;
+    ramp?: ReferenceState["ramp"];
+    confirmedBars?: number;
+    sections?: Array<{ id: string; label: string }>;
+  };
   writing?: {
     name: string;
     selected: string;
@@ -69,16 +81,26 @@ export function contextSummary(ctx: JoContext): string {
     .filter(([, m]) => m)
     .map(([k]) => k);
   return [
-    `Transport: ${ctx.transportState}, ${Math.round(ctx.bpm)} BPM, bar ${ctx.bar}.`,
-    `Style: ${ctx.styleName} (id ${ctx.styleId}), intensity ${Math.round(ctx.intensity * 100)}%.`,
-    `Chart: ${ctx.chartName ?? "none"}; now on ${ctx.currentChord}${
-      ctx.currentSection ? ` in the ${ctx.currentSection}` : ""
-    }.`,
-    `Muted parts: ${muted.length ? muted.join(", ") : "none"}.`,
-    `Available style ids: ${ctx.styles.map((s) => `${s.id} (${s.name})`).join(", ")}.`,
-    `Available chart ids: ${ctx.charts.map((c) => `${c.id} (${c.name})`).join(", ")}.`,
-    `Songwriting document: ${ctx.writing ? JSON.stringify(ctx.writing) : "none"}. Use the songwriting tool for this document.`,
-    `Film project: ${ctx.film ? JSON.stringify(ctx.film) : "none"}. Use edit_video_shot with these project and shot ids.`,
+    `Transport is ${ctx.transportState} at ${Math.round(ctx.bpm)} BPM, bar ${ctx.bar}.`,
+    `Style is ${ctx.styleName} (id ${ctx.styleId}) at ${Math.round(ctx.intensity * 100)}% intensity.`,
+    ctx.chartName
+      ? `Chart is ${ctx.chartName}; now on ${ctx.currentChord}${
+          ctx.currentSection ? ` in the ${ctx.currentSection}` : ""
+        }.`
+      : `No chart is loaded. Now on ${ctx.currentChord}${
+          ctx.currentSection ? ` in the ${ctx.currentSection}` : ""
+        }.`,
+    muted.length
+      ? `Muted parts are ${muted.join(", ")}.`
+      : "No parts are muted.",
+    `Available style ids are ${ctx.styles.map((s) => `${s.id} (${s.name})`).join(", ")}.`,
+    `Available chart ids are ${ctx.charts.map((c) => `${c.id} (${c.name})`).join(", ")}.`,
+    ctx.writing
+      ? `Songwriting document is ${JSON.stringify(ctx.writing)}. Use the songwriting tool for this document.`
+      : "No songwriting document is open.",
+    ctx.film
+      ? `Film project is ${JSON.stringify(ctx.film)}. Use edit_video_shot with these project and shot ids.`
+      : "No Film project is open.",
   ].join("\n");
 }
 
@@ -102,7 +124,7 @@ export function buildRequest(
       parts: [
         { text: JO_SYSTEM_PROMPT },
         {
-          text: `Current state of the room:\n${contextSummary(ctx)}\nUse the exact ids above in tool calls. When you call a tool, still answer with one short spoken sentence.`,
+          text: `This is the current state of the room.\n${contextSummary(ctx)}\nUse the exact ids above in tool calls. When you call a tool, still answer with one short spoken sentence.`,
         },
       ],
     },
@@ -138,7 +160,7 @@ export function readResponse(res: GeminiResponse): {
   const reply =
     texts.join(" ") ||
     (toolCalls.length > 0
-      ? "On it."
+      ? "This is underway."
       : "I didn't catch that. Try 'faster', 'play some funk' or 'drop the bass'.");
   return { reply, toolCalls };
 }

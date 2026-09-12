@@ -33,10 +33,10 @@ export default function AudioProfilesTool() {
         </p>
       )}
       <div className="room-tool-row">
-        <Field label="Setup name">
+        <Field label="Name this setup.">
           <input
             maxLength={60}
-            placeholder="Home studio"
+            placeholder="A home studio."
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -65,11 +65,11 @@ export default function AudioProfilesTool() {
               setName("");
               return isPreview
                 ? "Profile stored in this preview only."
-                : "Audio setup profile saved.";
+                : "This audio setup profile is saved.";
             })
           }
         >
-          Save current setup
+          Save this current setup.
         </Button>
       </div>
       <ul className="room-tool-list">
@@ -78,10 +78,14 @@ export default function AudioProfilesTool() {
             <div>
               <strong>{p.name}</strong>
               <p>
-                {p.config.input_device ?? "Default input"} →{" "}
-                {p.config.output_device ?? "Default output"} · channel{" "}
-                {p.config.input_channel + 1} · {p.config.sample_rate} Hz ·{" "}
-                {p.config.buffer_size} frames
+                {p.config.input_device
+                  ? `Input is ${p.config.input_device}.`
+                  : "This is the default input."}{" "}
+                {p.config.output_device
+                  ? `Output is ${p.config.output_device}.`
+                  : "This is the default output."}{" "}
+                Channel is {p.config.input_channel + 1}. {p.config.sample_rate}{" "}
+                Hz. {p.config.buffer_size} frames.
               </p>
             </div>
             <div className="room-tool-row">
@@ -104,10 +108,10 @@ export default function AudioProfilesTool() {
                   })
                 }
               >
-                Recall {p.name}
+                Recall this {p.name}.
               </Button>
               <Button
-                aria-label={`Remove profile ${p.name}`}
+                aria-label={`Remove this profile ${p.name}.`}
                 onClick={() =>
                   void run(async () => {
                     await saveRoomPreference(
@@ -118,7 +122,7 @@ export default function AudioProfilesTool() {
                   })
                 }
               >
-                Remove
+                Remove this profile.
               </Button>
             </div>
           </li>

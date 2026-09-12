@@ -23,12 +23,16 @@ dirs = "6.0"
 parking_lot.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.10"
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 tokio.workspace = true
 tracing.workspace = true
 reqwest.workspace = true
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-dialog = "2.7.3"
 
 [dev-dependencies]
+hound.workspace = true
 # Mock runtime for tests/ipc_e2e.rs; feature unification keeps it out of release builds.
 tauri = { version = "2.11", features = ["test"] }
 

@@ -51,7 +51,7 @@ it("offers playable theory choices in every key, including a resolving dominant 
   expect(harmonyChoices(cMajor, "", "borrowed")[3].chord).toBe("Fm");
   expect(harmonyChoices(cMajor, "", "dominant")[1]).toMatchObject({
     chord: "A7",
-    reason: "Resolve to Dm",
+    reason: "This resolves to Dm.",
   });
 });
 

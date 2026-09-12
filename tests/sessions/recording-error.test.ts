@@ -13,7 +13,7 @@ it("keeps a failed take guarded until saving and clears its error before another
   const stop = await previous.initListeners();
   try {
     useEngineStore.setState({ isRecording: true });
-    const message = "Recording interrupted: save the partial take.";
+    const message = "Recording was interrupted. Save the partial take.";
     handlers.get("recorder.error")?.(message);
     handlers.get("app.error")?.(message);
     expect(useEngineStore.getState().recordingError).toBe(message);

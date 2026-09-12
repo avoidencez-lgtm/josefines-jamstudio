@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "origin": "synthetic-analysis",
+  "fromAudio": false,
+  "summary": "Recorded review from take analysis numbers, not a listening pass.",
+  "strengths": ["The analysis numbers are complete enough to coach from."],
+  "drills": [
+    "Play the same four bars with a click and compare mean grid distance."
+  ],
+  "focusBars": [1, 2]
+}

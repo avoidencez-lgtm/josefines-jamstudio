@@ -3,6 +3,9 @@
  * function declarations, and the offline intent parser emits the same names.
  */
 
+import { ipc } from "../../ipc/client";
+import { rampAction } from "../referenceRamp";
+import { loadSong } from "./loadSong";
 import { STUDIO_TOOLS } from "./studioTools";
 export interface JoToolDeclaration {
   name: string;
@@ -20,6 +23,64 @@ export interface JoToolDeclaration {
     required?: string[];
   };
 }
+
+export interface JoAction {
+  declaration: JoToolDeclaration;
+  run: (args: Record<string, unknown>) => Promise<string>;
+}
+
+/** Immediate actions declare and execute through one registry. */
+export const JO_ACTIONS: Record<string, JoAction> = {
+  load_song: loadSong,
+  ramp: rampAction,
+  lyria_vibe: {
+    declaration: {
+      name: "lyria_vibe",
+      description:
+        "Change Lyria RealTime prompts. BPM stays a request, not the clock.",
+      parameters: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          weight: { type: "number" },
+        },
+        required: ["text"],
+      },
+    },
+    run: async (args) => {
+      await ipc.invoke("lyria_vibe", {
+        prompts: [
+          { text: String(args.text), weight: Number(args.weight ?? 1) },
+        ],
+      });
+      return "These Lyria prompts are updated.";
+    },
+  },
+  generate_track: {
+    declaration: {
+      name: "generate_track",
+      description:
+        "Start a Lyria 3 or ElevenLabs track. Lands in the library after analysis.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string" },
+          provider: { type: "string", enum: ["lyria3", "elevenlabs"] },
+          lengthMs: { type: "number" },
+        },
+        required: ["prompt", "provider"],
+      },
+    },
+    run: async (args) => {
+      await ipc.invoke("generate_track", {
+        prompt: String(args.prompt),
+        provider: String(args.provider),
+        lengthMs: Number(args.lengthMs ?? 30_000),
+      });
+      return "Track generation started.";
+    },
+  },
+};
 
 /** Validate at the shared execution boundary, including offline and cloud callers. */
 export function validateToolCall(call: {
@@ -52,6 +113,7 @@ export function validateToolCall(call: {
 }
 
 export const JO_TOOLS: JoToolDeclaration[] = [
+  ...Object.values(JO_ACTIONS).map((t) => t.declaration),
   {
     name: "edit_video_shot",
     description:
@@ -73,6 +135,16 @@ export const JO_TOOLS: JoToolDeclaration[] = [
     name: "analyze_take",
     description:
       "Run local timing/dynamics/intonation analysis of a saved guitar take. Use a take ID from context. Prefer raw ms, cents, level CV and coverage counts; null means unavailable. Legacy percentage zero can also mean unavailable. Grid distance can reflect intentional syncopation; bends and accents are not necessarily errors. This is heuristic evidence, not a listening review.",
+    parameters: {
+      type: "object",
+      properties: { takeId: { type: "string" } },
+      required: ["takeId"],
+    },
+  },
+  {
+    name: "coach_tip",
+    description:
+      "Return the stored take review written from analysis numbers. Never from audio. Use a take ID from context. Not configured without a recorded review fixture or a live text-provider key.",
     parameters: {
       type: "object",
       properties: { takeId: { type: "string" } },
@@ -123,13 +195,40 @@ export const JO_TOOLS: JoToolDeclaration[] = [
     },
   },
   {
+    name: "set_reference_practice",
+    description:
+      "Change and save playback speed (50–150 percent) or whole-semitone transposition (-12 to +12 from the original key) for the loaded native reference and all its stems. Use its current assetId from reference context. This preserves the guitar DI, loop bounds and the other setting. Unavailable during recording or browser preview; does not edit Write song chords.",
+    parameters: {
+      type: "object",
+      properties: {
+        assetId: { type: "string" },
+        speedPercent: { type: "number" },
+        semitones: { type: "number" },
+      },
+      required: ["assetId"],
+    },
+  },
+  {
+    name: "loop_reference_section",
+    description:
+      "Loop one user-confirmed reference section from its downbeat. Use the loaded reference assetId and a sectionId from reference context; never invent a section. Unavailable while recording or in browser preview.",
+    parameters: {
+      type: "object",
+      properties: {
+        assetId: { type: "string" },
+        sectionId: { type: "string" },
+      },
+      required: ["assetId", "sectionId"],
+    },
+  },
+  {
     name: "set_tempo",
     description:
       "Set the tempo. Give an absolute bpm, or a delta in BPM for 'faster'/'slower' (default ±5).",
     parameters: {
       type: "object",
       properties: {
-        bpm: { type: "number", description: "Absolute tempo, 40-300" },
+        bpm: { type: "number", description: "Absolute tempo, 20-300" },
         delta: { type: "number", description: "Change relative to now" },
       },
     },
@@ -222,6 +321,46 @@ export const JO_TOOLS: JoToolDeclaration[] = [
       type: "object",
       properties: { action: { type: "string", enum: ["start", "stop"] } },
       required: ["action"],
+    },
+  },
+  {
+    name: "set_count_in",
+    description: "Set the count-in to 0, 1 or 2 bars.",
+    parameters: {
+      type: "object",
+      properties: { bars: { type: "number" } },
+      required: ["bars"],
+    },
+  },
+  {
+    name: "tap_tempo",
+    description: "Tap the tempo. Two or more taps set BPM.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "seek_bar",
+    description: "Jump to a 1-based bar in the loaded chart.",
+    parameters: {
+      type: "object",
+      properties: { bar: { type: "number" } },
+      required: ["bar"],
+    },
+  },
+  {
+    name: "transpose_chart",
+    description: "Transpose the loaded chart by whole semitones.",
+    parameters: {
+      type: "object",
+      properties: { semitones: { type: "number" } },
+      required: ["semitones"],
+    },
+  },
+  {
+    name: "toggle_tuner",
+    description: "Turn the guitar tuner on or off.",
+    parameters: {
+      type: "object",
+      properties: { enabled: { type: "boolean" } },
     },
   },
 ];

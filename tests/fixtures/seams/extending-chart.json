@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-chart",
+  "name": "Fixture chart",
+  "kind": "chart",
+  "keyTonic": 0,
+  "mode": "major",
+  "timeSig": [4, 4],
+  "defaultBpm": 100.0,
+  "defaultStyleId": "fixture-style",
+  "sections": [
+    {
+      "id": "vamp",
+      "name": "Vamp",
+      "bars": [
+        [{ "chord": "C", "beats": 4.0 }],
+        [{ "chord": "F", "beats": 4.0 }],
+        [{ "chord": "G", "beats": 4.0 }],
+        [{ "chord": "C", "beats": 4.0 }]
+      ]
+    }
+  ],
+  "arrangement": [{ "sectionId": "vamp", "repeats": 1 }]
+}

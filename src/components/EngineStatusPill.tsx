@@ -16,33 +16,33 @@ export const EngineStatusPill: React.FC<{
   if (isPreview) {
     pill = {
       status: "idle",
-      label: "Preview: no audio",
+      label: "This preview has no audio.",
       title:
         "Running in a browser with a simulated engine. Launch the desktop app for sound.",
     };
   } else if (!status) {
     pill = {
       status: "idle",
-      label: "Audio: …",
-      title: "Waiting for the engine",
+      label: "Waiting for the audio.",
+      title: "Waiting for the engine.",
     };
   } else if (status.mode === "Hardware" && !status.last_error) {
     pill = {
       status: "ok",
-      label: `${status.output?.device_name ?? "Audio"} · ${status.sample_rate / 1000} kHz`,
-      title: `Output: ${status.output?.device_name}\nInput: ${status.input?.device_name ?? "none"}\nBuffer: ${status.output?.buffer_frames ?? "driver default"} frames`,
+      label: `${status.output?.device_name ? `${status.output.device_name}.` : "This audio is unnamed."} ${status.sample_rate / 1000} kHz.`,
+      title: `${status.output?.device_name ? `Output is ${status.output.device_name}.` : "This output is unnamed."} ${status.input?.device_name ? `Input is ${status.input.device_name}.` : "This input is not connected."} ${status.output?.buffer_frames != null ? `Buffer is ${status.output.buffer_frames} frames.` : "This buffer is the driver default."}`,
     };
   } else if (status.mode === "Hardware") {
     pill = {
       status: "live",
-      label: "Audio: warning",
+      label: "Audio has a warning.",
       title: status.last_error ?? "",
     };
   } else {
     pill = {
       status: "error",
-      label: "No audio device",
-      title: status.last_error ?? "Engine is running headless",
+      label: "There is no audio device.",
+      title: status.last_error ?? "The engine is running headless.",
     };
   }
   return (
@@ -50,6 +50,7 @@ export const EngineStatusPill: React.FC<{
       type="button"
       onClick={onClick}
       title={pill.title}
+      aria-label={pill.label}
       className="cursor-pointer"
     >
       <StatusPill status={pill.status} label={pill.label} />

@@ -1,4 +1,4 @@
-//! Offline 48 kHz stereo stretch. C++ state stays on the calling worker thread.
+//! 48 kHz stereo stretch, offline or in bounded blocks on the native render worker.
 use std::sync::atomic::{AtomicBool, Ordering};
 pub const MAX_FRAMES: usize = 48_000 * 600 + 4_800;
 
@@ -8,9 +8,131 @@ mod ffi {
         include!("stretch.h");
         type Stretch;
         fn new_stretch(speed: f64, semitones: f64) -> Result<UniquePtr<Stretch>>;
+        fn set_parameters(self: Pin<&mut Stretch>, speed: f64, semitones: f64);
         fn seek_length(&self) -> usize;
         fn seek(self: Pin<&mut Stretch>, input: &[f32]) -> Result<()>;
         fn process(self: Pin<&mut Stretch>, input: &[f32], output: &mut [f32]) -> Result<()>;
+    }
+}
+
+// SAFETY: Stretch owns its vectors, FFT and seeded random engine, with no thread-local
+// state or external pointers. UniquePtr transfers exclusive ownership; mutable calls
+// require Pin<&mut Stretch>. This permits transfer, not concurrent access (no Sync).
+unsafe impl Send for ffi::Stretch {}
+
+const BLOCK: usize = 256;
+
+/// Prepared off the render thread; one instance per stem, no callback access.
+pub struct Stream {
+    dsp: cxx::UniquePtr<ffi::Stretch>,
+    input: Vec<f32>,
+    output: [f32; (BLOCK + 1) * 2],
+    primed: bool,
+    origin: usize,
+    lead: usize,
+    produced: usize,
+    phase: f64,
+    speed: f64,
+}
+
+impl Stream {
+    pub fn new() -> Result<Self, String> {
+        // Allocate for the largest supported seek, then restore unity parameters.
+        let mut dsp = ffi::new_stretch(1.5, 0.0).map_err(|e| e.to_string())?;
+        let capacity = dsp.seek_length().max(BLOCK * 2);
+        dsp.pin_mut().set_parameters(1.0, 0.0);
+        Ok(Self {
+            dsp,
+            input: vec![0.0; capacity * 2],
+            output: [0.0; (BLOCK + 1) * 2],
+            primed: false,
+            origin: 0,
+            lead: 0,
+            produced: 0,
+            phase: 0.0,
+            speed: 1.0,
+        })
+    }
+
+    pub fn set_parameters(&mut self, speed: f64, semitones: f64) -> Result<(), String> {
+        validate(speed, semitones)?;
+        self.dsp.pin_mut().set_parameters(speed, semitones);
+        self.speed = speed;
+        self.invalidate();
+        Ok(())
+    }
+
+    pub fn invalidate(&mut self) {
+        self.primed = false;
+    }
+
+    fn copy_input(&mut self, samples: &[f32], start: usize, frames: usize) -> Result<(), String> {
+        let block = self
+            .input
+            .get_mut(..frames * 2)
+            .ok_or("Stretch input block exceeded its prepared capacity.")?;
+        block.fill(0.0);
+        if start < samples.len() / 2 {
+            let available = (samples.len() - start * 2).min(block.len());
+            block[..available].copy_from_slice(&samples[start * 2..start * 2 + available]);
+        }
+        if block.iter().any(|s| !s.is_finite()) {
+            return Err("Stretch source contains invalid audio.".into());
+        }
+        Ok(())
+    }
+
+    fn refill(&mut self, samples: &[f32]) -> Result<(), String> {
+        let consumed = (self.produced as f64 * self.speed).round() as usize;
+        let next = ((self.produced + BLOCK) as f64 * self.speed).round() as usize;
+        let count = next - consumed;
+        self.copy_input(samples, self.origin + self.lead + consumed, count)?;
+        self.output[0] = self.output[BLOCK * 2];
+        self.output[1] = self.output[BLOCK * 2 + 1];
+        self.dsp
+            .pin_mut()
+            .process(&self.input[..count * 2], &mut self.output[2..])
+            .map_err(|e| e.to_string())?;
+        if self.output.iter().any(|v| !v.is_finite()) {
+            return Err("Stretch produced invalid audio.".into());
+        }
+        self.produced += BLOCK;
+        Ok(())
+    }
+
+    /// `samples` ends at the active loop/file boundary. Lookahead is zero-padded.
+    /// `position` is in original 48 kHz frames and is read only after invalidation.
+    pub fn frame(&mut self, samples: &[f32], position: f64, rate: u32) -> Result<[f32; 2], String> {
+        if rate == 0 || !position.is_finite() || position < 0.0 || !samples.len().is_multiple_of(2)
+        {
+            return Err("Invalid stretch source position or output rate.".into());
+        }
+        if !self.primed {
+            self.origin = position.floor() as usize;
+            self.lead = self.dsp.seek_length();
+            self.copy_input(samples, self.origin, self.lead)?;
+            self.dsp
+                .pin_mut()
+                .seek(&self.input[..self.lead * 2])
+                .map_err(|e| e.to_string())?;
+            self.produced = 0;
+            self.output.fill(0.0);
+            self.refill(samples)?;
+            self.phase = 1.0 + position.fract() / self.speed;
+            self.primed = true;
+        }
+        while self.phase >= BLOCK as f64 {
+            self.refill(samples)?;
+            self.phase -= BLOCK as f64;
+        }
+        let a = self.phase.floor() as usize;
+        let fraction = self.phase.fract() as f32;
+        let output = [0, 1].map(|c| {
+            self.output[a * 2 + c]
+                + (self.output[(a + 1) * 2 + c] - self.output[a * 2 + c]) * fraction
+        });
+        self.phase += 48_000.0 / rate as f64;
+        Ok(output)
     }
 }
 
@@ -144,6 +266,83 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn time_stretch_125_length_and_dominant_bin() {
+        // ARCHITECTURE §9.1: 1 kHz sine × 1.25; length ±1 ms; dominant bin ±1 Hz.
+        let input: Vec<f32> = (0..96_000)
+            .flat_map(|i| {
+                let v = (i as f64 * 1000.0 * std::f64::consts::TAU / 48_000.0).sin() as f32 * 0.2;
+                [v, v]
+            })
+            .collect();
+        let output = stereo(&input, 1.25, 0.0, &AtomicBool::new(false)).unwrap();
+        let frames = output.len() / 2;
+        assert!((frames as f64 / 48_000.0 - 2.0 / 1.25).abs() <= 0.001);
+        let start = frames / 2 - 24_000;
+        let mut samples: Vec<f64> = output
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .skip(start)
+            .take(48_000)
+            .map(|c| c[0] as f64)
+            .collect();
+        assert_eq!(samples.len(), 48_000);
+        let fft = realfft::RealFftPlanner::<f64>::new().plan_fft_forward(48_000);
+        let mut spectrum = fft.make_output_vec();
+        let mut scratch = fft.make_scratch_vec();
+        fft.process_with_scratch(&mut samples, &mut spectrum, &mut scratch)
+            .unwrap();
+        let bin = spectrum
+            .iter()
+            .enumerate()
+            .skip(1)
+            .max_by(|a, b| a.1.norm_sqr().total_cmp(&b.1.norm_sqr()))
+            .map(|(i, _)| i)
+            .unwrap();
+        assert!((bin as i32 - 1000).abs() <= 1, "dominant bin {bin} Hz");
+    }
+
+    #[test]
+    fn pitch_shift_plus_two_semitones_is_1122_5_hz() {
+        // ARCHITECTURE §9.1: 1 kHz sine +2 semitones; f0 = 1122.5 ±5 Hz.
+        let input: Vec<f32> = (0..96_000)
+            .flat_map(|i| {
+                let v = (i as f64 * 1000.0 * std::f64::consts::TAU / 48_000.0).sin() as f32 * 0.2;
+                [v, v]
+            })
+            .collect();
+        let output = stereo(&input, 1.0, 2.0, &AtomicBool::new(false)).unwrap();
+        let frames = output.len() / 2;
+        let samples: Vec<f32> = output
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .skip(frames / 4)
+            .take(frames / 2)
+            .map(|c| c[0])
+            .collect();
+        let crossings: Vec<f64> = samples
+            .windows(2)
+            .enumerate()
+            .filter(|(_, p)| p[0] <= 0.0 && p[1] > 0.0)
+            .map(|(i, p)| i as f64 + (-p[0] / (p[1] - p[0])) as f64)
+            .collect();
+        let f0 =
+            (crossings.len() - 1) as f64 * 48_000.0 / (crossings.last().unwrap() - crossings[0]);
+        assert!((f0 - 1122.5).abs() <= 5.0, "f0 {f0} Hz");
+    }
+
+    #[test]
+    fn cancel_and_validate_still_reject() {
+        let input: Vec<f32> = (0..96_000)
+            .flat_map(|i| {
+                [1000.0, 500.0]
+                    .map(|f| (i as f64 * f * std::f64::consts::TAU / 48000.0).sin() as f32 * 0.2)
+            })
+            .collect();
         assert!(stereo(&input, 0.5, 0.0, &AtomicBool::new(true)).is_err());
         assert!(stereo(&[f32::NAN, 0.0], 1.0, 0.0, &AtomicBool::new(false)).is_err());
         for speed in [0.0, 1.51, f64::NAN] {

@@ -31,7 +31,7 @@ TTS uses 24 kHz PCM and existing interpolation into 48 kHz output. A separate
 voice bus attenuates the generated band over 150 ms; guitar and recorder stems
 are unaffected. Hardware output is required; headless fallback is refused.
 Cancelled requests may still incur provider cost. The existing render-ahead queue
-bounds interruption responsiveness. Live latency acceptance is pending; see [S5 evidence](spikes/S5-jo-voice.md).
+bounds interruption responsiveness. Live PTT latency is not configured: `voice_live_latency` needs `JAM_LIVE=1`, an ElevenLabs key, hardware audio, and ten talk turns with median release→first audio ≤ 2.5 s. See [S5 evidence](spikes/S5-jo-voice.md). Do not treat a fixture as that pass.
 
 ## 1. The governing rule
 
@@ -70,20 +70,15 @@ josefines-jamstudio/
   crates/
     jam-core/    types, timeline, chart, style, rig profile, control map, schema versions, registries (pure, serde)
     jam-dsp/     pure DSP: level, pitch, energy
-    jam-audio/   cpal devices and streams, io traits, engine (ring buffers, callback, render worker), transport, mixer, click, recorder, song player (stretch remains roadmap work)
+    jam-audio/   cpal devices and streams, io traits, engine (ring buffers, callback, render worker), transport, mixer, click, recorder, song player (offline + live stretch in jam-dsp)
     jam-band/    sequencer, instruments (Sampler, Sf2Synth), voicing, bass, comp, cues, offline render
     jam-rig/     MidiSink/MidirSink/MemorySink, profiles, scenes, scheduler, clock, input
   src-tauri/
-    src/main.rs, lib.rs
-    src/ipc/      one file per domain (audio, transport, mixer, band, recorder, tuner, song, analysis, voice, lyria, rig, keys, settings, assets, export, app) + mod.rs (domain list, IPC_VERSION)
-    src/net/      registry.rs (provider table), gemini.rs, elevenlabs.rs, lyria.rs, gemini_music.rs, musicai.rs, fetch_proxy.rs
-    src/keys/     SecretStore trait, KeyringStore, MemoryStore
-    src/store/    rusqlite index, rebuild from files
-    src/settings/ settings.json load/save/migrate
-    src/analysis/ pipeline: AnalysisKind steps, local fallback wiring
-    src/assets/   manifest, downloader, checksum
-    src/export/   logic.rs (stems + SMF)
-    src/platform/ anything OS-specific (paths, priorities)
+    src/main.rs, lib.rs (command table; IPC_VERSION lives in src/ipc/contract.ts)
+    src/assets.rs, keys.rs, settings.rs, store.rs, library.rs, voice.rs, lyria.rs, aliases.rs
+    src/media.rs + media/{songs,stems,analysis,grid}.rs
+    src/net.rs + net/{lyria,musicai,review,voice,media}.rs
+    src/platform/ OS-specific (paths, CPU sample, voice shortcut)
     tauri.conf.json, capabilities/
   src/
     app/          App shell, router, theme, global shortcuts
@@ -157,7 +152,7 @@ WASAPI shared mode; the HeadRush most likely exposes stereo only, so channel 3 (
 2. Every domain has exactly one `<domain>.state` event carrying its whole (small) state, emitted on any change from any source (UI or Jo). No diffs, no desync.
 3. High-rate telemetry (`meters`, `transport.state`, `tuner.state`) is emitted at a fixed rate (30 Hz, 30 Hz, 20 Hz).
 4. No PCM crosses IPC on the happy path. `Channel<InvokeResponseBody::Raw>` and raw request bodies exist only for waveform peaks, exports and the Lyria Fallback A.
-5. `IPC_VERSION` in `src/ipc/contract.ts` and `src-tauri/src/ipc/mod.rs`; changes are additive; a removed field is a version bump and an ADR.
+5. `IPC_VERSION` in `src/ipc/contract.ts`; changes are additive; a removed field is a version bump and an ADR.
 6. Every command returns the domain state after the change or an `AppError { code, message, detail?, fatal }`. Errors are also emitted as `app.error`.
 
 ### 5.2 Contract (TypeScript is the source of truth; Rust mirrors with serde and a round-trip test)
@@ -195,7 +190,8 @@ export type TransportState = {
   source: 'none'|'band'|'song'|'lyria';
 };
 // transport_play({ fromBeats?, countInBars? }) · transport_stop() · transport_locate(beats) · transport_set_loop(loop|null)
-// transport_set_tempo(bpm, when) · transport_set_time_sig(num, den, when) · transport_tap_tempo() -> { tempoBpm, taps }
+// transport_set_tempo(bpm, when)  // engine clamp 20–300; charts/Write/setlist stay 40–240
+// transport_set_time_sig(num, den, when) · transport_tap_tempo() -> { tempoBpm, taps }
 // event 'transport.state' @30 Hz
 
 // mixer and meters
@@ -217,7 +213,7 @@ export type BandState = { chartId: Uuid|null; styleId: string|null; intensity: n
   parts: { drums: boolean; bass: boolean; comp: boolean }; followEnergy: boolean; energy: number; seed: number;
   bar: number; chordNow: ChordSym|null; chordNext: ChordSym|null; pendingAtNextBar: string[] };
 // band_load_chart(chart: ResolvedChart, when) · band_set(patch: Partial<BandState>, when) · band_cue(kind: 'fill'|'crash'|'stop'|'ending')
-// band_render_offline({ chart, styleId, seed, bars, tempoBpm, outPath }) -> { path, frames } · event 'band.state'
+// band_render_offline({ chart, styleId, seed, bars, tempoBpm, outPath }) -> { path, frames, drumsRmsDb, bassRmsDb, compRmsDb, onsets } · event 'band.state'
 
 // recorder and takes
 export type TrackKind = 'guitar_di'|'guitar_amp'|'mic'|'drums'|'bass'|'comp'|'ai'|'song'|'mix';
@@ -252,6 +248,7 @@ export type LyriaState = { active: boolean; buffering: boolean; bufferMs: number
 // settings_get() -> Settings · settings_set(settings) -> Settings · event 'settings.state'
 // assets_ensure(ids) · event 'assets.state' -> { packs: { id, state: 'missing'|'downloading'|'verifying'|'ready'|'error', percent }[] }
 // export_logic(takeId) -> { folder } · event 'export.state'
+// takes_review(takeId) · rig_virtual_check()
 // provider_fetch({ provider, path, method, headers, body }) -> { status, headers, body }   (the only way TS reaches a provider)
 // event 'app.error' -> { code: string; message: string; detail?: string; fatal: boolean } · event 'cost.state' -> CostState
 ```
@@ -286,7 +283,7 @@ pub trait Analysis { async fn analyse(&self, wav: &Path, kinds: &[AnalysisKind],
 
 `registry.rs` holds the table; the settings hold `providers.<id>.enabled`. Keys come from `SecretStore` by provider id at call time and are never stored in the struct. Every call logs `provider, kind, model, ms, bytes_in, bytes_out, est_usd` to `cost.state`.
 
-### 6.2 LLM (TypeScript, `src/ai/llm/`)
+### 6.2 LLM (TypeScript, `src/lib/jo/providers.ts`)
 
 Vercel AI SDK `generateText` with `@ai-sdk/google` (`gemini-3.8-flash` by default), `maxSteps` from settings, tools from the registry, and a `fetch` shim that turns a request into `provider_fetch` and rebuilds a `Response`. Streaming is not used in v1 (tool loops with `generateText` are simpler and debuggable). Adding a provider is one `provider_fetch` target and one AI SDK provider package ([EXTENDING.md](EXTENDING.md)).
 
@@ -298,21 +295,138 @@ PTT down ─► Rust buffers mic (16 kHz mono) ─► PTT up ─► Stt::transcr
    ─► TS: voice_speak(reply) ─► Tts::synthesize ─► voice bus (duck band) ─► 'voice.state' speaking → idle
 ```
 
-Barge-in: a new PTT press during `speaking` stops the voice bus. Latency budget: STT ≤ 1.0 s, LLM ≤ 1.0 s, TTS first byte ≤ 0.5 s; median ≤ 2.5 s is the acceptance number. The persona lives in `src/ai/jo/persona.md`; the state summary given to the LLM is built from the `<domain>.state` snapshots (chart, key, tempo, style, source, last take analysis when present). Full-duplex (ElevenLabs Agents, Gemini Live) is a second `VoiceSession` implementation, backlog.
+Barge-in: a new PTT press during `speaking` stops the voice bus. Latency budget: STT ≤ 1.0 s, LLM ≤ 1.0 s, TTS first byte ≤ 0.5 s; median ≤ 2.5 s is the acceptance number and stays unproven until `voice_live_latency` succeeds. The persona lives in `src/lib/jo/persona.ts`; the state summary given to the LLM is built from the `<domain>.state` snapshots (chart, key, tempo, style, source, last take analysis when present). Full-duplex (ElevenLabs Agents, Gemini Live) is a second `VoiceSession` implementation, backlog.
 
 ### 6.4 Lyria RealTime (`net/lyria.rs`)
 
-WebSocket session per S4; audio chunks decoded to 48 kHz stereo into a jitter buffer feeding the `ai` bus (prefill 1 s, target 500 ms; underrun → 250 ms fade and `buffering: true`). Reconnect before the session cap with a 250 ms crossfade. `bpm` or `scale` change: the transport plays a one-bar count-in click, then `reset_context`. Band and Lyria are mutually exclusive: starting one stops the other. Cost guard: per-session minute cap and monthly cap from settings, a confirm dialog before start, spend meter from elapsed minutes at the configured estimate.
+Documented protocol encode/decode and a jitter/state machine live in
+`src-tauri/src/net/lyria.rs`. Commands `lyria_start`, `lyria_set`,
+`lyria_stop`, `lyria_status` and event `lyria.state` are registered.
+Rust owns bytes and time; the WebView never plays audio. Band and Lyria
+are mutually exclusive: starting one stops the other. BPM is a request,
+not the band or transport clock. A bpm/scale patch records
+`RESET_CONTEXT`; it does not retune the click. Without a Gemini key,
+`JAM_LIVE=1` and a recorded provider session the command is explicitly
+not configured and opens no WebSocket. `JAM_LYRIA_FIXTURE=1` walks the
+synthetic specimen only and never feeds the output bus. Live 10-minute
+stream, reconnect, count-in click and spend meter remain unfinished.
 
 ### 6.5 Track generation and analysis
 
 `generate_track` runs a `TrackGenerator` (Lyria 3 or ElevenLabs Music), writes the result into `songs/<slug>/`, then runs the analysis pipeline (§6.6) so the track opens in Song mode analysed.
 
-### 6.6 Analysis pipeline (`src-tauri/src/analysis/`)
+### 6.6 Analysis pipeline (`src-tauri/src/media/analysis.rs`, `net/musicai.rs`)
 
-One step per `AnalysisKind`; each step picks the enabled provider (Music.ai for beats, chords, key, sections; ElevenLabs or Music.ai for stems) and falls back to `jam-dsp::offline` (onset autocorrelation tempo, chroma-template chords per beat, Krumhansl key) flagged `confidence: 'low'`. Results are written into `song.json`; SQLite is re-indexed from the file.
+Local estimates run through `media_analyze`. Provider jobs use `analysis_start` and stay not configured without a key, `JAM_LIVE=1` and a recorded SUCCEEDED job. Local fallback is `jam-dsp::offline` (onset autocorrelation tempo, chroma-template chords, Krumhansl key), flagged `confidence: 'low'`. Results write into `song.json`. A live Music.ai SUCCEEDED job is not claimed.
 
 ## 7. Data model and files on disk
+
+### Native audio import (2026-09-06)
+
+New imports and recovered/generated audio run local analysis after publishing
+the canonical song. `analysisStatus` (version 1) records pending/running,
+ready, unavailable, failed or canceled, with analyzer and a user-facing message.
+Failed/canceled analysis preserves audio and previous measurements; manual
+analysis still reports an IPC error. A canonical source-hash mismatch is a
+refusal, never a new certified source. Future status versions are not rewritten.
+
+Generation receipts reserve `targetAssetId` before import and retain it across
+retries. It is withheld from public job responses; `assetId` denotes a published
+output. Recovery prepares the existing song when present, otherwise imports
+the retained raw output into that reserved destination. It never resubmits
+generation. Failed estimates leave job status `analysis` for local retry; old
+ready receipts remain untouched. AI Music routes completed generated/recovered
+audio to the native reference player with playback stopped. Film keeps its
+soundtrack selection. Music.ai is on the net allow-list. Recorded public
+module JSON parses to unverified beats, chords, key and sections.
+`analysis_start` persists them to `song.json` as `providerAnalysis`
+(`drivesGrid: false`) when `JAM_MUSICAI_FIXTURE=1`; otherwise it stays
+not configured. Local analysis also writes `estimatedGrid` (4/4, first
+beat as downbeat). Confirmed `referenceGrid` still wins; ramps require
+it. `media_guitar_residual` is not configured without a marked guitar
+stem.
+
+Songs uses `song_pick_file()` (native Tauri dialog returning `string | null`),
+WebView path-only drop events, or a pasted path. All route to the existing
+`media_import(path, kind: audio)` and canonical song store. No file bytes or new
+filesystem permissions reach JS. Canceling the dialog changes nothing; media
+work is serialized and audio import refuses recording. Listener cleanup handles
+screen changes and late registration. Headless picker calls fail explicitly.
+
+`jam-audio::import` uses Symphonia 0.6.1 and Rubato 5.0.0 on a blocking worker.
+WAV, MP3, FLAC, AAC/ALAC in M4A, AIFF and Ogg Vorbis decode locally, with
+mono duplicated at unity and stereo preserved. Input is bounded to 512 MB,
+8–192 kHz, and the caller's duration limit (ten minutes for imports, twenty for
+existing practice copies). FFT conversion removes its filter delay and emits
+exactly ceil(input frames * 48000 / input rate) frames. Even FFT sizes avoid a
+fractional-frame delay at rational ratios. Conversion checks finite samples,
+packet bounds, cancellation and declared duration, and never overwrites output.
+Memory holds bounded 48 kHz output plus one packet/converter block, not the full
+high-rate source. Playback and the audio callback are unchanged.
+
+Symphonia's MP4 demuxer does not apply edit lists. The separate bounded metadata
+reader handles version-0/1 static trims, optionally preceded by silence, using
+the selected track ID and movie/media time scales. Priming and final padding are
+removed before resampling. Multiple content edits, non-unit rates, mismatched
+time scales, fragmented/unknown-duration tracks and metadata over 8 MB are
+refused with a WAV/FLAC export instruction. A static edit ending past declared
+media EOF by at most one movie tick (rounded up to audio frames) is clamped to
+that EOF; larger overruns are refused. Decoded packet length must still match
+the declared media duration, so this does not mask truncated audio. Raw ADTS AAC
+and protected formats also need conversion. No invented fixed AAC delay or
+silent timing fallback.
+
+`decode_audio` shares this path with reference loading, analysis, stems and
+practice copies. FFmpeg remains separate for Film probe/encoding and clean-take
+soundtrack mixing. `import::tests` checks alias rejection below 1e-4 RMS,
+resampling phase error below 3e-4 RMS, bounded/cancelable writes and malformed
+edit lists. `native_song_import_normalizes_preserves_and_loads_audio_without_external_tools`
+covers the native IPC/storage/player path; the UI fixture checks native-only
+controls stay disabled in browser preview. `scripts/check-native-import.ps1`
+generates seven original codec fixtures with FFmpeg, then tests native decode:
+one-second duration within one frame and phase/amplitude RMS error below 0.015.
+An eighth fixture checks a short M4A using a millisecond movie clock; unit
+metadata checks cover rounded EOF and rejection beyond one tick.
+This optional codec test is distinct from ordinary CI and makes no provider call.
+
+### Implemented song storage (2026-09-06)
+
+New audio imports (including generated media and clean take mixes) and rendered
+practice copies now publish `songs/<id>/song.json`, `source.wav` (48 kHz stereo
+float PCM) and an unchanged `original.<ext>`. IDs remain stable across migration,
+so Film projects keep their `audioId`. `media_store_song(assetId)` copies a legacy
+audio entry and its hash-verified stems into that layout; Songs exposes it under
+Local file. Legacy files are retained. Repeating the operation is idempotent.
+
+The runtime schema is version 1 with `id`, `title`, relative `sourcePath`,
+`sourceHash` (SHA-256 of normalized source bytes), and `durationMs`. Existing
+`songAnalysis`, `referenceGrid`, `stemSet` and `referencePractice` documents are
+preserved as concrete extension fields, along with unknown metadata. This is the
+implemented storage schema; the richer provider `analysis[]`, `tempoMap` and
+resolved `chart` shape below still requires the remaining M3 integration.
+
+`media::asset` and `save_asset` route all readers and metadata writers to the
+canonical song file when its folder exists. `media_list` merges songs and legacy
+media with one entry per ID. A broken/future canonical document hides its stale
+legacy counterpart and reports a warning. No SQLite record or mirror manifest
+can override it. Source and stem paths are relative on disk and resolved at the
+native boundary; missing stems still permit loading the original mix. Video
+assembly and the external player use the same resolved asset view.
+
+Imports stage a private folder, validate bounded PCM/duration and source/stem
+hashes, sync files, then publish by directory rename. Cancellation or failure
+removes the private staging folder, keeping original/legacy/paid output files.
+Migration rebinds only schema-1 analysis/grid/stem hashes matching the old source;
+stale metadata remains stale. Unknown fields survive and reserved-field collisions
+are refused before copying. Rewrites use the existing temp-file/sync/backup
+helper (`song.bak`). The shared decoder is now bundled Symphonia/Rubato (see Native audio import below).
+
+`song_files_are_authoritative_portable_and_preserve_unknown_metadata` covers
+canonical precedence, version/path refusals and rewrite preservation in ordinary
+CI. The opt-in `legacy_song_migration_preserves_audio_metadata_stems_and_video_identity`
+uses real FFmpeg and checks PCM within `1e-7`, source/metadata preservation,
+relative stems, reload, idempotency and library relocation. Existing real-tool
+practice, stem and Film timing tests cover the migrated persistence route.
 
 Files are truth; SQLite is a cache ([ADR 0005](adr/0005-files-are-truth-sqlite-is-cache.md)). Every manifest has `schemaVersion`; unknown fields are preserved on rewrite; each bump has one migration function in `jam-core::schema`.
 
@@ -384,15 +498,15 @@ A seam is a definition (trait or schema), one registry, and consumers. There is 
 | Styles | `Style` schema (`jam-core`, zod mirror) | `jam-core::registry::styles` (bundled `styles/` via `include_dir` + `~/JosefinesJamstudio/styles/`) | band sequencer, Stage picker, Jo `set_style` |
 | Charts | `Chart` schema | `jam-core::registry::charts` + TS parser for text charts | band, Stage, Jo `load_chart` |
 | Rig profiles | `RigProfile` schema | `jam-core::registry::rigs` | `jam-rig`, Rig screen |
-| Control maps | `ControlMap` schema | `jam-core::registry::controls` | `src/lib/controls/` dispatcher, `jam-rig::input` |
-| Jo tools | `{ name, description, schema, run }` | `src/ai/tools/index.ts` (`import.meta.glob('./*.tool.ts')`) | LLM tool list, control-map actions, later Agents export |
+| Control maps | `ControlMap` schema | `jam-core::registry::controls` | `src/lib/controls.ts`, `jam-rig::input` |
+| Jo tools | `JoAction { declaration, run }`, `StudioTool { declaration, edit }`; shared argument validation | `JO_ACTIONS` / `JO_TOOLS` in `src/lib/jo/tools.ts`, document edits in `STUDIO_TOOLS`; legacy actions remain in `dispatcher.ts` | provider declarations, conversation/voice dispatch; planned control-map export remains separate |
 | Providers | traits in §6.1 | `src-tauri/src/net/registry.rs` | analysis pipeline, voice, music, `provider_fetch` |
 | Instruments | `Instrument` trait (`note_on`, `note_off`, `render(&mut [f32])`) | `jam-band::instruments::factory` | sequencer |
 | Audio I/O | `AudioInput` / `AudioOutput` | `jam-audio::io::select(config, env)` | engine |
 | MIDI sinks | `MidiSink` | `jam-rig::sink::select` | scheduler |
-| Analysis kinds | `AnalysisKind` + `AnalysisStep` | `src-tauri/src/analysis/steps.rs` | pipeline |
+| Analysis kinds | local `media_analyze` + `analysis_start` (Music.ai, loud not-configured without live job) | `src-tauri/src/media/analysis.rs`, `src-tauri/src/net/musicai.rs` | Songs |
 | Screens | React component + nav entry | `src/screens/registry.ts` | router, nav |
-| IPC domains | one Rust file + one TS file | `src-tauri/src/ipc/mod.rs`, `src/ipc/index.ts` | everything |
+| IPC domains | commands in `src-tauri/src/lib.rs` plus domain files; types in `src/ipc/contract.ts` | `src/ipc/client.ts`, `src/ipc/preview.ts` | everything |
 
 Current verification: `tests/invariants/seams.test.ts` checks bundled manifest fields; `crates/jam-core/tests/seams.rs` loads bundled styles, charts and controls and checks representative IDs. They do not automatically register every `tests/fixtures/seams/*` fixture or check changed-file scope. An extension PR must demonstrate its fixture through the relevant registry and show that core consumers need no changes. Recipes and verification limits are in [EXTENDING.md](EXTENDING.md).
 
@@ -478,7 +592,7 @@ Explorer is a handoff: successful process creation does not confirm the target
 application opened, and the UI does not announce success. OS launch behavior is
 separate from the mocked IPC and shell-exit regression checks.
 
-`AppError { code, message, detail?, fatal }` with codes in `src-tauri/src/ipc/errors.rs` mirrored in `src/ipc/errors.ts`; every code has a user-facing message and a next step in the UI. Logs via `tauri-plugin-log` to `~/JosefinesJamstudio/logs/` with rotation; levels info by default, debug with `JAM_LOG=debug`; never bodies, never keys, never raw audio.
+Commands return `Result<T, String>`. Failures also emit `app.error` as a string; the store shows it in the notice rail with a next step. There is no `AppError` code table. Logs via `tauri-plugin-log` to `~/JosefinesJamstudio/logs/` with rotation; levels info by default, debug with `JAM_LOG=debug`; never bodies, never keys, never raw audio.
 # Implemented songwriting workflow
 
 The Write screen adds a file-backed original-song document (`schemaVersion: 1`),
@@ -647,7 +761,8 @@ through a bounded ring back to the worker. The callback does not allocate, lock,
 write files or emit IPC. The worker matches MIDI to the completed frame index and
 updates retrospective capture. Queue loss or a hardware input/output gap interrupts
 the take rather than silently compressing its timeline. Device round-trip latency
-remains a separate manual guitar offset; no physical calibration is claimed.
+is measured by `audio_calibrate_latency` (three clicks on a cable loopback) or
+typed as a manual guitar offset; synthetic FileInput never applies an estimate.
 
 Files and their writer are prepared in a separate idle recorder before acquiring
 the render gate. Installing it and starting the song timeline share that gate,
@@ -743,14 +858,24 @@ rate never rewrites history. STT uses seconds / 3600 and TTS uses characters / 1
 `cost:state` refreshes the existing Settings usage view. Unknown entries are counted
 separately from the known estimate subtotal. No account budget or invoice is implied.
 
+Provider `generateContent` / Responses / Messages replies may include token counts.
+`provider_fetch` copies `promptTokens`, `completionTokens` and `totalTokens` from
+the response JSON into the usage line and does not store the body. Speech and
+media calls leave those fields empty. Older JSONL lines stay readable.
+
+Release-to-first-audio is the time from `voice_ptt` release to `voice` bus
+`play()`. `voice_live_latency` is the M2 gate: it refuses unless `JAM_LIVE=1`,
+then requires ten stored samples and a median ≤ 2500 ms. Headless and browser
+preview stay on the explicit not-configured path. The friend's headset session
+remains V2.
+
 ### Local reference practice copies (2026-09-06)
 
 `media_stretch(assetId, speed, semitones)` extends the existing media registry and
 returns a new `Asset`. The media operation gate excludes other media jobs; normal
-`media_cancel` cancellation covers FFmpeg decoding and the native block loop.
+`media_cancel` cancellation covers native decoding and the native block loop.
 The source must be an existing audio asset inside the canonical media library,
-up to ten minutes. The existing user-installed FFmpeg decodes local file/pipe
-protocols only, to 48 kHz stereo float WAV in a private work directory.
+up to ten minutes. The bundled Symphonia/Rubato decoder writes 48 kHz stereo float WAV in a private work directory.
 
 `jam-audio::practice::render` validates the decoded format/size, calls the pure
 Signalsmith wrapper on a blocking worker, writes a new float WAV with exclusive
@@ -769,7 +894,7 @@ longer/multi-stem preparation. Samples never cross IPC.
 ### Native reference playback (2026-09-06)
 
 `media_reference_load(assetId)` reuses the media gate, local path validation,
-FFmpeg decoder and cancellation. It decodes up to twenty minutes to a temporary
+bundled decoder and cancellation. It decodes up to twenty minutes to a temporary
 48 kHz stereo float WAV, reads a bounded source on a blocking worker, then installs
 `jam-audio::song::ReferenceSong` under the render gate. Normal completion/failure
 removes the temporary decode. No library document or source is rewritten. Loading
@@ -786,8 +911,8 @@ the generated band bus before voice ducking, and travels with the same output fr
 and DI capture to the recorder. Generated instrument stems and MIDI stay empty.
 Source samples are fixed at 48 kHz; the existing negotiated output rate is handled
 by stereo interpolation, without changing pitch/speed. Two-millisecond fades cover
-file/loop edges. Position and edits lead audible output by the queued duration,
-as the existing render-ahead model does; no beat-alignment acceptance is claimed.
+file/loop edges. Edits enter the render queue; displayed position now follows
+frames consumed by the output callback, as described below.
 
 `media_reference_seek(seconds)`, `media_reference_loop(start,end,enabled)` and
 `media_reference_unload()` refuse edits while recording. Loops must be at least
@@ -795,7 +920,7 @@ as the existing render-ahead model does; no beat-alignment acceptance is claimed
 this unanalysed source. Loading a chart/original replaces it; returning to band
 does not restore discarded original guitar layers. The session must reload a
 reference after app restart. `reference:state` and optional telemetry `reference`
-carry only ID, label, duration, position, state and loop settings. Songs and Stage
+carry ID, label, duration, position, state, loop settings and optional analysis readout. Songs and Stage
 share one control component, and the top transport shows seconds instead of a
 fabricated musical grid. Section-bound rig changes are suppressed for references.
 
@@ -803,5 +928,285 @@ One source uses at most about 440 MiB; replacement may temporarily hold two.
 The take snapshot records the reference identity, position and loop at preparation
 and marks `beatGrid: unanalysed`. The band WAV is the clean reference backing;
 the ordinary exported tempo map is not a detected map for it. Unmute that band
-track in the DAW when using the reference backing. Separate stems, automatic
+track in the DAW when using the reference backing. Separate stems, provider
 analysis and beat/section-synchronised reference transport remain M3 work.
+
+## Current local song analysis
+
+`media_analyze(assetId)` acquires the existing media gate and refuses recording.
+It validates the library asset, hashes its bounded source, decodes to a temporary
+48 kHz stereo WAV and calls `jam-dsp::offline` on a blocking worker. The numerical
+result contains an analyzer/version, low-confidence marker, nullable BPM/key,
+ordered beat seconds and chord windows with nullable labels. No samples cross IPC.
+Sources are 2 seconds to 20 minutes and at most 512 MB; decoded audio uses at most
+about 440 MiB. Cancellation is checked during hashing, decoding and DSP. Temporary
+audio is removed on completion/failure; a canceled/failed run keeps prior metadata.
+
+The encoded source hash is checked again before saving. The existing asset
+manifest receives `songAnalysis` and its SHA-256, preserving unknown fields and
+the original audio. Reload returns that saved result. Songs validates the shape
+before display, groups adjacent equal chord estimates and limits each page to
+16 passages. No pulse/key or ambiguous harmony remains explicitly unknown. The
+source hash is evidence of the analyzed bytes, not a promise that an externally
+edited file still matches; reanalysis is required after editing the file.
+
+This fallback estimates steady tempo and major/minor triads. It does not identify
+downbeats, sections, extended harmony or guitar stems, and does not change the
+reference transport's seconds grid. See [method and validation limits](research/local-song-analysis.md).
+
+### Reference chord readout at the output clock
+
+Loading an analysed reference hashes the encoded source before and after decoding.
+A changed source during loading refuses the load; a stale hash or malformed saved
+analysis leaves audio playable with `analysis_error` and a reanalysis instruction.
+Rust validates version, analyzer, confidence, decoded duration, finite/ordered
+beat and chord bounds and supported labels before accepting the map.
+
+Each queued output frame carries one u64: decoded-source generation and its 48 kHz
+source frame. The callback publishes the last consumed word once per buffer using
+an atomic store, without allocation, locks or IPC. A source generation prevents
+an old queued tail from moving a replacement song's display. Underruns hold the
+last delivered position; stopping the device clears it. `get_telemetry` looks up
+current/next different chord estimates and the one-based beat index from this
+position, outside the callback. Songs and Stage share the resulting readout.
+
+Tests cover queue lead, callback sizes, seek/loop/replacement and interpolation at
+44.1/48/96 kHz within one 48 kHz source frame, plus a real NullOutput engine path.
+The UI receives telemetry every 33 ms. The displayed cursor identifies audio sent
+to the device, not a measured loudspeaker arrival time: device buffering, OS/UI
+scheduling and hardware latency are additional. No physical latency acceptance,
+downbeat, bar, section or beat-loop support is claimed here.
+
+### Native stem references (M3 implementation slice)
+
+`media_separate_stems(assetId,catalogId,usdPerMinute?,confirmed)` uses the media
+registry's `stems` kind. ElevenLabs receives a multipart file with
+`six_stems_v1` and `output_format=mp3_44100_128`; the documented response is ZIP.
+The request is never retried automatically. Keys stay in `SecretStore`; requests
+and body-free cost entries stay in `net/media.rs`. Headless runs refuse upload.
+The UI requires explicit upload/charge agreement and accepts an optional account
+rate for the estimate; no current subscription price is inferred.
+
+The media gate serializes preparation and mixes. Paid ZIP bytes are synced under
+`music-videos/stem-receipts/<id>/stems.zip` before parsing, even if cost-log writing
+failed. A versioned receipt records status, source hash, provider/model and
+recovery path. Failures show that path. `media_stems_import(assetId,path)` reuses
+the same installer locally without provider calls. Files already saved remain
+available after cancellation or a failed import; old asset metadata is replaced
+only after all tracks validate. Previous stem folders are retained.
+
+The ZIP reader accepts 2–8 audio files, at most 32 entries, 192 MiB compressed,
+512 MiB per expanded file and 2 GiB total. Paths must be enclosed; symlinks,
+encryption and non-audio entries are rejected. Entry names are labels only;
+output names are generated. The bundled decoder converts each file to 48 kHz stereo float WAV.
+Tracks must have identical decoded lengths and be within 100 ms of the original
+asset duration. This catches duration mismatches, not musical misalignment:
+local imports must be exported from the same start. Native loaded tracks are
+bounded to 2 GiB, with no callback allocation, locks, IPC or new output clock.
+
+The additive asset `stemSet` has `schemaVersion:1`, an ID, source hash, provider,
+model, seconds, and stems with ID, label, path, SHA-256, gain, muted and guitar.
+No instrument meaning is guessed from a provider filename. On load, original
+and stem hashes are checked; malformed or changed stems fail visibly.
+`media_reference_load` defaults to stems when present; `useStems:false` loads
+the original without deleting metadata. Analysis is attached only when its
+source hash and decoded duration match, as for stereo references.
+
+`ReferenceState.stems` carries mix controls. `media_reference_mix(assetId,mix)`
+validates IDs/labels against the loaded source, persists only gain/mute/guitar
+fields while preserving unknown metadata, then applies the validated mix under
+the same engine control lock. Recording blocks mix changes. All stems share one
+cursor, seek/loop fade and output-position stamp. A 2 ms full-scale gain ramp
+avoids mute clicks. The original mix is never added to the stem sum. Recording
+retains this stereo backing in the band WAV and records the stem mix in the take
+snapshot; it does not create individual provider-stem take tracks. Film, the
+system player and practice-copy preparation still read the original stereo file.
+
+Evidence is synthetic: shared-cursor mixing at 44.1/48/96 kHz, native NullOutput
+recording, ZIP path/count bounds, upload guards, and an opt-in real FFmpeg
+WAV/MP3 archive/import/reload/hash-corruption scenario. The documentation-derived
+provider request fixture is not a recorded service response. Live provider
+quality, real-song residual guitar at or below -6 dB, Music.ai workflow support,
+analysed-grid controls remain V1 acceptance/work.
+
+### Live reference speed and transposition
+
+Reference practice ramps use `song::ramp::Config` (version 1, whole percentage
+points) and `media_reference_ramp(assetId, config?, toggle?)`. A null config
+cancels; native toggle stops an active ramp or arms the supplied draft, avoiding
+decisions from delayed UI telemetry. Arming requires complete confirmed bars
+and, when looping, downbeat-aligned bounds. It never starts playback or changes
+saved song settings. Drafts are shared by Songs, Stage, Q, the learned Ramp
+pedal and Jo's `ramp` action for this session.
+
+The render worker caches the next complete bar end in source frames. It counts
+the boundary before wrapping a loop, skips a partial first bar, changes all
+stem processors together and clamps to the target. Pause preserves progress;
+Stop resets to start speed. Seek, loop/grid changes or manual speed/key cancel
+the ramp. Old parameter stamps retain their ramp counters and speed for queued
+audio; stopped/paused telemetry exposes armed controls immediately. No callback
+work, JS timer, extra processing bus or dependency is added. The existing
+16-generation history ceiling still applies; older playing readouts are unknown.
+
+Ramps armed before recording continue natively. Takes retain the initial ramp
+configuration/counters and processed stereo backing; record-from-start snapshots
+the reset ramp before creating the take. Manual changes during recording are
+refused. The consumed-frame trace below now carries the trajectory into DAW export.
+
+`jam-dsp::stretch::Stream` reuses the vendored Signalsmith bridge in 256-frame
+48 kHz blocks on the render worker. Each source/stem owns preallocated DSP and
+seek buffers, prepared before loading. Exclusive CXX ownership permits `Send`,
+not `Sync`; the wrapper holds no external pointers or thread-local state.
+The callback still only consumes its existing ring. Speed is 0.5–1.5 and
+transposition is an integer from -12 to +12. Unity/original-key playback retains
+the direct path. Per-stem gain/mute follows processing; DI bypasses it.
+
+One original-source cursor advances by speed times the output-rate ratio.
+Seek, loop boundaries and EOF remain source seconds; lookahead is zero-padded
+at the boundary. Seek/parameter changes invalidate prepared caches, with a
+2 ms ramp from the last output level on processor restart. This is a short
+de-click ramp, not parallel rendering of two complete mixes. Source stamps
+retain up to 16 previous parameter generations so queued old audio keeps its
+old chord/key/BPM readout until consumed; older stamps yield an unknown readout.
+Estimated chords/key transpose, estimated BPM scales, analysis confidence stays low.
+
+`media_reference_processing(assetId,speed?,semitones?)` requires at least one
+field, validates the loaded source and refuses changes during recording. Missing
+fields resolve from native state under the engine control lock, not JS telemetry.
+The media gate serializes an additive `referencePractice` asset object
+(`schemaVersion:1`, `speed`, `semitones`); unknown fields survive. Save precedes
+application under the same control lock. `useStems:false` loads original stereo
+at unity/original key without deleting saved stems or practice settings. Bad
+saved settings fail visibly and this original-load path remains recovery.
+
+Songs/Stage share the native controls. Jo's `set_reference_practice` uses the
+same IPC, including partial updates. Recording contains processed backing and
+the actual source/mix/processing snapshot, while DI remains untouched. Runtime
+DSP errors pause the reference and surface `processing_error`. Film, system
+playback and offline practice-copy generation continue reading original files.
+Manual parameter changes during recording remain refused; pre-armed ramps run
+on confirmed bars as described above.
+
+Synthetic checks cover 44.1/48/96 kHz, variable blocks, speed/pitch extremes,
+pitch within 5 cents, cursor within one source frame, de-click bounds and queued
+readouts. A NullOutput recording at 50%/+2 verifies pitch, RMS, stereo correlation
+and absence of silent 256-frame blocks. The raw recording retains its two-LSB
+stereo test. The opt-in eight-stem CPU probe rendered 8 seconds in 1.230 seconds
+on the local Windows PC (worst block 10.582 ms); this is throughput evidence,
+not a physical-device dropout or subjective sound-quality acceptance.
+
+### Confirmed reference bars and sections
+
+`media_reference_grid_save(assetId,confirmation)` lets the user identify the
+first downbeat in the displayed local beat estimates, group 2–12 estimated beats
+per bar and enter up to 64 named, ordered, non-overlapping sections. This is
+explicit listening confirmation, not automatic downbeat/section detection.
+`expectedBeats` and `sourceHash` must match the displayed saved analysis; the
+native worker rehashes the original file before saving. It rejects changed
+analysis, sources, unsupported versions, invalid bounds and unconfirmed input.
+Unknown asset/grid fields and unknown fields of retained section IDs survive.
+
+The additive `referenceGrid` asset object has `schemaVersion:1`,
+`origin:"confirmed-local"`, `sourceHash`, `beatsPerBar`, source-second `beats`
+and `sections` (`id`, `label`, `startBar`, exclusive `endBar`). Beats include the
+ending downbeat and cover complete bars only. Pickup audio and incomplete endings
+stay outside the map. They are still playable through the seconds transport.
+The map retains measured beat times, including unequal intervals; it neither
+quantizes them nor infers a compound-meter denominator. Reanalysis does not
+overwrite a confirmed map. The editor resets confirmation when metadata changes.
+
+Loading validates the map and source hash; a bad map leaves audio playable and
+surfaces `grid_error`. `ReferenceState.grid` carries sections and the consumed
+output's bar, fractional beat, local interval BPM scaled by speed, and section.
+It does not broadcast the entire beat array. Before/after the confirmed range or
+while waiting for the source generation, position is unknown. The same source
+stamp used for chords aligns the map with the output queue, never a JS clock.
+`media_reference_loop_section(assetId,sectionId)` selects a validated section's
+start/end downbeats and seeks to its start using the existing seconds-loop and
+DSP invalidation path. The original render/output/recording queue remains shared.
+Queued audio can finish before the change is heard; recording blocks loop edits.
+The complete map is captured in the take's `snapshot.beatGrid` for reproducibility.
+It drives native practice ramps and recorded DAW tempo export. Band/MIDI transport
+and rig synchronisation remain separate work.
+
+Songs owns confirmation; Songs/Stage share section-loop buttons and readout.
+Jo's `loop_reference_section` takes current asset/section IDs. Offline `loop NAME`
+and `gjenta NAME` require one unique confirmed name, never an invented section.
+The synthetic fixture `tests/fixtures/seams/reference-grid.json` has unequal beat
+intervals. An OutputTap regression at 44.1/48/96 kHz and 50/75/150% speed checks
+variable render lead, every consumed source stamp within one 48 kHz frame, and
+section wraps within one output step plus one source frame. IPC verifies stale
+IDs, recording guards and the take snapshot. The real FFmpeg opt-in test verifies
+map reload and stale-hash recovery. Provider detection quality is not proved by
+these deterministic transport checks.
+
+### MIDI export validation (2026-09-06)
+
+Tempo-map and performance SMF builders return errors for unrepresentable data.
+They share validation of finite 20–400 BPM (the existing DAW export range),
+positive binary meter, and nonzero 24-bit microseconds per quarter. Source BPM
+continues to count the meter denominator. Marker bars must be positive and
+ordered; widened arithmetic precedes a checked four-byte VLQ encoding. MIDI
+notes must contain note-on/off bytes with 7-bit data and frames inside the take.
+Note ticks use the encoded microseconds, limiting conversion error to half a tick.
+No timing value is silently clamped or a meter replaced with 4/4.
+
+`takes_export_daw` validates both MIDI documents
+before writing bundle files. An explicitly malformed snapshot meter is an error;
+absent legacy meters retain the chart/default fallback. A legacy missing sample
+rate is recovered from the recorded WAV before both MIDI encoders run. Validation
+failure preserves an existing export and the original take. This is not a disk
+transaction: later I/O errors still surface and may leave partial output.
+Legacy takes without a recorded reference trace retain the constant map.
+
+Format authority: [MIDI Association Standard MIDI Files](https://midi.org/standard-midi-files),
+RP-001 v1.0, verified 2026-09-06. The regression covers VLQ boundary bytes,
+overflow, invalid meters/tempos/notes, compound-meter note timing, and IPC
+preservation of the previous bundle.
+
+### Recorded reference tempo export (2026-09-06)
+
+Each output frame carries a Copy source clock (source seconds and actual speed,
+zero while not playing). The callback only copies it. The render worker forwards
+consumed clocks alongside audio to the existing recorder. After disk-queue
+acceptance, clocks compress into `{frame,position,speed}` segments with a
+quarter-source-sample position tolerance; rejected audio adds no timing. The
+schema-1 `referenceTiming` manifest extra includes asset ID, source duration and
+the confirmed grid captured before recording. Capacity is 100,000 segments;
+capacity/clock failures interrupt recording and mark the trace incomplete.
+
+Export validates version, identity, grid and segment bounds before writing.
+Loop discontinuities start new segments. Source beat intervals and speed yield
+quarter-note BPM, bounded by SMF representation rather than the band's 20–400
+BPM control. Tempo points and repeated section markers use recorded frames.
+Lead-ins/partial starts preserve audio at time zero; DAW bar numbers can differ
+from source bars. Nonplaying spans are labelled and retain preceding tempo;
+before any playback the edge tempo is conventional. Outside confirmed beats,
+explicit edge-tempo markers distinguish extrapolation from confirmed timing.
+Event generation is bounded.
+
+SMF uses 9600 PPQ and corrects each rounded delta against encoded elapsed time,
+carrying sub-tick error forward across tempo changes. Synthetic five-minute reparsing
+checks every marker/tempo event and the ending time within 1 ms. REAPER uses
+`SetTempoTimeSigMarker` at recorded seconds (subsequent 0/0 meter retains the
+initial signature); WAV items retain time anchoring and speed 1. Reference takes
+use Guitar DI plus Band, with silent generated parts and Master muted. Standard
+band exports retain their previous track selection. No source WAV is rewritten.
+Info JSON carries `tempoSource`, derived `recordedTempoMap` and the untouched raw
+trace. Missing legacy traces use `constant-take-tempo`; malformed/future traces
+are errors, never that fallback. Reference traces mixed with virtual-band MIDI
+are refused as inconsistent metadata. This does not prove an actual Logic or
+REAPER import, physical-device drift, analysis quality or full V1 completion.
+
+REAPER authority: [ReaScript API](https://www.reaper.fm/sdk/reascript/reascripthelp.html#SetTempoTimeSigMarker),
+verified 2026-09-06. `tests/reaper-import.lua` checks multiple tempo points,
+retained meter, original audio speed and the existing failure cleanup.
+
+### Reference state after playback commands
+
+Reference telemetry uses consumed output stamps only while playing, including
+the published `speed` and `semitones` fields (not only grid BPM and ramp
+counters). While paused or stopped, the commanded cursor and prepared
+speed/key/ramp drive position, chord and grid readouts. A late queued buffer cannot undo Stop or a paused seek.
+The deterministic `queued_positions_cannot_override_stop_or_paused_edits` test
+covers both commanded edits and unchanged consumed-frame behavior during Play.

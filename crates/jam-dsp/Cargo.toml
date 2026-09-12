@@ -8,6 +8,8 @@ license.workspace = true
 [dependencies]
 cxx = "1"
 pitch-estimate.workspace = true
+realfft = "3.5"
+serde.workspace = true
 
 [build-dependencies]
 cxx-build = "1"

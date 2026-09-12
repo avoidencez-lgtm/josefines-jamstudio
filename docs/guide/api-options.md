@@ -3,14 +3,13 @@
 ## Connect once
 
 In the desktop app open **Settings → AI providers & Song Lab**. Choose Gemini,
-OpenAI, Anthropic Claude or OpenRouter. Expand API keys, paste that provider's key
+OpenAI, Anthropic Claude or OpenRouter. Expand API keys. Stored in the OS keychain., paste that provider's key
 and save it. Saved keys live in the OS keychain and are never returned to the UI.
 API access is billed separately from consumer chat subscriptions.
 
-Keep the suggested model or type a model ID, then **Save AI settings**. This
+Keep the suggested model or type a model ID, then **Save these AI settings.** This
 selection is shared by Jo and Song Lab. Custom models must support the selected
-provider's text endpoint and function calling for Jo. The explicit **Test model
-(API request)** button sends a small request and can incur a charge. It never
+provider's text endpoint and function calling for Jo. The explicit **Test this model.** button sends a small request and can incur a charge. It never
 runs automatically. No live paid API calls were made during this implementation.
 
 | Connection | Suggested model | Implemented use |
@@ -26,7 +25,7 @@ request to the selected connection only; it never retries against another paid
 provider. Jo can still interpret supported commands locally after reporting a
 cloud failure. Song Lab reports the failure and leaves the song alone.
 
-Under **Response limits and cost estimate**, set 256–4096 output tokens. Optional
+Under **These are the response limits and cost estimate.**, set 256–4096 output tokens. Optional
 input/output prices are USD per million tokens, with links to current pricing.
 Unknown prices stay unknown. Changing the model clears its prices. Estimates use
 approximate input tokens and the output limit; they are not the final bill or a
@@ -59,7 +58,7 @@ the existing 256-bar song and 20-version limits still apply.
 
 ## Audio and music video
 
-The **AI Music** and **Film** screens now connect Lyria, Eleven Music, MiniMax, Runway and local ComfyUI workflows. They share editable storyboards, retained generation jobs and local MP4 rendering. See [the music-video guide](music-video.md) for model access, setup and verified limits. Music.ai separation/transcription remains researched but unimplemented.
+The **AI Music** and **Film** screens now connect Lyria, Eleven Music, MiniMax, Runway and local ComfyUI workflows. They share editable storyboards, retained generation jobs and local MP4 rendering. See [the music-video guide](music-video.md) for model access, setup and verified limits. A Music.ai key can be stored. Recorded public module JSON is parsed in tests; live jobs stay not configured without `JAM_LIVE=1` and a recorded SUCCEEDED fixture. Local tempo/chord/key analysis is unchanged.
 
 ## Contract evidence and acceptance
 
@@ -77,7 +76,7 @@ checks request shapes, normalized actions, malformed/truncated replies, one prox
 call on failure, version preservation and stale proposal rejection. Rust tests
 check the allowlist, auth-header protection, redirect refusal and usage metadata.
 
-Owner acceptance: on the Mac save a key, run Test model, ask Jo for a small tempo
+Owner acceptance: on the Mac save a key, run Test this model., ask Jo for a small tempo
 change, then generate/edit/apply each Song Lab mode. Save, restart and verify the
 selected model and song versions persist. Check the provider dashboard against
 the local usage log. Account/model access and live output quality remain unverified
@@ -92,15 +91,14 @@ selection is used by Jo and Song Lab. This conversation is local to Jamstudio;
 it does not import the chat you already have open in either agent's own UI.
 
 Install a current native CLI and sign in once using that CLI's supported login.
-In Settings select it, leave Model ID as `default`, and press **Detect installed
-agent**. Detection runs `--version` only; it does not spend model usage or prove
+In Settings select it, leave Model ID as `default`, and press **Detect this installed agent.** Detection runs `--version` only; it does not spend model usage or prove
 login. If detection fails, supply its full executable path. On Windows choose either
 the native `.exe` or the `.cmd` shim that `npm install -g` writes (usually under
 `%APPDATA%
 pm`); other script types are refused. On Mac the app also searches
 common Homebrew and `~/.local/bin` locations. `default` uses the CLI's built-in default; custom user CLI configuration
 is deliberately not loaded. Enter a supported model ID to select another model.
-Then save the settings and use **Test agent (uses account)** or send your first
+Then save the settings and use **Test this agent.** or send your first
 studio request. No recurring switch to the agent's terminal/app is needed.
 
 The selected CLI keeps its own login. A saved ChatGPT login was confirmed here,
@@ -116,7 +114,7 @@ limits while its announced billing change is paused.
 
 ## More models without another app update
 
-For Gemini, OpenAI, Claude API or OpenRouter, press **Load provider models** in
+For Gemini, OpenAI, Claude API or OpenRouter, press **Load these provider models.** in
 Settings. Start typing in **Model ID** to pick a returned ID. Gemini is filtered
 to text generation and OpenRouter to tool-capable entries. OpenAI's catalog can
 include non-chat models; use the explicit model test to check suitability. The
@@ -147,9 +145,9 @@ The assistant now has six additional tools, shared with Jo and every connection:
   include its metrics in a follow-up request. These are heuristic measurements,
   not an AI listening assessment. Refresh takes in Write/Sessions if needed.
 
-The panel lists proposed actions with values; expand **Tweak proposed action
-values** for an editable JSON version, or ask for a revision in plain language.
-**Apply proposed actions** validates an entire group of song edits before changing
+The panel lists proposed actions with values; expand **Tweak the proposed action
+values.** for an editable JSON version, or ask for a revision in plain language.
+**Apply the proposed actions.** validates an entire group of song edits before changing
 anything and keeps one version. Transport/analysis actions are applied one at a
 time; request them separately from song edits. Guitar clips keep their absolute
 bar positions when the form changes, so check their placement in Write. Save to

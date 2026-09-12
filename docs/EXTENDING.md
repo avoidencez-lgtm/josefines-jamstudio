@@ -1,5 +1,158 @@
 # Extending Josefines Jamstudio
 
+## Recorded reference timing
+
+`jam-audio::reference_timing` owns the schema-1 source trace and MIDI/REAPER
+conversion. Add timing to `OutputFrame`, never poll render state at recording
+time. Only consumed frames accepted by the recorder enter the trace. A take
+keeps its own confirmed grid and source identity; exporters never reload an
+edited grid. `TakeMetadata.extra.referenceTiming` preserves unknown fields.
+Use `tests/invariants/reference-timing.json` for this seam. Native tests cover
+recorded ramps at three output rates, queue lead, disk backpressure, partial
+starts, silence, malformed/future traces and five-minute SMF timing. The IPC
+test checks validation before bundle writes and unchanged source WAVs. Info JSON
+includes the raw trace plus derived `recordedTempoMap`. Legacy takes retain
+explicitly labelled constant tempo. Extend `tests/reaper-import.lua` for new
+events; audio stays anchored to seconds.
+
+## Reference practice ramp
+
+`crates/jam-audio/src/song/ramp.rs` defines the versioned configuration and
+complete-bar boundary selection. `ReferenceSong` advances it from rendered
+source frames and reuses existing per-stem processing and stamped telemetry.
+Never drive it from a JS timer or band BPM. `src/lib/referenceRamp.ts` validates
+the UI boundary, owns the session draft and implements the Jo action; one
+`JO_ACTIONS` registry entry exposes it. UI, Q and the learned `ramp` pedal route
+to the same native command, which validates the currently loaded source and
+refuses recording-time edits. Settings are explicitly session-only.
+
+Use `tests/fixtures/seams/reference-ramp.json` when changing the seam. Native
+tests cover partial bars, nonuniform loop boundaries at 44.1/48/96 kHz (within
+three output samples), multi-bar steps, target clamping, pause/reset/cancel and
+old queued readouts. `record_from_start_restarts_the_reference_ramp_and_snapshots_its_reset_state`
+checks actual take metadata; the IPC grid scenario covers identity/recording
+guards. `tests/jo/reference-ramp.test.ts` exercises UI, keyboard, pedal and
+EN/NB Jo routing with native failure propagation. Keep bilingual help and the
+shortcut registry aligned. Recorded tempo export uses the trace above. Provider
+analysis remains separate; these tests do not prove physical-device timing or live quality.
+
+## Local reference analysis
+
+`jam-dsp::offline` owns the pure local tempo/chroma/key calculation and versioned
+`SongAnalysis` result. `media_analyze` reuses the media operation gate, decoding,
+cancellation and asset persistence; it never sends audio across IPC. Results live
+in the existing asset's `songAnalysis` field with source SHA-256. The source file
+and unknown manifest fields survive reanalysis. The UI validates the saved shape
+through `readSongAnalysis`, then groups adjacent equal estimates for display.
+
+New audio imports and generated outputs automatically call the same local
+analyzer through `media/analysis.rs`. `analysisStatus` is an optional version-1
+document with `analyzer`, `state` and `message`: pending/running, ready,
+unavailable (under two seconds), failed or canceled. Write pending with the
+published song and running before computation; keep previous measurements on
+failure. Unknown fields survive and future status versions are refused.
+Manual `media_analyze` still returns an error on failure after saving its status.
+Changed canonical source hashes cannot be recertified by reanalysis.
+
+`finish_import` records a private `targetAssetId` in the existing job receipt
+before import. Recovery uses the same song even if the raw duplicate is gone;
+only published outputs acquire a public `assetId`. Failed preparation leaves
+the job retryable and never repeats generation. `public_job` withholds the
+private target ID and download URL. Ready legacy jobs stay unchanged. No new
+provider protocol, dependency, background queue or analysis algorithm is added.
+
+The `analysis-status.json` seam fixture and invariant test cover status display
+beside old estimates; generated-audio UI tests cover native-only eligibility
+and the shared generate/recover-to-Stage action. Native tests exercise real
+synthetic-WAV import, receipt recovery, corrupt-source failure and retry,
+cancellation, unknown versions and byte-for-byte audio preservation. This does
+not prove provider quality or the remaining Music.ai/downbeat/section pipeline.
+
+`tests/fixtures/seams/song-analysis.json` is synthetic contract data. Its invariant
+test covers validation, grouping and honest missing estimates. The Rust synthetic
+C–F–G regression covers the numerical gate; the opt-in FFmpeg media test covers
+actual decoding, persisted reload, cancellation and source preservation. The
+[method notes](research/local-song-analysis.md) define the limits and sources.
+New algorithms must retain null for insufficient evidence, bound all computation,
+bump the analyzer identifier and add measured fixtures. This is the local fallback;
+provider orchestration and player beat-grid consumption remain M3 work.
+
+## Music.ai recorded analysis
+
+Add documented module JSON under `tests/fixtures/providers/musicai/` and
+extend `src-tauri/src/net/musicai.rs`. The provider row lives in
+`PROVIDERS` (`id: musicai`, `https://api.music.ai`, `Authorization` header).
+`analysis_start` / `analysis_cancel` are registered next to `media_analyze`.
+Parse fixtures in unit tests; persist them with `JAM_MUSICAI_FIXTURE=1`
+into `providerAnalysis` only. Do not treat public-doc shapes as a live job.
+Live upload stays not configured without `JAM_LIVE=1` and a recorded
+SUCCEEDED response. Never write these estimates into `referenceGrid` or
+claim downbeats. Local `estimate_grid` may write `estimatedGrid`.
+Secrets stay in SecretStore; request bodies are not logged.
+
+## Lyria RealTime
+
+Add documented protocol JSON under `tests/fixtures/providers/lyria/` and
+extend `src-tauri/src/net/lyria.rs`. Commands `lyria_start`, `lyria_set`,
+`lyria_stop` and `lyria_status` live in `src-tauri/src/lyria.rs` next to
+voice. Decode only explicit `audio/pcm;rate=48000` stereo little-endian i16.
+The jitter buffer is a pure structure; do not push fixture PCM onto the
+output bus. Band and song start stop Lyria; a successful Lyria start stops
+the band and unloads the reference. BPM is a request and never the
+transport clock. Live WebSocket stays not configured without a Gemini key,
+`JAM_LIVE=1` and a recorded provider session. `JAM_LYRIA_FIXTURE=1` runs
+the synthetic protocol state machine only. Secrets stay in SecretStore;
+request bodies are not logged. The WebView never plays audio.
+
+`tests/fixtures/seams/lyria.json` is the contract. Prove it with
+`tests/invariants/lyria.test.ts` and `cargo test -p src-tauri --lib -- lyria`
+plus `cargo test -p src-tauri --test ipc_lyria`.
+
+## Virtual MIDI monitor
+
+`rig_virtual_check` sends program changes 3 and 12 through the current
+profile channel. `JAM_MIDI_FIXTURE=1` uses MemorySink and records the
+monitor. A live loopMIDI/IAC port needs `JAM_MIDI_VIRTUAL` and
+`JAM_LIVE=1`. Missing ports are explicitly not configured. This is not
+owner gate 5. Fixture: `tests/fixtures/seams/virtual-midi.json`. Test:
+`tests/invariants/virtual-midi.test.ts` and
+`cargo test -p src-tauri --test ipc_rig_virtual`.
+
+## Sample packs
+
+`assets/manifest.json` lists packs with `id`, `url`, `sha256`, `bytes` and a
+licence line. Commands `assets_status` and `assets_ensure` live in
+`src-tauri/src/assets.rs`. `assets-v1` / `standard-rock-kit.zip` is a CC0
+synthetic kit (not acoustic). Headless download needs `JAM_LIVE=1`; resume
+writes a `.part` file and checks SHA-256 before unpack. `JAM_ASSETS_FIXTURE=1`
+reports the bundled synthetic kit only and never writes files. After unpack,
+`Sampler::open` loads `kit.json` and WAVs from
+`~/JosefinesJamstudio/assets/<id>/` (or `JAM_KIT_DIR` / `JAM_USER_DIR`).
+`Sf2Synth::open` loads `freepats-bass-comp` (`bass.sf2`, `comp.sf2`) with
+MIT `rustysynth` (`oxisynth` is LGPL and is not used). A missing or invalid
+pack stays on the synthetic kit or sine voices and says so on
+`band.state.kit_message` / `bass_message`. Goldens set `JAM_SYNTHETIC_KIT=1`.
+Settings → First run names the next step. Fixture:
+`tests/fixtures/seams/assets.json`. Tests: `tests/invariants/assets.test.ts`
+and `cargo test -p src-tauri --test ipc_assets`.
+
+## Take review
+
+`takes_review` writes `take.extra.review` and `sessions/<sessionId>/session.json.review`
+from analysis numbers, never audio. `JAM_REVIEW_FIXTURE=1` copies
+`tests/fixtures/providers/review/take-review.json`. Live provider calls
+stay not configured. Jo `coach_tip` reads that review. Logic SMF
+five-minute marker drift is a paper check in `jam-audio` export tests;
+opening the file in Logic Pro stays V2.
+
+## Extensibility proofs
+
+`tests/fixtures/seams/extending-*.json` hold one synthetic style, chart,
+rig, control map, Jo tool and provider. `tests/invariants/extending.test.ts` executes the style/chart/control/tool/provider
+recipes against those fixtures (golden render lives in `jam-band` golden tests;
+MemorySink PC lives in `jam-rig`). Ids stay absent from bundled registries.
+Do not copy them into `styles/`, `charts/`, `rigs/` or `controls/`.
+
 The extension rule is **every capability is a seam** (a definition, one registry, consumers), and adding to an existing seam must not require edits to core consumers. Review the PR diff for that requirement. The current `tests/invariants/seams.test.ts` checks bundled manifest fields, and `crates/jam-core/tests/seams.rs` checks bundled style, chart and control registries. Neither checks changed-file scope or automatically discovers every fixture under `tests/fixtures/seams/`. Per-extension fixture and registry coverage remains required; do not treat these two tests alone as proof that an extension recipe works.
 
 Each recipe below names the exact files to add and the test that proves it worked. When a milestone adds a seam, it adds the recipe here and a fixture there, in the same PR. Recipes are executed once by the builder as a test before they are considered true.
@@ -42,19 +195,30 @@ Ask Jo to author one: the `create_style` tool (backlog) writes the same JSON.
 
 ## Add a Jo tool
 
-1. Create `src/ai/tools/<name>.tool.ts`:
-   ```ts
-   import { z } from 'zod';
-   import { defineTool } from './define';
-   export default defineTool({
-     name: 'set_swing',
-     description: 'Set the swing amount of the band, 0 = straight, 1 = full triplet swing. Applies at the next bar.',
-     schema: z.object({ amount: z.number().min(0).max(1) }),
-     async run({ amount }, ctx) { await ctx.ipc.band.set({ swing: amount }, 'next_bar'); return `Swing ${Math.round(amount * 100)} percent at the next bar.`; },
-   });
-   ```
-2. The registry (`src/ai/tools/index.ts`) collects it automatically. Add one case to `tests/fixtures/jo/script.json` and a recorded LLM fixture if the tool changes what Jo says.
-3. `pnpm test -- tools` validates the schema and runs the script. The tool is now callable by voice, by text, and from control maps.
+1. For an immediate action, create `src/lib/jo/<name>.ts` with a `JoAction`
+   (`declaration` and async `run`) from `src/lib/jo/tools.ts`. Follow
+   `loadSong.ts`: validate at execution, reuse native IPC, and return the actual
+   outcome. Do not call the error-swallowing `useMedia.work` from Jo.
+2. Import it and add one entry to `JO_ACTIONS` in `src/lib/jo/tools.ts`.
+   `JO_TOOLS` collects its declaration and the dispatcher invokes `run` after
+   shared argument validation. Providers and offline intents use this same
+   tool name. Existing legacy actions still live in the dispatcher; new tools
+   do not need another switch case. Document edits instead use `STUDIO_TOOLS`
+   and its existing review/undo flow.
+3. Add a fixture-backed test under `tests/invariants/`. The synthetic library in
+   `load-song.test.ts` proves declarations, English/Bokmål offline intent,
+   fresh lookup, exact/ambiguous matching, busy/recording guards and native
+   failure propagation through the conversation. No network or audio hardware
+   is needed. Run `pnpm vitest run tests/invariants/load-song.test.ts tests/jo`.
+
+`load_song` matches an exact ID first, then a case-insensitive NFC-normalized
+full title, then a unique title substring. It never chooses the first of
+several matches. At most five candidate titles/IDs are returned, without file
+paths. Native `media_reference_load` remains responsible for source/stem hash
+checks and recording guards during preparation. Songs and Jo share
+`loadReference` for post-success UI reconciliation. Stage opens paused; a later
+reference command uses refreshed native telemetry. Command sequences stop at
+the first failure so a failed load cannot play the previous source.
 
 Rules: one tool does one thing; the return string is what Jo may say (twelve words or fewer); tools never read secrets; tools that only explain return text and have no side effects.
 
@@ -79,9 +243,9 @@ Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, 
 
 ## Add an analysis kind
 
-1. Extend `AnalysisKind` in `src/ipc/contract.ts` and the Rust mirror (additive; bump nothing).
-2. Add a step in `src-tauri/src/analysis/steps.rs` that picks a provider by kind and writes its result into `song.json` under a new field with `schemaVersion` unchanged (new optional field).
-3. Add the local fallback in `jam-dsp::offline` or mark the step `cloud_only`.
+1. Local estimates go through `media_analyze` in `src-tauri/src/media.rs` and `src-tauri/src/media/analysis.rs`. Provider jobs go through `analysis_start` / `src-tauri/src/net/musicai.rs` and stay loud not-configured without a key, `JAM_LIVE=1` and a recorded SUCCEEDED job.
+2. Write new optional fields into `song.json` with `schemaVersion` unchanged.
+3. Add the local fallback in `jam-dsp::offline` or keep the command not configured.
 4. Fixture test plus a synthetic ground-truth test if a fallback exists.
 
 ## Add a screen
@@ -92,9 +256,9 @@ Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, 
 
 ## Add an IPC domain
 
-1. Create `src-tauri/src/ipc/<domain>.rs` with the commands and one `<domain>.state` event, and `src/ipc/<domain>.ts` with the typed wrappers and the store slice.
-2. Add the types to `contract.ts` and the Rust mirror; add a round-trip serialization test.
-3. Register the domain in `src-tauri/src/ipc/mod.rs` and `src/ipc/index.ts`. Changes to existing domains are additive; removing or renaming a field bumps `IPC_VERSION` and needs an ADR.
+1. Add commands in `src-tauri/src/lib.rs` (or a sibling module that `lib.rs` registers). Types live in `src/ipc/contract.ts`. The store listens in `src/store/engine.ts`.
+2. Keep `IPC_VERSION` in `src/ipc/contract.ts`. Changes to existing domains are additive; removing or renaming a field bumps `IPC_VERSION` and needs an ADR.
+3. Add a preview handler in `src/ipc/preview.ts` and an IPC scenario under `src-tauri/tests/ipc_*.rs`.
 
 ## Add a data-file schema version
 
@@ -308,15 +472,100 @@ When upgrading vendored DSP, review both MIT sources, update source revisions an
 hashes together, and run the frequency/length tests on Windows and macOS. Do not
 turn on a third-party FFT backend without its own licence review.
 
+For live reference processing, reuse `stretch::Stream` and
+`ReferenceSong::set_processing`, keeping each stem on the shared source cursor.
+Allocate on load, never in the callback; preserve exclusive CXX ownership.
+Use `media_reference_processing` for saved controls and resolve omitted fields
+in native state under its control lock. Jo tools use `applyReferencePractice`;
+add their definition to the existing Jo registry, not a separate audio service.
+`tests/fixtures/seams/reference-practice.json` is shared by IPC and Jo tests;
+the UI invariant is in `tests/invariants/practice-copy.test.tsx`. Preserve the
+unknown-field, stale-source, recording and preview guards when extending it.
+Run `JAM_AUDIO_PERF=1 cargo test -p jam-audio live_eight_stem -- --ignored --nocapture`
+for the optional synthetic throughput probe; ordinary CI always runs frequency,
+source-position, de-click, queued-analysis and processed-recording regressions.
+
 ### Native reference sources
+
+Confirmed reference maps use `jam-audio::song::grid::Grid`; validate before
+attaching with `ReferenceSong::set_grid`. Keep its original-source times and
+explicit provenance. Use `media_reference_grid_save` to preserve unknown metadata
+and reject stale analysis/source hashes. Section endpoints are exclusive bar
+boundaries, never approximate seconds rounded by JS. `loop_reference_section`
+in the Jo registry and `media_reference_loop_section` share the native path.
+The shared synthetic fixture is `tests/fixtures/seams/reference-grid.json`, with
+UI coverage in `tests/invariants/practice-copy.test.tsx`, IPC in `ipc_rig_media`
+and consumed-output timing in the engine's `confirmed_section_readout` test.
+A future provider adapter must bring verified response fixtures and explicit
+origin/confidence semantics; do not label user-confirmed local estimates as
+provider-detected downbeats or sections. Band/MIDI/DAW grid integration is separate.
 
 Prepare bounded 48 kHz stereo off the render thread, then use `AudioEngine::load_reference`.
 Reuse the shared transport and recording queue, not a new output device or timer.
 `ReferenceSong` owns the deterministic seconds cursor/loop; metadata goes through
 `reference:state`, never PCM. A future beat map must replace the explicit grid
 refusal and supply genuine bar/chord positions before enabling those controls.
+For a saved local analysis, use `ReferenceSong::set_analysis` only after validating
+the encoded-source hash. Rendered frames carry source generation and position;
+keep this stamp beside the corresponding audio through `OutputTap`. Readouts use
+`played_state`, never the render cursor. Do not publish the full chord map at
+30 Hz or introduce a JS clock. The existing synthetic analysis seam fixture is
+also consumed by the reference timing test; invalid/stale results stay visible.
 Keep source switching and seeking protected during recording. Synthetic rate,
 pause/seek/loop/end tests live in `jam-audio::song`, native stereo recording in
 `engine`, command boundaries in `ipc_rig_media`, and the shared UI invariant in
 `tests/invariants/practice-copy.test.tsx`. The opt-in FFmpeg scenario also loads
 the rendered practice copy and plays one second through the native source.
+
+### Stem ZIP adapters and mixing
+
+Add a `kind: stems` entry to `src/lib/media-catalog.json` and implement its
+protocol in `src-tauri/src/net/media.rs`; generation screens filter by audio or
+video. Keep keys/uploads out of UI and do not switch on provider IDs elsewhere.
+Record verified request/response shapes beside
+`tests/fixtures/providers/eleven-stems.json`, explicitly distinguishing recorded
+responses from documentation-derived/synthetic fixtures. ZIP entry names are
+untrusted labels, never paths or instrument-role contracts.
+
+Reuse `media/stems.rs` for bounded extraction, durable paid ZIP receipts, native
+decode, hashes and additive asset metadata. Use `ReferenceSong::with_stems` and
+`set_stem_mix` so stems share the existing output cursor and recording mix; do not
+create a separate playback service. New gain controls must preserve unknown
+manifest fields, reject stale source/set IDs and stay blocked while recording.
+The regression lives in `tests/invariants/practice-copy.test.tsx`, the shared
+cursor test in `jam-audio::song`, and the archive/native FFmpeg tests in
+`media::stems::tests`. Run the latter with `JAM_HEADLESS=1 JAM_MEDIA_TEST=1` and
+`cargo test --workspace --lib local_stem_zip -- --ignored` on a machine with
+FFmpeg. It creates synthetic WAV and MP3 ZIPs, not a paid provider capture.
+
+### Canonical song files
+
+Audio imports and practice copies use `media::songs::store`; metadata edits use
+`media::asset` / `save_asset`, never a hard-coded legacy asset sidecar. The shared
+`tests/fixtures/seams/song-file.json` fixture defines the version-1 persisted
+identity/source fields. Runtime analysis/grid/stem/practice documents remain
+additive fields, with unknown fields preserved. Relative source/stem paths are
+resolved only in Rust. Add new audio-producing flows through the existing import
+helper so Songs, reference playback and Film see the same ID and `song.json`.
+Legacy migration is the registered `media_store_song` command under the media
+operation gate. It preserves the old files and publishes a staged song folder.
+A future schema bump needs one explicit migration; never fall back to a stale
+legacy sidecar when a canonical file is unreadable.
+
+### Native import formats and file selection
+
+Reuse `jam-audio::import::normalize` for offline audio decoding, including new
+producer/provider paths. Keep sample buffers in Rust and call from a blocking
+worker. Extend Symphonia's concrete feature list only for a verified format;
+record each licence exception in `deny.toml` and ship its notice under
+`assets/licenses/`. Retain exact duration, finite-sample and cancellation checks.
+Extend the synthetic codec fixture generator in `scripts/check-native-import.ps1`
+and its native regression together, with a stated timing/signal tolerance.
+Never mask an unsupported M4A edit list by discarding its priming metadata.
+
+The native picker returns one local path or null via `song_pick_file`; it opens
+no window in headless mode. Native file-drop events and pasted paths use the
+same Songs import callback and `media_import` validation. Do not add JS file
+reads, audio playback or dialog/filesystem permissions to implement an import
+button. The existing `tests/invariants/practice-copy.test.tsx` fixture covers the
+Songs controls; `src-tauri/tests/ipc_rig_media.rs` covers persistence and reload.

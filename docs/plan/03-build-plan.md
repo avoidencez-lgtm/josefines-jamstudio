@@ -38,7 +38,7 @@ A spike answers one question inside a timebox on a throwaway branch and leaves a
 ### 0.1 Toolchain and scaffold
 - Install per [05-kickoff.md](05-kickoff.md) (rustup stable-msvc, corepack pnpm, `cargo-deny`).
 - `corepack pnpm create tauri-app@latest .` with React + TypeScript + pnpm. Product name `Josefines Jamstudio`, identifier `com.josefinesjamstudio.desktop`, default window 1440x900, minimum 1100x700.
-- Convert to a Cargo workspace: root `Cargo.toml` with members `crates/jam-core`, `crates/jam-dsp`, `crates/jam-audio`, `crates/jam-band`, `crates/jam-rig`, `src-tauri`. Shared `[workspace.dependencies]` with pinned versions (see [04-research.md](04-research.md) for the crate list). Rust edition 2024, MSRV 1.85.
+- Convert to a Cargo workspace: root `Cargo.toml` with members `crates/jam-core`, `crates/jam-dsp`, `crates/jam-audio`, `crates/jam-band`, `crates/jam-rig`, `src-tauri`. Shared `[workspace.dependencies]` with pinned versions (see [04-research.md](04-research.md) for the crate list). Rust edition 2021, MSRV 1.88 (see `AGENTS.md` and workspace `rust-version`).
 - `package.json` scripts: `lint` (biome check), `format` (biome format --write), `typecheck` (tsc --noEmit), `test` (vitest run), `licenses:check` (`node scripts/check-js-licences.mjs`), `tauri`. `packageManager` pinned to the corepack pnpm version present on the PC.
 - Biome config (`biome.json`), strict `tsconfig.json`, `vitest.config.ts`, Tailwind v4 via the Vite plugin, path alias `@/` to `src/`.
 - `deny.toml`: licence allowlist Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Zlib, Unicode-3.0, Unicode-DFS-2016, CC0-1.0, MPL-2.0 only if a crate has no alternative (record the exception with a comment); deny GPL, LGPL, AGPL. `scripts/check-js-licences.mjs` reads `pnpm licenses list --json` and applies the same allowlist.
@@ -58,7 +58,7 @@ jobs:
 ```
 `rust` on macOS must pass with no audio device: S2 proves `JAM_HEADLESS=1` makes the engine use `NullOutput`.
 
-### 0.3 Engine skeleton (`crates/jam-audio`, `crates/jam-dsp`, `src-tauri/src/ipc/audio.rs`)
+### 0.3 Engine skeleton (`crates/jam-audio`, `crates/jam-dsp`, commands in `src-tauri/src/lib.rs`)
 - `jam-audio::io`: traits `AudioInput` and `AudioOutput` (ARCHITECTURE §4); `CpalInput`, `CpalOutput`, `FileInput` (looping WAV via `symphonia`, resampled to 48 kHz with `rubato`), `NullOutput` (advances exactly `bufferFrames` per tick on a timer thread).
 - `jam-audio::devices`: enumeration with channel counts and supported sample rates; `AudioConfig` selection; open/close; a resampler at the device edge when the device is not 48 kHz.
 - `jam-audio::engine`: the master ring buffer (`rtrb`), the output callback that only copies, the input callbacks that only push into per-input ring buffers, an xrun counter, and the first **render worker** thread that fills the ring from a `Renderer` trait. In M0 the renderer sums a test tone generator and a metronome.
@@ -69,7 +69,7 @@ jobs:
 ### 0.4 App shell (`src/`)
 - Design tokens and primitives from [DESIGN.md](../DESIGN.md): `src/design/tokens.css`, `Button`, `Toggle`, `Dial`, `BigReadout`, `Meter`, `Panel`, `StatusPill`. Empty/error states use the existing room UI; unused standalone wrappers were removed.
 - Navigation registry `src/screens/registry.ts` with Stage, Library, Sessions, Rig, Settings (later screens are one line each). Stage shows: tuner readout, input meter, tempo readout with tap, test tone and metronome toggles. Settings shows: audio devices and channels, API keys (set/clear only, never displayed), diagnostics (xruns, sample rate, buffer).
-- `src/ipc/`: `contract.ts` (types and `IPC_VERSION`), one file per domain wrapping `invoke` and `listen`, a `useEngineState` store (zustand) fed by `<domain>.state` events.
+- `src/ipc/`: `contract.ts` (`IPC_VERSION` and types), `client.ts`, `preview.ts`. The store is `src/store/engine.ts` (zustand), fed by `<domain>.state` events. There is no `src-tauri/src/ipc/` folder.
 
 ### 0.5 Keys, settings, store, logging (`src-tauri/src/{keys,store,settings}`)
 - `SecretStore` trait with `KeyringStore` (`keyring` crate, service `josefines-jamstudio`) and `MemoryStore` (tests). Commands `keys_set(provider, value)`, `keys_has(provider)`, `keys_delete(provider)`. There is no command that returns a key.
@@ -78,8 +78,8 @@ jobs:
 - Logging: `tauri-plugin-log` to `~/JosefinesJamstudio/logs/`, rotating, never request bodies.
 
 ### 0.6 Seam registries and the invariant tests
-- Rust: `jam-core::registry` loaders for `styles/`, `charts/`, `rigs/`, `controls/` (bundled via `include_dir` plus the user folders under `~/JosefinesJamstudio/`), `src-tauri/src/net/registry.rs` for providers (empty list in M0 but the `Provider` trait and the table exist), IPC domain list in `src-tauri/src/ipc/mod.rs`.
-- TS: tool registry `src/ai/tools/index.ts` via `import.meta.glob('./*.tool.ts', { eager: true })`, screen registry, provider id union.
+- Rust: `jam-core::registry` loaders for `styles/`, `charts/`, `rigs/`, `controls/` (bundled via `include_dir` plus the user folders under `~/JosefinesJamstudio/`), `src-tauri/src/net.rs` for providers. Commands register in `src-tauri/src/lib.rs`.
+- TS: Jo tools in `src/lib/jo/tools.ts`, screen registry, provider id union.
 - `tests/invariants/seams.test.ts` checks bundled style, chart, rig and control manifests for `schemaVersion`, `id` and `name`. `crates/jam-core/tests/seams.rs` loads those bundled registries and asserts representative IDs. Neither auto-discovers `tests/fixtures/seams/` nor proves core files were untouched; an extension PR must show its fixture in the relevant registry.
 
 ### 0.7 Spikes S1 to S3
@@ -111,7 +111,7 @@ Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs befo
 
 **Goal:** a drummer that plays a groove at his tempo with fills on command, rendered ahead of the audio callback.
 
-- `assets/manifest.json` (in repo) lists packs: `id`, `version`, `url` (GitHub Release asset), `sha256`, `bytes`, `licence`, `attribution`. `src-tauri/src/assets/`: downloader with resume, checksum, unpack to `~/JosefinesJamstudio/assets/<id>/`, event `assets.state`, command `assets_ensure(ids)`. UI: an Assets panel in Settings and a first-run prompt on Stage.
+- `assets/manifest.json` (in repo) lists packs: `id`, `version`, `url` (GitHub Release asset), `sha256`, `bytes`, `licence`, `attribution`. `src-tauri/src/assets.rs`: downloader with resume, checksum, unpack to `~/JosefinesJamstudio/assets/<id>/`, event `assets.state`, command `assets_ensure(ids)`. UI: an Assets panel in Settings and a first-run prompt on Stage.
 - Kit selection task: audit candidates ([04-research.md](04-research.md) §F) and pick one multisampled drum kit with velocity layers under CC0 or CC-BY; write the licence line in `assets/LICENSES.md`; publish the pack as a GitHub Release `assets-v1` (`gh release create assets-v1 --notes "Sample packs for Josefines Jamstudio"`); convert it to the kit format `kit.json` (instrument, layers by velocity range, round-robin files, choke groups).
 - `jam-band::instruments::Sampler`: polyphonic, velocity layers, round-robin, choke groups (open/closed hi-hat), release fade; implements `Instrument`.
 - `jam-core::style` schema v1 (ARCHITECTURE §7) with `serde` and a JSON Schema exported for the TS side (`zod` mirrors it); loader in the registry; `styles/blues-shuffle.json` and `styles/rock-straight.json` first (drums part).
@@ -129,7 +129,7 @@ Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs befo
 
 **Goal:** a full band over a 12-bar blues in any key.
 
-- `jam-band::instruments::Sf2Synth` using `oxisynth`, loading a permissive SoundFont from the asset manifest (bass and an electric piano or organ program; audit licence as in M1b). Voicing templates per `ChordQuality` (shell, triad, drop2, power) in `jam-band::voicing`.
+- `jam-band::instruments::Sf2Synth` using MIT `rustysynth` (oxisynth is LGPL and is unused), loading a permissive SoundFont from the asset manifest (bass and an electric piano or organ program; audit licence as in M1b). Voicing templates per `ChordQuality` (shell, triad, drop2, power) in `jam-band::voicing`.
 - `jam-band::bass`: pattern notes by degree relative to the chord root with octave and approach-note rules per style; `jam-band::comp`: strum events from `CompPattern` with the voicing template.
 - Chart: `jam-core::chart` types and `resolve(chart) -> ResolvedChart` (arrangement expansion). TS: `src/lib/chart/parse.ts` parses text charts (`[Verse] | A7 | D7 | A7 | A7 |`, `x2` repeats, slash chords, `%` repeat) using `tonal`, transposes, and produces the numeric `ResolvedChart` the engine receives (no music theory in Rust beyond voicings).
 - `charts/*.json` presets: 12-bar blues (standard and quick change), 8-bar blues, minor blues, I-V-vi-IV, ii-V-I, 16-bar rock, one-chord vamp. Each with a default style and tempo.
@@ -185,7 +185,7 @@ Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs befo
 - Mic input: a second `AudioInput` stream (`micDeviceId`), downmixed to mono and resampled to 16 kHz into a bounded buffer while PTT is held (max 20 s). Command `voice_ptt(down: bool)`.
 - `src-tauri/src/net/elevenlabs.rs`: `stt_transcribe(wav16k) -> Transcript`, `tts_synthesize(text, voice) -> Pcm48k`, `voices_list()`. `src-tauri/src/net/gemini.rs`: `provider_fetch` target with `x-goog-api-key` from the keychain. `net/registry.rs`: the providers table with `id`, `base_url`, `auth`, `enabled`.
 - Voice bus and ducking in the mixer: when the voice bus is active, band buses duck by `duckBandDb` (default -9 dB) with 150 ms ramps.
-- TS `src/ai/`: `llm/` (Vercel AI SDK `generateText` with `@ai-sdk/google`, model from settings, custom `fetch` shim over `provider_fetch`, `maxSteps` from settings), `tools/*.tool.ts` (each exports `name`, `description`, `schema` (zod), `run`), `jo/persona.md` (system prompt), `jo/session.ts` (state machine idle → listening → transcribing → thinking → speaking, with barge-in: a new PTT press stops TTS), `jo/transcript.ts` (conversation log per session).
+- TS `src/lib/jo/`: `providers.ts` (`provider_fetch` shim), `tools.ts` + `dispatcher.ts` (declarations and `run`), `persona.ts` (system prompt), `conversation.ts` and `voice.ts` (typed and PTT flow; barge-in: a new PTT press stops TTS). There is no `src/ai/` tree.
 - Tools in v1: `set_tempo`, `set_key`, `set_style`, `load_chart` (preset id or chart text), `transport` (play, stop, count_in), `set_loop` (section name, bar range, or off), `set_intensity`, `set_parts`, `cue`, `tuner`, `explain` (returns text only), `coach_tip` (uses the last take's analysis when M6 exists; before that, generic per style).
 - Jo presence on Stage: a small orb with state colour, the last transcript and reply, a text input as fallback, and a "latency" figure per turn (logged too).
 - `cost.state` event and a spend meter in Settings (STT seconds, TTS characters, LLM tokens, estimated USD from the price table in settings).
@@ -202,7 +202,7 @@ Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs befo
 **Goal:** import one of his songs, get the guitar removed and the chords on screen, and jam over it at any speed and in any key.
 
 - Import: file dialog and drag-and-drop for wav, mp3, flac, m4a, aiff; decode with `symphonia`, resample to 48 kHz, write `~/JosefinesJamstudio/songs/<slug>/source.wav` and `song.json` with `sourceHash`; command `song_import(path)`, `song_list`, `song_load(songId)`.
-- Analysis pipeline `src-tauri/src/analysis/`: `AnalysisKind` enum (`stems`, `beats`, `chords`, `key`, `sections`); providers `net/musicai.rs` (signed-URL upload, workflow run, poll, download; modules for beats and downbeats, chords, key, sections) and ElevenLabs stems (`POST /v1/music/stem-separation` → ZIP → WAV per stem); local fallback in `jam-dsp::offline` (onset autocorrelation tempo, chroma-template chords per beat, Krumhansl key profiles) used when a provider is disabled or fails, flagged `confidence: low`. Commands `analysis_start`, `analysis_cancel`; events `analysis.progress`, `analysis.result`. Results written into `song.json` (`tempoMap`, `beats`, `chart`, `key`, `stems[]`, `analysis[]` with provider and cost).
+- Analysis lives in `src-tauri/src/media.rs` (`analysis_start`, `analysis_cancel`, `media_analyze`) with local prep in `media/analysis.rs` and Music.ai in `net/musicai.rs`. Live provider jobs stay not configured without a key, `JAM_LIVE=1` and a recorded SUCCEEDED fixture. Local fallback is `jam-dsp::offline` (onset autocorrelation tempo, chroma-template chords, Krumhansl key), flagged low confidence. ElevenLabs stem ZIP import is a separate media path. Results write into `song.json`; a live Music.ai SUCCEEDED job is not claimed.
 - Song player `jam-audio::song`: multi-stem player (one file per stem, per-stem gain and mute; minus-guitar = guitar stem muted, other stems as mixed), Signalsmith stretch (time ratio 0.5 to 1.5) and pitch shift (±12 semitones) per S3, locked to the transport so bars, beats and sections display and loop; the song's tempo map becomes the transport timeline while in Song mode.
 - Stage in Song mode: chord timeline (now, next, the bar grid), section list with loop, speed slider with practice ramp (start %, step %, target %, bars per step), transpose, stem mutes. Library screen: songs with analysis status, re-run analysis, delete.
 - Jo tools: `load_song(query)`, `set_speed(percent)`, `transpose(semitones)`, `loop_section(name)`, `ramp(start, step, target)`.
@@ -254,7 +254,7 @@ Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs befo
 
 - `jam-dsp::offline::take_analysis`: pitch track on the DI (cents deviation from equal temperament per note, bend detection excluded from "flat" statistics), onset timing versus the grid (mean and standard deviation in ms, early/late bias), chord chroma per bar versus the chart (agreement ratio), dynamics profile. Written into `take.json.analysis`.
 - LLM review via `provider_fetch`: structured output (summary, strengths, drills, focus bars) from the analysis numbers and the chart, never from audio; stored in `session.json.review`; the Sessions screen shows it; Jo's `coach_tip` uses it.
-- Logic export `src-tauri/src/export/logic.rs`: `exports/<session>/<take>/` with 24-bit 48 kHz WAVs trimmed to start at bar 1, `tempo.mid` (Standard MIDI File format 0 written with `midly`: tempo meta events at every `TempoPoint`, time signature, marker meta events for sections and user markers, optional chord names as text events), and `README.txt` with the Logic steps (File > Open the MIDI file, keep tempo, drag the WAVs to bar 1). Command `export_logic(takeId)`, event `export.state`.
+- Logic export is `jam_audio::export::DawExporter` plus `takes_export_daw` / `export_logic` (there is no `src-tauri/src/export/logic.rs`). The folder is `exports/<take>/` with copied WAVs, `{takeId}-tempo-map.mid`, `{takeId}-info.json`, and `README.txt` with the Logic steps (File > Open the tempo-map MIDI, keep tempo, drag the WAVs to bar 1). Opening the project in Logic Pro stays a V2 owner gate. `export_logic` emits `export.state`.
 - Progress dashboard on Sessions: sessions per week, minutes played, tempo records per chart, timing and pitch trends over the last 20 takes.
 - Tests: SMF written for a three-change tempo map re-parsed with `midly` and compared; analysis on synthetic takes (a DI fixture with known timing offsets and known pitch errors); export folder layout.
 
@@ -285,7 +285,7 @@ Run S2 first (it can change 0.3), then S3, then S1. Findings merged as docs befo
 
 Recorded here so nobody re-decides them. Each becomes a milestone only by a status-board change approved by Vegar.
 
-- **Jo Live:** full-duplex conversation over the ElevenLabs Agents WebSocket with client tools, behind the existing `VoiceSession` interface; agent provisioned from `src/ai/jo/agent.json` through the ElevenLabs API.
+- **Jo Live:** full-duplex conversation over the ElevenLabs Agents WebSocket with client tools, behind the existing `VoiceSession` interface. Backlog; there is no `src/ai/` tree in this repo.
 - **Adaptive tempo following** (the band follows his tempo) behind an accuracy gate; **live chord detection** from the DI.
 - **More LLM providers** (Anthropic, OpenAI, Moonshot Kimi): one `provider_fetch` target each plus one AI SDK provider package.
 - **VST3/AU hosting** and a software monitoring path: only via the criteria in [ADR 0001](../adr/0001-tauri-rust-not-juce.md).

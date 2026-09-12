@@ -322,7 +322,7 @@ fn save_enforces_the_songwriting_scope_bounds() {
         d["body"].as_object_mut().unwrap().remove("chart");
     });
     assert!(
-        no_chart.starts_with("Song: ") && no_chart.contains("chart"),
+        no_chart.starts_with("The song is invalid.") && no_chart.contains("chart"),
         "{no_chart}"
     );
 }
@@ -399,7 +399,7 @@ fn save_checks_lyrics_and_band_settings() {
             .unwrap()
             .pop();
     });
-    assert!(two_parts.starts_with("Song: "), "{two_parts}");
+    assert!(two_parts.starts_with("The song is invalid."), "{two_parts}");
 }
 
 #[test]
@@ -627,7 +627,7 @@ fn load_refuses_songs_the_band_cannot_play_and_keeps_the_previous_song() {
         d["body"].as_object_mut().unwrap().remove("chart");
     });
     assert!(
-        no_chart.starts_with("Song: ") && no_chart.contains("chart"),
+        no_chart.starts_with("The song is invalid.") && no_chart.contains("chart"),
         "{no_chart}"
     );
     assert_eq!(
@@ -802,8 +802,9 @@ fn record_without_a_loaded_song_records_the_default_band() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let take_id = studio.ok("originals_record", json!({ "sessionId": "free-play" }));
-    wait_until("playback", || {
-        telemetry(&studio)["transport"]["state"] == "playing"
+    wait_until("one beat of recording", || {
+        let t = telemetry(&studio)["transport"].clone();
+        t["state"] == "playing" && t["position_beats"].as_f64() >= Some(1.0)
     });
     let take = studio.ok("recorder_stop", json!({}));
     assert_eq!(take["id"], take_id);
@@ -938,7 +939,7 @@ fn capture_arm_bounds_the_rolling_buffer_and_keep_saves_an_idea() {
     assert_eq!(armed_seconds(), 0);
     assert_eq!(
         studio.err("capture_keep", json!({ "sessionId": "ideas" })),
-        "Arm capture, then play something first."
+        "Arm this capture. Then play something first."
     );
     studio.ok("capture_arm", json!({ "seconds": 60 }));
     assert_eq!(armed_seconds(), 60);
@@ -989,7 +990,7 @@ fn capture_arm_bounds_the_rolling_buffer_and_keep_saves_an_idea() {
     studio.ok("capture_arm", json!({ "seconds": 0 }));
     assert_eq!(
         studio.err("capture_keep", json!({ "sessionId": "ideas" })),
-        "Arm capture, then play something first.",
+        "Arm this capture. Then play something first.",
         "disarming forgets the buffered audio"
     );
 }
@@ -1093,6 +1094,7 @@ fn audition_of_a_take_whose_audio_file_is_missing_names_the_take_or_file() {
     let id = unique("orphan");
     orphan_take(&id);
     let err = studio.err("clip_audition", json!({ "spec": clip_spec(&id, 1.0) }));
+    assert!(err.starts_with("Cannot read take "), "{err}");
     assert!(err.contains(&id) || err.contains("guitar-di.wav"), "{err}");
 }
 

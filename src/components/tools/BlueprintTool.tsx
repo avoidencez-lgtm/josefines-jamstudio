@@ -39,7 +39,7 @@ export default function BlueprintTool() {
         ideas.
       </p>
       <div className="room-tool-row">
-        <Field label="Reference audio (optional)">
+        <Field label="Reference audio is optional.">
           <select
             value={referenceId}
             onChange={(e) => {
@@ -47,7 +47,7 @@ export default function BlueprintTool() {
               setProposal(null);
             }}
           >
-            <option value="">Use a named reference</option>
+            <option value="">Use a named reference.</option>
             {assets
               .filter((a) => a.kind === "audio")
               .map((a) => (
@@ -57,7 +57,7 @@ export default function BlueprintTool() {
               ))}
           </select>
         </Field>
-        <Field label="Reference / inspiration">
+        <Field label="Reference or inspiration.">
           <input
             maxLength={120}
             value={referenceName}
@@ -75,7 +75,7 @@ export default function BlueprintTool() {
           }}
         />
       </div>
-      <Field label="One section per line · Name | bars | energy 0–100">
+      <Field label="Write one section per line as Name | bars | energy 0–100.">
         <textarea
           rows={6}
           value={text}
@@ -113,11 +113,11 @@ export default function BlueprintTool() {
               base: songFingerprint(),
               summary: `${rows.map((r) => `${r.name} ${r.bars} bars (${r.energy}%)`).join(" → ")}. ${rows.reduce((n, r) => n + r.bars, 0)} bars total.`,
             });
-            return "Preview ready. Locked and muted parts keep their settings; lyrics stay in their original sections.";
+            return "Preview ready. Review the form below, then apply it. Locked and muted parts keep their settings; lyrics stay in their original sections.";
           })
         }
       >
-        Preview new form
+        Preview this new form.
       </Button>
       {proposal && (
         <>
@@ -135,7 +135,7 @@ export default function BlueprintTool() {
               })
             }
           >
-            Apply blueprint to original
+            Apply this blueprint to the original.
           </Button>
         </>
       )}

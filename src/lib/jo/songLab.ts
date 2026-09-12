@@ -10,10 +10,10 @@ import { checkWritingForm } from "../writingTools";
 import type { BrainRequest } from "./providers";
 
 export const LAB_IDEAS = {
-  chords: "Alternative chords",
-  bridge: "A contrasting bridge",
-  lyrics: "A lyric seed",
-  feedback: "Arrangement feedback",
+  chords: "These are alternative chords.",
+  bridge: "This is a contrasting bridge.",
+  lyrics: "This is a lyric seed.",
+  feedback: "This is arrangement feedback.",
 } as const;
 export type LabKind = keyof typeof LAB_IDEAS;
 const ideaSchema = z.object({
@@ -129,7 +129,7 @@ export function applyProposal(proposal: Proposal): void {
   b.notes =
     `${b.notes}\n\n${idea.title} (${proposal.source})\n${idea.summary}${proposal.kind === "lyrics" ? "" : `\n${idea.notes}`}`.trim();
   checkWritingForm(b);
-  w.version(`Before ${idea.title}`);
+  w.version(`This is before ${idea.title}.`);
   w.edit((body) => Object.assign(body, b));
   useWriting.setState({
     message:

@@ -1,6 +1,28 @@
 /** 2 since ADR 0010 removed the never-wired M3/M4 placeholder commands. */
 export const IPC_VERSION = 2;
 
+export interface IdleCpuSample {
+  percent: number | null;
+  seconds: number;
+  headless: boolean;
+  proven: boolean;
+  message: string;
+}
+
+export interface PackStatus {
+  id: string;
+  name: string;
+  state: string;
+  live: boolean;
+  message: string;
+}
+
+export interface LatencyCalibration {
+  roundTripFrames: number;
+  confidence: number;
+  estimated: boolean;
+}
+
 export interface DeviceDescriptor {
   name: string;
   is_default: boolean;
@@ -89,6 +111,11 @@ export interface BandTelemetry {
   pending_style_id?: string | null;
   pending_intensity?: number | null;
   is_stopped: boolean;
+  kit_id?: string;
+  kit_source?: "file" | "synthetic";
+  kit_message?: string;
+  bass_source?: "sine" | "sf2";
+  bass_message?: string;
 }
 
 // --- Library: styles and charts (data seams, see docs/plan) ---
@@ -155,6 +182,21 @@ export interface BandPatch {
   atNextBar?: boolean;
 }
 
+export interface StemMix {
+  id: string;
+  label: string;
+  gain: number;
+  muted: boolean;
+  guitar: boolean;
+}
+
+export interface ReferenceSection {
+  id: string;
+  label: string;
+  startBar: number;
+  endBar: number;
+}
+
 export interface ReferenceState {
   asset_id: string;
   label: string;
@@ -164,6 +206,48 @@ export interface ReferenceState {
   loop_start: number;
   loop_end: number;
   loop_enabled: boolean;
+  analysis?: {
+    confidence: "low";
+    bpm: number | null;
+    key: string | null;
+    chord: string | null;
+    next_chord: string | null;
+    beat: number | null;
+    beat_count: number;
+  } | null;
+  analysis_error?: string | null;
+  stems?: StemMix[];
+  speed?: number;
+  semitones?: number;
+  processing_error?: string | null;
+  grid?: {
+    origin: "confirmed-local" | "estimated-local";
+    beats_per_bar: number;
+    bars: number;
+    sections: ReferenceSection[];
+    position: {
+      bar: number;
+      beat: number;
+      bpm: number;
+      section_id: string | null;
+      section_label: string | null;
+    } | null;
+  } | null;
+  grid_error?: string | null;
+  ramp?: {
+    config: ReferenceRampConfig;
+    active: boolean;
+    completed_bars: number;
+    speed_percent: number;
+  } | null;
+}
+
+export interface ReferenceRampConfig {
+  schemaVersion: 1;
+  startPercent: number;
+  stepPercent: number;
+  targetPercent: number;
+  barsPerStep: number;
 }
 
 export interface EngineTelemetry {
@@ -269,6 +353,8 @@ export interface RigState {
   sectionMappings: Record<string, number>;
   controlValues: Record<string, number>;
   followSections: boolean;
+  sendClock: boolean;
+  dryRun: boolean;
   port: string | null;
   portDescription: string;
   live: boolean;
@@ -314,6 +400,9 @@ export interface CostEntry {
   estimatedCostUsd?: number | null;
   sttSeconds?: number | null;
   ttsCharacters?: number | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
 }
 
 export interface CostTotal {
@@ -324,6 +413,9 @@ export interface CostTotal {
   bytesOut: number;
   sttSeconds: number;
   ttsCharacters: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
   estimatedCostUsd: number | null;
   unpricedCalls: number;
 }
@@ -340,6 +432,17 @@ export interface TakeAnalysis {
   intonationAccuracyPct: number;
   detectedTransients: number;
   summary: string;
+}
+
+/** Lyria RealTime status. `live` stays false until a recorded provider session exists. */
+export interface LyriaStatus {
+  phase: string;
+  requestedBpm: number;
+  scale: string;
+  buffering: boolean;
+  live: boolean;
+  drivesClock: boolean;
+  outbound: number;
 }
 
 /** What `takes_export_daw` actually wrote. */

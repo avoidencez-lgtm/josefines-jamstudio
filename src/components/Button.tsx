@@ -14,7 +14,7 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const base =
-    "inline-flex items-center justify-center gap-1.5 font-medium rounded transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center gap-1.5 font-medium rounded-[var(--radius-m)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
 
   const variants = {
     primary:
@@ -28,9 +28,9 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const sizes = {
-    sm: "px-2 py-1 text-xs",
-    md: "px-4 py-2 text-sm",
-    lg: "px-6 py-3 text-base",
+    sm: "min-h-8 min-w-8 px-2 py-1 text-xs",
+    md: "min-h-8 min-w-8 px-4 py-2 text-sm",
+    lg: "min-h-8 min-w-8 px-6 py-3 text-base",
   };
 
   return (

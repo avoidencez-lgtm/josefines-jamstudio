@@ -54,7 +54,12 @@ export function ShortcutsHelp({
     setLanguage(next);
     // The choice holds no secrets; it lives with the other app settings.
     void saveRoomPreference("helpLanguage", next).catch((e) =>
-      useEngineStore.getState().notify("error", `Help language: ${String(e)}`),
+      useEngineStore
+        .getState()
+        .notify(
+          "error",
+          `Could not save the help language. ${String(e).replace(/^Error:\s*/, "")}`,
+        ),
     );
   };
   const matches = manual.chapters.filter((c) =>
@@ -72,11 +77,13 @@ export function ShortcutsHelp({
       id="studio-help"
       className="studio-manual"
       lang={language}
-      aria-label={nb ? "Hjelp og veiledninger" : "Help & guides"}
+      aria-label={nb ? "Åpne hjelp og veiledninger." : "Open help and guides."}
     >
       <header className="manual-heading">
         <div>
-          <h1>{nb ? "Hjelp og veiledninger" : "Help & guides"}</h1>
+          <h1>
+            {nb ? "Åpne hjelp og veiledninger." : "Open help and guides."}
+          </h1>
           <p>
             {nb
               ? "Fra første idé til ferdig låt. Filene dine lagres lokalt i skrivebordsappen."
@@ -84,7 +91,7 @@ export function ShortcutsHelp({
           </p>
         </div>
         <label>
-          {nb ? "Språk" : "Language"}
+          {nb ? "Velg språk." : "Choose the language."}
           <select
             value={language}
             onChange={(e) => chooseLanguage(e.target.value as HelpLanguage)}
@@ -94,13 +101,13 @@ export function ShortcutsHelp({
           </select>
         </label>
         <Button variant="secondary" onClick={onClose}>
-          {nb ? "Lukk hjelp" : "Close help"}
+          {nb ? "Lukk denne hjelpen." : "Close this help."}
         </Button>
       </header>
       <div className="manual-layout">
         <aside>
           <label htmlFor="manual-search">
-            {nb ? "Søk i håndboken" : "Search the manual"}
+            {nb ? "Søk i håndboken." : "Search the manual."}
           </label>
           <input
             ref={search}
@@ -109,14 +116,18 @@ export function ShortcutsHelp({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <label htmlFor="manual-chapter">{nb ? "Kapittel" : "Chapter"}</label>
+          <label htmlFor="manual-chapter">
+            {nb ? "Velg et kapittel." : "Choose a chapter."}
+          </label>
           <select
             id="manual-chapter"
             value={chapter?.id ?? ""}
             onChange={(e) => setSelected(e.target.value)}
           >
             {!chapter && (
-              <option value="">{nb ? "Ingen treff" : "No matches"}</option>
+              <option value="">
+                {nb ? "Dette har ingen treff." : "This has no matches."}
+              </option>
             )}
             {matches.map((c) => (
               <option key={c.id} value={c.id}>
@@ -128,14 +139,18 @@ export function ShortcutsHelp({
         <article>
           <p className="sr-only" aria-live="polite">
             {chapter
-              ? `${nb ? "Kapittel" : "Chapter"}: ${chapter.title[language]}`
+              ? `${nb ? "Kapittel" : "Chapter"} ${chapter.title[language]}.`
               : ""}
           </p>
           {chapter ? (
             <>
               <h2>{chapter.title[language]}</h2>
               <nav
-                aria-label={nb ? "Emner i kapitlet" : "Topics in this chapter"}
+                aria-label={
+                  nb
+                    ? "Dette er emnene i kapitlet."
+                    : "These are the topics in this chapter."
+                }
               >
                 {chapter.sections.map((s) => (
                   <a
@@ -164,15 +179,24 @@ export function ShortcutsHelp({
               ))}
             </>
           ) : (
-            <p>
-              {nb
-                ? "Ingen treff. Prøv et annet søkeord."
-                : "No matching chapters. Try a different search."}
-            </p>
+            <div className="workspace-stack">
+              <p>
+                {nb
+                  ? "Ingen treff. Prøv et annet søkeord."
+                  : "No matching chapters. Try a different search."}
+              </p>
+              <Button size="sm" onClick={() => setQuery("")}>
+                {nb ? "Tøm dette søket." : "Clear this search."}
+              </Button>
+            </div>
           )}
           {chapter?.id === "start" && (
             <section>
-              <h3>{nb ? "Hurtigtaster" : "Keyboard shortcuts"}</h3>
+              <h3>
+                {nb
+                  ? "Dette er hurtigtastene."
+                  : "These are the keyboard shortcuts."}
+              </h3>
               <p>
                 {nb
                   ? "Hurtigtastene er av når fokus er i hjelpen eller du skriver i et felt. I skjemaeditoren spiller Ctrl/Cmd+Enter skjemaet, og Ctrl/Cmd+S lagrer det."

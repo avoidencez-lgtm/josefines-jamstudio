@@ -2,6 +2,66 @@ import type React from "react";
 import { useEffect, useRef } from "react";
 import type { Chart } from "../ipc/contract";
 import { resolveChart } from "../lib/chart/text";
+import { tickPlayheadFrame } from "../lib/meterFps";
+import { useCanvasRaf } from "../lib/useCanvasRaf";
+
+/** Fill used by the canvas playhead. Progress is 0..1 across the current bar. */
+export function paintPlayhead(
+  ctx: CanvasFill,
+  width: number,
+  height: number,
+  progress: number,
+  colors: { bg: string; accent: string },
+): void {
+  const p = Math.min(1, Math.max(0, progress));
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = colors.bg;
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = colors.accent;
+  ctx.fillRect(0, 0, width * p, height);
+}
+
+export interface CanvasFill {
+  clearRect(x: number, y: number, w: number, h: number): void;
+  fillRect(x: number, y: number, w: number, h: number): void;
+  fillStyle: CanvasRenderingContext2D["fillStyle"];
+}
+
+function PlayheadBar({ progress, live }: { progress: number; live: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const value = useRef(progress);
+  value.current = progress;
+
+  useCanvasRaf(live, () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    tickPlayheadFrame();
+    const dpr = window.devicePixelRatio || 1;
+    const widthPx = canvas.clientWidth;
+    const heightPx = canvas.clientHeight;
+    if (
+      canvas.width !== Math.round(widthPx * dpr) ||
+      canvas.height !== Math.round(heightPx * dpr)
+    ) {
+      canvas.width = Math.round(widthPx * dpr);
+      canvas.height = Math.round(heightPx * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const style = getComputedStyle(canvas);
+    paintPlayhead(ctx, widthPx, heightPx, value.current, {
+      bg: style.getPropertyValue("--bg-2").trim() || "#1f1c1a",
+      accent: style.getPropertyValue("--accent").trim() || "#e0a24a",
+    });
+  });
+
+  return (
+    <canvas
+      className="absolute left-0 right-0 bottom-0 h-0.5 w-full bg-[var(--bg-2)]"
+      aria-hidden
+    />
+  );
+}
 
 export interface ChordStripProps {
   chart: Chart | null;
@@ -12,6 +72,8 @@ export interface ChordStripProps {
   onSeek?: (bar: number) => void;
   onSetLoop?: (startBar: number, endBar: number) => void;
   compact?: boolean;
+  /** When false, the playhead paints once and stops rAF. */
+  live?: boolean;
 }
 
 /** Horizontal metrics the strip needs; keeps tests off jsdom. */
@@ -62,6 +124,7 @@ export const ChordStrip: React.FC<ChordStripProps> = ({
   onSeek,
   onSetLoop,
   compact = false,
+  live = false,
 }) => {
   const stripRef = useRef<HTMLDivElement | null>(null);
   const currentRef = useRef<HTMLButtonElement | null>(null);
@@ -118,8 +181,8 @@ export const ChordStrip: React.FC<ChordStripProps> = ({
             type="button"
             ref={isCurrent ? currentRef : undefined}
             onClick={(e) => handleClick(e, bar.barIndex)}
-            title={`Bar ${bar.barIndex} (${bar.sectionName}) — click to jump, shift-click to loop`}
-            className={`relative shrink-0 rounded-[var(--radius-m)] border text-left font-mono transition-colors cursor-pointer ${
+            title={`This is bar ${bar.barIndex} (${bar.sectionName}). Click it to jump. Shift-click it to loop.`}
+            className={`relative shrink-0 rounded-[var(--radius-m)] border text-left font-mono cursor-pointer ${
               compact ? "min-w-[64px] px-2 py-1.5" : "min-w-[88px] px-3 py-2"
             } ${
               isCurrent
@@ -156,14 +219,7 @@ export const ChordStrip: React.FC<ChordStripProps> = ({
                 </span>
               ))}
             </div>
-            {isCurrent && (
-              <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-[var(--bg-2)] rounded-b overflow-hidden">
-                <div
-                  className="h-full bg-[var(--accent)]"
-                  style={{ width: `${Math.round(barProgress * 100)}%` }}
-                />
-              </div>
-            )}
+            {isCurrent && <PlayheadBar progress={barProgress} live={live} />}
           </button>
         );
       })}

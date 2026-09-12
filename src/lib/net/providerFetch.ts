@@ -47,7 +47,7 @@ export async function providerJson<T>(
     throw new ProviderError(
       provider,
       res.status,
-      `${provider} returned ${res.status}: ${summariseError(res.body)}`,
+      `${provider} returned ${res.status}. ${summariseError(res.body)}`,
     );
   }
   try {

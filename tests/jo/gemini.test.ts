@@ -27,11 +27,21 @@ describe("Jo's Gemini request", () => {
   it("tells the model what is going on and which ids exist", () => {
     const s = contextSummary(ctx);
     expect(s).toContain("110 BPM");
-    expect(s).toContain("Muted parts: bass");
+    expect(s).toContain("Muted parts are bass");
     expect(s).toContain("blues-shuffle");
     expect(s).toContain("blues-12-bar");
     // From the Jo room the film tool can only work with real shot ids (#45).
-    expect(s).toContain("Film project: none");
+    expect(s).toContain("No Film project is open.");
+    expect(s).toContain("No songwriting document is open.");
+    expect(s).not.toContain("is none");
+    expect(s).not.toContain("are none");
+    const empty = contextSummary({
+      ...ctx,
+      chartName: null,
+      muted: { drums: false, bass: false, comp: false },
+    });
+    expect(empty).toContain("No chart is loaded.");
+    expect(empty).toContain("No parts are muted.");
     expect(
       contextSummary({
         ...ctx,
@@ -123,7 +133,7 @@ describe("Jo's Gemini reply", () => {
           },
         ],
       }).reply,
-    ).toBe("On it.");
+    ).toBe("This is underway.");
     expect(readResponse({}).toolCalls).toEqual([]);
     expect(readResponse({}).reply).toMatch(/didn't catch/);
     expect(
