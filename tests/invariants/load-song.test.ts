@@ -91,7 +91,14 @@ const mockLibrary = () =>
 it("routes the declared tool from English/Bokmål text through fresh native lookup and reports actual loading", async () => {
   const invoke = mockLibrary();
   expect(JO_TOOLS.filter((t) => t.name === "load_song")).toHaveLength(1);
-  for (const text of ["load song Blå natt", 'last inn sangen "Blå natt"']) {
+  for (const text of [
+    "load song Blå natt",
+    'last inn sangen "Blå natt"',
+    "load song Blå natt.",
+    "load song Blå natt and play",
+    "last inn sangen Blå natt og spill det!",
+    "load song 'Blå natt'",
+  ]) {
     expect(parseNaturalIntent(text).toolCalls).toEqual([call("Blå natt")]);
     expect(await handleJoQuery(text)).toContain("Blå natt");
     expect(invoke).toHaveBeenLastCalledWith("media_reference_load", {
@@ -100,12 +107,12 @@ it("routes the declared tool from English/Bokmål text through fresh native look
       useMinusGuitar: undefined,
     });
   }
-  expect(invoke.mock.calls.map(([name]) => name)).toEqual([
-    "media_list",
-    "media_reference_load",
-    "media_list",
-    "media_reference_load",
-  ]);
+  expect(invoke.mock.calls.map(([name]) => name)).toEqual(
+    Array.from({ length: 6 }, () => [
+      "media_list",
+      "media_reference_load",
+    ]).flat(),
+  );
   expect(useEngineStore.getState().currentScreen).toBe("stage");
   expect(useEngineStore.getState().tempoTrainer.enabled).toBe(false);
   expect(useEngineStore.getState().loadedOriginal).toBeNull();
@@ -115,7 +122,13 @@ it("routes the declared tool from English/Bokmål text through fresh native look
 
 it("prefers exact IDs/titles, allows a unique title fragment, and refuses ambiguous or missing audio", async () => {
   const invoke = mockLibrary();
-  for (const query of [" song-a ", "BLA\u030a NATT", "natt live"]) {
+  for (const query of [
+    " song-a ",
+    "song-a.",
+    "BLA\u030a NATT",
+    "natt live",
+    "Blå natt.",
+  ]) {
     await expect(dispatchJoToolCall(call(query))).resolves.toContain("Loaded");
   }
   for (const query of ["natt", "Encore", "Film only", "missing"]) {
@@ -241,6 +254,8 @@ it("does not reinterpret questions or negated song requests as transport/style c
     "ikke last inn sangen Jazz",
     "load song",
     "last inn sangen",
+    "load song .",
+    "load song and play",
   ])
     expect(parseNaturalIntent(text).toolCalls).toEqual([]);
 });
