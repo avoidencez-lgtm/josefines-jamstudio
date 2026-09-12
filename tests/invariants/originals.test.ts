@@ -104,6 +104,31 @@ describe("songwriting workflow", () => {
     w.restore(useWriting.getState().song?.versions[0].id ?? "");
     expect(useWriting.getState().song?.body).toEqual(original);
   });
+  it("restore keeps a selected section that still exists and otherwise falls back, and resets rehearsal", () => {
+    const w = useWriting.getState();
+    w.version("Before the bridge");
+    const versionId = useWriting.getState().song?.versions[0].id ?? "";
+    w.edit((b) => {
+      b.chart.sections.push({
+        id: "bridge",
+        name: "Bridge",
+        bars: [[{ chord: "G", beats: 4 }]],
+      });
+      b.chart.arrangement.push({ sectionId: "bridge", repeats: 1 });
+      b.sections.bridge = defaultSection();
+    });
+    w.select("bridge");
+    useWriting.setState({ rehearsalIndex: 2 });
+    expect(w.restore(versionId)).toBe(true);
+    const restored = useWriting.getState();
+    expect(restored.selected).toBe("verse");
+    expect(restored.rehearsalIndex).toBe(-1);
+    expect(
+      arrangementRanges(
+        restored.song?.body.chart ?? newOriginal().body.chart,
+      ).some((r) => r.sectionId === restored.selected),
+    ).toBe(true);
+  });
   it("fits the band to a trimmed audio loop without changing that audio", () => {
     const clip = {
       takeId: "x",
