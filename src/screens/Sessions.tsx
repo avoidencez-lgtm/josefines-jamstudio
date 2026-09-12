@@ -15,6 +15,7 @@ import { WorkspaceHeader } from "../components/Workspace";
 import { ipc, isPreview } from "../ipc/client";
 import { useWriting } from "../lib/originals";
 import {
+  dawExportBanner,
   drillFor,
   formatJamTime,
   practiceStreakDays,
@@ -69,6 +70,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
   const [query, setQuery] = useState("");
   const [favourites, setFavourites] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [exportOk, setExportOk] = useState(true);
   const [latencyDraft, setLatencyDraft] = useState<string>("");
 
   useEffect(() => {
@@ -97,10 +99,12 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
       const missing = report.missingStems.length
         ? ` (${report.missingStems.length} stem file(s) could not be found on disk)`
         : "";
+      setExportOk(true);
       setExportMessage(
         `Wrote ${report.copiedStems.length} stem(s) and a tempo map to ${report.dir}${missing}. Open README.txt for Logic steps.${report.reaperScript ? " For REAPER, follow REAPER-START-HERE.txt." : ""}`,
       );
     } else {
+      setExportOk(false);
       setExportMessage(
         "Export failed. If the disk is full, free space and try again.",
       );
@@ -218,9 +222,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
         </p>
       )}
       {exportMessage && (
-        <div className="p-3 bg-[var(--ok-soft)] border border-[var(--ok)] rounded-[var(--radius-m)] text-xs font-mono text-[var(--ok)]">
-          {exportMessage}
-        </div>
+        <div {...dawExportBanner(exportOk)}>{exportMessage}</div>
       )}
 
       <Panel title="This is the progress.">

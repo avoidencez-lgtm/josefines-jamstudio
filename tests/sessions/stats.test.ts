@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  dawExportBanner,
   drillFor,
   formatJamTime,
   practiceStreakDays,
@@ -180,6 +181,17 @@ describe("jam time", () => {
     expect(
       formatJamTime(totalRecordedSecs([{ durationSecs: Number.NaN }])),
     ).toBe("0 s");
+  });
+
+  it("styles a failed DAW export as an alert, not a success banner", () => {
+    const failed = dawExportBanner(false);
+    expect(failed.role).toBe("alert");
+    expect(failed.className).toContain("bg-[var(--error-soft)]");
+    expect(failed.className).toContain("border-[var(--error)]");
+    expect(failed.className).toContain("text-[var(--error)]");
+    const ok = dawExportBanner(true);
+    expect(ok.role).toBeUndefined();
+    expect(ok.className).toContain("bg-[var(--ok-soft)]");
   });
 });
 
