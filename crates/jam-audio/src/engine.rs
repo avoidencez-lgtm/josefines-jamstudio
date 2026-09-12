@@ -259,6 +259,16 @@ impl Default for BandTelemetry {
     }
 }
 
+impl BandTelemetry {
+    /// Idle ticks emit this copy so the Stage energy bar drops (#297).
+    pub fn for_emit(mut self, clock_busy: bool) -> Self {
+        if !clock_busy {
+            self.current_energy = 0.0;
+        }
+        self
+    }
+}
+
 /// Where the engine's audio actually goes.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum EngineMode {
@@ -2086,6 +2096,15 @@ fn dirs_base() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn idle_band_emit_zeros_energy() {
+        let mut playing = BandTelemetry::default();
+        playing.current_energy = 0.8;
+        assert_eq!(playing.clone().for_emit(true).current_energy, 0.8);
+        let idle = playing.for_emit(false);
+        assert_eq!(idle.current_energy, 0.0);
+    }
 
     #[test]
     fn stop_cannot_split_a_render_blocks_transport_and_band_state() {
