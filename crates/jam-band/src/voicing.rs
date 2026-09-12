@@ -160,9 +160,10 @@ fn classify_quality(suffix: &str) -> ChordQuality {
             ChordQuality::Major
         };
     }
-    if q.starts_with("min") || q.starts_with('m') || q.starts_with('-') {
+    if q.starts_with("min") || q.starts_with("Min") || q.starts_with('m') || q.starts_with('-') {
         let ext = q
             .trim_start_matches("min")
+            .trim_start_matches("Min")
             .trim_start_matches('m')
             .trim_start_matches('-');
         // "mMaj7" is rare enough to voice as plain minor.
