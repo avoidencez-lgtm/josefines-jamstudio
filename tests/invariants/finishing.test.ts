@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { __setIpcForTests, ipc } from "../../src/ipc/client";
 import type { TakeMetadata } from "../../src/ipc/contract";
 import {
+  applyFinishingChange,
   buildSectionComp,
   contrastVariation,
   finishingReview,
@@ -59,6 +60,60 @@ it("keeps a unique-appearance lift in the form without nested variation names (#
   expect(second.chart.sections[1].name).toBe("This is Chorus variation 4.");
   expect(second.chart.sections[1].name).not.toMatch(/This is This is/);
   expect(second.chart.sections[1].name.split(".").length).toBe(2);
+});
+
+it("keeps a finishing preview when Keep cannot apply (#427)", () => {
+  const song = newOriginal();
+  song.versions = Array.from({ length: 20 }, (_, i) => ({
+    id: `v${i}`,
+    name: `This is version ${i + 1}.`,
+    body: structuredClone(song.body),
+  }));
+  useWriting.setState({
+    song,
+    past: [],
+    future: [],
+    busy: false,
+    dirty: false,
+    message: "",
+  });
+  useEngineStore.setState({ isRecording: false });
+  const next = contrastVariation(song.body, 1, "lift", 0.3, "kept-lift");
+  const base = JSON.stringify([song.id, song.body]);
+  expect(() =>
+    applyFinishingChange(next, "This is a section lift.", base),
+  ).toThrow(/version/);
+  expect(useWriting.getState().song?.body).toEqual(song.body);
+  expect(useWriting.getState().song?.versions).toHaveLength(20);
+  useWriting.setState({
+    song: { ...newOriginal(), id: song.id },
+    busy: false,
+  });
+  useEngineStore.setState({ isRecording: true });
+  expect(applyFinishingChange(next, "This is a section lift.", base)).toBe(
+    false,
+  );
+  useEngineStore.setState({ isRecording: false });
+  const fresh = newOriginal();
+  useWriting.setState({
+    song: fresh,
+    past: [],
+    future: [],
+    busy: false,
+    dirty: false,
+    message: "",
+  });
+  const applied = contrastVariation(fresh.body, 1, "lift", 0.3, "kept-lift");
+  expect(
+    applyFinishingChange(
+      applied,
+      "This is a section lift.",
+      JSON.stringify([fresh.id, fresh.body]),
+    ),
+  ).toBe(true);
+  expect(
+    useWriting.getState().song?.body.chart.arrangement.map((a) => a.sectionId),
+  ).toEqual(["verse", "kept-lift"]);
 });
 
 it("comps the correct bars, replaces only the same comp slot and rejects stale takes", () => {

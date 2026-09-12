@@ -1,6 +1,12 @@
 import type { Chart, TakeMetadata } from "../ipc/contract";
+import { useEngineStore } from "../store/engine";
 import { resolveChart } from "./chart/text";
-import { type Original, type SongBody, arrangementRanges } from "./originals";
+import {
+  type Original,
+  type SongBody,
+  arrangementRanges,
+  useWriting,
+} from "./originals";
 import {
   arrangedBars,
   checkWritingForm,
@@ -51,6 +57,40 @@ export function contrastVariation(
     );
   checkWritingForm(body);
   return body;
+}
+
+/** Apply a finishing preview. Returns false when busy or recording so the UI can keep it. */
+export function applyFinishingChange(
+  body: SongBody,
+  label: string,
+  base: string,
+): boolean {
+  const current = useWriting.getState();
+  if (current.busy || useEngineStore.getState().isRecording) return false;
+  if (
+    !current.song ||
+    JSON.stringify([current.song.id, current.song.body]) !== base
+  )
+    throw new Error(
+      "The song changed. Preview this idea again before applying it.",
+    );
+  if (JSON.stringify(body) === JSON.stringify(current.song.body)) {
+    useWriting.setState({
+      message: "This performance is already in place.",
+    });
+    return true;
+  }
+  if (current.song.versions.length >= 20)
+    throw new Error(
+      "Remove an unused version first so the current song can be preserved.",
+    );
+  checkWritingForm(body);
+  current.version(`This is before ${label}.`);
+  current.edit((b) => Object.assign(b, structuredClone(body)));
+  useWriting.setState({
+    message: `${label} applied. Your previous song is in Versions; Undo also returns to it. Save to keep both on disk.`,
+  });
+  return true;
 }
 
 function performanceTimeline(body: SongBody) {
