@@ -36,13 +36,23 @@
     { "start": 0, "end": 0.5, "bpm": 120 },
     { "start": 0.5, "end": 1, "bpm": 120 },
     { "start": 1, "end": 1.5, "bpm": 120 },
-    { "start": 1.5, "end": 2, "bpm": 120 }
+    { "start": 1.5, "end": 2, "bpm": 120 },
+    { "start": 2, "end": 2.5, "bpm": 120 },
+    { "start": 2.5, "end": 3, "bpm": 120 },
+    { "start": 3, "end": 3.5, "bpm": 120 },
+    { "start": 3.5, "end": 4, "bpm": 120 },
+    { "start": 4, "end": 4.5, "bpm": 120 }
   ],
   "beatMap": [
     { "start": 0, "beat": 1 },
     { "start": 0.5, "beat": 2 },
     { "start": 1, "beat": 3 },
-    { "start": 1.5, "beat": 4 }
+    { "start": 1.5, "beat": 4 },
+    { "start": 2, "beat": 1 },
+    { "start": 2.5, "beat": 2 },
+    { "start": 3, "beat": 3 },
+    { "start": 3.5, "beat": 4 },
+    { "start": 4, "beat": 1 }
   ],
   "chords": [
     { "start": 0, "end": 2, "chord": "C" },

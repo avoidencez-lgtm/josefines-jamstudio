@@ -18,6 +18,7 @@ export interface JoContext {
   intensity: number;
   chartName: string | null;
   currentChord: string;
+  nextChord?: string | null;
   currentSection: string;
   muted: { drums: boolean; bass: boolean; comp: boolean };
   styles: Array<{ id: string; name: string }>;
@@ -27,10 +28,25 @@ export interface JoContext {
     label: string;
     position: number;
     seconds: number;
+    loopEnabled: boolean;
+    loopStart: number;
+    loopEnd: number;
     speed: number;
     semitones: number;
     ramp?: ReferenceState["ramp"];
     confirmedBars?: number;
+    key?: string | null;
+    analysisError?: string | null;
+    gridError?: string | null;
+    processingError?: string | null;
+    stems?: ReferenceState["stems"];
+    gridOrigin?: "confirmed-local" | "estimated-local" | null;
+    beatsPerBar?: number | null;
+    beat?: number | null;
+    analysisBeat?: number | null;
+    analysisBeatCount?: number | null;
+    confidence?: "low" | null;
+    analysisBpm?: number | null;
     sections?: Array<{ id: string; label: string }>;
   };
   writing?: {
@@ -80,16 +96,82 @@ export function contextSummary(ctx: JoContext): string {
   const muted = Object.entries(ctx.muted)
     .filter(([, m]) => m)
     .map(([k]) => k);
+  const at = `${ctx.currentChord}${
+    ctx.currentSection ? ` in the ${ctx.currentSection}` : ""
+  }`;
   return [
     `Transport is ${ctx.transportState} at ${Math.round(ctx.bpm)} BPM, bar ${ctx.bar}.`,
     `Style is ${ctx.styleName} (id ${ctx.styleId}) at ${Math.round(ctx.intensity * 100)}% intensity.`,
-    ctx.chartName
-      ? `Chart is ${ctx.chartName}; now on ${ctx.currentChord}${
-          ctx.currentSection ? ` in the ${ctx.currentSection}` : ""
-        }.`
-      : `No chart is loaded. Now on ${ctx.currentChord}${
-          ctx.currentSection ? ` in the ${ctx.currentSection}` : ""
-        }.`,
+    ...(ctx.reference
+      ? [
+          `Reference is ${ctx.reference.label} (id ${ctx.reference.assetId}) at ${Math.round(ctx.reference.speed * 100)}% and ${ctx.reference.semitones} semitones; now on ${at}.`,
+          ctx.reference.sections?.length
+            ? `Confirmed reference section ids are ${ctx.reference.sections
+                .map((section) => `${section.id} (${section.label})`)
+                .join(", ")}.`
+            : "No confirmed reference sections are present.",
+          ctx.reference.ramp
+            ? `${ctx.reference.ramp.active ? "This ramp is armed" : "This ramp is inactive"} from ${ctx.reference.ramp.config.startPercent} to ${ctx.reference.ramp.config.targetPercent} by ${ctx.reference.ramp.config.stepPercent} every ${ctx.reference.ramp.config.barsPerStep} bars.`
+            : "No reference ramp is active.",
+          ctx.reference.confirmedBars
+            ? `Confirmed reference bars are ${ctx.reference.confirmedBars}.`
+            : "No confirmed reference bars are present.",
+          ctx.reference.loopEnabled
+            ? `Reference loop is ${ctx.reference.loopStart.toFixed(1)} to ${ctx.reference.loopEnd.toFixed(1)} s.`
+            : "Reference looping is off.",
+          `The reference is at ${ctx.reference.position.toFixed(1)} of ${ctx.reference.seconds.toFixed(1)} s.`,
+          ctx.nextChord
+            ? `Next is ${ctx.nextChord}.`
+            : "No next chord is present.",
+          ctx.reference.key
+            ? `The key is ${ctx.reference.key}.`
+            : "No reference key is known.",
+          ctx.reference.analysisError
+            ? ctx.reference.analysisError
+            : "Reference analysis has no error.",
+          ctx.reference.gridError
+            ? ctx.reference.gridError
+            : "Reference grid has no error.",
+          ctx.reference.processingError
+            ? ctx.reference.processingError
+            : "Reference processing has no error.",
+          ctx.reference.stems?.length
+            ? `Reference stem ids are ${ctx.reference.stems
+                .map((stem) => {
+                  const parts = [
+                    `${Math.round(stem.gain * 100)}%`,
+                    stem.muted ? "muted" : "playing",
+                  ];
+                  if (stem.guitar) parts.push("guitar");
+                  return `${stem.id} (${stem.label}, ${parts.join(", ")})`;
+                })
+                .join(", ")}.`
+            : "No reference stems are loaded.",
+          ctx.reference.gridOrigin
+            ? `Reference grid origin is ${ctx.reference.gridOrigin}.`
+            : "No reference grid is present.",
+          ctx.reference.beatsPerBar
+            ? `Reference beats per bar are ${ctx.reference.beatsPerBar}.`
+            : "No reference beats per bar are known.",
+          ctx.reference.beat != null
+            ? `Reference beat is ${ctx.reference.beat}.`
+            : "No reference beat is known.",
+          ctx.reference.analysisBeat != null &&
+          ctx.reference.analysisBeatCount != null
+            ? `Beat ${ctx.reference.analysisBeat} of ${ctx.reference.analysisBeatCount}.`
+            : "No analysed beat at this position.",
+          ctx.reference.confidence
+            ? "Local estimates. Low confidence."
+            : "No analysis confidence is known.",
+          ctx.reference.analysisBpm != null
+            ? `The analysed tempo is ${ctx.reference.analysisBpm.toFixed(1)} BPM.`
+            : "No analysed tempo is known.",
+        ]
+      : [
+          ctx.chartName
+            ? `Chart is ${ctx.chartName}; now on ${at}.`
+            : `No chart is loaded. Now on ${at}.`,
+        ]),
     muted.length
       ? `Muted parts are ${muted.join(", ")}.`
       : "No parts are muted.",

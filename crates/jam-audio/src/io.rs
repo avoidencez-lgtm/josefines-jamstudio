@@ -178,11 +178,12 @@ impl FileInput {
         } else {
             raw_samples
         };
+        let samples = crate::edge::resample_mono_to_48k(&mono_samples, spec.sample_rate)?;
 
         Ok(Self {
-            samples: mono_samples,
+            samples,
             buffer_size,
-            sample_rate: spec.sample_rate,
+            sample_rate: crate::edge::INTERNAL_RATE,
             running: Arc::new(AtomicBool::new(false)),
             thread_handle: None,
         })
@@ -759,6 +760,78 @@ mod tests {
             Ok(true),
             "eight paced blocks would take seven seconds"
         );
+    }
+
+    #[test]
+    fn file_input_converts_44100_wav_to_48k() {
+        let path = std::env::temp_dir().join(format!(
+            "jam-file-44100-{}-{}.wav",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut writer = hound::WavWriter::create(
+            &path,
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: 44_100,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .unwrap();
+        for i in 0..44_100 {
+            let s = (std::f64::consts::TAU * 1000.0 * i as f64 / 44_100.0).sin();
+            writer.write_sample((s * 16_000.0) as i16).unwrap();
+        }
+        writer.finalize().unwrap();
+        let input = FileInput::from_wav_file(path.to_str().unwrap(), 256).unwrap();
+        assert_eq!(input.info().unwrap().sample_rate, 48_000);
+        assert!(
+            input.samples.len().abs_diff(48_000) <= 48,
+            "converted length {}",
+            input.samples.len()
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn from_samples_at_reports_a_foreign_rate_and_the_capture_edge_converts() {
+        let from = 44_100u32;
+        let hz = 1000.0f64;
+        let samples: Vec<f32> = (0..from)
+            .map(|i| (std::f64::consts::TAU * hz * i as f64 / f64::from(from)).sin() as f32)
+            .collect();
+        let input = FileInput::from_samples_at(samples.clone(), 256, from);
+        assert_eq!(input.info().unwrap().sample_rate, 44_100);
+        let mut edge = crate::edge::MonoInEdge::from_device(from).unwrap();
+        for sample in samples {
+            edge.push(sample).unwrap();
+        }
+        for _ in 0..2048 {
+            edge.push(0.0).unwrap();
+        }
+        let mut out = Vec::new();
+        while let Some(sample) = edge.pop() {
+            out.push(sample);
+        }
+        let expected = crate::edge::INTERNAL_RATE as usize;
+        assert!(
+            out.len() >= expected,
+            "converted length {} expected at least {expected}",
+            out.len()
+        );
+        let region = &out[2000..expected - 1000];
+        let mut crossings = 0u32;
+        for w in region.windows(2) {
+            if w[0] < 0.0 && w[1] >= 0.0 {
+                crossings += 1;
+            }
+        }
+        let measured = crossings as f64 / (region.len() as f64 / f64::from(crate::edge::INTERNAL_RATE));
+        assert!((measured - hz).abs() <= 1.0, "frequency {measured} Hz");
     }
 
     #[test]

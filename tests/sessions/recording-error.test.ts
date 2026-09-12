@@ -3,6 +3,37 @@ import { ipc } from "../../src/ipc/client";
 import { closeDecision } from "../../src/lib/closeGuard";
 import { useEngineStore } from "../../src/store/engine";
 
+it("shows disk-full and permission app.error notices with the path", async () => {
+  const previous = useEngineStore.getState();
+  const handlers = new Map<string, (payload: unknown) => void>();
+  vi.spyOn(ipc, "listen").mockImplementation(async (event, handler) => {
+    handlers.set(event, handler);
+    return () => handlers.delete(event);
+  });
+  const stop = await previous.initListeners();
+  try {
+    const disk =
+      "Cannot write C:\\JosefinesJamstudio\\takes\\full\\guitar-di.wav. The disk is full.";
+    const permission =
+      "Cannot create C:\\JosefinesJamstudio\\takes\\blocked. Permission denied.";
+    handlers.get("app.error")?.(disk);
+    handlers.get("app.error")?.(permission);
+    const notices = useEngineStore.getState().notices.map((n) => n.text);
+    expect(notices.some((t) => t.includes(disk))).toBe(true);
+    expect(notices.some((t) => t.includes(permission))).toBe(true);
+    expect(notices.some((t) => t.includes("C:\\JosefinesJamstudio\\takes\\full"))).toBe(
+      true,
+    );
+    expect(
+      notices.some((t) => t.includes("C:\\JosefinesJamstudio\\takes\\blocked")),
+    ).toBe(true);
+  } finally {
+    stop();
+    vi.restoreAllMocks();
+    useEngineStore.setState(previous, true);
+  }
+});
+
 it("keeps a failed take guarded until saving and clears its error before another take", async () => {
   const previous = useEngineStore.getState();
   const handlers = new Map<string, (payload: unknown) => void>();

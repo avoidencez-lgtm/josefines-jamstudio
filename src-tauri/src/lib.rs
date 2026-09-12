@@ -578,18 +578,52 @@ struct BandSetArgs {
     at_next_bar: Option<bool>,
 }
 
-#[tauri::command]
-fn recorder_start(session_id: String, state: State<'_, AppState>) -> Result<String, String> {
-    // Jam record only. Write's Record uses `originals_record` → `record_song`.
-    // A leftover song_snapshot must not rewind, clear the loop or auto-play (#201).
-    state.engine.lock().recorder_start(session_id)
+fn emit_recorder_io_error<R: tauri::Runtime>(app: &AppHandle<R>, error: &str) {
+    if error.contains("The disk is full.")
+        || error.contains("Permission denied.")
+        || error.contains("Cannot create ")
+        || error.contains("Cannot write ")
+        || error.contains("Cannot save ")
+    {
+        let _ = app.emit("app:error", error);
+    }
 }
 
 #[tauri::command]
-fn recorder_stop(state: State<'_, AppState>) -> Result<jam_audio::recorder::TakeMetadata, String> {
-    let meta = state.engine.lock().recorder_stop()?;
-    let _ = state.store.lock().insert_take(&meta);
-    Ok(meta)
+fn recorder_start<R: tauri::Runtime>(
+    session_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle<R>,
+) -> Result<String, String> {
+    // Jam record only. Write's Record uses `originals_record` → `record_song`.
+    // A leftover song_snapshot must not rewind, clear the loop or auto-play (#201).
+    state.engine.lock().recorder_start(session_id).map_err(|error| {
+        emit_recorder_io_error(&app, &error);
+        error
+    })
+}
+
+#[tauri::command]
+fn recorder_stop<R: tauri::Runtime>(
+    state: State<'_, AppState>,
+    app: AppHandle<R>,
+) -> Result<jam_audio::recorder::TakeMetadata, String> {
+    match state.engine.lock().recorder_stop() {
+        Ok(meta) => {
+            if meta.notes.contains("The disk is full.")
+                || meta.notes.contains("Permission denied.")
+                || meta.notes.contains("Cannot write ")
+            {
+                emit_recorder_io_error(&app, &meta.notes);
+            }
+            let _ = state.store.lock().insert_take(&meta);
+            Ok(meta)
+        }
+        Err(error) => {
+            emit_recorder_io_error(&app, &error);
+            Err(error)
+        }
+    }
 }
 
 /// Sets the round-trip offset (in samples) trimmed from the start of the guitar stem so
@@ -1702,6 +1736,7 @@ pub fn configure<R: tauri::Runtime>(
             media::stems::media_separate_stems,
             media::stems::media_reference_mix,
             media::media_analyze,
+            media::fixture::media_fixture_song,
             media::analysis_start,
             media::analysis_cancel,
             media::media_guitar_residual,
@@ -1711,6 +1746,7 @@ pub fn configure<R: tauri::Runtime>(
             media::media_reference_processing,
             media::media_reference_ramp,
             media::grid::media_reference_grid_save,
+            media::grid::media_reference_grid_replace,
             media::grid::media_reference_loop_section,
             media::media_from_take,
             media::media_generate,

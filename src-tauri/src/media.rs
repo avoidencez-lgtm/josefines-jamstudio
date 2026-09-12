@@ -12,6 +12,7 @@ use std::{
 };
 use tauri::{AppHandle, Runtime, State};
 mod analysis;
+pub mod fixture;
 pub mod grid;
 pub mod songs;
 pub mod stems;

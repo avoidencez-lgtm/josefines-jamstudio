@@ -157,7 +157,20 @@ export const Stage: React.FC = () => {
     ? transport.bpm < bpmRange[0] || transport.bpm > bpmRange[1]
     : false;
 
-  if (telemetry.reference)
+  if (telemetry.reference) {
+    const song = telemetry.reference;
+    const chord = song.analysis?.chord || "This is a rest or no chord.";
+    const next = song.analysis?.next_chord
+      ? `Next is ${song.analysis.next_chord}`
+      : "";
+    const gridAt = song.grid?.position;
+    const bar = gridAt ? `${gridAt.bar} · ${Math.floor(gridAt.beat)}` : "--";
+    const bpm =
+      gridAt != null
+        ? `${gridAt.bpm.toFixed(0)} BPM.`
+        : song.analysis?.bpm != null
+          ? `${song.analysis.bpm.toFixed(0)} BPM.`
+          : "";
     return (
       <div className="workspace-stack max-w-6xl mx-auto w-full">
         <WorkspaceHeader
@@ -166,12 +179,32 @@ export const Stage: React.FC = () => {
           description="Rehearse through your studio output with the reference speed, key and mix you choose."
         />
         <JoStage />
-        <ReferencePlayer
-          key={telemetry.reference.asset_id}
-          song={telemetry.reference}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Panel className="flex flex-col items-center justify-center min-h-[180px]">
+            <BigReadout
+              value={chord}
+              subValue={next}
+              label="This is the active chord."
+              kind="chord"
+              highlight={song.state === "playing"}
+            />
+          </Panel>
+          <Panel className="flex flex-col items-center justify-center min-h-[180px]">
+            <BigReadout
+              value={bar}
+              subValue={bpm}
+              label="This is the bar."
+              kind="tempo"
+            />
+          </Panel>
+        </div>
+        {song.analysis?.chord ? (
+          <ChordShapes now={song.analysis.chord} next={song.analysis.next_chord} />
+        ) : null}
+        <ReferencePlayer key={song.asset_id} song={song} />
       </div>
     );
+  }
 
   return (
     <div className="flex flex-col gap-6 max-w-6xl mx-auto w-full">

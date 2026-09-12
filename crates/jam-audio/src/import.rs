@@ -536,4 +536,70 @@ mod tests {
         assert!(decode(&input, 48000, &cancel).is_err());
         fs::remove_dir_all(dir).unwrap();
     }
+
+    #[test]
+    fn chords_c_f_g_90_wav_meets_local_fallback_tolerances() {
+        // M3 acceptance: local fallback on the plan-named fixture.
+        // Tempo within ±1 bpm; ≥90% of chord spans match the C/F/G beat grid.
+        const TEMPO_TOLERANCE_BPM: f64 = 1.0;
+        const CHORD_ACCURACY: f64 = 0.90;
+        const BPM: f64 = 90.0;
+        const RATE: u32 = 48_000;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/audio/chords-c-f-g-90.wav");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let beat = (RATE as f64 * 60.0 / BPM) as usize;
+        let progression = [[60u8, 64, 67], [65, 69, 72], [67, 71, 74]];
+        let mut writer = hound::WavWriter::create(
+            &path,
+            hound::WavSpec {
+                channels: 2,
+                sample_rate: RATE,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .unwrap();
+        for bar_beat in 0..24 {
+            let notes = progression[bar_beat / 4 % 3];
+            for i in 0..beat {
+                let env = (-(i as f64) / (RATE as f64 * 0.25)).exp();
+                let value = notes
+                    .iter()
+                    .map(|n| {
+                        let hz = 440.0 * 2.0_f64.powf((*n as f64 - 69.0) / 12.0);
+                        (i as f64 * hz * std::f64::consts::TAU / RATE as f64).sin() * 0.1 * env
+                    })
+                    .sum::<f64>();
+                let pcm = (value.clamp(-1.0, 1.0) * 32767.0) as i16;
+                writer.write_sample(pcm).unwrap();
+                writer
+                    .write_sample(((-value).clamp(-1.0, 1.0) * 32767.0) as i16)
+                    .unwrap();
+            }
+        }
+        writer.finalize().unwrap();
+        let input = decode(&path, RATE as usize * 20, &AtomicBool::new(false)).unwrap();
+        let result = crate::offline::analyze(&input, &AtomicBool::new(false)).unwrap();
+        assert!(
+            (result.bpm.unwrap() - BPM).abs() <= TEMPO_TOLERANCE_BPM,
+            "tempo {} outside ±{TEMPO_TOLERANCE_BPM} bpm of {BPM}: {result:?}",
+            result.bpm.unwrap()
+        );
+        let names = ["C", "F", "G"];
+        let correct = result
+            .chords
+            .iter()
+            .filter(|c| {
+                let index = ((c.start + c.end) * 0.5 * BPM / 60.0) as usize;
+                c.chord.as_deref() == Some(names[index / 4 % 3])
+            })
+            .count();
+        let accuracy = correct as f64 / result.chords.len() as f64;
+        assert!(
+            accuracy >= CHORD_ACCURACY,
+            "beat-aligned chords {accuracy} below {CHORD_ACCURACY}: {result:?}"
+        );
+        assert_eq!(result.key.as_deref(), Some("C major"));
+    }
 }

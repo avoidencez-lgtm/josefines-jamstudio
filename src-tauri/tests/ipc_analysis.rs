@@ -1,4 +1,5 @@
-//! Music.ai estimates persist from the recorded fixture without touching the grid.
+//! Music.ai estimates persist from the recorded fixture without touching the grid
+//! until an explicit fixture-grid replace.
 mod common;
 use common::{unique, user_dir, Studio};
 use serde_json::json;
@@ -223,4 +224,102 @@ fn recorded_musicai_fixture_persists_without_writing_the_grid() {
         serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap()).unwrap();
     assert!(after.get("referenceGrid").is_none());
     assert_eq!(after["providerAnalysis"]["sourceHash"], after["sourceHash"]);
+}
+
+fn write_tone_seconds(path: &Path, seconds: u32) {
+    let mut wav = hound::WavWriter::create(
+        path,
+        hound::WavSpec {
+            channels: 1,
+            sample_rate: 48000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for i in 0..48000 * seconds {
+        wav.write_sample((4000.0 * (i as f64 * 0.1).sin()) as i16)
+            .unwrap();
+    }
+    wav.finalize().unwrap();
+}
+
+#[test]
+fn recorded_fixture_replace_writes_the_confirmed_grid_or_fails_loud() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let source = user_dir().join(format!("{}.wav", unique("gridfix")));
+    write_tone_seconds(&source, 5);
+    let asset = studio.ok("media_import", json!({"path":source,"kind":"audio"}));
+    let id = asset["id"].as_str().unwrap();
+    let hash = asset["sourceHash"].as_str().unwrap();
+    let refused = studio.err(
+        "media_reference_grid_replace",
+        json!({"assetId": id, "replacement": {
+            "sourceHash": hash,
+            "firstDownbeat": 0,
+            "beatsPerBar": 4,
+            "sections": [{"id":"verse","label":"Verse","startBar":1,"endBar":2}],
+            "confirmed": true
+        }}),
+    );
+    assert!(
+        refused.contains("not configured") && refused.contains("JAM_LIVE=1"),
+        "{refused}"
+    );
+    std::env::set_var("JAM_MUSICAI_FIXTURE", "1");
+    let saved = studio.ok(
+        "media_reference_grid_replace",
+        json!({"assetId": id, "replacement": {
+            "sourceHash": hash,
+            "firstDownbeat": 0,
+            "beatsPerBar": 4,
+            "sections": [{"id":"verse","label":"Verse","startBar":1,"endBar":2}],
+            "confirmed": true
+        }}),
+    );
+    std::env::remove_var("JAM_MUSICAI_FIXTURE");
+    assert_eq!(saved["referenceGrid"]["origin"], "confirmed-local");
+    assert_eq!(saved["providerAnalysis"]["drivesGrid"], true);
+    let beats = saved["referenceGrid"]["beats"].as_array().unwrap();
+    assert_eq!(beats.len(), 9);
+    assert!((beats[4].as_f64().unwrap() - 2.0).abs() <= 0.001);
+}
+
+#[test]
+fn recorded_fixture_song_writes_stems_and_chord_chart_or_fails_loud() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let source = user_dir().join(format!("{}.wav", unique("fixsong")));
+    write_tone_seconds(&source, 5);
+    let asset = studio.ok("media_import", json!({"path":source,"kind":"audio"}));
+    let id = asset["id"].as_str().unwrap();
+    let manifest = Path::new(asset["path"].as_str().unwrap())
+        .parent()
+        .unwrap()
+        .join("song.json");
+    let refused = studio.err("media_fixture_song", json!({"assetId": id}));
+    assert!(
+        refused.contains("not configured") && refused.contains("JAM_LIVE=1"),
+        "{refused}"
+    );
+    let before =
+        serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap()).unwrap();
+    assert!(before.get("stemSet").is_none());
+    std::env::set_var("JAM_SONG_FIXTURE", "1");
+    let saved = studio.ok("media_fixture_song", json!({"assetId": id}));
+    std::env::remove_var("JAM_SONG_FIXTURE");
+    assert_eq!(saved["stemSet"]["provider"], "recorded-fixture");
+    assert_eq!(saved["stemSet"]["stems"].as_array().unwrap().len(), 2);
+    assert_eq!(saved["stemSet"]["stems"][0]["id"], "guitar");
+    assert_eq!(saved["stemSet"]["stems"][1]["id"], "band");
+    assert_eq!(saved["songAnalysis"]["chords"][0]["chord"], "C");
+    assert_eq!(saved["songAnalysis"]["chords"][1]["chord"], "F");
+    assert_eq!(saved["songAnalysis"]["sourceHash"], saved["sourceHash"]);
+    let after =
+        serde_json::from_slice::<serde_json::Value>(&std::fs::read(&manifest).unwrap()).unwrap();
+    assert_eq!(after["stemSet"]["stems"].as_array().unwrap().len(), 2);
+    assert_eq!(after["songAnalysis"]["chords"][0]["chord"], "C");
+    assert_eq!(after["songAnalysis"]["chords"][1]["chord"], "F");
+    assert!(after.get("referenceGrid").is_none());
 }

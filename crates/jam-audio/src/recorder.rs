@@ -43,6 +43,7 @@ type Writer = thread::JoinHandle<Result<TakeMetadata, String>>;
 pub struct TakeRecorder {
     sample_rate: u32,
     base_dir: PathBuf,
+    take_dir: Option<PathBuf>,
     latency_offset_samples: usize,
     sender: Option<mpsc::SyncSender<Vec<Frame>>>,
     writer: Option<Writer>,
@@ -57,6 +58,7 @@ impl TakeRecorder {
         Self {
             sample_rate,
             base_dir,
+            take_dir: None,
             latency_offset_samples: 0,
             sender: None,
             writer: None,
@@ -116,9 +118,9 @@ impl TakeRecorder {
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| e.to_string())?;
         let id = format!("take-{}", now.as_nanos());
-        fs::create_dir_all(&self.base_dir).map_err(|e| e.to_string())?;
+        fs::create_dir_all(&self.base_dir).map_err(|e| io_at("Cannot create", &self.base_dir, e))?;
         let dir = self.base_dir.join(&id);
-        fs::create_dir(&dir).map_err(|e| e.to_string())?;
+        fs::create_dir(&dir).map_err(|e| io_at("Cannot create", &dir, e))?;
         let layout: [(&str, &[usize]); 6] = [
             ("guitar-di", &[0]),
             ("band", &[1, 2]),
@@ -140,9 +142,9 @@ impl TakeRecorder {
                     sample_format: hound::SampleFormat::Int,
                 },
             )
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| io_at("Cannot create", &path, e))?;
             stems.insert(name.to_string(), path.to_string_lossy().into_owned());
-            writers.push((channels.to_vec(), writer));
+            writers.push((path, channels.to_vec(), writer));
         }
         let mut meta = TakeMetadata {
             id: id.clone(),
@@ -172,7 +174,7 @@ impl TakeRecorder {
             let mut peaks = Vec::new();
             for block in rx {
                 for frame in block {
-                    for (channels, writer) in &mut writers {
+                    for (path, channels, writer) in &mut writers {
                         if channels == &[0] && frames < offset {
                             continue;
                         }
@@ -185,7 +187,7 @@ impl TakeRecorder {
                             }
                             writer
                                 .write_sample((v.clamp(-1.0, 1.0) * 8_388_607.0) as i32)
-                                .map_err(|e| e.to_string())?;
+                                .map_err(|e| io_at("Cannot write", path, e))?;
                         }
                     }
                     peak = peak.max(frame[0].abs()).max(frame[3].abs());
@@ -195,23 +197,33 @@ impl TakeRecorder {
                         peak = 0.0;
                     }
                     if frames - checkpoint >= rate as usize {
-                        for (_, writer) in &mut writers {
-                            writer.flush().map_err(|e| e.to_string())?;
+                        for (path, _, writer) in &mut writers {
+                            writer.flush().map_err(|e| io_at("Cannot write", path, e))?;
                         }
                         checkpoint = frames;
+                        // M1e: a crash mid-take still leaves take.json after 10 s.
+                        if frames.is_multiple_of((rate as usize).saturating_mul(10).max(1)) {
+                            meta.sample_count = frames;
+                            meta.duration_secs = frames as f64 / rate as f64;
+                            save_manifest(&meta)?;
+                        }
                     }
                 }
             }
             // Pad the shifted input so every exported stem retains a common duration.
-            for (channels, writer) in &mut writers {
+            for (path, channels, writer) in &mut writers {
                 if channels == &[0] {
                     for _ in 0..offset.min(frames) {
-                        writer.write_sample(0i32).map_err(|e| e.to_string())?;
+                        writer
+                            .write_sample(0i32)
+                            .map_err(|e| io_at("Cannot write", path, e))?;
                     }
                 }
             }
-            for (_, writer) in writers {
-                writer.finalize().map_err(|e| e.to_string())?;
+            for (path, _, writer) in writers {
+                writer
+                    .finalize()
+                    .map_err(|e| io_at("Cannot write", &path, e))?;
             }
             if peaks.is_empty() {
                 peaks.push(peak);
@@ -226,6 +238,7 @@ impl TakeRecorder {
         });
         self.sender = Some(tx);
         self.writer = Some(writer);
+        self.take_dir = Some(dir);
         self.failure = None;
         self.midi.clear();
         self.frames_written = 0;
@@ -240,8 +253,13 @@ impl TakeRecorder {
         if let Some(tx) = &self.sender {
             let count = frames.len() as u64;
             if let Err(e) = tx.try_send(frames) {
+                let path = self
+                    .take_dir
+                    .as_ref()
+                    .map_or_else(|| self.base_dir.clone(), PathBuf::clone);
                 self.failure = Some(format!(
-                    "Recording was interrupted. The disk writer stopped accepting audio ({e}). Save the partial take; partial WAVs remain on disk."
+                    "Recording was interrupted. The disk writer stopped accepting audio ({e}). {}. Save the partial take; partial WAVs remain on disk.",
+                    io_at("Cannot write", &path, "The disk is full.")
                 ));
                 self.sender = None;
             } else {
@@ -279,6 +297,7 @@ impl TakeRecorder {
     pub fn stop_and_save(&mut self) -> Result<TakeMetadata, String> {
         self.sender.take();
         let writer = self.writer.take().ok_or("No active recording")?;
+        self.take_dir = None;
         let mut meta = writer
             .join()
             .map_err(|_| "Recording writer failed; partial WAVs kept")??;
@@ -319,13 +338,44 @@ pub fn save_manifest(meta: &TakeMetadata) -> Result<(), String> {
         .create_new(true)
         .open(&temp)
         .map_err(|e| format!("Cannot create {}. {e}", temp.display()))?;
+    let dest = dir.join("take.json");
     let result = file.write_all(&bytes).and_then(|()| file.sync_all());
     drop(file);
-    let result = result.and_then(|()| fs::rename(&temp, dir.join("take.json")));
+    let result = result.and_then(|()| {
+        // Windows rename does not replace an existing take.json.
+        if dest.exists() {
+            fs::remove_file(&dest)?;
+        }
+        fs::rename(&temp, &dest)
+    });
     if result.is_err() {
         let _ = fs::remove_file(&temp);
     }
-    result.map_err(|e| format!("Cannot save {}. {e}", dir.join("take.json").display()))
+    result.map_err(|e| format!("Cannot save {}. {e}", dest.display()))
+}
+
+/// M1e: disk-full and permission errors name the path so the UI can fail loud.
+fn io_at(action: &str, path: &Path, err: impl std::fmt::Display) -> String {
+    let detail = err.to_string();
+    let lower = detail.to_ascii_lowercase();
+    let reason = if lower.contains("no space")
+        || lower.contains("not enough space")
+        || lower.contains("disk is full")
+        || lower.contains("disk full")
+    {
+        Some("The disk is full.")
+    } else if lower.contains("permission denied")
+        || lower.contains("access is denied")
+        || lower.contains("access denied")
+    {
+        Some("Permission denied.")
+    } else {
+        None
+    };
+    match reason {
+        Some(reason) => format!("{action} {}. {reason}", path.display()),
+        None => format!("{action} {}. {detail}", path.display()),
+    }
 }
 
 /// Reads a WAV file back as mono f32 in -1..1 (channels are averaged), together with its
@@ -381,6 +431,45 @@ mod tests {
         assert_eq!(fs::read(&victim).unwrap(), b"keep this file");
         assert!(!root.join("take.json").exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn disk_full_and_permission_errors_name_the_path() {
+        let dir = Path::new("C:\\JosefinesJamstudio\\takes\\blocked");
+        assert_eq!(
+            io_at("Cannot write", dir, "There is not enough space on the disk."),
+            format!("Cannot write {}. The disk is full.", dir.display())
+        );
+        assert_eq!(
+            io_at("Cannot create", dir, "Access is denied. (os error 5)"),
+            format!("Cannot create {}. Permission denied.", dir.display())
+        );
+    }
+
+    #[test]
+    fn permission_error_on_start_names_the_path() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-recording-perm-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::write(&root, b"not a directory").unwrap();
+        let mut r = TakeRecorder::new(1000, root.clone());
+        let err = r
+            .start_take("song".into(), "rock".into(), "verse".into(), 100.0)
+            .unwrap_err();
+        assert!(
+            err.contains(&root.to_string_lossy().as_ref()),
+            "{err}"
+        );
+        assert!(
+            err.starts_with("Cannot create "),
+            "{err}"
+        );
+        let _ = fs::remove_file(root);
     }
 
     #[test]
@@ -503,17 +592,127 @@ mod tests {
         r.start_take("song".into(), "rock".into(), "verse".into(), 100.0)
             .unwrap();
         r.push_capture(&vec![[0.1; 9]; 64]).unwrap();
-        r.failure =
-            Some("Recording was interrupted by disk backpressure. The disk is full. Partial WAVs were kept.".into());
+        r.take_dir = Some(root.join("take-full"));
+        r.failure = Some(format!(
+            "Recording was interrupted. The disk writer stopped accepting audio (full). {}. Save the partial take; partial WAVs remain on disk.",
+            io_at("Cannot write", &root.join("take-full"), "The disk is full.")
+        ));
         let t = r
             .stop_and_save()
             .expect("saved take stays visible after backpressure");
         assert!(t.notes.contains("interrupted"), "{}", t.notes);
+        assert!(
+            t.notes.contains(&root.join("take-full").to_string_lossy().as_ref()),
+            "{}",
+            t.notes
+        );
+        assert!(t.notes.contains("The disk is full."), "{}", t.notes);
         assert!(Path::new(&t.path_input)
             .parent()
             .unwrap()
             .join("take.json")
             .exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sixty_second_take_stems_match_length_to_the_sample() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-recording-60s-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let rate = 48_000u32;
+        let expected = (rate as usize).saturating_mul(60);
+        // 10 ms guitar delay: the writer skips then pads so every stem stays 60 s.
+        let offset = 480usize;
+        let mut r = TakeRecorder::new(rate, root.clone());
+        r.set_latency_compensation(offset);
+        r.start_take("song".into(), "rock".into(), "verse".into(), 120.0)
+            .unwrap();
+        let block = vec![[0.1f32; 9]; 4_800];
+        for _ in 0..(expected / block.len()) {
+            r.push_capture(&block).unwrap();
+        }
+        let t = r.stop_and_save().unwrap();
+        assert_eq!(t.sample_count, expected);
+        assert!((t.duration_secs - 60.0).abs() < 1e-9);
+        let mut lengths = Vec::new();
+        for p in t.stems.values() {
+            let reader = hound::WavReader::open(p).unwrap();
+            assert_eq!(reader.spec().sample_rate, rate);
+            lengths.push(reader.duration() as usize);
+        }
+        assert!(
+            lengths.iter().all(|&n| n == expected),
+            "stem lengths {lengths:?} expected {expected}"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn crash_after_ten_seconds_leaves_a_take_manifest() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-recording-chk-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut r = TakeRecorder::new(10, root.clone());
+        let id = r
+            .start_take("song".into(), "rock".into(), "verse".into(), 100.0)
+            .unwrap();
+        let manifest = root.join(&id).join("take.json");
+        assert!(!manifest.exists(), "no take.json before 10 seconds");
+        r.push_capture(&vec![[0.1; 9]; 100]).unwrap();
+        let started = std::time::Instant::now();
+        while !manifest.exists() && started.elapsed() < std::time::Duration::from_secs(2) {
+            thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(
+            manifest.exists(),
+            "take.json must exist after 10 recorded seconds"
+        );
+        let checkpoint: TakeMetadata =
+            serde_json::from_slice(&fs::read(&manifest).unwrap()).unwrap();
+        assert!(
+            checkpoint.sample_count >= 100,
+            "checkpoint samples {}",
+            checkpoint.sample_count
+        );
+        assert!(
+            checkpoint.duration_secs >= 10.0,
+            "checkpoint duration {}",
+            checkpoint.duration_secs
+        );
+        r.push_capture(&vec![[0.1; 9]; 100]).unwrap();
+        let started = std::time::Instant::now();
+        while started.elapsed() < std::time::Duration::from_secs(2) {
+            if let Ok(bytes) = fs::read(&manifest) {
+                if let Ok(next) = serde_json::from_slice::<TakeMetadata>(&bytes) {
+                    if next.sample_count >= 200 {
+                        break;
+                    }
+                }
+            }
+            thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let second: TakeMetadata = serde_json::from_slice(&fs::read(&manifest).unwrap()).unwrap();
+        assert!(
+            second.sample_count >= 200,
+            "second checkpoint samples {}",
+            second.sample_count
+        );
+        std::mem::forget(r);
+        assert!(
+            manifest.exists(),
+            "a crash after the checkpoint must leave take.json"
+        );
         let _ = fs::remove_dir_all(root);
     }
 }

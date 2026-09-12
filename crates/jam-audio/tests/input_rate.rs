@@ -3,9 +3,9 @@ use jam_audio::{devices::AudioConfig, engine::AudioEngine};
 // This integration-test binary owns its process environment. Do not move the
 // fake-input override into engine unit tests, which start engines concurrently.
 #[test]
-fn mismatched_input_refuses_every_take_path_and_matching_restart_recovers() {
+fn fake_44100_file_converts_to_48k_and_records() {
     let dir = std::env::temp_dir().join(format!(
-        "jam-rate-mismatch-{}-{}",
+        "jam-rate-edge-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -32,43 +32,24 @@ fn mismatched_input_refuses_every_take_path_and_matching_restart_recovers() {
     std::env::set_var("JAM_DATA_DIR", &dir);
     std::env::set_var("JAM_FAKE_INPUT", &wav);
     let mut engine = AudioEngine::new(AudioConfig {
-        sample_rate: 48_000,
+        sample_rate: 44_100,
         ..AudioConfig::default()
     });
     engine.start().unwrap();
     let status = engine.status();
-    let error = status.last_error.unwrap();
+    assert_eq!(status.sample_rate, 48_000);
     assert!(
-        error.contains("44100") && error.contains("48000"),
-        "{error}"
+        status.last_error.is_none(),
+        "{}",
+        status.last_error.unwrap_or_default()
     );
-    assert!(status.input.is_none());
-    assert!(engine
-        .recorder_start("jam".into())
-        .unwrap_err()
-        .contains("Cannot record"));
-    assert!(engine
-        .record_song("song".into())
-        .unwrap_err()
-        .contains("Cannot record"));
-    {
-        let mut capture = engine.capture.lock();
-        capture.arm(1).unwrap();
-        capture.push(&[[0.1; 9]; 64], 48_000);
-    }
-    let kept = engine.keep_capture("idea".into());
-    engine.stop().unwrap();
-    assert!(kept.unwrap_err().contains("Cannot record"));
-    assert!(
-        !dir.join("takes").exists(),
-        "rejected takes must create no files"
+    assert_eq!(
+        status.input.as_ref().map(|i| i.sample_rate),
+        Some(48_000)
     );
-
-    std::env::remove_var("JAM_FAKE_INPUT");
-    engine.start().unwrap();
-    assert!(engine.status().last_error.is_none());
-    let id = engine.recorder_start("matching".into()).unwrap();
+    let id = engine.recorder_start("jam".into()).unwrap();
     assert_eq!(engine.recorder_stop().unwrap().id, id);
     engine.stop().unwrap();
+    std::env::remove_var("JAM_FAKE_INPUT");
     std::fs::remove_dir_all(dir).unwrap();
 }

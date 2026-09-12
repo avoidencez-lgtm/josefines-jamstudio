@@ -84,10 +84,16 @@ extend `src-tauri/src/net/musicai.rs`. The provider row lives in
 `PROVIDERS` (`id: musicai`, `https://api.music.ai`, `Authorization` header).
 `analysis_start` / `analysis_cancel` are registered next to `media_analyze`.
 Parse fixtures in unit tests; persist them with `JAM_MUSICAI_FIXTURE=1`
-into `providerAnalysis` only. Do not treat public-doc shapes as a live job.
-Live upload stays not configured without `JAM_LIVE=1` and a recorded
-SUCCEEDED response. Never write these estimates into `referenceGrid` or
-claim downbeats. Local `estimate_grid` may write `estimatedGrid`.
+into `providerAnalysis`. `media_reference_grid_replace` may write
+`referenceGrid` from those fixture beats only after an explicit listen
+confirm. The command fails loud without `JAM_MUSICAI_FIXTURE=1`. Do not
+treat public-doc shapes as a live job. `media_fixture_song` writes
+`stemSet` and a `songAnalysis` chord chart into `song.json` from
+`tests/fixtures/seams/fixture-song.json` only when `JAM_SONG_FIXTURE=1`.
+It fails loud without that env. Live stem separation and Music.ai stay
+not configured. Live upload stays not configured
+without `JAM_LIVE=1` and a recorded SUCCEEDED response, and never writes
+the grid. Local `estimate_grid` may write `estimatedGrid`.
 Secrets stay in SecretStore; request bodies are not logged.
 
 ## Lyria RealTime
@@ -490,7 +496,9 @@ source-position, de-click, queued-analysis and processed-recording regressions.
 Confirmed reference maps use `jam-audio::song::grid::Grid`; validate before
 attaching with `ReferenceSong::set_grid`. Keep its original-source times and
 explicit provenance. Use `media_reference_grid_save` to preserve unknown metadata
-and reject stale analysis/source hashes. Section endpoints are exclusive bar
+and reject stale analysis/source hashes. `media_reference_grid_replace` confirms
+the recorded Music.ai fixture beats into the same `referenceGrid` and fails
+loud without `JAM_MUSICAI_FIXTURE=1`. Section endpoints are exclusive bar
 boundaries, never approximate seconds rounded by JS. `loop_reference_section`
 in the Jo registry and `media_reference_loop_section` share the native path.
 The shared synthetic fixture is `tests/fixtures/seams/reference-grid.json`, with
