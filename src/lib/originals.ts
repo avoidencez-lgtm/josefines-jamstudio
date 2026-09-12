@@ -319,13 +319,20 @@ export const useWriting = create<WritingState>((set, get) => ({
   },
   restore: (id) => {
     const v = get().song?.versions.find((v) => v.id === id);
-    if (v)
-      return get().edit((b) => {
-        for (const key of Object.keys(b))
-          delete (b as unknown as Record<string, unknown>)[key];
-        Object.assign(b, structuredClone(v.body));
-      });
-    return false;
+    if (!v) return false;
+    get().edit((b) => {
+      for (const key of Object.keys(b))
+        delete (b as unknown as Record<string, unknown>)[key];
+      Object.assign(b, structuredClone(v.body));
+    });
+    const selectedInForm = v.body.chart.arrangement.some(
+      (a) => a.sectionId === get().selected,
+    );
+    set({
+      selected: selectedInForm ? get().selected : v.body.chart.sections[0].id,
+      rehearsalIndex: -1,
+    });
+    return true;
   },
   refresh: async () => {
     const saved = await ipc.invoke<Original[]>("originals_list");
@@ -362,11 +369,11 @@ export const useWriting = create<WritingState>((set, get) => ({
     copy.revision = 0;
     copy.body.chart.id = copy.id;
     copy.body.chart.name += " (copy)";
-    const saved = await ipc.invoke<Original>("originals_save", {
+    await ipc.invoke<Original>("originals_save", {
       document: copy,
     });
     if (get().song === song) {
-      set({ song: saved, dirty: false, message: "Copy saved. Original kept." });
+      set({ message: "Copy saved. Original kept." });
     } else {
       set({
         message: "Copy saved. Your newer draft is still open and needs saving.",

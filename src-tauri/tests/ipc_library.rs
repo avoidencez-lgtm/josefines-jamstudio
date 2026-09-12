@@ -603,17 +603,21 @@ fn saving_a_chart_writes_a_user_file_that_is_listed_and_survives_a_reload() {
     );
     assert_eq!(charts(&studio).iter().filter(|c| c["id"] == id).count(), 1);
 
-    // Ids that are not file-safe get a safe file name and stay addressable by id.
-    let odd = unique("odd id/with spaces");
-    let path = studio.ok("charts_save", json!({"chart": four_four(&odd)}));
-    let path = PathBuf::from(path.as_str().unwrap());
-    assert_eq!(path.parent().unwrap(), user_dir().join("charts"));
-    let stem = path.file_stem().unwrap().to_string_lossy().into_owned();
-    assert_eq!(stem, odd.replace([' ', '/'], "-"));
-    assert_eq!(read_json(&path)["id"], odd);
-    assert!(chart_ids(&studio).contains(&odd));
-    studio.ok("charts_delete_user", json!({"chartId": &odd}));
-    assert!(!path.exists());
+    // Ids that would sanitize onto one filename are refused, so the first chart stays.
+    let spaced = unique("My Chart");
+    let dashed = spaced.replace(' ', "-");
+    assert_ne!(spaced, dashed);
+    assert_eq!(
+        studio.err("charts_save", json!({"chart": four_four(&spaced)})),
+        "Chart id may only contain letters, numbers, hyphens and underscores."
+    );
+    let first = studio.ok("charts_save", json!({"chart": four_four(&dashed)}));
+    let first = PathBuf::from(first.as_str().unwrap());
+    assert_eq!(first, user_chart_file(&dashed));
+    assert!(chart_ids(&studio).contains(&dashed));
+    assert!(!chart_ids(&studio).contains(&spaced));
+    studio.ok("charts_delete_user", json!({"chartId": &dashed}));
+    assert!(!first.exists());
 
     // An invalid chart is refused before anything is written.
     let bad_id = unique("bad-save");

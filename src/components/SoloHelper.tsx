@@ -18,6 +18,12 @@ const STRING_LABELS = ["E", "A", "D", "G", "B", "e"];
 const FRETS = 15;
 const FRET_NUMBERS = Array.from({ length: FRETS + 1 }, (_, i) => i);
 
+/** Keep the highlighted scale inside the list when the sounding chord changes. */
+export function clampScaleIdx(scaleIdx: number, scaleCount: number): number {
+  if (scaleCount <= 0) return 0;
+  return Math.min(Math.max(0, scaleIdx), scaleCount - 1);
+}
+
 /**
  * "What can I play over this?" for the chord that is sounding right now: chord tones,
  * guide tones, a ranked scale list and a fretboard with the chosen scale lit up.
@@ -30,6 +36,12 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
 }) => {
   const [scaleIdx, setScaleIdx] = useState(0);
   const [useKeyScale, setUseKeyScale] = useState(false);
+  const [trackedChord, setTrackedChord] = useState(chord);
+  if (trackedChord !== chord) {
+    setTrackedChord(chord);
+    setScaleIdx(0);
+    setUseKeyScale(false);
+  }
 
   const suggestion = useMemo(
     () =>
@@ -60,10 +72,10 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
     );
   }
 
+  const activeIdx = clampScaleIdx(scaleIdx, suggestion.scales.length);
   const scale: ScaleSuggestion | null = useKeyScale
     ? suggestion.keyScale
-    : (suggestion.scales[Math.min(scaleIdx, suggestion.scales.length - 1)] ??
-      null);
+    : (suggestion.scales[activeIdx] ?? null);
 
   const chordSet = new Set(suggestion.chordTones);
   const guideSet = new Set(suggestion.guideTones);
@@ -162,7 +174,7 @@ export const SoloHelper: React.FC<SoloHelperProps> = ({
                   setUseKeyScale(false);
                 }}
                 className={`px-2.5 py-1 rounded-[var(--radius-m)] text-xs font-mono border cursor-pointer ${
-                  !useKeyScale && i === scaleIdx
+                  !useKeyScale && i === activeIdx
                     ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--fg-0)]"
                     : "bg-[var(--bg-2)] border-[var(--line)] text-[var(--fg-1)] hover:text-[var(--fg-0)]"
                 }`}

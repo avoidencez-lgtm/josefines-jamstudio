@@ -5,6 +5,7 @@ import { assignPedal, useController } from "../../src/lib/controller";
 import { parseNaturalIntent } from "../../src/lib/jo/intent";
 import { JO_TOOLS } from "../../src/lib/jo/tools";
 import {
+  type Original,
   arrangementRanges,
   changeGroove,
   defaultSection,
@@ -103,6 +104,64 @@ describe("songwriting workflow", () => {
     expect(useWriting.getState().song?.body.chart.defaultBpm).toBe(130);
     w.restore(useWriting.getState().song?.versions[0].id ?? "");
     expect(useWriting.getState().song?.body).toEqual(original);
+  });
+  it("restore keeps a selected section that still exists and otherwise falls back, and resets rehearsal", () => {
+    const w = useWriting.getState();
+    w.version("Before the bridge");
+    const versionId = useWriting.getState().song?.versions[0].id ?? "";
+    w.edit((b) => {
+      b.chart.sections.push({
+        id: "bridge",
+        name: "Bridge",
+        bars: [[{ chord: "G", beats: 4 }]],
+      });
+      b.chart.arrangement.push({ sectionId: "bridge", repeats: 1 });
+      b.sections.bridge = defaultSection();
+    });
+    w.select("bridge");
+    useWriting.setState({ rehearsalIndex: 2 });
+    expect(w.restore(versionId)).toBe(true);
+    const restored = useWriting.getState();
+    expect(restored.selected).toBe("verse");
+    expect(restored.rehearsalIndex).toBe(-1);
+    expect(
+      arrangementRanges(
+        restored.song?.body.chart ?? newOriginal().body.chart,
+      ).some((r) => r.sectionId === restored.selected),
+    ).toBe(true);
+  });
+  it("saveCopy writes the duplicate without replacing the open song or undo history", async () => {
+    const previous = { ...ipc };
+    const savedIds: string[] = [];
+    __setIpcForTests({
+      invoke: async <T>(command: string, args?: Record<string, unknown>) => {
+        if (command === "originals_save") {
+          const document = args?.document as Original;
+          savedIds.push(document.id);
+          return { ...document, revision: 1 } as T;
+        }
+        if (command === "originals_list") return [] as T;
+        return undefined as T;
+      },
+    });
+    try {
+      const w = useWriting.getState();
+      const openId = w.song?.id;
+      w.edit((b) => {
+        b.chart.name = "Draft title";
+      });
+      const past = useWriting.getState().past;
+      await w.saveCopy();
+      const after = useWriting.getState();
+      expect(savedIds).toHaveLength(1);
+      expect(savedIds[0]).not.toBe(openId);
+      expect(after.song?.id).toBe(openId);
+      expect(after.song?.body.chart.name).toBe("Draft title");
+      expect(after.past).toEqual(past);
+      expect(after.message).toBe("Copy saved. Original kept.");
+    } finally {
+      __setIpcForTests(previous);
+    }
   });
   it("fits the band to a trimmed audio loop without changing that audio", () => {
     const clip = {

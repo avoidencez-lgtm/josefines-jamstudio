@@ -61,6 +61,15 @@ export async function loadReference(
   }));
 }
 
+/** Catch a refused cancel so Film is not stuck busy without a next step. */
+export async function cancelFilmWork() {
+  try {
+    await ipc.invoke("media_cancel");
+  } catch (e) {
+    useMedia.setState({ message: String(e) });
+  }
+}
+
 export async function applyReferencePractice(
   assetId: string,
   speed?: number,

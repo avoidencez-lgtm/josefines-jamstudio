@@ -176,7 +176,12 @@ pub fn validate(req: &FetchRequest) -> Result<(&'static ProviderEntry, String), 
             "The path must start with a single '/'. Got {path:?}."
         ));
     }
-    if path.contains("://") || path.contains('@') || path.contains("..") || path.contains('\\') {
+    if path.contains("://")
+        || path.contains('@')
+        || path.contains("..")
+        || path.contains('\\')
+        || encoded_traversal(path)
+    {
         return Err(format!(
             "The path may not point outside the provider. Got {path:?}."
         ));
@@ -196,6 +201,21 @@ pub fn validate(req: &FetchRequest) -> Result<(&'static ProviderEntry, String), 
         }
     }
     Ok((entry, format!("{}{}", entry.base_url, path)))
+}
+
+fn encoded_traversal(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    if lower.contains("%2e")
+        || lower.contains("%2f")
+        || lower.contains("%5c")
+        || lower.contains("%40")
+    {
+        return true;
+    }
+    let Ok(url) = reqwest::Url::parse(&format!("https://jam.invalid{path}")) else {
+        return true;
+    };
+    url.host_str() != Some("jam.invalid") || url.path().split('/').any(|s| s == "..")
 }
 
 /// One line of measured usage and the request's optional cost estimate.
@@ -657,6 +677,8 @@ mod tests {
         assert!(validate(&req("gemini", "https://evil.example/x")).is_err());
         assert!(validate(&req("gemini", "//evil.example/x")).is_err());
         assert!(validate(&req("gemini", "/a/../b")).is_err());
+        assert!(validate(&req("gemini", "/%2e%2e/admin")).is_err());
+        assert!(validate(&req("gemini", "/%2E%2E/admin")).is_err());
         assert!(validate(&req("gemini", "/x@y")).is_err());
         assert!(validate(&req("gemini", "/with space")).is_err());
         let mut r = req("gemini", "/x");

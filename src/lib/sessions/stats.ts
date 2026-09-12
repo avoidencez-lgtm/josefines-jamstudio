@@ -131,6 +131,31 @@ export function sessionProgress(
   };
 }
 
+/** Sum take lengths, treating missing or non-finite durations as zero. */
+export function totalRecordedSecs(takes: { durationSecs: number }[]): number {
+  return takes.reduce(
+    (acc, t) => acc + (Number.isFinite(t.durationSecs) ? t.durationSecs : 0),
+    0,
+  );
+}
+
+/** Sessions DAW-export notice: success uses ok tokens; failure is an alert. */
+export function dawExportBanner(ok: boolean): {
+  role?: "alert";
+  className: string;
+} {
+  return ok
+    ? {
+        className:
+          "p-3 bg-[var(--ok-soft)] border border-[var(--ok)] rounded-[var(--radius-m)] text-xs font-mono text-[var(--ok)]",
+      }
+    : {
+        role: "alert",
+        className:
+          "p-3 bg-[var(--error-soft)] border border-[var(--error)] rounded-[var(--radius-m)] text-xs font-mono text-[var(--error)]",
+      };
+}
+
 export function formatJamTime(totalSecs: number): string {
   if (totalSecs < 60) return `${Math.round(totalSecs)} s`;
   const h = Math.floor(totalSecs / 3600);

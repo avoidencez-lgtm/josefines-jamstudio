@@ -1052,18 +1052,17 @@ fn recorded_review_fixture_writes_from_analysis_numbers() {
         .as_str()
         .unwrap()
         .contains("attack"));
-    let session = serde_json::from_slice::<Value>(
-        &std::fs::read(
-            common::user_dir()
-                .join("sessions")
-                .join(format!("session-of-{}", take.id))
-                .join("session.json"),
-        )
-        .unwrap(),
-    )
-    .unwrap();
+    let session_path = common::user_dir()
+        .join("sessions")
+        .join(format!("session-of-{}", take.id))
+        .join("session.json");
+    let session = serde_json::from_slice::<Value>(&std::fs::read(&session_path).unwrap()).unwrap();
     assert_eq!(session["review"]["fromAudio"], false);
     assert_eq!(session["review"]["origin"], "synthetic-analysis");
+    assert!(!session_path.with_extension("json.tmp").exists());
+    studio.ok("takes_review", json!({"takeId": take.id}));
+    assert!(!session_path.with_extension("json.tmp").exists());
+    assert!(session_path.with_extension("json.bak").exists());
     let exported = studio.ok("export_logic", json!({"takeId": take.id}));
     assert!(exported["folder"].as_str().unwrap().contains(&take.id));
     std::env::remove_var("JAM_REVIEW_FIXTURE");

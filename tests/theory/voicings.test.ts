@@ -41,7 +41,7 @@ describe("chord shapes", () => {
   });
 
   it("puts the slash bass, and otherwise the root, on the lowest string", () => {
-    for (const symbol of ["C/G", "D/F#", "Am/E", "G/B"]) {
+    for (const symbol of ["C/G", "D/F#", "Am/E", "G/B", "F/G", "C/D"]) {
       const parsed = chordChromas(symbol);
       if (!parsed) throw new Error(symbol);
       const voicings = chordVoicings(symbol, 5);

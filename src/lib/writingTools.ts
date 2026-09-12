@@ -156,9 +156,11 @@ export function harmonyChoices(
       ? ["", "m", "m", "", "", "m", "dim"]
       : ["m", "dim", "", "m", "m", "", ""];
   const degrees =
-    mode === "major"
-      ? ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
-      : ["i", "ii°", "III", "iv", "v", "VI", "VII"];
+    family === "borrowed" && chart.mode === "major"
+      ? ["i", "ii°", "bIII", "iv", "v", "bVI", "bVII"]
+      : mode === "major"
+        ? ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
+        : ["i", "ii°", "III", "iv", "v", "VI", "VII"];
   const previousPcs = new Set(chordNotes(previous).map(Note.chroma));
   return notes
     .map((root, i) => {
