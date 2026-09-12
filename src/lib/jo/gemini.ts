@@ -101,6 +101,20 @@ export function contextSummary(ctx: JoContext): string {
     ctx.film
       ? `Film project is ${JSON.stringify(ctx.film)}. Use edit_video_shot with these project and shot ids.`
       : "No Film project is open.",
+    ctx.reference
+      ? [
+          `Reference is ${ctx.reference.label} (assetId ${ctx.reference.assetId}) at ${Math.round(ctx.reference.speed * 100)}% and ${ctx.reference.semitones > 0 ? "+" : ""}${ctx.reference.semitones} semitones.`,
+          `${ctx.reference.confirmedBars ?? 0} confirmed bars.`,
+          ctx.reference.sections?.length
+            ? `Confirmed section ids are ${ctx.reference.sections
+                .map((s) => `${s.id} (${s.label})`)
+                .join(", ")}.`
+            : "No confirmed reference sections.",
+          ctx.reference.ramp
+            ? `Practice ramp is ${JSON.stringify(ctx.reference.ramp)}.`
+            : "No practice ramp is armed.",
+        ].join(" ")
+      : "No reference is loaded.",
   ].join("\n");
 }
 
