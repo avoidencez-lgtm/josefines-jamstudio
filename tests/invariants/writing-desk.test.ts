@@ -162,6 +162,52 @@ it("rejects oversized and empty forms atomically without adding Undo, and counts
   ).toThrow(/Lyrics/);
 });
 
+it("rejects a 17th guitar clip and missing section settings before Undo", () => {
+  const originalSong = currentSong();
+  const clip = {
+    takeId: "take-1",
+    label: "clip",
+    trimStart: 0,
+    trimEnd: 1,
+    startBar: 1,
+    repeats: 1,
+    gain: 1,
+    muted: false,
+  };
+  const seventeen = structuredClone(originalSong.body);
+  seventeen.clips = Array.from({ length: 17 }, () => ({ ...clip }));
+  expect(() => checkWritingForm(seventeen)).toThrow(/16 guitar clips/);
+  const orphan = structuredClone(originalSong.body);
+  const { verse: _verse, ...sections } = orphan.sections;
+  orphan.sections = sections;
+  expect(() => checkWritingForm(orphan)).toThrow(/Missing band settings for/);
+  useWriting.getState().edit((b) => {
+    b.clips = Array.from({ length: 16 }, (_, i) => ({
+      ...clip,
+      takeId: `take-${i}`,
+    }));
+  });
+  const before = useWriting.getState();
+  useWriting.getState().attach({
+    id: "take-overflow",
+    sessionId: "s",
+    timestamp: "1",
+    durationSecs: 1,
+    styleId: "blues-shuffle",
+    chartId: "blues-12-bar",
+    tempo: 120,
+    sampleCount: 1,
+    pathInput: "x",
+    pathBand: "x",
+    pathMaster: "x",
+    waveformPeaks: [],
+    notes: "",
+  });
+  expect(useWriting.getState().song).toBe(before.song);
+  expect(useWriting.getState().past).toBe(before.past);
+  expect(useWriting.getState().message).toMatch(/16 guitar clips/);
+});
+
 it("restores older versions without retaining later lyric fields; redo returns those lyrics", () => {
   const w = useWriting.getState();
   w.version("Before lyrics");

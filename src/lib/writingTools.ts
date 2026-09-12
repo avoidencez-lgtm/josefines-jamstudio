@@ -49,6 +49,12 @@ export function checkWritingForm(body: SongBody): void {
     throw new Error(
       "Keep the song within 256 arranged bars, 64 sections and 128 form entries. Undo or shorten a section to make room.",
     );
+  if (body.clips && body.clips.length > 16)
+    throw new Error(
+      "Songwriting supports 4/4, 40–240 BPM, up to 64 sections and 16 guitar clips.",
+    );
+  const missing = c.sections.find((s) => !body.sections?.[s.id]);
+  if (missing) throw new Error(`Missing band settings for ${missing.name}`);
 }
 
 export function duplicateSection(
