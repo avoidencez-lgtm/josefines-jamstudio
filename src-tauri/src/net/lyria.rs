@@ -8,6 +8,21 @@ pub const NOT_CONFIGURED: &str = "Lyria RealTime is not configured. Add a Google
 
 const MAX_MESSAGE: usize = 4 * 1024 * 1024;
 const MODEL: &str = "models/lyria-realtime-exp";
+const SCALES: &[&str] = &[
+    "C_MAJOR_A_MINOR",
+    "D_FLAT_MAJOR_B_FLAT_MINOR",
+    "D_MAJOR_B_MINOR",
+    "E_FLAT_MAJOR_C_MINOR",
+    "E_MAJOR_D_FLAT_MINOR",
+    "F_MAJOR_D_MINOR",
+    "G_FLAT_MAJOR_E_FLAT_MINOR",
+    "G_MAJOR_E_MINOR",
+    "A_FLAT_MAJOR_F_MINOR",
+    "A_MAJOR_G_FLAT_MINOR",
+    "B_FLAT_MAJOR_G_MINOR",
+    "B_MAJOR_A_FLAT_MINOR",
+    "SCALE_UNSPECIFIED",
+];
 
 pub fn protocol() -> Value {
     serde_json::from_str(include_str!(
@@ -67,19 +82,19 @@ pub fn validate(config: &Config) -> Result<(), String> {
             p.text.trim().is_empty()
                 || p.text.len() > 300
                 || !p.weight.is_finite()
-                || !(0.0..=2.0).contains(&p.weight)
+                || p.weight == 0.0
         })
         || !config.bpm.is_finite()
-        || !(40.0..=240.0).contains(&config.bpm)
-        || config.scale.trim().is_empty()
-        || config.scale.len() > 40
+        || config.bpm.fract() != 0.0
+        || !(60.0..=200.0).contains(&config.bpm)
+        || !SCALES.contains(&config.scale.as_str())
         || !config.density.is_finite()
         || !(0.0..=1.0).contains(&config.density)
         || !config.brightness.is_finite()
         || !(0.0..=1.0).contains(&config.brightness)
     {
         return Err(
-            "Choose 1–8 prompts, 40–240 BPM as a request, and density/brightness from 0 to 1."
+            "Choose 1–8 nonzero-weight prompts, an allowed scale, whole-number BPM from 60 to 200, and density/brightness from 0 to 1."
                 .into(),
         );
     }
@@ -182,8 +197,17 @@ impl Jitter {
         }
     }
 
+    fn cap(&self) -> usize {
+        // At least ~0.5 s of 48 kHz interleaved stereo, or 32× the prefill window.
+        self.prefill.saturating_mul(32).max(48_000)
+    }
+
     pub fn push(&mut self, samples: &[i16]) {
         self.queued.extend(samples);
+        let extra = self.queued.len().saturating_sub(self.cap());
+        if extra > 0 {
+            self.queued.drain(..extra);
+        }
         if !self.primed && self.queued.len() >= self.prefill {
             self.primed = true;
         }
@@ -194,6 +218,7 @@ impl Jitter {
         let need = frames.saturating_mul(2);
         if !self.primed || self.queued.len() < need {
             self.primed = false;
+            self.queued.clear();
             return (vec![0; need], true);
         }
         let mut out = Vec::with_capacity(need);
@@ -287,6 +312,9 @@ impl Machine {
     }
 
     pub fn apply(&mut self, patch: Config) -> Result<(), String> {
+        if self.phase == "idle" {
+            return Err("Controls must wait for setupComplete".into());
+        }
         validate(&patch)?;
         let reset =
             (patch.bpm - self.config.bpm).abs() > f64::EPSILON || patch.scale != self.config.scale;
@@ -322,6 +350,41 @@ pub fn recorded_for_session() -> Result<Machine, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn config_matches_the_provider_contract() {
+        let valid = Config {
+            prompts: vec![Prompt {
+                text: "Funk".into(),
+                weight: -1.0,
+            }],
+            bpm: 60.0,
+            scale: "SCALE_UNSPECIFIED".into(),
+            ..Config::default()
+        };
+        assert!(validate(&valid).is_ok());
+
+        for bpm in [59.0, 60.5, 201.0] {
+            assert!(validate(&Config {
+                bpm,
+                ..valid.clone()
+            })
+            .is_err());
+        }
+        assert!(validate(&Config {
+            prompts: vec![Prompt {
+                text: "Funk".into(),
+                weight: 0.0,
+            }],
+            ..valid.clone()
+        })
+        .is_err());
+        assert!(validate(&Config {
+            scale: "CHROMATIC".into(),
+            ..valid
+        })
+        .is_err());
+    }
 
     #[test]
     fn fixture_orders_setup_before_controls_and_decodes_48k_stereo() {
@@ -366,9 +429,26 @@ mod tests {
         jitter.push(&[5, 6, 7, 8, 9, 10, 11, 12]);
         let (ready, ok) = jitter.take(2);
         assert!(!ok);
-        assert_eq!(ready.len(), 4);
+        assert_eq!(ready, vec![5, 6, 7, 8]);
         let (_, late) = jitter.take(8);
         assert!(late);
+    }
+
+    #[test]
+    fn jitter_drops_stale_samples_on_underflow_and_bounds_the_queue() {
+        let mut jitter = Jitter::new(4);
+        jitter.push(&(1..100).collect::<Vec<i16>>());
+        let (_, starving) = jitter.take(200);
+        assert!(starving);
+        assert!(jitter.queued.is_empty());
+        jitter.push(&[11, 12, 13, 14, 15, 16, 17, 18]);
+        let (live, ok) = jitter.take(2);
+        assert!(!ok);
+        assert_eq!(live, vec![11, 12, 13, 14]);
+        for _ in 0..8 {
+            jitter.push(&[7; 10_000]);
+        }
+        assert!(jitter.queued.len() <= jitter.cap());
     }
 
     #[test]
@@ -377,5 +457,26 @@ mod tests {
         machine.send(setup_message());
         machine.send(playback("PLAY"));
         assert!(machine.receive(&protocol()["setupReply"]).is_err());
+    }
+
+    #[test]
+    fn apply_before_setup_complete_is_refused() {
+        let mut machine = Machine::default();
+        machine.send(setup_message());
+        assert_eq!(
+            machine.apply(Config::default()).unwrap_err(),
+            "Controls must wait for setupComplete"
+        );
+        assert!(machine
+            .outbound
+            .iter()
+            .all(|m| m.get("playbackControl").is_none() && m.get("clientContent").is_none()));
+        machine.receive(&protocol()["setupReply"]).unwrap();
+        assert_eq!(machine.phase, "ready");
+        machine.apply(Config::default()).unwrap();
+        assert!(machine
+            .outbound
+            .iter()
+            .any(|m| m.get("clientContent").is_some()));
     }
 }

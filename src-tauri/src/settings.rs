@@ -42,6 +42,8 @@ pub struct RecorderSettings {
     pub latency_confidence: f32,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub latency_by_device: HashMap<String, DeviceLatency>,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -51,6 +53,8 @@ pub struct DeviceLatency {
     pub estimated: bool,
     #[serde(default, skip_serializing_if = "is_zero_f32")]
     pub confidence: f32,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 fn is_zero_f32(value: &f32) -> bool {
@@ -58,9 +62,15 @@ fn is_zero_f32(value: &f32) -> bool {
 }
 
 impl RecorderSettings {
-    pub fn device_key(input: Option<&str>, output: Option<&str>, channel: u16) -> String {
+    pub fn device_key(
+        input: Option<&str>,
+        output: Option<&str>,
+        channel: u16,
+        sample_rate: u32,
+        buffer_size: u32,
+    ) -> String {
         format!(
-            "{}|{}|{channel}",
+            "{}|{}|{channel}|{sample_rate}|{buffer_size}",
             input.unwrap_or("default"),
             output.unwrap_or("default")
         )
@@ -82,6 +92,7 @@ impl RecorderSettings {
                 round_trip_frames,
                 estimated,
                 confidence,
+                extra: HashMap::new(),
             },
         );
     }
@@ -101,6 +112,8 @@ pub struct RigSettings {
     /// Section name -> scene index, per profile id.
     #[serde(default)]
     pub section_mappings: HashMap<String, HashMap<String, usize>>,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 fn yes() -> bool {
@@ -115,6 +128,7 @@ impl Default for RigSettings {
             follow_sections: true,
             send_clock: false,
             section_mappings: HashMap::new(),
+            extra: HashMap::new(),
         }
     }
 }
@@ -147,7 +161,7 @@ impl Default for AppSettings {
     }
 }
 
-// Serialises writers; normal saves refuse corrupt input. Startup archives it before recovery.
+// Serialises settings updates; malformed input is archived before replacement.
 static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn load_from(path: &std::path::Path) -> Result<AppSettings, String> {
@@ -165,56 +179,16 @@ pub fn load_settings() -> Result<AppSettings, String> {
 
 fn save_to(path: &std::path::Path, settings: &AppSettings) -> Result<(), String> {
     let _lock = SAVE_LOCK.lock().map_err(|e| e.to_string())?;
-    load_from(path)?;
+    if load_from(path).is_err() && path.exists() {
+        archive_damaged(path)?;
+        return write_to(path, settings, false);
+    }
     write_to(path, settings, true)
 }
 
-fn write_to(
-    path: &std::path::Path,
-    settings: &AppSettings,
-    keep_backup: bool,
-) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let temp = path.with_extension("json.tmp");
-    fs::write(
-        &temp,
-        serde_json::to_vec_pretty(settings).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    fs::OpenOptions::new()
-        .write(true)
-        .open(&temp)
-        .and_then(|f| f.sync_all())
-        .map_err(|e| e.to_string())?;
-    if keep_backup && path.exists() {
-        fs::copy(path, path.with_extension("json.bak")).map_err(|e| e.to_string())?;
-    }
-    fs::rename(temp, path).map_err(|e| e.to_string())
-}
-
-pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
-    save_to(&settings_path(), settings)
-}
-
-/// Startup-only recovery: preserve damaged bytes before replacing the active file.
-fn recover_from(path: &std::path::Path) -> Result<(AppSettings, Option<String>), String> {
+fn archive_damaged(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
     use std::io::Write;
-    let _lock = SAVE_LOCK.lock().map_err(|e| e.to_string())?;
-    if let Ok(settings) = load_from(path) {
-        return Ok((settings, None));
-    }
-    // Permission/read failures are not evidence of malformed JSON and must not be replaced.
     let damaged = fs::read(path).map_err(|e| format!("Cannot recover {}. {e}", path.display()))?;
-    let backup = path.with_extension("json.bak");
-    let restored = backup.is_file().then(|| load_from(&backup).ok()).flatten();
-    let source = if restored.is_some() {
-        "the last valid backup"
-    } else {
-        "default settings"
-    };
-    let settings = restored.unwrap_or_default();
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -228,6 +202,42 @@ fn recover_from(path: &std::path::Path) -> Result<(AppSettings, Option<String>),
     file.write_all(&damaged)
         .and_then(|_| file.sync_all())
         .map_err(|e| e.to_string())?;
+    Ok(archive)
+}
+
+fn write_to(
+    path: &std::path::Path,
+    settings: &AppSettings,
+    keep_backup: bool,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let bytes = serde_json::to_vec_pretty(settings).map_err(|e| e.to_string())?;
+    let backup = keep_backup.then(|| path.with_extension("json.bak"));
+    crate::persistence::write(path, &bytes, backup.as_deref()).map_err(|e| e.to_string())
+}
+
+pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
+    save_to(&settings_path(), settings)
+}
+
+/// Startup-only recovery: preserve damaged bytes before replacing the active file.
+fn recover_from(path: &std::path::Path) -> Result<(AppSettings, Option<String>), String> {
+    let _lock = SAVE_LOCK.lock().map_err(|e| e.to_string())?;
+    if let Ok(settings) = load_from(path) {
+        return Ok((settings, None));
+    }
+    // Permission/read failures are not evidence of malformed JSON and must not be replaced.
+    let archive = archive_damaged(path)?;
+    let backup = path.with_extension("json.bak");
+    let restored = backup.is_file().then(|| load_from(&backup).ok()).flatten();
+    let source = if restored.is_some() {
+        "the last valid backup"
+    } else {
+        "default settings"
+    };
+    let settings = restored.unwrap_or_default();
     write_to(path, &settings, false)?;
     Ok((settings, Some(format!("Recovered settings using {source}. The damaged file is preserved at {}. Check your audio device and MIDI port before playing.", archive.display()))))
 }
@@ -302,8 +312,44 @@ mod tests {
         );
         fs::write(&path, "broken JSON").unwrap();
         assert!(load_from(&path).is_err());
-        assert!(save_to(&path, &settings).is_err());
-        assert_eq!(fs::read_to_string(&path).unwrap(), "broken JSON");
+        save_to(&path, &settings).unwrap();
+        assert_eq!(load_from(&path).unwrap().buffer_size, 512);
+        let preserved: Vec<_> = fs::read_dir(&root)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.to_string_lossy().contains(".broken-"))
+            .map(|p| fs::read_to_string(p).unwrap())
+            .collect();
+        assert_eq!(preserved, ["broken JSON"]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn save_to_archives_corrupt_settings_and_writes_the_new_document() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-settings-save-corrupt-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("settings.json");
+        fs::write(&path, "{ not json").unwrap();
+        let settings = AppSettings {
+            buffer_size: 1024,
+            ..AppSettings::default()
+        };
+        save_to(&path, &settings).unwrap();
+        assert_eq!(load_from(&path).unwrap().buffer_size, 1024);
+        let preserved: Vec<_> = fs::read_dir(&root)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.to_string_lossy().contains(".broken-"))
+            .map(|p| fs::read_to_string(p).unwrap())
+            .collect();
+        assert_eq!(preserved, ["{ not json"]);
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -343,5 +389,69 @@ mod tests {
         let reserialized = serde_json::to_string(&settings).unwrap();
         assert!(reserialized.contains("future_custom_feature"));
         assert!(reserialized.contains("number_val"));
+    }
+
+    #[test]
+    fn nested_unknown_rig_and_recorder_fields_survive_a_rewrite() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-settings-nested-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("settings.json");
+        fs::write(
+            &path,
+            r#"{
+                "schemaVersion": 1,
+                "buffer_size": 256,
+                "rig": {
+                    "profile_id": "black-spirit-200",
+                    "futureClockPpq": 24
+                },
+                "recorder": {
+                    "latency_samples": 96,
+                    "futurePunchIn": true,
+                    "latency_by_device": {
+                        "default|default|2": {
+                            "round_trip_frames": 96,
+                            "futureCalibrator": "loopback-v2"
+                        }
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+        let mut settings = load_from(&path).unwrap();
+        assert_eq!(settings.rig.extra.get("futureClockPpq").unwrap(), 24);
+        assert_eq!(settings.recorder.extra.get("futurePunchIn").unwrap(), true);
+        assert_eq!(
+            settings.recorder.latency_by_device["default|default|2"]
+                .extra
+                .get("futureCalibrator")
+                .unwrap(),
+            "loopback-v2"
+        );
+        settings.buffer_size = 512;
+        save_to(&path, &settings).unwrap();
+        let round = load_from(&path).unwrap();
+        assert_eq!(round.buffer_size, 512);
+        assert_eq!(round.rig.extra.get("futureClockPpq").unwrap(), 24);
+        assert_eq!(round.recorder.extra.get("futurePunchIn").unwrap(), true);
+        assert_eq!(
+            round.recorder.latency_by_device["default|default|2"]
+                .extra
+                .get("futureCalibrator")
+                .unwrap(),
+            "loopback-v2"
+        );
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("futureClockPpq"), "{text}");
+        assert!(text.contains("futurePunchIn"), "{text}");
+        assert!(text.contains("futureCalibrator"), "{text}");
+        fs::remove_dir_all(root).unwrap();
     }
 }

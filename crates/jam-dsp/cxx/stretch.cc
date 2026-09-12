@@ -26,6 +26,10 @@ void Stretch::process(rust::Slice<const float> input, rust::Slice<float> output)
     dsp.process(Stereo<const float>{input.data()}, static_cast<int>(input.size() / 2),
                 Stereo<float>{output.data()}, static_cast<int>(output.size() / 2));
 }
+void Stretch::flush(rust::Slice<float> output) {
+    dsp.flush(Stereo<float>{output.data()}, static_cast<int>(output.size() / 2),
+              static_cast<float>(speed));
+}
 std::unique_ptr<Stretch> new_stretch(double speed, double semitones) {
     return std::make_unique<Stretch>(speed, semitones);
 }

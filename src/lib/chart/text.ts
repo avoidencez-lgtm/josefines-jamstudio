@@ -61,6 +61,7 @@ const SETTING_KEYS = new Set([
   "tempo",
   "style",
   "sectionstyle",
+  "sectionid",
   "stylehere",
   "arrangement",
   "form",
@@ -92,7 +93,7 @@ interface WorkingSection {
 
 export function parseChartText(
   text: string,
-  opts: { id?: string } = {},
+  opts: { id?: string; source?: Chart | null } = {},
 ): ParsedChartText {
   const problems: ChartTextProblem[] = [];
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
@@ -234,6 +235,18 @@ export function parseChartText(
         case "stylehere":
           ensureSection(lineNo).styleOverrideId = value;
           break;
+        case "sectionid": {
+          const section = ensureSection(lineNo);
+          if (sections.some((s) => s !== section && s.id === value)) {
+            problems.push({
+              line: lineNo,
+              message: `section id "${value}" is already used`,
+            });
+          } else {
+            section.id = value;
+          }
+          break;
+        }
         case "arrangement":
         case "form":
           arrangementSpec = value;
@@ -311,20 +324,70 @@ export function parseChartText(
     styleOverrideId: s.styleOverrideId,
   }));
 
+  const parsed: Chart = {
+    schemaVersion: 1,
+    id: id ?? slugify(name),
+    name,
+    keyTonic,
+    mode,
+    timeSig,
+    defaultBpm: bpm,
+    defaultStyleId: styleId,
+    sections: chartSections,
+    arrangement,
+  };
   return {
-    chart: {
-      schemaVersion: 1,
-      id: id ?? slugify(name),
-      name,
-      keyTonic,
-      mode,
-      timeSig,
-      defaultBpm: bpm,
-      defaultStyleId: styleId,
-      sections: chartSections,
-      arrangement,
-    },
+    chart: opts.source ? preserveSourceMetadata(parsed, opts.source) : parsed,
     problems,
+  };
+}
+
+function preserveSourceMetadata(parsed: Chart, source: Chart): Chart {
+  if (parsed.id !== source.id) return parsed;
+  const sections = parsed.sections.map((section) => {
+    const previous = source.sections.find(
+      (candidate) => candidate.id === section.id,
+    );
+    if (!previous) return section;
+    const sameChords =
+      section.bars.length === previous.bars.length &&
+      section.bars.every(
+        (bar, barIndex) =>
+          bar.length === previous.bars[barIndex]?.length &&
+          bar.every(
+            (chord, chordIndex) =>
+              chord.chord === previous.bars[barIndex][chordIndex]?.chord &&
+              chord.beats === previous.bars[barIndex][chordIndex]?.beats,
+          ),
+      );
+    return {
+      ...previous,
+      ...section,
+      bars: sameChords
+        ? section.bars.map((bar, barIndex) =>
+            bar.map((chord, chordIndex) => ({
+              ...previous.bars[barIndex][chordIndex],
+              ...chord,
+            })),
+          )
+        : section.bars,
+    };
+  });
+  const sameArrangement =
+    parsed.arrangement.length === source.arrangement.length &&
+    parsed.arrangement.every(
+      (item, index) => item.sectionId === source.arrangement[index]?.sectionId,
+    );
+  return {
+    ...source,
+    ...parsed,
+    sections,
+    arrangement: sameArrangement
+      ? parsed.arrangement.map((item, index) => ({
+          ...source.arrangement[index],
+          ...item,
+        }))
+      : parsed.arrangement,
   };
 }
 
@@ -387,7 +450,11 @@ function isChordToken(tok: string): boolean {
   const chord = splitChord(tok);
   return (
     chord !== null &&
-    !Chord.get(chord.rootName + tok.slice(chord.rootName.length)).empty
+    !Chord.get(
+      chord.rootName +
+        chord.quality +
+        (chord.bassName ? `/${chord.bassName}` : ""),
+    ).empty
   );
 }
 
@@ -438,9 +505,12 @@ export function chartToText(chart: Chart): string {
   if (!inOrder) {
     out.push(
       `arrangement: ${chart.arrangement
-        .map((a) =>
-          a.repeats > 1 ? `${a.sectionId} x${a.repeats}` : a.sectionId,
-        )
+        .map((a) => {
+          const name =
+            chart.sections.find((s) => s.id === a.sectionId)?.name ??
+            a.sectionId;
+          return a.repeats > 1 ? `${name} x${a.repeats}` : name;
+        })
         .join(", ")}`,
     );
   }
@@ -455,6 +525,7 @@ export function chartToText(chart: Chart): string {
     out.push(
       repeats > 1 ? `[${section.name} x${repeats}]` : `[${section.name}]`,
     );
+    out.push(`section id: ${section.id}`);
     if (section.styleOverrideId)
       out.push(`section style: ${section.styleOverrideId}`);
     for (let i = 0; i < section.bars.length; i += 4) {
@@ -480,6 +551,7 @@ export interface FlatBar {
   sectionId: string;
   sectionName: string;
   chords: BarChord[];
+  styleOverrideId?: string | null;
 }
 
 /** Expands the arrangement into the bar list the band actually plays (mirrors `Chart::resolve`). */
@@ -495,6 +567,7 @@ export function resolveChart(chart: Chart): FlatBar[] {
           sectionId: section.id,
           sectionName: section.name,
           chords: bar,
+          styleOverrideId: section.styleOverrideId ?? null,
         });
       }
     }

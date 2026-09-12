@@ -1,11 +1,11 @@
 //! One bounded, cancellable Jo voice turn. Cancellation invalidates late results;
 //! a request already sent may still be billed and is never automatically retried.
-use crate::{net, AppState};
+use crate::{emit_cost_state, net, AppState};
 use jam_audio::{engine::EngineMode, io::CpalInput, voice::Microphone};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
-use tauri::{Emitter, State};
+use tauri::State;
 
 const LIVE_TURNS: usize = 10;
 const LIVE_MEDIAN_MS: u64 = 2500;
@@ -181,12 +181,7 @@ pub async fn voice_ptt<R: tauri::Runtime>(
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(20)).await;
             let _ = tauri::async_runtime::spawn_blocking(move || {
-                let mut session = voice.lock();
-                if session.generation == generation {
-                    if let Some(mic) = &mut session.microphone {
-                        let _ = mic.stop_stream();
-                    }
-                }
+                expire_listening(&mut voice.lock(), generation);
             })
             .await;
         });
@@ -227,7 +222,7 @@ pub async fn voice_ptt<R: tauri::Runtime>(
         .await
     }
     .await;
-    let _ = app.emit("cost:state", state.cost_log.totals());
+    emit_cost_state(&app, &state.cost_log);
     let mut session = state.voice.lock();
     if session.generation != generation {
         return Err("Voice turn cancelled.".into());
@@ -264,7 +259,7 @@ pub async fn voice_speak<R: tauri::Runtime>(
         &state.cost_log,
     )
     .await;
-    let _ = app.emit("cost:state", state.cost_log.totals());
+    emit_cost_state(&app, &state.cost_log);
     let mut session = state.voice.lock();
     if session.generation != generation {
         return Err("Voice turn cancelled.".into());
@@ -286,6 +281,17 @@ pub async fn voice_speak<R: tauri::Runtime>(
     session.phase = if result.is_ok() { "speaking" } else { "idle" };
     session.error = result.as_ref().err().cloned();
     result
+}
+
+/// Drop the live microphone so a later push-to-talk can open a new stream.
+fn expire_listening(session: &mut VoiceSession, generation: u32) {
+    if session.generation != generation {
+        return;
+    }
+    if let Some(mut mic) = session.microphone.take() {
+        let _ = mic.stop_stream();
+    }
+    session.phase = "idle";
 }
 
 fn record_first_audio(session: &mut VoiceSession) {
@@ -380,5 +386,35 @@ mod tests {
         assert!(session.released_at.is_none());
         record_first_audio(&mut session);
         assert_eq!(session.latencies.len(), 1);
+    }
+
+    #[test]
+    fn safety_timeout_clears_the_microphone_so_push_to_talk_can_start_again() {
+        let mic = jam_audio::voice::Microphone::start(Box::new(jam_audio::io::FileInput::silent(
+            256, 16_000,
+        )))
+        .expect("silent test microphone");
+        let mut session = VoiceSession {
+            generation: 3,
+            microphone: Some(mic),
+            phase: "listening",
+            ..VoiceSession::default()
+        };
+        expire_listening(&mut session, 2);
+        assert!(
+            session.microphone.is_some(),
+            "a stale timeout must not drop a newer turn"
+        );
+        assert_eq!(session.phase, "listening");
+        expire_listening(&mut session, 3);
+        assert!(session.microphone.is_none());
+        assert_eq!(session.phase, "idle");
+        let again = jam_audio::voice::Microphone::start(Box::new(
+            jam_audio::io::FileInput::silent(256, 16_000),
+        ));
+        assert!(again.is_ok(), "{}", again.err().unwrap_or_default());
+        session.microphone = again.ok();
+        session.phase = "listening";
+        assert!(session.microphone.is_some());
     }
 }

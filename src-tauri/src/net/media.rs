@@ -152,7 +152,7 @@ pub async fn fetch(
     body: Option<&Value>,
     store: &dyn SecretStore,
     log: &CostLog,
-) -> Result<Vec<u8>, String> {
+) -> Result<(Vec<u8>, Option<String>), String> {
     let local = m.protocol == "comfy";
     let entry = provider(&m.provider);
     let base = if local {
@@ -201,21 +201,30 @@ pub async fn fetch(
         if !response.status().is_success() { return Err(format!("{} returned HTTP {status}. Check model access, credits and prompt in your provider account.", m.name)); }
         read_bounded(response, 192 * 1024 * 1024).await
     }.await;
-    let _ = log.append(&CostEntry {
-        at_ms: super::now_ms(),
-        provider: m.provider.clone(),
-        method: if body.is_some() { "POST" } else { "GET" }.into(),
-        path: super::strip_query(path),
-        status,
-        duration_ms: started.elapsed().as_millis() as u64,
-        bytes_out: body.map_or(0, |v| v.to_string().len() as u64),
-        bytes_in: result.as_ref().map_or(0, |v| v.len() as u64),
-        error: result.as_ref().err().cloned(),
-        model: Some(m.model.clone()),
-        estimated_cost_usd: None,
-        ..CostEntry::default()
-    });
-    result
+    let usage_warning = record_media_usage(
+        log,
+        CostEntry {
+            at_ms: super::now_ms(),
+            provider: m.provider.clone(),
+            method: if body.is_some() { "POST" } else { "GET" }.into(),
+            path: super::strip_query(path),
+            status,
+            duration_ms: started.elapsed().as_millis() as u64,
+            bytes_out: body.map_or(0, |v| v.to_string().len() as u64),
+            bytes_in: result.as_ref().map_or(0, |v| v.len() as u64),
+            error: result.as_ref().err().cloned(),
+            model: Some(m.model.clone()),
+            estimated_cost_usd: None,
+            ..CostEntry::default()
+        },
+    );
+    preserve_response(result, usage_warning)
+}
+
+fn record_media_usage(log: &CostLog, entry: CostEntry) -> Option<String> {
+    log.append(&entry).err().map(|_| {
+        "Could not save media usage. Check the data folder; do not retry automatically.".into()
+    })
 }
 async fn read_bounded(mut response: reqwest::Response, limit: usize) -> Result<Vec<u8>, String> {
     if response.content_length().is_some_and(|n| n > limit as u64) {
@@ -264,13 +273,15 @@ pub async fn separate_stems(
             .is_some_and(|v| !v.is_finite() || !(0.0..=10000.0).contains(&v))
         || file.is_empty()
         || file.len() > 512 * 1024 * 1024
-        || !["wav", "mp3", "flac", "m4a", "aac", "ogg"].contains(&extension)
     {
         return Err(
             "Choose 2 seconds to 10 minutes of audio up to 512 MB and a valid optional price."
                 .into(),
         );
     }
+    let mime = audio_mime(extension).ok_or(
+        "Choose 2 seconds to 10 minutes of audio up to 512 MB and a valid optional price.",
+    )?;
     if cancel.load(Ordering::Relaxed) {
         return Err("Stem separation canceled before upload.".into());
     }
@@ -278,12 +289,13 @@ pub async fn separate_stems(
     let key = store.require(provider.id)?;
     super::live_guard("stem separation")?;
     let size = file.len() as u64;
+    let part = reqwest::multipart::Part::bytes(file)
+        .file_name(format!("source.{extension}"))
+        .mime_str(mime)
+        .map_err(|_| "Invalid audio type.")?;
     let form = reqwest::multipart::Form::new()
         .text("stem_variation_id", model.model.clone())
-        .part(
-            "file",
-            reqwest::multipart::Part::bytes(file).file_name(format!("source.{extension}")),
-        );
+        .part("file", part);
     let path = "/v1/music/stem-separation";
     let req = provider_client()
         .timeout(Duration::from_secs(900))
@@ -330,15 +342,15 @@ pub async fn separate_stems(
         })
         .err()
         .map(|_| "Could not save the usage log. Check provider history for charges.".to_string());
-    preserve_stem_response(result, usage_error)
+    preserve_response(result, usage_error)
 }
 
-fn preserve_stem_response(
-    result: Result<Vec<u8>, String>,
+fn preserve_response<T>(
+    result: Result<T, String>,
     usage_error: Option<String>,
-) -> Result<(Vec<u8>, Option<String>), String> {
-    // Return paid bytes even when accounting storage fails; the caller preserves the ZIP.
-    result.map(|bytes| (bytes, usage_error))
+) -> Result<(T, Option<String>), String> {
+    // Return paid responses even when accounting storage fails; the caller persists the result.
+    result.map(|value| (value, usage_error))
 }
 pub enum Output {
     Pending(String),
@@ -434,6 +446,18 @@ pub fn response(m: &Model, bytes: Vec<u8>) -> Result<Output, String> {
         ext.into(),
     ))
 }
+fn audio_mime(extension: &str) -> Option<&'static str> {
+    Some(match extension {
+        "wav" => "audio/wav",
+        "mp3" => "audio/mpeg",
+        "flac" => "audio/flac",
+        "m4a" => "audio/mp4",
+        "aac" => "audio/aac",
+        "ogg" => "audio/ogg",
+        _ => return None,
+    })
+}
+
 pub fn valid_task(id: &str) -> Result<(), String> {
     if id.is_empty()
         || id.len() > 160
@@ -475,8 +499,38 @@ pub fn download_url(m: &Model, uri: &str) -> Result<reqwest::Url, String> {
     }
     Ok(url)
 }
-pub async fn download(m: &Model, uri: &str, store: &dyn SecretStore) -> Result<Vec<u8>, String> {
+fn download_entry(
+    m: &Model,
+    path: &str,
+    status: u16,
+    duration_ms: u64,
+    bytes_in: u64,
+    error: Option<String>,
+) -> CostEntry {
+    CostEntry {
+        at_ms: super::now_ms(),
+        provider: m.provider.clone(),
+        method: "GET".into(),
+        path: super::strip_query(path),
+        status,
+        duration_ms,
+        bytes_out: 0,
+        bytes_in,
+        error,
+        model: Some(m.model.clone()),
+        estimated_cost_usd: None,
+        ..CostEntry::default()
+    }
+}
+
+pub async fn download(
+    m: &Model,
+    uri: &str,
+    store: &dyn SecretStore,
+    log: &CostLog,
+) -> Result<(Vec<u8>, Option<String>), String> {
     let url = download_url(m, uri)?;
+    let path = super::strip_query(url.path());
     super::live_guard("a media download")?;
     let mut req = provider_client()
         .no_proxy()
@@ -491,17 +545,34 @@ pub async fn download(m: &Model, uri: &str, store: &dyn SecretStore) -> Result<V
         );
     }
     // Runway's signed CDN URL needs no API key. Never forward credentials or follow redirects.
-    let resp = req
-        .send()
-        .await
-        .map_err(|_| "Media download failed; refresh the job to retry.")?;
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Download HTTP {}. Refresh the job or import the dashboard download.",
-            resp.status().as_u16()
-        ));
+    let started = Instant::now();
+    let mut status = 0;
+    let result = async {
+        let resp = req
+            .send()
+            .await
+            .map_err(|_| "Media download failed; refresh the job to retry.".to_string())?;
+        status = resp.status().as_u16();
+        if !resp.status().is_success() {
+            return Err(format!(
+                "Download HTTP {status}. Refresh the job or import the dashboard download."
+            ));
+        }
+        read_bounded(resp, 128 * 1024 * 1024).await
     }
-    read_bounded(resp, 128 * 1024 * 1024).await
+    .await;
+    let usage_warning = record_media_usage(
+        log,
+        download_entry(
+            m,
+            &path,
+            status,
+            started.elapsed().as_millis() as u64,
+            result.as_ref().map_or(0, |v| v.len() as u64),
+            result.as_ref().err().cloned(),
+        ),
+    );
+    preserve_response(result, usage_warning)
 }
 
 pub async fn poll(
@@ -510,21 +581,18 @@ pub async fn poll(
     task: &str,
     store: &dyn SecretStore,
     log: &CostLog,
-) -> Result<Output, String> {
+) -> Result<(Output, Option<String>), String> {
     valid_task(task)?;
     if m.protocol.starts_with("runway") {
-        return response(
-            m,
-            fetch(m, &format!("/v1/tasks/{task}"), None, store, log).await?,
-        );
+        let (bytes, warning) = fetch(m, &format!("/v1/tasks/{task}"), None, store, log).await?;
+        return Ok((response(m, bytes)?, warning));
     }
     if m.protocol != "comfy" {
         return Err("This provider does not expose a resumable task.".into());
     }
-    let value: Value =
-        serde_json::from_slice(&fetch(m, &format!("/history/{task}"), None, store, log).await?)
-            .map_err(|_| "Invalid ComfyUI history")?;
-    comfy_output(m, r, task, &value)
+    let (bytes, warning) = fetch(m, &format!("/history/{task}"), None, store, log).await?;
+    let value: Value = serde_json::from_slice(&bytes).map_err(|_| "Invalid ComfyUI history")?;
+    Ok((comfy_output(m, r, task, &value)?, warning))
 }
 fn comfy_output(m: &Model, r: &Generate, task: &str, v: &Value) -> Result<Output, String> {
     let result = &v[task];
@@ -585,7 +653,7 @@ mod tests {
     use super::*;
     #[tokio::test]
     async fn stem_request_rejects_invalid_inputs_missing_keys_and_headless_uploads() {
-        let (bytes, warning) = preserve_stem_response(
+        let (bytes, warning) = preserve_response(
             Ok(b"paid ZIP response".to_vec()),
             Some("Usage log is not writable".into()),
         )
@@ -722,5 +790,76 @@ mod tests {
             serde_json::to_vec(&json!({"base_resp":{"status_code":1000}})).unwrap()
         )
         .is_err());
+    }
+
+    #[test]
+    fn stem_multipart_maps_extension_to_audio_mime() {
+        assert_eq!(audio_mime("wav"), Some("audio/wav"));
+        assert_eq!(audio_mime("mp3"), Some("audio/mpeg"));
+        assert_eq!(audio_mime("flac"), Some("audio/flac"));
+        assert_eq!(audio_mime("m4a"), Some("audio/mp4"));
+        assert_eq!(audio_mime("aac"), Some("audio/aac"));
+        assert_eq!(audio_mime("ogg"), Some("audio/ogg"));
+        assert_eq!(audio_mime("txt"), None);
+        let part = reqwest::multipart::Part::bytes(vec![1])
+            .file_name("source.wav")
+            .mime_str(audio_mime("wav").unwrap())
+            .unwrap();
+        drop(part);
+    }
+
+    #[test]
+    fn media_download_cost_entry_is_a_get_with_bytes() {
+        let m = catalog().into_iter().find(|m| m.id == "omni").unwrap();
+        let dir = std::env::temp_dir().join(format!("jam-download-cost-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        log.append(&download_entry(
+            &m,
+            "/v1beta/files/abc?alt=media",
+            200,
+            12,
+            50_000,
+            None,
+        ))
+        .unwrap();
+        let listed = log.list(1).unwrap();
+        assert_eq!(listed[0].method, "GET");
+        assert_eq!(listed[0].bytes_in, 50_000);
+        assert_eq!(listed[0].path, "/v1beta/files/abc");
+        assert_eq!(listed[0].provider, m.provider);
+        assert_eq!(listed[0].model.as_deref(), Some(m.model.as_str()));
+        assert_eq!(listed[0].status, 200);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn paid_media_response_survives_when_usage_cannot_be_appended() {
+        let dir = std::env::temp_dir().join(format!("jam-media-cost-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let blocker = dir.join("not-a-folder");
+        std::fs::write(&blocker, b"x").unwrap();
+        let log = CostLog::new(blocker.join("usage.jsonl"));
+        let warning = record_media_usage(
+            &log,
+            CostEntry {
+                provider: "runway".into(),
+                path: "/v1/generate".into(),
+                status: 200,
+                ..CostEntry::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            warning,
+            "Could not save media usage. Check the data folder; do not retry automatically."
+        );
+        let (bytes, returned_warning) =
+            preserve_response(Ok(b"paid media response".to_vec()), Some(warning)).unwrap();
+        assert_eq!(bytes, b"paid media response");
+        assert!(returned_warning.is_some());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

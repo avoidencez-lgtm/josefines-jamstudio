@@ -203,6 +203,7 @@ export function createPreviewEngine(
       "This browser preview is a simulated engine. No audio is produced.",
     stream_errors: 0,
     input_gaps: 0,
+    xruns: 0,
   };
   let config: AudioConfig = {
     input_device: null,
@@ -212,6 +213,7 @@ export function createPreviewEngine(
     buffer_size: 256,
   };
   let tunerOn = false;
+  let lastTunerActive = false;
   let toneOn = false;
   let clickVolume = 0.7;
   let bandVolume = 0.8;
@@ -315,6 +317,18 @@ export function createPreviewEngine(
     return { now, next, section: b.sectionName };
   }
 
+  let lastStyleSection = "";
+  function applySectionStyle(sectionId: string, override?: string | null) {
+    if (sectionId === lastStyleSection) return;
+    lastStyleSection = sectionId;
+    const id = override || chart.defaultStyleId;
+    if (!id) return;
+    const s = styles.get(id);
+    if (!s) return;
+    band.style_id = s.id;
+    band.style_name = s.name;
+  }
+
   function refreshBand() {
     const barIdx = Math.max(0, transport.bar - 1);
     const beatInBar = transport.position_beats - barIdx * beatsPerBar();
@@ -322,10 +336,21 @@ export function createPreviewEngine(
     band.current_chord = c.now;
     band.next_chord = c.next;
     band.current_section = c.section;
+    const resolved = bars[((barIdx % barCount()) + barCount()) % barCount()];
+    applySectionStyle(resolved?.sectionId ?? "", resolved?.styleOverrideId);
     if (transport.state === "playing" && c.section) rigOnSection(c.section);
   }
 
+  function validateBandPosition(beats: number) {
+    if (!(beats >= 0 && beats < 0xffff_ffff)) {
+      throw new Error(
+        "Beat position is outside the supported timeline. Choose an earlier position.",
+      );
+    }
+  }
+
   function seekBar(bar: number) {
+    validateBandPosition((Math.max(1, bar) - 1) * beatsPerBar());
     const clamped = Math.min(Math.max(1, bar), barCount());
     transport.bar = clamped;
     transport.beat = 1;
@@ -339,14 +364,17 @@ export function createPreviewEngine(
     band.active_cue = "none";
     band.pending_cue = "none";
     band.is_stopped = false;
-    seekBar(transport.loop_enabled ? transport.loop_start_bar : 1);
+    seekBar(1);
   }
 
-  function enterPlayback() {
+  function enterPlayback(fromCountIn = false) {
     transport.state = "playing";
     // position_beats holds the song seek; bar/beat temporarily show count-in clicks.
+    // After Stop the playhead is 0; come in at the loop start when a loop is
+    // armed, matching Timeline count-in completion (#134). Play without a
+    // count-in starts at bar 1 until the wrap.
     seekBar(
-      transport.position_beats === 0 && transport.loop_enabled
+      fromCountIn && transport.position_beats === 0 && transport.loop_enabled
         ? transport.loop_start_bar
         : Math.floor(transport.position_beats / beatsPerBar()) + 1,
     );
@@ -404,7 +432,7 @@ export function createPreviewEngine(
       transport.beat = (Math.floor(done) % beatsPerBar()) + 1;
       transport.bar_progress = (done % beatsPerBar()) / beatsPerBar();
       if (countInRemainingBeats <= 0) {
-        enterPlayback();
+        enterPlayback(true);
       }
     } else if (transport.state === "playing") {
       transport.position_beats += (dt * transport.bpm) / 60;
@@ -469,6 +497,8 @@ export function createPreviewEngine(
     emit("transport.state", { ...transport });
     emit("band.state", { ...band });
     if (tuner) emit("tuner.state", tuner);
+    else if (lastTunerActive) emit("tuner.state", null);
+    lastTunerActive = tuner != null;
     emit("engine.status", { ...status });
   }
 
@@ -491,6 +521,7 @@ export function createPreviewEngine(
   function loadChart(next: Chart, follow: boolean) {
     chart = next;
     bars = resolveChart(chart);
+    lastStyleSection = "";
     if (follow) {
       transport.time_signature = chart.timeSig;
       if (chart.defaultBpm > 0) transport.bpm = chart.defaultBpm;
@@ -715,7 +746,7 @@ export function createPreviewEngine(
       }
     },
     transport_pause: () => {
-      if (transport.state === "playing") {
+      if (transport.state === "playing" || transport.state === "counting_in") {
         transport.state = "paused";
         if (rig.sendClock) {
           rigSend([0xfc], "clock");
@@ -741,6 +772,7 @@ export function createPreviewEngine(
       if (!Number.isFinite(beats) || beats < 0) {
         throw new Error("Locate needs a non-negative beat position.");
       }
+      validateBandPosition(beats);
       seekBar(Math.floor(beats / beatsPerBar()) + 1);
     },
     mixer_set_bus: (a) => {
@@ -750,15 +782,37 @@ export function createPreviewEngine(
         gainDb?: number;
         muted?: boolean;
       };
-      let gain =
+      const gain =
         typeof patch.gain === "number"
           ? Math.min(1, Math.max(0, patch.gain))
           : typeof patch.gainDb === "number"
             ? Math.min(1, 10 ** (patch.gainDb / 20))
             : undefined;
-      if (patch.muted) gain = 0;
-      if (id === "band" && gain !== undefined) bandVolume = gain;
-      if (id === "click" && gain !== undefined) clickVolume = gain;
+      if (id === "band") {
+        if (gain !== undefined) bandVolume = patch.muted ? 0 : gain;
+        else if (patch.muted === true) bandVolume = 0;
+        else if (patch.muted === false && bandVolume === 0) bandVolume = 1;
+      } else if (id === "click") {
+        if (gain !== undefined) clickVolume = patch.muted ? 0 : gain;
+        else if (patch.muted === true) clickVolume = 0;
+        else if (patch.muted === false && clickVolume === 0) clickVolume = 1;
+      } else if (id === "drums" || id === "bass" || id === "comp") {
+        if (gain !== undefined && patch.muted === undefined) {
+          throw new Error(
+            `Mixer bus '${id}' has no gain control. Mute it with muted, or use band_set for parts.`,
+          );
+        }
+        if (id === "drums" && patch.muted !== undefined)
+          band.mute_drums = patch.muted;
+        if (id === "bass" && patch.muted !== undefined)
+          band.mute_bass = patch.muted;
+        if (id === "comp" && patch.muted !== undefined)
+          band.mute_comp = patch.muted;
+      } else {
+        throw new Error(
+          `Unknown mixer bus '${id}'. Use band, click, drums, bass or comp.`,
+        );
+      }
       return [
         {
           id: "band",
@@ -775,11 +829,11 @@ export function createPreviewEngine(
       ];
     },
     transport_set_loop: (a) => {
-      transport.loop_start_bar = Math.max(1, Number(a.startBar));
-      transport.loop_end_bar = Math.max(
-        transport.loop_start_bar + 1,
-        Number(a.endBar),
-      );
+      const start = Math.max(1, Number(a.startBar));
+      const end = Math.max(start + 1, Number(a.endBar));
+      validateBandPosition((end - 1) * beatsPerBar());
+      transport.loop_start_bar = start;
+      transport.loop_end_bar = end;
       transport.loop_enabled = Boolean(a.enabled);
     },
     transport_set_count_in: (a) => {
@@ -789,7 +843,15 @@ export function createPreviewEngine(
       transport.bpm = Math.max(20, Math.min(300, Number(a.bpm)));
     },
     transport_set_time_signature: (a) => {
-      transport.time_signature = [Number(a.numerator), Number(a.denominator)];
+      const meter = [Number(a.numerator), Number(a.denominator)] as [
+        number,
+        number,
+      ];
+      const styleMeter = styles.get(band.style_id)?.feel.timeSig;
+      if (!styleMeter || meter.some((n, i) => n !== styleMeter[i])) {
+        throw new Error("Load a chart with a matching style to change meter.");
+      }
+      transport.time_signature = meter;
     },
     transport_set_click_volume: (a) => {
       clickVolume = Number(a.volume);
@@ -797,11 +859,9 @@ export function createPreviewEngine(
     band_set_style: (a) => {
       const s = styles.get(String(a.styleId));
       if (!s) throw new Error(`unknown style "${a.styleId}"`);
-      if (transport.state === "playing") band.pending_style_id = s.id;
-      else {
-        band.style_id = s.id;
-        band.style_name = s.name;
-      }
+      band.style_id = s.id;
+      band.style_name = s.name;
+      band.pending_style_id = null;
     },
     band_render_offline: () => {
       throw new Error(
@@ -813,10 +873,6 @@ export function createPreviewEngine(
     },
     band_cue: (a) => {
       band.pending_cue = String(a.cue) as Cue;
-      if (transport.state !== "playing") {
-        band.active_cue = band.pending_cue;
-        band.pending_cue = "none";
-      }
     },
     band_list_styles: () => bundledStyles(),
     band_list_charts: () =>
@@ -854,6 +910,7 @@ export function createPreviewEngine(
       chartsDir: "(preview) ~/JosefinesJamstudio/charts",
       userChartIds: [...userCharts],
       loadErrors: [],
+      controlMaps: ["default", "black-spirit-200"],
     }),
     band_set: (a) => {
       const p = a.args as BandPatch;
@@ -897,6 +954,7 @@ export function createPreviewEngine(
     clip_audition: () => {
       throw new Error("Guitar preview requires the desktop app.");
     },
+    clip_audition_stop: () => null,
     controller_ports: () => [],
     controller_config: () => ({ schemaVersion: 1, bindings: [] }),
     controller_open: () => {

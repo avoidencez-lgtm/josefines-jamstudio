@@ -1,10 +1,17 @@
 import { beforeEach, expect, it } from "vitest";
+import { chartToText, parseChartText } from "../../src/lib/chart/text";
 import { applyProposal, labRequest } from "../../src/lib/jo/songLab";
 import {
   applyStudioEdits,
   songFingerprint,
 } from "../../src/lib/jo/studioTools";
-import { newOriginal, sectionBars, useWriting } from "../../src/lib/originals";
+import {
+  commitSectionDeletion,
+  defaultSection,
+  newOriginal,
+  sectionBars,
+  useWriting,
+} from "../../src/lib/originals";
 import {
   arrangedBars,
   checkWritingForm,
@@ -13,6 +20,7 @@ import {
   harmonyChoices,
   setSectionEnergy,
   transformPhrase,
+  uniqueSectionName,
 } from "../../src/lib/writingTools";
 import { useEngineStore } from "../../src/store/engine";
 
@@ -48,6 +56,15 @@ it("offers playable theory choices in every key, including a resolving dominant 
     degree: "I",
     shared: 2,
   });
+  expect(harmonyChoices(cMajor, "", "borrowed").map((c) => c.degree)).toEqual([
+    "i",
+    "ii°",
+    "bIII",
+    "iv",
+    "v",
+    "bVI",
+    "bVII",
+  ]);
   expect(harmonyChoices(cMajor, "", "borrowed")[3].chord).toBe("Fm");
   expect(harmonyChoices(cMajor, "", "dominant")[1]).toMatchObject({
     chord: "A7",
@@ -105,12 +122,57 @@ it("deletes only sections outside the form, with their lyrics and settings, and 
   expect(after.sections.idea).toBeUndefined();
   expect(after.lyrics?.idea).toBeUndefined();
   expect(() => checkWritingForm(after)).not.toThrow();
+  expect(() =>
+    checkWritingForm({
+      ...after,
+      clips: [
+        {
+          takeId: "t",
+          label: "Riff",
+          trimStart: 4,
+          trimEnd: 2,
+          startBar: 1,
+          repeats: 1,
+          gain: 1,
+          muted: false,
+        },
+      ],
+    }),
+  ).toThrow(/trim end/i);
   w.undo();
   expect(currentSong().body).toEqual(before);
   const single = structuredClone(newOriginal().body);
   single.chart.sections = [single.chart.sections[0]];
   single.chart.arrangement = [];
   expect(() => deleteSection(single, "verse")).toThrow(/at least one/);
+});
+
+it("does not keep a version when deleting a section is refused (#362)", () => {
+  const w = useWriting.getState();
+  w.edit((b) => {
+    duplicateSection(b, "verse", "idea");
+    b.chart.arrangement = b.chart.arrangement.filter(
+      (a) => a.sectionId !== "idea",
+    );
+  });
+  expect(currentSong().versions).toHaveLength(0);
+  useEngineStore.setState({ isRecording: true });
+  expect(commitSectionDeletion("idea")).toBe(false);
+  expect(useWriting.getState().message).toContain("Save the take");
+  expect(currentSong().body.chart.sections.map((s) => s.id)).toContain("idea");
+  expect(currentSong().versions).toHaveLength(0);
+  useEngineStore.setState({ isRecording: false });
+  const before = structuredClone(currentSong().body);
+  expect(commitSectionDeletion("idea")).toBe(true);
+  expect(currentSong().versions).toHaveLength(1);
+  expect(currentSong().versions[0].name).toBe(
+    "Before deleting This is Verse variation 3.",
+  );
+  expect(currentSong().versions[0].body).toEqual(before);
+  expect(currentSong().body.chart.sections.map((s) => s.id)).toEqual([
+    "verse",
+    "chorus",
+  ]);
 });
 
 it("groups a slider drag or a run of typing into one Undo step (#38)", () => {
@@ -160,6 +222,52 @@ it("rejects oversized and empty forms atomically without adding Undo, and counts
   expect(() =>
     checkWritingForm({ ...originalSong.body, lyrics: { missing: "No" } }),
   ).toThrow(/Lyrics/);
+});
+
+it("rejects a 17th guitar clip and missing section settings before Undo", () => {
+  const originalSong = currentSong();
+  const clip = {
+    takeId: "take-1",
+    label: "clip",
+    trimStart: 0,
+    trimEnd: 1,
+    startBar: 1,
+    repeats: 1,
+    gain: 1,
+    muted: false,
+  };
+  const seventeen = structuredClone(originalSong.body);
+  seventeen.clips = Array.from({ length: 17 }, () => ({ ...clip }));
+  expect(() => checkWritingForm(seventeen)).toThrow(/16 guitar clips/);
+  const orphan = structuredClone(originalSong.body);
+  const { verse: _verse, ...sections } = orphan.sections;
+  orphan.sections = sections;
+  expect(() => checkWritingForm(orphan)).toThrow(/Missing band settings for/);
+  useWriting.getState().edit((b) => {
+    b.clips = Array.from({ length: 16 }, (_, i) => ({
+      ...clip,
+      takeId: `take-${i}`,
+    }));
+  });
+  const before = useWriting.getState();
+  useWriting.getState().attach({
+    id: "take-overflow",
+    sessionId: "s",
+    timestamp: "1",
+    durationSecs: 1,
+    styleId: "blues-shuffle",
+    chartId: "blues-12-bar",
+    tempo: 120,
+    sampleCount: 1,
+    pathInput: "x",
+    pathBand: "x",
+    pathMaster: "x",
+    waveformPeaks: [],
+    notes: "",
+  });
+  expect(useWriting.getState().song).toBe(before.song);
+  expect(useWriting.getState().past).toBe(before.past);
+  expect(useWriting.getState().message).toMatch(/16 guitar clips/);
 });
 
 it("restores older versions without retaining later lyric fields; redo returns those lyrics", () => {
@@ -220,6 +328,47 @@ it("shares section lyrics with both AI paths and applies reviewed seeds without 
     ]),
   ).toThrow(/missing/i);
   expect(songFingerprint()).toBe(before);
+});
+
+it("numbers each added section so chart text can round-trip (#425)", () => {
+  expect(uniqueSectionName(["Verse", "Chorus"])).toBe("This is a new section.");
+  expect(uniqueSectionName(["Verse", "Chorus", "This is a new section."])).toBe(
+    "This is a new section 2.",
+  );
+  const w = useWriting.getState();
+  w.edit((b) => {
+    const id = "section-a";
+    b.chart.sections.push({
+      id,
+      name: uniqueSectionName(b.chart.sections.map((s) => s.name)),
+      bars: structuredClone(b.chart.sections[0].bars),
+    });
+    b.sections[id] = defaultSection();
+    b.chart.arrangement.push({ sectionId: id, repeats: 1 });
+  });
+  w.edit((b) => {
+    const id = "section-b";
+    b.chart.sections.push({
+      id,
+      name: uniqueSectionName(b.chart.sections.map((s) => s.name)),
+      bars: structuredClone(b.chart.sections[0].bars),
+    });
+    b.sections[id] = defaultSection();
+    b.chart.arrangement.push({ sectionId: id, repeats: 1 });
+  });
+  const names = currentSong().body.chart.sections.map((s) => s.name);
+  expect(names).toEqual([
+    "Verse",
+    "Chorus",
+    "This is a new section.",
+    "This is a new section 2.",
+  ]);
+  expect(new Set(names).size).toBe(names.length);
+  const { chart, problems } = parseChartText(
+    chartToText(currentSong().body.chart),
+  );
+  expect(problems).toEqual([]);
+  expect(chart?.sections.map((s) => s.name)).toEqual(names);
 });
 
 function currentSong() {

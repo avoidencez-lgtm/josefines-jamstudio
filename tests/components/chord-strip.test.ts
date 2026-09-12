@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  loopRangeFromShiftClick,
   paintPlayhead,
   scrollBarInStrip,
 } from "../../src/components/ChordStrip";
@@ -40,6 +41,14 @@ describe("scrollBarInStrip", () => {
     };
     scrollBarInStrip(strip, { offsetLeft: 500, offsetWidth: 88 }, viewport);
     expect(strip.scrollTo).not.toHaveBeenCalled();
+  });
+});
+
+describe("loopRangeFromShiftClick", () => {
+  it("does not send a 0-based loop start when transport is stopped or counting in", () => {
+    expect(loopRangeFromShiftClick(null, 0, 4)).toEqual([4, 5]);
+    expect(loopRangeFromShiftClick(null, 2, 4)).toEqual([2, 5]);
+    expect(loopRangeFromShiftClick(1, 0, 4)).toEqual([1, 5]);
   });
 });
 

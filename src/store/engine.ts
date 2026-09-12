@@ -15,6 +15,7 @@ import type {
   LyriaStatus,
   MeterTelemetry,
   MidiPortInfo,
+  PackStatus,
   ReferenceState,
   RigProfile,
   RigState,
@@ -26,7 +27,7 @@ import type {
 } from "../ipc/contract";
 import { transposeChart } from "../lib/chart/transpose";
 import { withNextStep } from "../lib/loudError";
-import type { Original } from "../lib/originals";
+import { type Original, useWriting } from "../lib/originals";
 import { savedTakeAnalysis } from "../lib/sessions/analysis";
 
 export type ScreenId =
@@ -96,7 +97,7 @@ export interface EngineState {
   notify: (kind: Notice["kind"], text: string) => void;
   dismissNotice: (id: number) => void;
   setTone: (on: boolean, hz?: number) => Promise<void>;
-  setTuner: (on: boolean) => Promise<void>;
+  setTuner: (on: boolean) => Promise<CommandResult>;
   setClickVolume: (volume: number) => Promise<void>;
   setBandVolume: (volume: number) => Promise<void>;
 
@@ -104,13 +105,13 @@ export interface EngineState {
   transportPlay: () => Promise<CommandResult>;
   transportPause: () => Promise<CommandResult>;
   transportStop: () => Promise<CommandResult>;
-  transportSeekBar: (bar: number) => Promise<void>;
+  transportSeekBar: (bar: number) => Promise<CommandResult>;
   transportSetLoop: (
     startBar: number,
     endBar: number,
     enabled: boolean,
   ) => Promise<CommandResult>;
-  transportSetCountIn: (bars: number) => Promise<void>;
+  transportSetCountIn: (bars: number) => Promise<CommandResult>;
   transportSetTempo: (bpm: number) => Promise<CommandResult<number>>;
   transportSetTimeSignature: (
     numerator: number,
@@ -151,7 +152,7 @@ export interface EngineState {
   deleteUserChart: (chartId: string) => Promise<void>;
   /** Load a chart object straight into the band without saving (editor preview). */
   playChartInline: (chart: Chart) => Promise<boolean>;
-  transposeCurrentChart: (semitones: number) => Promise<void>;
+  transposeCurrentChart: (semitones: number) => Promise<CommandResult>;
 
   // Recorder & Takes
   takes: TakeMetadata[];
@@ -189,6 +190,7 @@ export interface EngineState {
   sendRigProgram: (program: number) => Promise<void>;
   clearRigMonitor: () => Promise<void>;
   checkVirtualMidi: () => Promise<CommandResult>;
+  assetPacks: PackStatus[];
   ensureAssets: (ids?: string[]) => Promise<CommandResult>;
   exportLogs: () => Promise<CommandResult<string>>;
 
@@ -372,7 +374,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
 
     setTuner: async (on) => {
       set({ tunerOn: on });
-      await run("The tuner", () => ipc.invoke("tuner_set", { on }));
+      return command("The tuner", () => ipc.invoke("tuner_set", { on }));
     },
 
     setClickVolume: async (volume) => {
@@ -407,7 +409,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       return command("Stop", () => ipc.invoke<void>("transport_stop"));
     },
     transportSeekBar: async (bar) => {
-      await run("Seek", () => ipc.invoke("transport_seek_bar", { bar }));
+      return command("Seek", () => ipc.invoke("transport_seek_bar", { bar }));
     },
     transportSetLoop: async (startBar, endBar, enabled) => {
       return command("The loop", () =>
@@ -415,7 +417,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       );
     },
     transportSetCountIn: async (bars) => {
-      await run("The count-in", () =>
+      return command("The count-in", () =>
         ipc.invoke("transport_set_count_in", { bars }),
       );
     },
@@ -443,11 +445,12 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const intervals = recent.slice(1).map((t, i) => t - recent[i]);
       const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
       const bpm = Math.round(60_000 / avg);
-      if (bpm >= 20 && bpm <= 300) {
-        const result = await get().transportSetTempo(bpm);
-        return result.ok ? result.value : null;
+      if (bpm < 20 || bpm > 300) {
+        const error = `Tempo failed. Tap tempo ${bpm} BPM is outside 20–300.`;
+        get().notify("error", error);
+        throw new Error(error);
       }
-      return null;
+      return requireCommand(await get().transportSetTempo(bpm));
     },
 
     setTempoTrainer: (patch) =>
@@ -566,30 +569,48 @@ export const useEngineStore = create<EngineState>((set, get) => {
     },
     transposeCurrentChart: async (semitones) => {
       const current = get().currentChart;
-      if (!current) return;
+      if (!current) return { ok: false, error: "Load a chart first." };
+      if (get().telemetry.reference) {
+        const error =
+          "Cannot transpose the band while a reference is loaded. Open Songs to change key on the reference player, or return to the band.";
+        get().notify("error", error);
+        return { ok: false, error };
+      }
       const moved = transposeChart(current, semitones);
       const loaded = get().loadedOriginal;
       if (loaded) {
-        const document: Original = {
-          schemaVersion: 1,
-          id: loaded.id,
-          revision: 0,
-          versions: [],
-          body: { ...loaded.body, chart: moved },
-        };
-        if (
-          await runOk("The transpose song", () =>
-            ipc.invoke("originals_load", { document, keepPlayback: true }),
-          )
-        ) {
+        const writing = useWriting.getState();
+        const source = writing.song?.id === loaded.id ? writing.song : null;
+        const document: Original = source
+          ? { ...source, body: { ...source.body, chart: moved } }
+          : {
+              schemaVersion: 1,
+              id: loaded.id,
+              revision: 0,
+              versions: [],
+              body: { ...loaded.body, chart: moved },
+            };
+        const result = await command("The transpose song", () =>
+          ipc.invoke<void>("originals_load", { document, keepPlayback: true }),
+        );
+        if (result.ok) {
+          if (source) {
+            useWriting.getState().edit((body) => {
+              body.chart = moved;
+            });
+          }
           set({
             currentChart: moved,
             loadedOriginal: { id: loaded.id, body: document.body },
           });
         }
-        return;
+        return result;
       }
-      await get().playChartInline(moved);
+      const result = await command("The play chart", () =>
+        ipc.invoke<void>("band_load_chart_inline", { chart: moved }),
+      );
+      if (result.ok) set({ currentChart: moved, loadedOriginal: null });
+      return result;
     },
 
     startRecording: async (sessionId = "default-session") => {
@@ -758,6 +779,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
     checkVirtualMidi: async () => {
       return command("The virtual MIDI", () => ipc.invoke("rig_virtual_check"));
     },
+    assetPacks: [],
     ensureAssets: async (ids) => {
       return command("The sample packs", () =>
         ipc.invoke("assets_ensure", ids ? { ids } : {}),
@@ -823,6 +845,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
         set((s) => ({
           engineStatus: status,
           settings: s.settings ? { ...s.settings, ...config } : s.settings,
+          toneOn: false,
+          tunerOn: false,
+          isRecording: false,
         }));
         if (status.last_error) get().notify("error", status.last_error);
         else
@@ -843,8 +868,14 @@ export const useEngineStore = create<EngineState>((set, get) => {
       const status = await run("The restart audio", () =>
         ipc.invoke<EngineStatus>("engine_restart"),
       );
-      if (status) set({ engineStatus: status });
-      else await get().refreshEngineStatus();
+      if (status) {
+        set({
+          engineStatus: status,
+          toneOn: false,
+          tunerOn: false,
+          isRecording: false,
+        });
+      } else await get().refreshEngineStatus();
     },
 
     checkKey: async (provider) => {
@@ -889,7 +920,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
               ? "song"
               : state.lyriaStatus.phase !== "idle"
                 ? "lyria"
-                : state.telemetry.reference
+                : state.activeSource === "song"
                   ? "band"
                   : state.activeSource,
           }));
@@ -913,7 +944,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
         ipc.listen<MeterTelemetry>("input.meters", (input_level) => {
           set((state) => ({ telemetry: { ...state.telemetry, input_level } }));
         }),
-        ipc.listen<TunerTelemetry>("tuner.state", (tuner) => {
+        ipc.listen<TunerTelemetry | null>("tuner.state", (tuner) => {
           set((state) => ({ telemetry: { ...state.telemetry, tuner } }));
         }),
         ipc.listen<TransportTelemetry>("transport.state", (transport) => {
@@ -923,6 +954,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
           const trainer = get().tempoTrainer;
           const boundary =
             transport.bar === prev.bar + 1 ||
+            (transport.bar === 1 &&
+              prev.bar > 1 &&
+              transport.bar_progress < prev.bar_progress) ||
             (transport.loop_enabled &&
               prev.loop_enabled &&
               prev.bar === transport.loop_end_bar - 1 &&
@@ -980,7 +1014,13 @@ export const useEngineStore = create<EngineState>((set, get) => {
         }),
         ipc.listen<EngineStatus>("engine.status", (engineStatus) => {
           const prev = get().engineStatus;
-          set({ engineStatus });
+          set((state) => ({
+            engineStatus,
+            telemetry: {
+              ...state.telemetry,
+              xruns: engineStatus.xruns ?? state.telemetry.xruns,
+            },
+          }));
           if (
             !isPreview &&
             engineStatus.last_error &&
@@ -988,6 +1028,9 @@ export const useEngineStore = create<EngineState>((set, get) => {
           ) {
             get().notify("error", engineStatus.last_error);
           }
+        }),
+        ipc.listen<PackStatus[]>("assets.state", (assetPacks) => {
+          set({ assetPacks });
         }),
       ]);
 

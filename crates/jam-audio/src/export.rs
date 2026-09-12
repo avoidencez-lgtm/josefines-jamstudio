@@ -1,4 +1,4 @@
-//! export: DAW multi-track export packaging (WAV stems + SMF Type 1 MIDI tempo map).
+//! export: DAW multi-track export packaging (WAV stems + SMF MIDI tempo map).
 
 use std::fs::File;
 use std::io::Write;
@@ -19,6 +19,8 @@ pub struct ExportJob<'a> {
     pub sections: &'a [(&'a str, u32)],
     /// `(stem name, path to the recorded WAV)`. Missing files are reported, not fatal.
     pub stems: &'a [(&'a str, &'a Path)],
+    /// Directory that recorded WAVs must canonicalize inside, when known.
+    pub take_dir: Option<&'a Path>,
 }
 
 /// What was written, so the UI can tell the truth about the bundle.
@@ -32,8 +34,16 @@ pub struct ExportReport {
     pub reaper_script: Option<String>,
 }
 
+fn stem_key_ok(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+}
+
 impl DawExporter {
-    /// Generates Standard MIDI File (SMF Type 1) with tempo, time signature, and section markers.
+    /// Generates Standard MIDI File (SMF Type 0) with tempo, time signature, and section markers.
     pub fn build_tempo_map_midi(tempo: f64, sections: &[(&str, u32)]) -> std::io::Result<Vec<u8>> {
         Self::build_tempo_map_midi_with_meter(tempo, (4, 4), sections)
     }
@@ -46,10 +56,10 @@ impl DawExporter {
         let micros = midi_tempo(tempo, time_sig)?;
         let mut midi = Vec::new();
 
-        // SMF Header: 'MThd', length 6, format 1 (multi-track / tempo map), 1 track, 480 ticks/quarter
+        // SMF Header: 'MThd', length 6, format 0, 1 track, 480 ticks/quarter.
         midi.extend_from_slice(b"MThd");
         midi.extend_from_slice(&6u32.to_be_bytes());
-        midi.extend_from_slice(&1u16.to_be_bytes()); // Format 1
+        midi.extend_from_slice(&0u16.to_be_bytes()); // Format 0 (single track)
         midi.extend_from_slice(&1u16.to_be_bytes()); // 1 Track
         midi.extend_from_slice(&480u16.to_be_bytes()); // 480 ticks/quarter note
 
@@ -60,7 +70,12 @@ impl DawExporter {
         // cc = 24 MIDI clocks per metronome click, bb = 8 32nd notes per quarter.
         let (num, den) = time_sig;
         let den_pow = den.trailing_zeros() as u8;
-        track_data.extend_from_slice(&[0x00, 0xFF, 0x58, 0x04, num, den_pow, 0x18, 0x08]);
+        let clocks = match den {
+            8 => 0x24, // dotted quarter in compound meters
+            2 => 0x30, // half-note click in cut time
+            _ => 0x18, // quarter-note click
+        };
+        track_data.extend_from_slice(&[0x00, 0xFF, 0x58, 0x04, num, den_pow, clocks, 0x08]);
 
         // 2. Set Tempo: delta 0, FF 51 03 [24-bit microsec/quarter]
         let t_bytes = micros.to_be_bytes();
@@ -90,8 +105,14 @@ impl DawExporter {
             track_data.extend_from_slice(name_bytes);
         }
 
-        // End of Track: delta 0, FF 2F 00
-        track_data.extend_from_slice(&[0x00, 0xFF, 0x2F, 0x00]);
+        // End of Track: extend through the last marked bar so a one-section
+        // map is not zero-length (SMF duration is the last event's tick).
+        let end_tick = match sections.last() {
+            Some(&(_, bar)) => u64::from(bar) * ticks_per_bar,
+            None => ticks_per_bar,
+        };
+        write_var_len(&mut track_data, end_tick.saturating_sub(prev_tick))?;
+        track_data.extend_from_slice(&[0xFF, 0x2F, 0x00]);
 
         // Track Chunk: 'MTrk', length, data
         midi.extend_from_slice(b"MTrk");
@@ -106,7 +127,7 @@ impl DawExporter {
     }
 
     /// Writes the bundle a DAW needs to reopen a take at bar 1: the recorded stems, an
-    /// SMF Type 1 tempo map with section markers, and a JSON sidecar describing both.
+    /// SMF tempo map with section markers, and a JSON sidecar describing both.
     pub fn export_take_bundle(
         output_dir: &Path,
         job: &ExportJob<'_>,
@@ -127,10 +148,50 @@ impl DawExporter {
         let mut copied_stems = Vec::new();
         let mut missing_stems = Vec::new();
         for (name, src) in job.stems {
+            if !stem_key_ok(name) {
+                return Err(invalid_midi(
+                    "Stem names may contain only letters, numbers, '_' and '-'.",
+                ));
+            }
             let dest = output_dir.join(format!("{}-{}.wav", job.take_id, name));
+            if dest.parent() != Some(output_dir) {
+                return Err(invalid_midi("Export destination left the export folder."));
+            }
+            if let Some(take_dir) = job.take_dir {
+                match src.canonicalize() {
+                    Ok(canon) => {
+                        let root = take_dir.canonicalize().map_err(|e| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("Take directory is unreadable. {e}"),
+                            )
+                        })?;
+                        if !canon.starts_with(&root) {
+                            return Err(invalid_midi(
+                                "Stem path must stay inside the take directory.",
+                            ));
+                        }
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => {
+                        return Err(std::io::Error::new(
+                            e.kind(),
+                            format!("Cannot read {}. {e}", src.display()),
+                        ));
+                    }
+                }
+            }
             match std::fs::copy(src, &dest) {
                 Ok(_) => copied_stems.push(dest.to_string_lossy().to_string()),
-                Err(_) => missing_stems.push(src.to_string_lossy().to_string()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    missing_stems.push(src.to_string_lossy().to_string())
+                }
+                Err(e) => {
+                    return Err(std::io::Error::new(
+                        e.kind(),
+                        format!("Cannot write {}. {e}", dest.display()),
+                    ));
+                }
             }
         }
 
@@ -145,7 +206,7 @@ impl DawExporter {
             "sections": job.sections.iter().map(|(n, b)| serde_json::json!({"name": n, "bar": b})).collect::<Vec<_>>(),
             "stems": copied_stems,
             "tempoMap": midi_path.to_string_lossy(),
-            "format": "24-bit PCM WAV + SMF Type 1 MIDI",
+            "format": "WAV stems + SMF MIDI",
             "howTo": "Import the tempo map first so the DAW adopts the tempo and markers, then drop every stem at bar 1."
         });
         File::create(&json_path)?.write_all(serde_json::to_string_pretty(&info)?.as_bytes())?;
@@ -469,6 +530,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn tempo_map_uses_format_0_and_extends_end_of_track_through_the_last_bar() {
+        let midi =
+            DawExporter::build_tempo_map_midi_with_meter(120.0, (4, 4), &[("Main", 1)]).unwrap();
+        assert_eq!(
+            &midi[8..12],
+            &[0, 0, 0, 1],
+            "constant-tempo export uses Format 0"
+        );
+        assert!(
+            midi.ends_with(&[0x8F, 0x00, 0xFF, 0x2F, 0x00]),
+            "EOT must cover one 4/4 bar (1920 ticks), not delta 0"
+        );
+    }
+
+    #[test]
+    fn time_signature_metronome_click_follows_the_beat_unit() {
+        for (meter, clocks) in [((4, 4), 0x18), ((6, 8), 0x24), ((2, 2), 0x30)] {
+            let midi =
+                DawExporter::build_tempo_map_midi_with_meter(120.0, meter, &[("A", 1)]).unwrap();
+            let i = midi
+                .windows(4)
+                .position(|w| w == [0xFF, 0x58, 0x04, meter.0])
+                .unwrap();
+            assert_eq!(midi[i + 5], clocks, "{}/{} click", meter.0, meter.1);
+        }
+    }
+
+    #[test]
     fn reaper_bundle_is_portable_preserves_timing_and_mutes_only_reference_mixes() {
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
             "../../../tests/fixtures/seams/reaper-export.json"
@@ -521,6 +610,7 @@ mod tests {
             sample_rate: 48000,
             sections: &sections,
             stems: &[],
+            take_dir: None,
         };
         let script = write_reaper_import(&dir, &job, &report, &notes).unwrap();
         let text = std::fs::read_to_string(&script).unwrap();
@@ -639,8 +729,8 @@ mod tests {
         // Check header 'MThd'
         assert_eq!(&midi[0..4], b"MThd");
         assert_eq!(&midi[4..8], &6u32.to_be_bytes());
-        // Format 1
-        assert_eq!(&midi[8..10], &1u16.to_be_bytes());
+        // Format 0 (single-track tempo map)
+        assert_eq!(&midi[8..10], &0u16.to_be_bytes());
 
         // Check track 'MTrk'
         assert_eq!(&midi[14..18], b"MTrk");
@@ -720,12 +810,22 @@ mod tests {
             sample_rate: 44_100,
             sections: &[("Intro", 1), ("Verse", 5)],
             stems: &[("input", input.as_path()), ("band", missing.as_path())],
+            take_dir: Some(src.as_path()),
         };
         let report = DawExporter::export_take_bundle(&dir.join("out"), &job).unwrap();
         assert_eq!(report.copied_stems.len(), 1);
         assert_eq!(report.missing_stems.len(), 1);
         assert!(Path::new(&report.midi_file).exists());
         assert!(dir.join("out").join("take-1-input.wav").exists());
+        let outside = src.join("secret.txt");
+        std::fs::write(&outside, b"secret").unwrap();
+        let escaped = ExportJob {
+            stems: &[("../../pwned", outside.as_path())],
+            take_dir: Some(src.as_path()),
+            ..job
+        };
+        assert!(DawExporter::export_take_bundle(&dir.join("jail"), &escaped).is_err());
+        assert!(!dir.join("pwned.wav").exists());
         let info = std::fs::read_to_string(dir.join("out").join("take-1-info.json")).unwrap();
         assert!(info.contains("\"sampleRate\": 44100"));
         let readme = std::fs::read_to_string(dir.join("out").join("README.txt")).unwrap();

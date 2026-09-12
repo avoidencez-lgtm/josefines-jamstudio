@@ -53,10 +53,14 @@ impl Session {
         machine.apply(patch)?;
         Ok(machine.status())
     }
+
+    pub fn config(&self) -> Option<Config> {
+        self.machine.as_ref().map(|m| m.config.clone())
+    }
 }
 
 fn emit<R: Runtime>(app: &AppHandle<R>, status: &Status) {
-    let _ = app.emit("lyria.state", status);
+    let _ = app.emit("lyria:state", status);
 }
 
 #[tauri::command]

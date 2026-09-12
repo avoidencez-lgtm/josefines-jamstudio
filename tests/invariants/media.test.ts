@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { __setIpcForTests, ipc } from "../../src/ipc/client";
 import type { Chart } from "../../src/ipc/contract";
 import { dispatchJoToolCall } from "../../src/lib/jo/dispatcher";
 import {
   MEDIA_MODELS,
   applyShotIdeas,
+  cancelFilmWork,
   clampGenerationSeconds,
   fitShots,
+  maxClipTrimStart,
   newVideo,
   shotsFromChart,
   useMedia,
@@ -13,6 +16,13 @@ import {
 } from "../../src/lib/media";
 
 describe("music video seam", () => {
+  it("clamps clip start so a shot still fits in the assigned clip", () => {
+    expect(maxClipTrimStart(10, 8)).toBe(2);
+    expect(maxClipTrimStart(10, 12)).toBe(0);
+    expect(maxClipTrimStart(undefined, 8)).toBe(0);
+    expect(Math.min(9, maxClipTrimStart(10, 8))).toBe(2);
+  });
+
   it("agent shot edits validate IDs, preserve attached clips and support undo", async () => {
     const project = newVideo();
     project.shots[0].assetId = "existing";
@@ -111,5 +121,26 @@ describe("music video seam", () => {
     expect(() =>
       applyShotIdeas(p, JSON.stringify([{ ...idea, id: "other" }])),
     ).toThrow();
+  });
+
+  it("a refused Film cancel sets a message instead of leaving busy stuck", async () => {
+    const previous = { ...ipc };
+    useMedia.setState({ busy: "Rendering", message: "" });
+    __setIpcForTests({
+      invoke: async () => {
+        throw new Error(
+          "Nothing is running to cancel. Wait for this job to finish, or start it again.",
+        );
+      },
+    });
+    try {
+      await cancelFilmWork();
+      expect(useMedia.getState().message).toContain(
+        "Nothing is running to cancel",
+      );
+    } finally {
+      __setIpcForTests(previous);
+      useMedia.setState({ busy: "", message: "" });
+    }
   });
 });

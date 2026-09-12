@@ -44,6 +44,15 @@ export function FootControls() {
         <label className="song-check">
           <input
             type="checkbox"
+            checked={c.config.ccToggle ?? false}
+            disabled={c.busy || isPreview}
+            onChange={(e) => void c.setCcToggle(e.target.checked)}
+          />
+          Use toggle CC pedals.
+        </label>
+        <label className="song-check">
+          <input
+            type="checkbox"
             checked={c.enabled}
             disabled={!c.port || c.busy}
             onChange={(e) => {
@@ -96,8 +105,10 @@ export function FootControls() {
         HeadRush Pedalboard sends Program Changes from its 5-pin MIDI Out when
         rigs change; connect that through a MIDI interface. A dedicated CC/note
         controller also works. Actions stay off after restarting until you
-        connect and enable them. PC numbers use 0–127. CC pedals trigger when
-        crossing 64; release before pressing again.
+        connect and enable them. PC numbers use 0–127. Leave toggle mode off if
+        releasing a CC pedal sends 0. Enable it if successive presses alternate
+        between 127 and 0. Changing mode reconnects this input and disables
+        actions until you enable them again.
       </p>
     </details>
   );

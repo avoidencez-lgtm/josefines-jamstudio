@@ -151,6 +151,61 @@ fn save_returns_the_stored_document_and_writes_it_under_the_user_folder() {
 }
 
 #[test]
+fn saving_preserves_a_previous_temporary_song_file() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let id = unique("recoverable-song");
+    let first = studio.ok("originals_save", json!({"document": song(&id)}));
+    let file = song_file(&id);
+    let temporary = file.with_extension("json.tmp");
+    let recovery = serde_json::to_vec(&first).unwrap();
+    std::fs::write(&temporary, &recovery).unwrap();
+    let mut edited = first;
+    edited["title"] = json!("A later edit");
+    let second = studio.ok("originals_save", json!({"document": edited}));
+    assert!(
+        temporary.is_file(),
+        "An earlier temporary save must not be consumed"
+    );
+    assert_eq!(std::fs::read(&temporary).unwrap(), recovery);
+    assert_eq!(second["revision"], 2);
+    assert_eq!(read_json(&file), second);
+}
+
+#[test]
+fn failed_song_backup_keeps_the_song_and_cleans_only_its_new_temporary_files() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let id = unique("failed-song-save");
+    let first = studio.ok("originals_save", json!({"document": song(&id)}));
+    let file = song_file(&id);
+    let before = std::fs::read(&file).unwrap();
+    let backup = file.with_extension("json.bak");
+    std::fs::create_dir(&backup).unwrap();
+    std::fs::write(backup.join("keep.txt"), b"unrelated recovery").unwrap();
+    let mut edited = first;
+    edited["title"] = json!("Cannot be committed");
+    assert!(!studio
+        .err("originals_save", json!({"document": edited}))
+        .is_empty());
+    assert_eq!(std::fs::read(&file).unwrap(), before);
+    assert_eq!(
+        std::fs::read(backup.join("keep.txt")).unwrap(),
+        b"unrelated recovery"
+    );
+    assert!(
+        !std::fs::read_dir(file.parent().unwrap())
+            .unwrap()
+            .any(|entry| {
+                let name = entry.unwrap().file_name();
+                let name = name.to_string_lossy();
+                name.starts_with(&id) && name.contains(".tmp")
+            }),
+        "A failed save must clean the temporary files it created"
+    );
+}
+
+#[test]
 fn save_checks_the_revision_against_the_file_on_disk() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
@@ -186,7 +241,15 @@ fn save_checks_the_revision_against_the_file_on_disk() {
 fn save_refuses_invalid_ids_without_touching_the_disk() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
-    for id in ["../escape", "my song", "", "sång", &"a".repeat(101)] {
+    for id in [
+        "../escape",
+        "my song",
+        "",
+        "sång",
+        "MySong",
+        "Blues-Shuffle",
+        &"a".repeat(101),
+    ] {
         assert_eq!(
             studio.err("originals_save", json!({ "document": song(id) })),
             "Invalid song or take id.",
@@ -194,8 +257,17 @@ fn save_refuses_invalid_ids_without_touching_the_disk() {
         );
     }
     let longest = "a".repeat(100);
+    let mut boundary = song(&longest);
+    boundary["body"]["chart"]["id"] = json!("c".repeat(121));
     assert_eq!(
-        studio.ok("originals_save", json!({ "document": song(&longest) }))["id"],
+        studio.err("originals_save", json!({ "document": boundary })),
+        "Chart id may only contain letters, numbers, hyphens and underscores.",
+        "the chart has its own 120-character ID limit"
+    );
+    assert!(!song_file(&longest).exists());
+    boundary["body"]["chart"]["id"] = json!("c".repeat(120));
+    assert_eq!(
+        studio.ok("originals_save", json!({ "document": boundary }))["id"],
         longest,
         "100 characters is the longest accepted id"
     );
@@ -896,6 +968,15 @@ fn favourite_marks_the_take_manifest_on_disk_and_rejects_unknown_takes() {
         .find(|t| t["id"] == take_id)
         .unwrap();
     assert_eq!(entry["favourite"], true);
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    let cached = cached.iter().find(|t| t.id == take_id).unwrap();
+    assert_eq!(cached.extra.get("favourite"), Some(&json!(true)));
 
     let cleared = studio.ok(
         "takes_favourite",
@@ -1025,6 +1106,11 @@ fn audition_plays_a_trimmed_clip_of_a_take_and_checks_its_spec() {
     let previewing = previewing.expect("a preview voice is playing");
     assert_eq!(previewing.take_id, take_id);
     assert_eq!(previewing.trim_end, duration);
+    studio.ok("clip_audition_stop", json!({}));
+    assert!(
+        state.engine.lock().audition.lock().is_none(),
+        "Stop listening clears the preview voice"
+    );
     wait_until("the transport to stop for the preview", || {
         telemetry(&studio)["transport"]["state"] == "stopped"
     });

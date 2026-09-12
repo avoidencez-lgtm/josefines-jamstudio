@@ -19,6 +19,7 @@ import {
   COALESCE_MS,
   type Original,
   arrangementRanges,
+  commitSectionDeletion,
   defaultSection,
   sectionBars,
   useWriting,
@@ -237,6 +238,27 @@ it("a run of typing in the title, lyrics and notebook is one Undo step each, a p
   expect(writing().past).toHaveLength(5);
 });
 
+it("section renaming coalesces keystrokes into one undo step", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(Date.UTC(2026, 8, 5, 11));
+  const w = writing();
+  w.createSong();
+  w.edit((b) => {
+    b.chart.sections[0].bars[0][0].chord = "Dm";
+  });
+  expect(writing().past).toHaveLength(1);
+  for (const name of ["P", "Po", "Post-Chorus Breakdown 1"])
+    w.edit((b) => {
+      const s = b.chart.sections.find((section) => section.id === "verse");
+      if (s) s.name = name;
+    }, "section-name:verse");
+  expect(writing().past).toHaveLength(2);
+  expect(body().chart.sections[0].name).toBe("Post-Chorus Breakdown 1");
+  w.undo();
+  expect(body().chart.sections[0].name).toBe("Verse");
+  expect(body().chart.sections[0].bars[0][0].chord).toBe("Dm");
+});
+
 it("the bar editor and the harmony palette rewrite chords bar by bar; malformed bars and missing sections never reach the song", () => {
   const w = writing();
   w.createSong();
@@ -406,8 +428,7 @@ it("Add section, take it out of the form, Delete section: a version is kept, its
     b.chart.arrangement.splice(2, 1);
   });
   const beforeDelete = structuredClone(body());
-  w.version("Before deleting This is a new section.");
-  w.edit((b) => deleteSection(b, id));
+  expect(commitSectionDeletion(id)).toBe(true);
   const sections = song().body.chart.sections;
   if (!sections.some((s) => s.id === id)) w.select(sections[0].id);
 
@@ -489,18 +510,18 @@ it("Save song stores it in the engine and lists it; each save bumps the revision
 
   await w.action(w.saveCopy);
   expect(writing()).toMatchObject({
-    dirty: false,
+    dirty: true,
     message: "Copy saved. Original kept.",
   });
   expect(body().notes).toBe("Third pass");
-  expect(song().id).not.toBe(id);
+  expect(song().id).toBe(id);
   const afterCopy = await ipc.invoke<Original[]>("originals_list");
   expect(afterCopy).toHaveLength(2);
   expect(afterCopy.find((s) => s.id === id)).toMatchObject({
     revision: 3,
     body: { notes: "Another window" },
   });
-  expect(afterCopy.find((s) => s.id === song().id)).toMatchObject({
+  expect(afterCopy.find((s) => s.id !== id)).toMatchObject({
     revision: 1,
     body: { notes: "Third pass" },
   });
@@ -519,31 +540,31 @@ it("Save copy writes a second song under a new id and leaves the original in the
   });
 
   await w.action(w.saveCopy);
-  const copy = song();
-  expect(copy.id).not.toBe(originalId);
-  expect(copy.id).toMatch(/^song-[0-9a-f-]{36}$/);
-  expect(copy.revision).toBe(1);
-  expect(copy.body.chart.id).toBe(copy.id);
-  expect(copy.body.chart.name).toBe("Blue (copy)");
-  expect(copy.body.lyrics).toEqual({ verse: "New words" });
+  expect(song().id).toBe(originalId);
+  expect(song().body.chart.name).toBe("Blue");
+  expect(song().body.lyrics).toEqual({ verse: "New words" });
   expect(writing()).toMatchObject({
-    dirty: false,
+    dirty: true,
     message: "Copy saved. Original kept.",
   });
 
   const listed = await ipc.invoke<Original[]>("originals_list");
-  expect(
-    listed.map((s) => [s.id, s.body.chart.name, s.revision, s.body.lyrics]),
-  ).toEqual([
-    [originalId, "Blue", 1, undefined],
-    [copy.id, "Blue (copy)", 1, { verse: "New words" }],
-  ]);
+  const copy = listed.find((s) => s.id !== originalId);
+  expect(copy?.id).toMatch(/^song-[0-9a-f-]{36}$/);
+  expect(copy?.revision).toBe(1);
+  expect(copy?.body.chart.id).toBe(copy?.id);
+  expect(copy?.body.chart.name).toBe("Blue (copy)");
+  expect(copy?.body.lyrics).toEqual({ verse: "New words" });
+  expect(listed.find((s) => s.id === originalId)).toMatchObject({
+    revision: 1,
+    body: { chart: { name: "Blue" } },
+  });
+  expect(listed.find((s) => s.id === originalId)?.body.lyrics).toBeUndefined();
   expect(writing().saved).toEqual(listed);
 
-  w.openSong(listed[0]);
   expect(song().id).toBe(originalId);
   expect(body().chart.name).toBe("Blue");
-  expect(body().lyrics).toBeUndefined();
+  expect(body().lyrics).toEqual({ verse: "New words" });
 });
 
 it("a saved song reopens from the list; Play needs the desktop engine, and the same chart played inline reaches telemetry chord by chord", async () => {

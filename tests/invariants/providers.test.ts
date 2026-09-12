@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import { __setIpcForTests, ipc } from "../../src/ipc/client";
 import type { JoContext } from "../../src/lib/jo/gemini";
@@ -191,6 +192,12 @@ describe("provider contracts and creative proposals", () => {
         keysPresent: engine.keysPresent,
       });
     }
+  });
+  it("hides usage numbers when the usage log cannot be read", () => {
+    const settings = readFileSync("src/screens/Settings.tsx", "utf8");
+    expect(settings).toMatch(/!error\s*&&\s*totals\.length === 0/);
+    expect(settings).toMatch(/!error\s*&&\s*totals\.map/);
+    expect(settings).toMatch(/!error\s*&&\s*entries\.length > 0/);
   });
   it("keeps the original version, preserves part locks and blocks stale proposals", () => {
     const song = useWriting.getState().song;

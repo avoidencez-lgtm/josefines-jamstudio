@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import { ipc, isPreview } from "../ipc/client";
 import { useEngineStore } from "../store/engine";
+import { bindingArgs, matchControlMidi } from "./controls";
 import { handleJoQuery } from "./jo/conversation";
+import { dispatchJoToolCall } from "./jo/dispatcher";
 import { cancelVoice, toggleVoice, useVoice } from "./jo/voice";
 import { useWriting } from "./originals";
 import { toggleReferenceRamp } from "./referenceRamp";
@@ -24,6 +26,7 @@ export interface PedalPress {
 }
 export interface PedalConfig {
   schemaVersion: number;
+  ccToggle?: boolean;
   bindings: { action: PedalAction; press: PedalPress }[];
   [key: string]: unknown;
 }
@@ -58,6 +61,7 @@ interface ControllerState {
   busy: boolean;
   refresh: () => Promise<void>;
   connect: (port: string) => Promise<void>;
+  setCcToggle: (on: boolean) => Promise<void>;
   receive: (press: PedalPress) => Promise<void>;
   remove: (action: PedalAction) => Promise<void>;
 }
@@ -104,6 +108,30 @@ export const useController = create<ControllerState>((set, get) => ({
       set({ busy: false });
     }
   },
+  setCcToggle: async (on) => {
+    if (get().busy) return;
+    const { config, port } = get();
+    set({ busy: true, enabled: false, learning: null });
+    try {
+      if (["opening", "listening"].includes(useVoice.getState().phase))
+        await cancelVoice();
+      const next = { ...config, ccToggle: on };
+      await ipc.invoke("controller_save", { document: next });
+      set({
+        config: next,
+        message: "Pedal mode saved. Enable control when ready.",
+      });
+      if (port) {
+        await ipc.invoke("controller_open", { port: null });
+        set({ port: "" });
+        await get().connect(port);
+      }
+    } catch (e) {
+      set({ message: String(e) });
+    } finally {
+      set({ busy: false });
+    }
+  },
   remove: async (action) => {
     if (get().busy) return;
     set({ busy: true });
@@ -144,7 +172,19 @@ export const useController = create<ControllerState>((set, get) => ({
     const action = config.bindings.find((b) =>
       samePress(b.press, press),
     )?.action;
-    if (!action) return;
+    if (!action) {
+      const mapped = matchControlMidi(press);
+      if (!mapped) return;
+      if (mapped.action === "ptt") {
+        await toggleVoice(handleJoQuery);
+        return;
+      }
+      await dispatchJoToolCall({
+        name: mapped.action,
+        arguments: bindingArgs(mapped),
+      });
+      return;
+    }
     if (action === "voice") {
       await toggleVoice(handleJoQuery);
       return;

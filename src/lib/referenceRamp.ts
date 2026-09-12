@@ -93,15 +93,16 @@ export const rampAction: JoAction = {
     },
   },
   run: async (args) => {
+    const defaults = useReferenceRamp.getState().config;
     const config =
       args.stop === true
         ? null
         : {
             schemaVersion: 1 as const,
-            startPercent: Number(args.startPercent),
-            stepPercent: Number(args.stepPercent),
-            targetPercent: Number(args.targetPercent),
-            barsPerStep: Number(args.barsPerStep),
+            startPercent: Number(args.startPercent ?? defaults.startPercent),
+            stepPercent: Number(args.stepPercent ?? defaults.stepPercent),
+            targetPercent: Number(args.targetPercent ?? defaults.targetPercent),
+            barsPerStep: Number(args.barsPerStep ?? defaults.barsPerStep),
           };
     const result = await applyReferenceRamp(String(args.assetId), config);
     return result

@@ -11,6 +11,8 @@ The shared media catalog defines cloud and fixed-loopback ComfyUI protocols;
 all HTTP remains under `net/media.rs`. Tauri asset access is limited to media
 assets and exports, excluding generation receipts. Native preview is silent;
 FFmpeg and the user's external media player own exported audiovisual playback.
+Successful provider responses, task IDs and downloads survive usage-log write
+failures; the saved job exposes the accounting warning without resubmitting work.
 See [music-video setup and acceptance](guide/music-video.md).
 
 ## Current native Jo voice
@@ -193,6 +195,8 @@ export type TransportState = {
 // transport_set_tempo(bpm, when)  // engine clamp 20–300; charts/Write/setlist stay 40–240
 // transport_set_time_sig(num, den, when) · transport_tap_tempo() -> { tempoBpm, taps }
 // event 'transport.state' @30 Hz
+// Band locate/seek/loop positions must fit the u32 beat-event range and audio sample clock.
+// Invalid positions fail before changing the playhead, loop or queued band events.
 
 // mixer and meters
 export type BusState = { id: BusId; gainDb: Db; muted: boolean; soloed: boolean };
@@ -437,7 +441,7 @@ Files are truth; SQLite is a cache ([ADR 0005](adr/0005-files-are-truth-sqlite-i
   styles/  charts/  rigs/  controls/     user-added seam files (same schemas as the bundled ones)
   songs/<slug>/               song.json, source.wav (48 kHz), stems/<name>.wav, analysis/<kind>-<provider>.json
   sessions/<date>-<slug>/     session.json, takes/<n>/take.json + <kind>.wav
-  exports/<session>/<take>/   stems + tempo.mid + README.txt
+  exports/<take>[-<number>]/  stems + tempo map + README.txt
 ```
 
 ```ts
@@ -498,7 +502,7 @@ A seam is a definition (trait or schema), one registry, and consumers. There is 
 | Styles | `Style` schema (`jam-core`, zod mirror) | `jam-core::registry::styles` (bundled `styles/` via `include_dir` + `~/JosefinesJamstudio/styles/`) | band sequencer, Stage picker, Jo `set_style` |
 | Charts | `Chart` schema | `jam-core::registry::charts` + TS parser for text charts | band, Stage, Jo `load_chart` |
 | Rig profiles | `RigProfile` schema | `jam-core::registry::rigs` | `jam-rig`, Rig screen |
-| Control maps | `ControlMap` schema | `jam-core::registry::controls` | `src/lib/controls.ts`, `jam-rig::input` |
+| Control maps | `ControlMap` schema | `jam-core::registry::controls` (bundled `controls/` + `~/JosefinesJamstudio/controls/`) | `src/lib/controls.ts` (`matchControlMidi`), `src/lib/controller.ts`, `Library` |
 | Jo tools | `JoAction { declaration, run }`, `StudioTool { declaration, edit }`; shared argument validation | `JO_ACTIONS` / `JO_TOOLS` in `src/lib/jo/tools.ts`, document edits in `STUDIO_TOOLS`; legacy actions remain in `dispatcher.ts` | provider declarations, conversation/voice dispatch; planned control-map export remains separate |
 | Providers | traits in §6.1 | `src-tauri/src/net/registry.rs` | analysis pipeline, voice, music, `provider_fetch` |
 | Instruments | `Instrument` trait (`note_on`, `note_off`, `render(&mut [f32])`) | `jam-band::instruments::factory` | sequencer |
@@ -600,6 +604,10 @@ reusing `Chart` for chords/arrangement and the existing style registry for each
 section's three independent parts. `src/lib/originals.ts` holds editable state,
 50 body-level undo steps and named versions. Changes reach audio on Play or Record.
 Locks preserve a part's settings when trying another groove; direct edits remain available.
+The sequencer selects the current section before applying a Fill or Ending cue.
+The section's independent bass and comp remain active during the fill and return
+with its normal drum groove afterward. Ending replaces a prior Fill and stops
+after its own bar. Leaving an original clears its composed pattern from the cache.
 
 `originals_save/list/load/record`, `capture_arm/keep` and `takes_favourite` are
 additive commands. `src-tauri/src/originals.rs` bounds and validates documents,
@@ -626,7 +634,11 @@ The second songwriting slice adds Rust guitar auditioning and explicitly opened
 MIDI input. `ControllerInput` filters PC/CC/note presses into a bounded queue; the
 existing telemetry worker emits them to the shared frontend controller registry.
 Learning persists a validated, versioned `controller.json`; pedal actions use the
-same writing commands as buttons and Jo. Releases/held CCs do not trigger commands,
+same writing commands as buttons and Jo. The optional `ccToggle` boolean defaults
+to false: momentary CC releases do not trigger commands. Toggle mode accepts both
+edges across 64 for pedals that alternate values on successive presses. The mode
+is read when opening the input; changing it in the UI saves, reconnects and disarms
+control. Held CCs do not retrigger in either mode,
 and recent echoed rig messages are filtered before dispatch. No MIDI input is opened
 or armed automatically. Rehearsal ranges are computed from the existing arrangement.
 
@@ -645,6 +657,12 @@ Reference mixes and MIDI alternatives start muted. Relative file references allo
 moving the export folder between Windows and Mac. Import never opens a network,
 modifies the original audio, or saves over a project. Logic-compatible WAV/MIDI
 exports remain available. This is a one-way performance handoff, not a hosted DAW.
+Every export reserves a fresh folder with `create_dir`; repeats use numbered
+suffixes. Earlier bundles and DAW projects saved inside them are never overwritten.
+On failure, only the newly reserved folder is removed; a cleanup error names the
+partial folder. Both `takes_export_daw` and `export_logic` return the new location.
+Unreadable guitar-layer metadata or more than 16 layers stops export before any
+files are written. Layers are never silently dropped on a deserialization error.
 
 ## Implemented text providers and Song Lab (2026-09-04)
 
@@ -720,7 +738,7 @@ and REAPER. Recordings snapshot the meter; timing edits are refused during a tak
 Charts and styles with different meters are refused before playback changes.
 
 Settings writes flush a temporary file, retain the previous valid `.bak`, then
-rename. On startup, malformed settings are archived as `settings.json.broken-<timestamp>` before restoring a valid backup or defaults. A one-time UI notice names the archive. Read/permission failures are reported without replacing the source. Ordinary saves still refuse corrupt input; restart to recover. Unknown fields in a valid backup survive recovery. Song saves and scans enforce the same 2 MB compact JSON limit, with a shared 8 MB formatted-file bound.
+rename. On startup, malformed settings are archived as `settings.json.broken-<timestamp>` before restoring a valid backup or defaults. A one-time UI notice names the archive. Read/permission failures are reported without replacing the source. Saving settings while the app is running also archives malformed input before writing the new settings, leaving the existing backup intact. Unknown fields in a valid backup survive recovery. Song saves and scans enforce the same 2 MB compact JSON limit, with a shared 8 MB formatted-file bound.
 Take scanning reports damaged manifests individually and once per session; a cache
 row the current code cannot read falls back to its plain columns or is skipped with a
 warning, never hiding the takes on disk. Complete cached manifests
@@ -743,6 +761,31 @@ are added); master/monitor click and test tone are excluded.
 `lib/finishing.ts` transforms song documents without producing audio. Transition rehearsal reuses `useWriting.loopRange` and native transport IPC. Contrast variants preserve timing and locked/muted parts. Section comps require compatible original recording snapshots and reuse `GuitarClip`; optional `compSlot` identifies a managed bar interval, survives JSON saves and is ignored by native playback. Same-slot replacement preserves unrelated layers. Versions and Undo precede/recover accepted edits. No new IPC command or provider seam is introduced.
 
 Original and Film save completions preserve newer in-memory edits while advancing the disk revision. Film Undo retains that revision. Original listing isolates malformed documents; chart loading validates user overrides before registration and chart saves keep a previous-file backup. Structural chart limits are checked before arrangement expansion.
+
+Native chart JSON retains unknown fields on the chart, sections, chords and
+arrangement entries through loading, IPC and saving. Style JSON retains them on
+feel, humanization, patterns, drum hits, bass notes and comp strums, including
+fills and endings. These use the existing flattened extension maps; recognized
+fields keep their typed validation and newer schema versions are still refused.
+The chart editor keeps its loaded source document beside the text draft. Its
+generated `section id:` lines retain section identity through renames. A rewrite
+retains chart and matched-section extension fields. Chord fields are retained only
+while that section's chord sequence is unchanged (the Transpose action advances
+the source first), and arrangement fields only while the section sequence is
+unchanged, so structural edits cannot move metadata onto a different object.
+
+Originals, charts, settings, media/song metadata and session reviews share
+`persistence::write`. Commits are serialized within the process; caller revision
+checks still apply. Each write uses exclusively created, uniquely named temporary
+files beside its destination, then syncs and closes them before replacement.
+An existing backup is retained until the document replacement succeeds. A failed
+replacement restores that backup, or removes a newly created backup when none
+existed before. Failed restoration reports the retained recovery path. Existing
+directories and links are refused as document/backup targets. Cleanup attempts
+to remove only temporary files owned by that attempt; older temporary files are
+left intact. This covers reported I/O failures. Crash leftovers are retained for
+manual recovery; automatic restoration of those files is not claimed.
+
 # Implemented room capability layer (2026-09-05)
 
 `RoomTools` supplies one registered expandable tool for each of the ten existing rooms. It composes existing writing/media/engine stores; it does not introduce a second document database or a provider framework. Pure operations live in `roomTools.ts`; foreground actions and the close-guard flags live in `roomActions.ts` (`busy` serialises tools; `blocking` marks work the window must not close during, so a pending coach answer never traps the window). Each tool is its own chunk, loaded the first time its room is shown; from then on hidden room drafts remain mounted and subscribe to selected stable fields rather than whole stores or transport telemetry. Screens and the manual reader are lazily imported by `App` for the same reason, and screen modules export only components; shared helpers and stores live under `src/lib/`.
@@ -763,6 +806,11 @@ updates retrospective capture. Queue loss or a hardware input/output gap interru
 the take rather than silently compressing its timeline. Device round-trip latency
 is measured by `audio_calibrate_latency` (three clicks on a cable loopback) or
 typed as a manual guitar offset; synthetic FileInput never applies an estimate.
+
+Queued reference frames also carry a source serial. Unloading the reference,
+loading a band chart, and loading an original all clear the reference and reset
+the callback's serial together. Old source frames become silence while new band
+frames remain audible; the callback never locks to inspect the loaded song.
 
 Files and their writer are prepared in a separate idle recorder before acquiring
 the render gate. Installing it and starting the song timeline share that gate,
@@ -857,6 +905,16 @@ Rust snapshots the estimate into each request's existing log entry; editing a
 rate never rewrites history. STT uses seconds / 3600 and TTS uses characters / 1000.
 `cost:state` refreshes the existing Settings usage view. Unknown entries are counted
 separately from the known estimate subtotal. No account budget or invoice is implied.
+`cost_log_totals` summarizes the latest 10,000 valid log entries across all providers;
+Settings names this window explicitly. Older entries remain in `usage-log.jsonl`.
+Reads scan backwards and stop after enough valid rows. Malformed rows and rows
+over 64 KiB are skipped; request bodies do not belong in this metadata-only log.
+Missing logs are empty; filesystem read or seek failures reject the IPC command and
+surface an app error instead of reporting a credible partial or zero total.
+Negative numeric usage or overflowing sums set `CostTotal.invalidValues` for
+that provider. Call/failure counts remain available, but numeric amounts are
+incomplete and the cost estimate is null. Settings hides those amounts and names
+the invalid-log problem. Other providers and stored entries remain intact.
 
 Provider `generateContent` / Responses / Messages replies may include token counts.
 `provider_fetch` copies `promptTokens`, `completionTokens` and `totalTokens` from

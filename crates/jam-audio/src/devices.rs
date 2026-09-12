@@ -38,6 +38,23 @@ impl Default for AudioConfig {
     }
 }
 
+const STANDARD_RATES: [u32; 6] = [44_100, 48_000, 88_200, 96_000, 176_400, 192_000];
+
+fn standard_rates_in(min: u32, max: u32) -> Vec<u32> {
+    let lo = min.min(max);
+    let hi = min.max(max);
+    let mut rates: Vec<u32> = STANDARD_RATES
+        .into_iter()
+        .filter(|r| (lo..=hi).contains(r))
+        .collect();
+    if !rates.contains(&hi) {
+        rates.push(hi);
+    }
+    rates.sort_unstable();
+    rates.dedup();
+    rates
+}
+
 pub fn list_devices() -> AudioDevices {
     let host = cpal::default_host();
 
@@ -53,7 +70,10 @@ pub fn list_devices() -> AudioDevices {
                     let mut sample_rates = Vec::new();
                     for c in configs {
                         max_channels = max_channels.max(c.channels());
-                        sample_rates.push(c.max_sample_rate().0);
+                        sample_rates.extend(standard_rates_in(
+                            c.min_sample_rate().0,
+                            c.max_sample_rate().0,
+                        ));
                     }
                     sample_rates.sort_unstable();
                     sample_rates.dedup();
@@ -84,7 +104,10 @@ pub fn list_devices() -> AudioDevices {
                     let mut sample_rates = Vec::new();
                     for c in configs {
                         max_channels = max_channels.max(c.channels());
-                        sample_rates.push(c.max_sample_rate().0);
+                        sample_rates.extend(standard_rates_in(
+                            c.min_sample_rate().0,
+                            c.max_sample_rate().0,
+                        ));
                     }
                     sample_rates.sort_unstable();
                     sample_rates.dedup();
@@ -104,4 +127,23 @@ pub fn list_devices() -> AudioDevices {
     }
 
     AudioDevices { inputs, outputs }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn continuous_range_includes_48000_not_only_the_maximum() {
+        assert_eq!(
+            standard_rates_in(44_100, 192_000),
+            vec![44_100, 48_000, 88_200, 96_000, 176_400, 192_000]
+        );
+        assert!(standard_rates_in(44_100, 192_000).contains(&48_000));
+        assert_eq!(standard_rates_in(48_000, 48_000), vec![48_000]);
+        assert_eq!(
+            standard_rates_in(96_000, 192_000),
+            vec![96_000, 176_400, 192_000]
+        );
+    }
 }

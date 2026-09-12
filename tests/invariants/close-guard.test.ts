@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { closeDecision, windowCloseAction } from "../../src/lib/closeGuard";
 import { useLibraryDraft } from "../../src/lib/libraryDraft";
@@ -36,6 +38,29 @@ it("refuses to close during blocking work, asks about unsaved drafts, otherwise 
   useLibraryDraft.setState({ dirty: false });
   useMedia.setState({ busy: "Rendering" });
   expect(closeDecision()).toBe("refuse");
+  useMedia.setState({
+    busy: "Generating video. This can take several minutes.",
+  });
+  expect(closeDecision()).toBe("refuse");
+  useMedia.setState({ busy: "" });
+  expect(closeDecision()).toBe("close");
+});
+
+it("routes Cmd+Q through the same closeDecision as the window close button (#35)", () => {
+  const app = fs.readFileSync(
+    path.resolve(process.cwd(), "src/App.tsx"),
+    "utf8",
+  );
+  const rust = fs.readFileSync(
+    path.resolve(process.cwd(), "src-tauri/src/lib.rs"),
+    "utf8",
+  );
+  expect(app).toContain('listen("app.exit-requested"');
+  expect(app).toMatch(/listen\("app\.exit-requested"[\s\S]*?closeDecision\(\)/);
+  expect(rust).toContain("RunEvent::ExitRequested");
+  expect(rust).toContain('emit("app:exit-requested"');
+  expect(rust).toContain("prevent_exit");
+  expect(closeDecision()).toBe("close");
 });
 
 it("always preventDefaults the window close so Tauri can then app_exit (#127)", () => {

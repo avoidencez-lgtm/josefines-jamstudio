@@ -1,4 +1,5 @@
 //! registry: Seam definitions and loaders for styles, charts, rigs, and control maps.
+//! Control maps are loaded by the library and dispatched from `src/lib/controls.ts`.
 
 use include_dir::{include_dir, Dir};
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,8 @@ pub struct ControlMapManifest {
     pub schema_version: u32,
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub bindings: Vec<serde_json::Value>,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -67,6 +70,20 @@ pub struct SeamRegistry<T: VersionedManifest> {
     items: HashMap<String, T>,
 }
 
+/// Current chart, style, rig and control-map schema. Newer files must be refused
+/// so unknown fields are not silently dropped (invariant 6).
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 1;
+
+fn refuse_future_schema<T: VersionedManifest>(item: &T, origin: &str) -> Result<(), String> {
+    let version = item.schema_version();
+    if version > SUPPORTED_SCHEMA_VERSION {
+        return Err(format!(
+            "Cannot read {origin}. schemaVersion {version} is newer than this app supports ({SUPPORTED_SCHEMA_VERSION}). Update the app before loading this file."
+        ));
+    }
+    Ok(())
+}
+
 impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
     pub fn new() -> Self {
         Self {
@@ -81,6 +98,7 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
                 if let Some(content) = file.contents_utf8() {
                     match crate::json::from_str::<T>(content) {
                         Ok(item) => {
+                            refuse_future_schema(&item, &file.path().display().to_string())?;
                             self.items.insert(item.id().to_string(), item);
                             count += 1;
                         }
@@ -104,6 +122,7 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
     pub fn load_from_fs_dir<P: AsRef<Path>>(&mut self, path: P) -> (usize, Vec<String>) {
         let mut count = 0;
         let mut errors = Vec::new();
+        let mut loaded_from = HashMap::<String, std::path::PathBuf>::new();
         if let Ok(entries) = std::fs::read_dir(path) {
             for entry in entries.flatten() {
                 let p = entry.path();
@@ -111,7 +130,23 @@ impl<T: VersionedManifest + for<'de> Deserialize<'de>> SeamRegistry<T> {
                     match std::fs::read_to_string(&p) {
                         Ok(content) => match crate::json::from_str::<T>(&content) {
                             Ok(item) => {
-                                self.items.insert(item.id().to_string(), item);
+                                if let Err(e) =
+                                    refuse_future_schema(&item, &p.display().to_string())
+                                {
+                                    errors.push(e);
+                                    continue;
+                                }
+                                let id = item.id().to_string();
+                                if let Some(first) = loaded_from.get(&id) {
+                                    errors.push(format!(
+                                        "id `{id}` already loaded from {}. {}",
+                                        first.display(),
+                                        p.display()
+                                    ));
+                                    continue;
+                                }
+                                loaded_from.insert(id.clone(), p.clone());
+                                self.items.insert(id, item);
                                 count += 1;
                             }
                             Err(e) => errors.push(format!("Cannot read {}. {e}", p.display())),
@@ -202,6 +237,79 @@ mod tests {
         assert_eq!(errors, Vec::<String>::new());
         assert_eq!(count, 1);
         assert_eq!(maps.get("bom-map").unwrap().name, "BOM");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn write_chart(dir: &Path, file: &str, id: &str, name: &str) {
+        std::fs::write(
+            dir.join(file),
+            format!(
+                r#"{{"schemaVersion":1,"id":"{id}","name":"{name}","keyTonic":0,"mode":"major","timeSig":[4,4],"defaultBpm":100,"sections":[{{"id":"a","name":"A","bars":[[{{"chord":"C","beats":4}}]]}}],"arrangement":[{{"sectionId":"a","repeats":1}}]}}"#
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn two_user_files_with_the_same_id_are_an_error() {
+        let dir = std::env::temp_dir().join(format!("jam-registry-dup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        write_chart(&dir, "a.json", "my-blues", "A");
+        write_chart(&dir, "b.json", "my-blues", "B");
+        let mut charts: SeamRegistry<Chart> = SeamRegistry::new();
+        let (count, errors) = charts.load_from_fs_dir(&dir);
+        assert_eq!(count, 1);
+        assert_eq!(charts.len(), 1);
+        assert_eq!(errors.len(), 1);
+        assert!(
+            errors[0].starts_with("id `my-blues` already loaded from ")
+                && errors[0].contains("a.json")
+                && errors[0].contains("b.json"),
+            "{}",
+            errors[0]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_single_user_file_may_override_a_bundled_id() {
+        let dir =
+            std::env::temp_dir().join(format!("jam-registry-override-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        write_chart(&dir, "user.json", "blues-12-bar", "User blues");
+        let mut charts: SeamRegistry<Chart> = SeamRegistry::new();
+        charts.load_from_dir(&BUNDLED_CHARTS).unwrap();
+        let bundled = charts.get("blues-12-bar").unwrap().name.clone();
+        let (count, errors) = charts.load_from_fs_dir(&dir);
+        assert_eq!(errors, Vec::<String>::new());
+        assert_eq!(count, 1);
+        assert_ne!(charts.get("blues-12-bar").unwrap().name, bundled);
+        assert_eq!(charts.get("blues-12-bar").unwrap().name, "User blues");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn future_schema_versions_are_refused_instead_of_dropping_fields() {
+        let dir = std::env::temp_dir().join(format!("jam-registry-future-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("future.json"),
+            br#"{"schemaVersion":2,"id":"future-chart","name":"Future","keyTonic":0,"mode":"major","timeSig":[4,4],"defaultBpm":120,"sections":[{"id":"a","name":"A","bars":[[{"chord":"C","beats":4}]]}],"arrangement":[{"sectionId":"a"}],"futureField":true}"#,
+        )
+        .unwrap();
+        let mut charts: SeamRegistry<Chart> = SeamRegistry::new();
+        let (count, errors) = charts.load_from_fs_dir(&dir);
+        assert_eq!(count, 0);
+        assert_eq!(errors.len(), 1);
+        assert!(
+            errors[0].contains("schemaVersion 2") && errors[0].contains("future.json"),
+            "{}",
+            errors[0]
+        );
+        assert!(charts.get("future-chart").is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

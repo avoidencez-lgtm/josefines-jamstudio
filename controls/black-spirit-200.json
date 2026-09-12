@@ -1,5 +1,23 @@
 {
   "schemaVersion": 1,
   "id": "black-spirit-200",
-  "name": "Black Spirit 200 CC Map"
+  "name": "Black Spirit 200 CC Map",
+  "kind": "control",
+  "bindings": [
+    {
+      "source": { "kind": "midi_cc", "cc": 14 },
+      "action": "transport_control",
+      "args": { "action": "play" }
+    },
+    {
+      "source": { "kind": "midi_cc", "cc": 15 },
+      "action": "record_take",
+      "args": { "action": "start" }
+    },
+    {
+      "source": { "kind": "midi_pc", "program": 1 },
+      "action": "ptt",
+      "args": {}
+    }
+  ]
 }

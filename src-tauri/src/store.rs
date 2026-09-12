@@ -31,8 +31,17 @@ impl IndexStore {
             let _ = fs::create_dir_all(parent);
         }
         let conn = Connection::open(path).map_err(|e| e.to_string())?;
+        Self::configure_connection(&conn)?;
         Self::init_schema(&conn)?;
         Ok(Self { conn })
+    }
+
+    fn configure_connection(conn: &Connection) -> Result<(), String> {
+        conn.busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(|e| e.to_string())?;
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     /// Opens the on-disk cache, or an empty in-memory one when the file cannot be
@@ -55,6 +64,8 @@ impl IndexStore {
 
     pub fn open_in_memory() -> Result<Self, String> {
         let conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(|e| e.to_string())?;
         Self::init_schema(&conn)?;
         Ok(Self { conn })
     }
@@ -229,6 +240,32 @@ mod tests {
     #[test]
     fn test_store_open_in_memory() {
         IndexStore::open_in_memory().expect("in-memory db opens");
+    }
+
+    #[test]
+    fn open_path_enables_wal_and_a_five_second_busy_timeout() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-index-wal-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = root.join("index.sqlite");
+        let store = IndexStore::open_path(&path).expect("on-disk index opens");
+        let journal: String = store
+            .conn
+            .pragma_query_value(None, "journal_mode", |row| row.get(0))
+            .expect("journal_mode");
+        assert_eq!(journal.to_ascii_lowercase(), "wal");
+        let timeout: i64 = store
+            .conn
+            .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+            .expect("busy_timeout");
+        assert_eq!(timeout, 5000);
+        drop(store);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

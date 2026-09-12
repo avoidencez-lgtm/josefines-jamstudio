@@ -1,12 +1,15 @@
 //! chart: Chord charts, arrangement expansion, and chord resolution math.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BarChord {
     pub chord: String,
     pub beats: f64,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -17,6 +20,8 @@ pub struct ChartSection {
     pub bars: Vec<Vec<BarChord>>,
     #[serde(default)]
     pub style_override_id: Option<String>,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -25,6 +30,8 @@ pub struct ArrangementItem {
     pub section_id: String,
     #[serde(default = "default_repeats")]
     pub repeats: u32,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 fn default_repeats() -> u32 {
@@ -45,6 +52,8 @@ pub struct Chart {
     pub default_style_id: Option<String>,
     pub sections: Vec<ChartSection>,
     pub arrangement: Vec<ArrangementItem>,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -54,6 +63,8 @@ pub struct ResolvedBar {
     pub section_id: String,
     pub section_name: String,
     pub chords: Vec<BarChord>,
+    #[serde(default)]
+    pub style_override_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -85,6 +96,7 @@ impl Chart {
                             section_id: sec.id.clone(),
                             section_name: sec.name.clone(),
                             chords: bar_chords.clone(),
+                            style_override_id: sec.style_override_id.clone(),
                         });
                         current_bar_idx += 1;
                     }
@@ -182,50 +194,62 @@ mod tests {
     fn test_12_bar_blues_expansion() {
         let verse_bars: Vec<Vec<BarChord>> = vec![
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "D7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "D7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "D7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "E7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "D7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "E7".into(),
                 beats: 4.0,
             }],
@@ -245,11 +269,14 @@ mod tests {
                 name: "Verse".into(),
                 bars: verse_bars,
                 style_override_id: None,
+                extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
+                extra: Default::default(),
                 section_id: "verse".into(),
                 repeats: 2, // 2 chorus = 24 bars
             }],
+            extra: HashMap::new(),
         };
 
         let resolved = chart.resolve();
@@ -284,25 +311,31 @@ mod tests {
                 bars: vec![
                     vec![
                         BarChord {
+                            extra: Default::default(),
                             chord: "A7".into(),
                             beats: 2.0,
                         },
                         BarChord {
+                            extra: Default::default(),
                             chord: "D7".into(),
                             beats: 2.0,
                         },
                     ],
                     vec![BarChord {
+                        extra: Default::default(),
                         chord: "E7".into(),
                         beats: 4.0,
                     }],
                 ],
                 style_override_id: None,
+                extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
+                extra: Default::default(),
                 section_id: "a".into(),
                 repeats: 1,
             }],
+            extra: HashMap::new(),
         };
         let r = chart.resolve();
         assert_eq!(r.chord_at(1, 1), ("A7".into(), Some("D7".into())));
@@ -332,19 +365,84 @@ mod tests {
                 id: "a".into(),
                 name: "A".into(),
                 bars: vec![vec![BarChord {
+                    extra: Default::default(),
                     chord: "C".into(),
                     beats: 4.0,
                 }]],
                 style_override_id: None,
+                extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
+                extra: Default::default(),
                 section_id: "a".into(),
                 repeats: 0,
             }],
+            extra: HashMap::new(),
         };
         let resolved = chart.resolve();
         assert_eq!(resolved.bars.len(), 1);
         assert_eq!(resolved.bars[0].chords[0].chord, "C");
+    }
+
+    #[test]
+    fn resolve_copies_section_style_override() {
+        let bar = |chord: &str| {
+            vec![BarChord {
+                extra: Default::default(),
+                chord: chord.into(),
+                beats: 4.0,
+            }]
+        };
+        let chart = Chart {
+            schema_version: 1,
+            id: "form".into(),
+            name: "form".into(),
+            key_tonic: 0,
+            mode: "major".into(),
+            time_sig: (4, 4),
+            default_bpm: 120.0,
+            default_style_id: Some("blues-shuffle".into()),
+            extra: HashMap::new(),
+            sections: vec![
+                ChartSection {
+                    id: "verse".into(),
+                    name: "Verse".into(),
+                    bars: vec![bar("Am"), bar("G")],
+                    style_override_id: None,
+                    extra: HashMap::new(),
+                },
+                ChartSection {
+                    id: "chorus".into(),
+                    name: "Chorus".into(),
+                    bars: vec![bar("C"), bar("F")],
+                    style_override_id: Some("rock-straight".into()),
+                    extra: HashMap::new(),
+                },
+            ],
+            arrangement: vec![
+                ArrangementItem {
+                    extra: Default::default(),
+                    section_id: "verse".into(),
+                    repeats: 1,
+                },
+                ArrangementItem {
+                    extra: Default::default(),
+                    section_id: "chorus".into(),
+                    repeats: 1,
+                },
+            ],
+        };
+        let resolved = chart.resolve();
+        assert_eq!(resolved.bars[0].style_override_id, None);
+        assert_eq!(resolved.bars[1].style_override_id, None);
+        assert_eq!(
+            resolved.bars[2].style_override_id.as_deref(),
+            Some("rock-straight")
+        );
+        assert_eq!(
+            resolved.bars[3].style_override_id.as_deref(),
+            Some("rock-straight")
+        );
     }
 
     #[test]
@@ -358,5 +456,41 @@ mod tests {
             bars: vec![],
         };
         assert_eq!(chart.chord_at_position(1, 0.0), (String::new(), None));
+    }
+
+    #[test]
+    fn unknown_chart_and_section_fields_survive_a_rewrite() {
+        let json = r#"{
+            "schemaVersion": 1,
+            "id": "waltz-scratch",
+            "name": "Waltz Scratch",
+            "keyTonic": 7,
+            "mode": "major",
+            "timeSig": [3, 4],
+            "defaultBpm": 96.0,
+            "rigSceneId": "verse-clean",
+            "sections": [{
+                "id": "a",
+                "name": "A",
+                "intensity": 0.4,
+                "bars": [[{"chord": "G", "beats": 3.0, "voicingHint": {"keep": [true, 7, "minor"]}}]]
+            }],
+            "arrangement": [{"sectionId": "a", "repeats": 1, "marker": {"keep": "a"}}]
+        }"#;
+        let chart: Chart = serde_json::from_str(json).unwrap();
+        assert_eq!(chart.extra.get("rigSceneId").unwrap(), "verse-clean");
+        assert_eq!(chart.sections[0].extra.get("intensity").unwrap(), 0.4);
+        let round = serde_json::to_value(&chart).unwrap();
+        assert_eq!(round["rigSceneId"], "verse-clean");
+        assert_eq!(round["sections"][0]["intensity"], 0.4);
+        assert_eq!(
+            round["sections"][0]["bars"][0][0]["voicingHint"],
+            serde_json::json!({"keep": [true, 7, "minor"]})
+        );
+        assert_eq!(
+            round["arrangement"][0]["marker"],
+            serde_json::json!({"keep": "a"})
+        );
+        assert_eq!(round["id"], "waltz-scratch");
     }
 }

@@ -22,13 +22,15 @@ const BUNDLED_CHARTS: [&str; 9] = [
 ];
 
 /// (id, name, meter) of every bundled style.
-const BUNDLED_STYLES: [(&str, &str, [u8; 2]); 6] = [
+const BUNDLED_STYLES: [(&str, &str, [u8; 2]); 8] = [
     ("ballad-68", "Slow 6/8 Ballad", [6, 8]),
     ("blues-shuffle", "Blues Shuffle", [4, 4]),
+    ("five-four", "Five Four", [5, 4]),
     ("funk-16", "Funk 16th Groove", [4, 4]),
     ("jazz-swing", "Jazz Swing", [4, 4]),
     ("metal-gallop", "Heavy Metal Gallop", [4, 4]),
     ("rock-straight", "Rock Straight 8th", [4, 4]),
+    ("waltz-34", "Waltz 3/4", [3, 4]),
 ];
 
 const METER_MISMATCH: &str =
@@ -362,6 +364,20 @@ fn an_inline_chart_plays_without_touching_the_library_and_can_change_the_meter()
     });
     assert_eq!(tel["band"]["style_id"], "blues-shuffle");
     assert_eq!(tel["band"]["current_chord"], "A7");
+
+    let three = chart_value(&unique("three-four"), [3, 4], None, &[&[("G", 3.0)]]);
+    studio.ok("band_load_chart_inline", json!({"chart": three}));
+    let tel = telemetry_where(&studio, "3/4 meter", |t| {
+        t["transport"]["time_signature"] == json!([3, 4])
+    });
+    assert_eq!(tel["band"]["style_id"], "waltz-34");
+
+    let five = chart_value(&unique("five-four"), [5, 4], None, &[&[("Em", 5.0)]]);
+    studio.ok("band_load_chart_inline", json!({"chart": five}));
+    let tel = telemetry_where(&studio, "5/4 meter", |t| {
+        t["transport"]["time_signature"] == json!([5, 4])
+    });
+    assert_eq!(tel["band"]["style_id"], "five-four");
 }
 
 #[test]
@@ -452,12 +468,13 @@ fn the_inline_validator_names_what_is_wrong_and_leaves_the_band_untouched() {
             "chart id is empty".into(),
         ),
         (
-            "3/4 with no matching style",
+            "7/8 default style in a different meter",
             with(|c| {
-                c["timeSig"] = json!([3, 4]);
-                c["sections"][0]["bars"] = json!([[{"chord": "Gm7", "beats": 3.0}]]);
+                c["timeSig"] = json!([7, 8]);
+                c["defaultStyleId"] = json!("blues-shuffle");
+                c["sections"][0]["bars"] = json!([[{"chord": "Am", "beats": 7.0}]]);
             }),
-            "No style matches this chart's meter.".into(),
+            "The chart's default style has a different meter. Choose a matching style.".into(),
         ),
         (
             "6/8 with a 4/4 default style",
@@ -545,6 +562,10 @@ fn saving_a_chart_writes_a_user_file_that_is_listed_and_survives_a_reload() {
     let id = unique("saved");
     let mut chart = four_four(&id);
     chart["name"] = json!("Saved Chart");
+    chart["annotation"] = json!({"keep": "chart"});
+    chart["sections"][0]["annotation"] = json!({"keep": "section"});
+    chart["sections"][0]["bars"][0][0]["annotation"] = json!({"keep": "chord"});
+    chart["arrangement"][0]["annotation"] = json!({"keep": "arrangement"});
     let before = charts(&studio);
     assert!(before.iter().all(|c| c["id"] != id));
 
@@ -562,6 +583,11 @@ fn saving_a_chart_writes_a_user_file_that_is_listed_and_survives_a_reload() {
     assert_eq!(find_chart(&after, &id)["name"], "Saved Chart");
 
     let info = studio.ok("library_reload", json!({}));
+    let maps = info["controlMaps"].as_array().unwrap();
+    assert!(
+        maps.iter().any(|id| id == "default") && maps.iter().any(|id| id == "black-spirit-200"),
+        "{maps:?}"
+    );
     assert_eq!(
         PathBuf::from(info["chartsDir"].as_str().unwrap()),
         user_dir().join("charts")
@@ -590,30 +616,52 @@ fn saving_a_chart_writes_a_user_file_that_is_listed_and_survives_a_reload() {
     assert_eq!(find_chart(&charts(&studio), &id)["name"], "Saved Chart");
     let loaded = studio.ok("band_load_chart", json!({"chartId": &id}));
     assert_eq!(loaded["name"], "Saved Chart");
+    let metadata_paths = [
+        "/annotation",
+        "/sections/0/annotation",
+        "/sections/0/bars/0/0/annotation",
+        "/arrangement/0/annotation",
+    ];
+    for pointer in metadata_paths {
+        assert_eq!(loaded.pointer(pointer), chart.pointer(pointer), "{pointer}");
+    }
     band_where(&studio, "saved chart", |b| b["current_chord"] == "Gm7");
 
     // Saving again keeps a backup of the previous file and updates the listing.
+    chart = loaded;
     chart["name"] = json!("Saved Chart v2");
     studio.ok("charts_save", json!({"chart": chart}));
     assert_eq!(find_chart(&charts(&studio), &id)["name"], "Saved Chart v2");
-    assert_eq!(read_json(&path)["name"], "Saved Chart v2");
-    assert_eq!(
-        read_json(&path.with_extension("json.bak"))["name"],
-        "Saved Chart"
-    );
+    let saved = read_json(&path);
+    let backup = read_json(&path.with_extension("json.bak"));
+    assert_eq!(saved["name"], "Saved Chart v2");
+    assert_eq!(backup["name"], "Saved Chart");
+    for document in [&saved, &backup] {
+        for pointer in metadata_paths {
+            assert_eq!(
+                document.pointer(pointer),
+                chart.pointer(pointer),
+                "{pointer}"
+            );
+        }
+    }
     assert_eq!(charts(&studio).iter().filter(|c| c["id"] == id).count(), 1);
 
-    // Ids that are not file-safe get a safe file name and stay addressable by id.
-    let odd = unique("odd id/with spaces");
-    let path = studio.ok("charts_save", json!({"chart": four_four(&odd)}));
-    let path = PathBuf::from(path.as_str().unwrap());
-    assert_eq!(path.parent().unwrap(), user_dir().join("charts"));
-    let stem = path.file_stem().unwrap().to_string_lossy().into_owned();
-    assert_eq!(stem, odd.replace([' ', '/'], "-"));
-    assert_eq!(read_json(&path)["id"], odd);
-    assert!(chart_ids(&studio).contains(&odd));
-    studio.ok("charts_delete_user", json!({"chartId": &odd}));
-    assert!(!path.exists());
+    // Ids that would sanitize onto one filename are refused, so the first chart stays.
+    let spaced = unique("My Chart");
+    let dashed = spaced.replace(' ', "-");
+    assert_ne!(spaced, dashed);
+    assert_eq!(
+        studio.err("charts_save", json!({"chart": four_four(&spaced)})),
+        "Chart id may only contain letters, numbers, hyphens and underscores."
+    );
+    let first = studio.ok("charts_save", json!({"chart": four_four(&dashed)}));
+    let first = PathBuf::from(first.as_str().unwrap());
+    assert_eq!(first, user_chart_file(&dashed));
+    assert!(chart_ids(&studio).contains(&dashed));
+    assert!(!chart_ids(&studio).contains(&spaced));
+    studio.ok("charts_delete_user", json!({"chartId": &dashed}));
+    assert!(!first.exists());
 
     // An invalid chart is refused before anything is written.
     let bad_id = unique("bad-save");

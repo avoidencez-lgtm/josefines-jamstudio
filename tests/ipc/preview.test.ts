@@ -8,6 +8,7 @@ import type {
   RigState,
   StyleSummary,
   TransportTelemetry,
+  TunerTelemetry,
 } from "../../src/ipc/contract";
 import {
   type PreviewEngine,
@@ -22,6 +23,34 @@ describe("browser preview engine", () => {
     engine = createPreviewEngine({ autoTick: false });
   });
   afterEach(() => engine.dispose());
+
+  it("refuses unrepresentable band positions without changing transport", async () => {
+    await engine.invoke("transport_locate", { beats: 4 });
+    const before = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    for (const [command, args] of [
+      ["transport_locate", { beats: Number.MAX_VALUE }],
+      ["transport_locate", { beats: 0xffff_ffff }],
+      ["transport_seek_bar", { bar: 0xffff_ffff }],
+      [
+        "transport_set_loop",
+        { startBar: 1, endBar: 0xffff_ffff, enabled: true },
+      ],
+      [
+        "transport_set_loop",
+        { startBar: 0xffff_ffff, endBar: 1, enabled: true },
+      ],
+    ] as const) {
+      await expect(engine.invoke(command, args)).rejects.toThrow("position");
+      const after = await engine.invoke<{ transport: TransportTelemetry }>(
+        "audio_get_telemetry",
+        {},
+      );
+      expect(after.transport).toEqual(before.transport);
+    }
+  });
 
   it("refuses malformed program changes without sending MIDI", async () => {
     const before = await engine.invoke("rig_get_state", {});
@@ -82,10 +111,12 @@ describe("browser preview engine", () => {
     expect(styles.map((s) => s.id).sort()).toEqual([
       "ballad-68",
       "blues-shuffle",
+      "five-four",
       "funk-16",
       "jazz-swing",
       "metal-gallop",
       "rock-straight",
+      "waltz-34",
     ]);
     expect(charts.length).toBe(9);
   });
@@ -190,7 +221,7 @@ describe("browser preview engine", () => {
     expect(state.transport.bar).toBe(5);
   });
 
-  it("applies style changes at the next bar while playing", async () => {
+  it("applies style changes immediately while playing", async () => {
     const seen: { band?: BandTelemetry } = {};
     await engine.listen<BandTelemetry>("band.state", (b) => {
       seen.band = b;
@@ -201,11 +232,85 @@ describe("browser preview engine", () => {
     engine.tick(0.5);
     await engine.invoke("band_set_style", { styleId: "funk-16" });
     engine.tick(0.01);
-    expect(seen.band?.pending_style_id).toBe("funk-16");
-    expect(seen.band?.style_id).toBe("blues-shuffle");
-    for (let i = 0; i < 20; i++) engine.tick(0.1);
-    expect(seen.band?.style_id).toBe("funk-16");
     expect(seen.band?.pending_style_id).toBeNull();
+    expect(seen.band?.style_id).toBe("funk-16");
+    expect(seen.band?.style_name).toBe("Funk 16th Groove");
+  });
+
+  it("pauses a count-in and resumes playing from the held song position", async () => {
+    await engine.invoke("band_load_chart", { chartId: "blues-12-bar" });
+    await engine.invoke("transport_set_count_in", { bars: 2 });
+    await engine.invoke("transport_set_tempo", { bpm: 240 });
+    await engine.invoke("transport_play", {});
+    engine.tick(0.2);
+    const counting = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(counting.transport.state).toBe("counting_in");
+    await engine.invoke("transport_pause", {});
+    for (let i = 0; i < 20; i++) engine.tick(0.1);
+    const paused = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(paused.transport.state).toBe("paused");
+    expect(paused.transport.position_beats).toBe(0);
+    await engine.invoke("transport_play", {});
+    engine.tick(0.01);
+    const resumed = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(resumed.transport.state).toBe("playing");
+    expect(resumed.transport.bar).toBe(1);
+  });
+
+  it("stops at bar 1 with a loop armed and plays from the top until the wrap", async () => {
+    await engine.invoke("band_load_chart", { chartId: "blues-12-bar" });
+    await engine.invoke("transport_set_count_in", { bars: 0 });
+    await engine.invoke("transport_set_tempo", { bpm: 240 });
+    await engine.invoke("transport_set_loop", {
+      startBar: 5,
+      endBar: 9,
+      enabled: true,
+    });
+    await engine.invoke("transport_seek_bar", { bar: 6 });
+    await engine.invoke("transport_stop", {});
+    const stopped = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(stopped.transport.state).toBe("stopped");
+    expect(stopped.transport.bar).toBe(1);
+    expect(stopped.transport.position_beats).toBe(0);
+    await engine.invoke("transport_play", {});
+    engine.tick(0.01);
+    const playing = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(playing.transport.state).toBe("playing");
+    expect(playing.transport.bar).toBe(1);
+  });
+
+  it("keeps a stopped cue pending until the first playing bar", async () => {
+    await engine.invoke("band_cue", { cue: "fill" });
+    const armed = await engine.invoke<{ band: BandTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(armed.band.pending_cue).toBe("fill");
+    expect(armed.band.active_cue).toBe("none");
+    await engine.invoke("transport_set_count_in", { bars: 0 });
+    await engine.invoke("transport_play", {});
+    engine.tick(0.01);
+    const playing = await engine.invoke<{ band: BandTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(playing.band.active_cue).toBe("fill");
+    expect(playing.band.pending_cue).toBe("none");
   });
 
   it("refuses offline render and live key tests in preview", async () => {
@@ -367,6 +472,27 @@ describe("browser preview engine", () => {
     ]);
   });
 
+  it("refuses unknown mixer buses and gain-only drum patches", async () => {
+    await expect(
+      engine.invoke("mixer_set_bus", { id: "reverb", patch: { gain: 0.5 } }),
+    ).rejects.toThrow(/Unknown mixer bus/);
+    await expect(
+      engine.invoke("mixer_set_bus", { id: "drums", patch: { gain: 0.5 } }),
+    ).rejects.toThrow(/no gain/);
+    await engine.invoke("mixer_set_bus", {
+      id: "drums",
+      patch: { muted: true },
+    });
+    await engine.invoke("mixer_set_bus", {
+      id: "band",
+      patch: { muted: true },
+    });
+    const buses = await engine.invoke<
+      { id: string; muted: boolean; gainDb: number }[]
+    >("mixer_set_bus", { id: "band", patch: { muted: false } });
+    expect(buses[0].muted).toBe(false);
+  });
+
   it("clamps knobs to the declared range and remembers them", async () => {
     await engine.invoke("rig_select_profile", { profileId: "quad-cortex" });
     const s = await engine.invoke<RigState>("rig_set_control", {
@@ -376,5 +502,47 @@ describe("browser preview engine", () => {
     expect(s.controlValues["43"]).toBe(7);
     expect(s.monitor.at(-1)?.bytes).toEqual([0xb0, 43, 7]);
     expect(s.live).toBe(false);
+  });
+
+  it("clamps count-in to four bars like the desktop engine", async () => {
+    await engine.invoke("transport_set_count_in", { bars: 999 });
+    const tel = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(tel.transport.count_in_bars).toBe(4);
+    await engine.invoke("transport_set_count_in", { bars: -3 });
+    const low = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(low.transport.count_in_bars).toBe(0);
+  });
+
+  it("rejects a transport meter that does not match the active style", async () => {
+    await expect(
+      engine.invoke("transport_set_time_signature", {
+        numerator: 3,
+        denominator: 4,
+      }),
+    ).rejects.toThrow(/matching style/);
+    const state = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(state.transport.time_signature).toEqual([4, 4]);
+  });
+
+  it("emits tuner.state null when the tuner turns off", async () => {
+    const seen: Array<TunerTelemetry | null> = [];
+    await engine.listen<TunerTelemetry | null>("tuner.state", (t) => {
+      seen.push(t);
+    });
+    await engine.invoke("tuner_set", { on: true });
+    engine.tick(0);
+    expect(seen.at(-1)?.note).toBe("A4");
+    await engine.invoke("tuner_set", { on: false });
+    engine.tick(0);
+    expect(seen.at(-1)).toBeNull();
   });
 });

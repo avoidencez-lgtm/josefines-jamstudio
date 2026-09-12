@@ -33,8 +33,41 @@ describe("Jo's Gemini request", () => {
     // From the Jo room the film tool can only work with real shot ids (#45).
     expect(s).toContain("No Film project is open.");
     expect(s).toContain("No songwriting document is open.");
+    expect(s).toContain("No reference is loaded.");
     expect(s).not.toContain("is none");
     expect(s).not.toContain("are none");
+    const withReference = contextSummary({
+      ...ctx,
+      reference: {
+        assetId: "song-a",
+        label: "Blå natt",
+        position: 0,
+        seconds: 30,
+        speed: 0.8,
+        semitones: 2,
+        confirmedBars: 8,
+        sections: [{ id: "verse", label: "Verse" }],
+        ramp: {
+          config: {
+            schemaVersion: 1,
+            startPercent: 75,
+            stepPercent: 5,
+            targetPercent: 100,
+            barsPerStep: 4,
+          },
+          active: true,
+          completed_bars: 0,
+          speed_percent: 75,
+        },
+      },
+    });
+    expect(withReference).toContain("assetId song-a");
+    expect(withReference).toContain("80%");
+    expect(withReference).toContain("+2 semitones");
+    expect(withReference).toContain("8 confirmed bars");
+    expect(withReference).toContain("verse (Verse)");
+    expect(withReference).toContain("Practice ramp");
+    expect(withReference).not.toContain("No reference is loaded.");
     const empty = contextSummary({
       ...ctx,
       chartName: null,
@@ -52,6 +85,34 @@ describe("Jo's Gemini request", () => {
         },
       }),
     ).toContain("shot-a");
+  });
+
+  it("merges consecutive assistant turns so Anthropic roles keep alternating", () => {
+    const history = [
+      {
+        id: "u1",
+        sender: "user" as const,
+        text: "change the verse groove",
+        timestamp: "Jo",
+      },
+      {
+        id: "j1",
+        sender: "jo" as const,
+        text: "Proposed song edits. Review them below.",
+        timestamp: "Jo",
+      },
+      {
+        id: "j2",
+        sender: "jo" as const,
+        text: "The proposal was set aside. Your new message replaces it. Nothing was applied.",
+        timestamp: "This is a review.",
+      },
+    ];
+    const req = buildRequest(history, "what is the current bpm?", ctx);
+    const roles = req.contents.map((c) => c.role);
+    expect(roles).toEqual(["user", "model", "user"]);
+    expect(req.contents[1]?.parts[0]?.text).toContain("Proposed song edits");
+    expect(req.contents[1]?.parts[0]?.text).toContain("Nothing was applied");
   });
 
   it("does not send the UI welcome as a model turn", () => {

@@ -244,7 +244,23 @@ export const handleJoQuery = async (query: string, current = () => true) => {
     setMessages((prev) => [...prev, joMsg]);
     return joMsg.text;
   } catch (e) {
+    const text = withNextStep(String(e).replace(/^Error:\s*/, ""));
     useEngineStore.getState().notify("error", String(e));
+    setMessages((prev) => {
+      if (prev.at(-1)?.sender !== "user") return prev;
+      return [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          sender: "jo",
+          text,
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        },
+      ];
+    });
   } finally {
     useJoConversation.setState({ busy: false });
   }

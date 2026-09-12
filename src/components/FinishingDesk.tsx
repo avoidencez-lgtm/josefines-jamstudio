@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { ipc, isPreview } from "../ipc/client";
 import {
+  applyFinishingChange,
   buildSectionComp,
   contrastVariation,
   finishingReview,
@@ -13,7 +14,6 @@ import {
   arrangementRanges,
   useWriting,
 } from "../lib/originals";
-import { checkWritingForm } from "../lib/writingTools";
 import { useEngineStore } from "../store/engine";
 import { Button } from "./Button";
 
@@ -81,34 +81,14 @@ export function FinishingDesk() {
       useWriting.setState({ message: String(e) });
     }
   };
-  const apply = (body: SongBody, label: string, base: string) =>
-    report(() => {
-      const current = useWriting.getState();
-      if (current.busy || useEngineStore.getState().isRecording) return;
-      if (
-        !current.song ||
-        JSON.stringify([current.song.id, current.song.body]) !== base
-      )
-        throw new Error(
-          "The song changed. Preview this idea again before applying it.",
-        );
-      if (JSON.stringify(body) === JSON.stringify(current.song.body)) {
-        useWriting.setState({
-          message: "This performance is already in place.",
-        });
-        return;
-      }
-      if (current.song.versions.length >= 20)
-        throw new Error(
-          "Remove an unused version first so the current song can be preserved.",
-        );
-      checkWritingForm(body);
-      current.version(`This is before ${label}.`);
-      current.edit((b) => Object.assign(b, structuredClone(body)));
-      useWriting.setState({
-        message: `${label} applied. Your previous song is in Versions; Undo also returns to it. Save to keep both on disk.`,
-      });
-    });
+  const apply = (body: SongBody, label: string, base: string): boolean => {
+    try {
+      return applyFinishingChange(body, label, base);
+    } catch (e) {
+      useWriting.setState({ message: String(e) });
+      return false;
+    }
+  };
   return (
     <div className="finishing-desk">
       <section aria-labelledby="finish-title">
@@ -295,10 +275,12 @@ export function FinishingDesk() {
             </table>
             <div className="song-controls">
               <Button
-                disabled={proposal.base !== fingerprint}
+                disabled={
+                  proposal.base !== fingerprint || song.versions.length >= 20
+                }
                 onClick={() => {
-                  apply(proposal.body, proposal.label, proposal.base);
-                  setProposal(null);
+                  if (apply(proposal.body, proposal.label, proposal.base))
+                    setProposal(null);
                 }}
               >
                 Keep this variation.
@@ -359,6 +341,15 @@ export function FinishingDesk() {
             }}
           >
             Listen to this selection.
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={isPreview}
+            onClick={() =>
+              void w.action(() => ipc.invoke("clip_audition_stop"))
+            }
+          >
+            Stop listening.
           </Button>
           <Button
             disabled={!choice?.body}

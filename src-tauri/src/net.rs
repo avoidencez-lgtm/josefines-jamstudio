@@ -12,7 +12,7 @@ pub mod review;
 pub mod voice;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{BufRead, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -176,7 +176,12 @@ pub fn validate(req: &FetchRequest) -> Result<(&'static ProviderEntry, String), 
             "The path must start with a single '/'. Got {path:?}."
         ));
     }
-    if path.contains("://") || path.contains('@') || path.contains("..") || path.contains('\\') {
+    if path.contains("://")
+        || path.contains('@')
+        || path.contains("..")
+        || path.contains('\\')
+        || encoded_traversal(path)
+    {
         return Err(format!(
             "The path may not point outside the provider. Got {path:?}."
         ));
@@ -196,6 +201,21 @@ pub fn validate(req: &FetchRequest) -> Result<(&'static ProviderEntry, String), 
         }
     }
     Ok((entry, format!("{}{}", entry.base_url, path)))
+}
+
+fn encoded_traversal(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    if lower.contains("%2e")
+        || lower.contains("%2f")
+        || lower.contains("%5c")
+        || lower.contains("%40")
+    {
+        return true;
+    }
+    let Ok(url) = reqwest::Url::parse(&format!("https://jam.invalid{path}")) else {
+        return true;
+    };
+    url.host_str() != Some("jam.invalid") || url.path().split('/').any(|s| s == "..")
 }
 
 /// One line of measured usage and the request's optional cost estimate.
@@ -236,6 +256,58 @@ pub struct CostLog {
     path: PathBuf,
 }
 
+// ponytail: cap a body-free usage row at 64 KiB; raise only if the usage schema needs it.
+const MAX_COST_LINE: usize = 64 * 1024;
+
+fn cost_tail(mut file: impl Read + Seek, limit: usize) -> std::io::Result<Vec<CostEntry>> {
+    let mut entries = Vec::new();
+    if limit == 0 {
+        return Ok(entries);
+    }
+    let mut end = file.seek(SeekFrom::End(0))?;
+    let mut block = [0u8; 8192];
+    let mut line = Vec::new();
+    let mut oversized = false;
+    let parse = |line: &mut [u8], oversized| {
+        if oversized {
+            return None;
+        }
+        line.reverse();
+        serde_json::from_slice::<CostEntry>(line).ok()
+    };
+    while end > 0 {
+        let n = end.min(block.len() as u64) as usize;
+        let start = end - n as u64;
+        file.seek(SeekFrom::Start(start))?;
+        file.read_exact(&mut block[..n])?;
+        end = start;
+        for byte in block[..n].iter().rev() {
+            if *byte == b'\n' {
+                if let Some(entry) = parse(&mut line, oversized) {
+                    entries.push(entry);
+                    if entries.len() == limit {
+                        entries.reverse();
+                        return Ok(entries);
+                    }
+                }
+                line.clear();
+                oversized = false;
+            } else if line.len() < MAX_COST_LINE {
+                line.push(*byte);
+            } else {
+                oversized = true;
+            }
+        }
+    }
+    if end == 0 {
+        if let Some(entry) = parse(&mut line, oversized) {
+            entries.push(entry);
+        }
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
 impl CostLog {
     pub fn new(path: PathBuf) -> Self {
         Self { path }
@@ -263,41 +335,67 @@ impl CostLog {
         writeln!(f, "{line}").map_err(|e| e.to_string())
     }
 
-    /// Newest last. Lines that do not parse are skipped (a half-written line after
-    /// a crash must not hide the rest).
-    pub fn list(&self, limit: usize) -> Vec<CostEntry> {
-        let Ok(f) = std::fs::File::open(&self.path) else {
-            return Vec::new();
+    /// Newest last. Read backwards until `limit` valid rows are found, skipping
+    /// malformed or oversized lines without buffering the whole log.
+    pub fn list(&self, limit: usize) -> Result<Vec<CostEntry>, String> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let f = match std::fs::File::open(&self.path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => {
+                return Err(format!("Cannot read {}. {error}", self.path.display()));
+            }
         };
-        let entries: Vec<CostEntry> = std::io::BufReader::new(f)
-            .lines()
-            .map_while(Result::ok)
-            .filter_map(|l| serde_json::from_str(&l).ok())
-            .collect();
-        let skip = entries.len().saturating_sub(limit);
-        entries.into_iter().skip(skip).collect()
+        cost_tail(f, limit).map_err(|error| format!("Cannot read {}. {error}", self.path.display()))
     }
 
+    const TOTALS_TAIL: usize = 10_000;
+
     /// Totals per provider for the summary line in Settings.
-    pub fn totals(&self) -> Vec<CostTotal> {
+    pub fn totals(&self) -> Result<Vec<CostTotal>, String> {
         let mut by: HashMap<String, CostTotal> = HashMap::new();
-        for e in self.list(usize::MAX) {
+        for e in self.list(Self::TOTALS_TAIL)? {
             let t = by.entry(e.provider.clone()).or_insert_with(|| CostTotal {
                 provider: e.provider.clone(),
                 ..CostTotal::default()
             });
             t.calls += 1;
-            t.bytes_in += e.bytes_in;
-            t.bytes_out += e.bytes_out;
-            t.stt_seconds += e.stt_seconds.unwrap_or(0.0);
-            t.tts_characters += e.tts_characters.unwrap_or(0);
-            t.prompt_tokens += e.prompt_tokens.unwrap_or(0);
-            t.completion_tokens += e.completion_tokens.unwrap_or(0);
-            t.total_tokens += e.total_tokens.unwrap_or(0);
+            for (sum, value) in [
+                (&mut t.bytes_in, e.bytes_in),
+                (&mut t.bytes_out, e.bytes_out),
+                (&mut t.tts_characters, e.tts_characters.unwrap_or(0)),
+                (&mut t.prompt_tokens, e.prompt_tokens.unwrap_or(0)),
+                (&mut t.completion_tokens, e.completion_tokens.unwrap_or(0)),
+                (&mut t.total_tokens, e.total_tokens.unwrap_or(0)),
+            ] {
+                if let Some(next) = sum.checked_add(value) {
+                    *sum = next;
+                } else {
+                    t.invalid_values = true;
+                }
+            }
+            let seconds = e.stt_seconds.unwrap_or(0.0);
+            let total_seconds = t.stt_seconds + seconds;
+            if seconds >= 0.0 && total_seconds.is_finite() {
+                t.stt_seconds = total_seconds;
+            } else {
+                t.invalid_values = true;
+            }
             if let Some(cost) = e.estimated_cost_usd.filter(|v| v.is_finite() && *v >= 0.0) {
-                *t.estimated_cost_usd.get_or_insert(0.0) += cost;
+                let total_cost = t.estimated_cost_usd.unwrap_or(0.0) + cost;
+                if total_cost.is_finite() {
+                    t.estimated_cost_usd = Some(total_cost);
+                } else {
+                    t.invalid_values = true;
+                }
             } else {
                 t.unpriced_calls += 1;
+                t.invalid_values |= e.estimated_cost_usd.is_some();
+            }
+            if t.invalid_values {
+                t.estimated_cost_usd = None;
             }
             if !(200..300).contains(&e.status) || e.error.is_some() {
                 t.failures += 1;
@@ -305,7 +403,7 @@ impl CostLog {
         }
         let mut v: Vec<CostTotal> = by.into_values().collect();
         v.sort_by(|a, b| a.provider.cmp(&b.provider));
-        v
+        Ok(v)
     }
 }
 
@@ -313,6 +411,9 @@ impl CostLog {
 #[serde(rename_all = "camelCase")]
 pub struct CostTotal {
     pub provider: String,
+    /// Numeric amounts are incomplete when true; consumers must hide them.
+    #[serde(default)]
+    pub invalid_values: bool,
     pub calls: u64,
     pub failures: u64,
     pub bytes_in: u64,
@@ -328,6 +429,12 @@ pub struct CostTotal {
 
 fn strip_query(path: &str) -> String {
     path.split('?').next().unwrap_or(path).to_string()
+}
+
+/// Transport failures must not persist `reqwest::Error` Display (it includes the URL).
+fn map_transport_error(provider: &str, err: reqwest::Error) -> String {
+    let _ = err;
+    format!("The {provider} request failed. Check your connection; it was not retried.")
 }
 
 fn now_ms() -> u64 {
@@ -422,7 +529,7 @@ pub async fn provider_fetch_notifying(
         let mut resp = builder
             .send()
             .await
-            .map_err(|e| format!("The {} request failed. {e}", entry.id))?;
+            .map_err(|e| map_transport_error(entry.id, e))?;
         let status = resp.status().as_u16();
         let headers: HashMap<String, String> = resp
             .headers()
@@ -434,7 +541,7 @@ pub async fn provider_fetch_notifying(
         while let Some(chunk) = resp
             .chunk()
             .await
-            .map_err(|e| format!("The {} request failed. {e}", entry.id))?
+            .map_err(|e| map_transport_error(entry.id, e))?
         {
             if bytes.len() + chunk.len() > 2 * 1024 * 1024 {
                 return Err("Provider response exceeds the 2 MB text limit.".into());
@@ -479,6 +586,20 @@ fn llm_tokens(body: &str) -> LlmTokens {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
         return LlmTokens::default();
     };
+    llm_tokens_from_value(&value)
+}
+
+fn llm_tokens_from_value(value: &serde_json::Value) -> LlmTokens {
+    if let Some(items) = value.as_array() {
+        return items
+            .iter()
+            .rev()
+            .map(llm_tokens_from_value)
+            .find(|tokens| {
+                tokens.prompt.is_some() || tokens.completion.is_some() || tokens.total.is_some()
+            })
+            .unwrap_or_default();
+    }
     if let Some(usage) = value.get("usageMetadata") {
         return LlmTokens {
             prompt: usage.get("promptTokenCount").and_then(|v| v.as_u64()),
@@ -522,6 +643,180 @@ fn persist_cost(log: &CostLog, cost: &CostEntry, on_log_error: impl FnOnce(&str)
 mod tests {
     use super::*;
     use crate::keys::{FailingStore, MemoryStore};
+    use std::io::Write;
+
+    #[test]
+    fn cost_tail_stops_after_enough_rows_and_bounds_damaged_lines() {
+        struct Counted {
+            cursor: std::io::Cursor<Vec<u8>>,
+            bytes: usize,
+        }
+        impl Read for Counted {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let n = self.cursor.read(buf)?;
+                self.bytes += n;
+                Ok(n)
+            }
+        }
+        impl Seek for Counted {
+            fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+                self.cursor.seek(pos)
+            }
+        }
+        let older = CostEntry {
+            at_ms: 1,
+            provider: "gemini".into(),
+            path: format!("/{}", "ø".repeat(5000)),
+            ..CostEntry::default()
+        };
+        let oversized = CostEntry {
+            at_ms: 2,
+            path: "x".repeat(MAX_COST_LINE + 1),
+            ..CostEntry::default()
+        };
+        let newest = CostEntry {
+            at_ms: 3,
+            provider: "gemini".into(),
+            ..CostEntry::default()
+        };
+        let data = format!(
+            "{}{}\r\n{}\n{}",
+            "invalid\n".repeat(20_000),
+            serde_json::to_string(&older).unwrap(),
+            serde_json::to_string(&oversized).unwrap(),
+            serde_json::to_string(&newest).unwrap()
+        );
+        let mut file = Counted {
+            cursor: std::io::Cursor::new(data.into_bytes()),
+            bytes: 0,
+        };
+        assert_eq!(cost_tail(&mut file, 1).unwrap(), vec![newest.clone()]);
+        assert!(file.bytes <= 8192, "read {} bytes for one row", file.bytes);
+        // Reassemble UTF-8 across blocks; skip the oversized row and keep order.
+        assert_eq!(cost_tail(&mut file, 2).unwrap(), vec![older, newest]);
+        assert!(cost_tail(&mut file, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn cost_tail_reports_io_errors_instead_of_returning_partial_totals() {
+        struct BrokenRead;
+        impl Read for BrokenRead {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("fixture read failure"))
+            }
+        }
+        impl Seek for BrokenRead {
+            fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+                Ok(if matches!(pos, SeekFrom::End(_)) {
+                    1
+                } else {
+                    0
+                })
+            }
+        }
+
+        let error = cost_tail(BrokenRead, 1).unwrap_err();
+        assert!(error.to_string().contains("fixture read failure"));
+    }
+
+    #[test]
+    fn invalid_usage_totals_are_reported_without_losing_other_providers() {
+        let dir = std::env::temp_dir().join(format!("jam-invalid-cost-{}", std::process::id()));
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        for (provider, entry) in [
+            (
+                "integers",
+                CostEntry {
+                    bytes_in: u64::MAX,
+                    bytes_out: u64::MAX,
+                    tts_characters: Some(u64::MAX),
+                    prompt_tokens: Some(u64::MAX),
+                    completion_tokens: Some(u64::MAX),
+                    total_tokens: Some(u64::MAX),
+                    ..CostEntry::default()
+                },
+            ),
+            (
+                "seconds",
+                CostEntry {
+                    stt_seconds: Some(f64::MAX),
+                    ..CostEntry::default()
+                },
+            ),
+            (
+                "cost",
+                CostEntry {
+                    estimated_cost_usd: Some(f64::MAX),
+                    ..CostEntry::default()
+                },
+            ),
+            (
+                "negative-seconds",
+                CostEntry {
+                    stt_seconds: Some(-1.0),
+                    ..CostEntry::default()
+                },
+            ),
+            (
+                "negative-cost",
+                CostEntry {
+                    estimated_cost_usd: Some(-1.0),
+                    ..CostEntry::default()
+                },
+            ),
+            (
+                "valid",
+                CostEntry {
+                    bytes_in: 12,
+                    stt_seconds: Some(1.5),
+                    total_tokens: Some(30),
+                    estimated_cost_usd: Some(0.25),
+                    ..CostEntry::default()
+                },
+            ),
+        ] {
+            let entry = CostEntry {
+                provider: provider.into(),
+                status: 200,
+                ..entry
+            };
+            log.append(&entry).unwrap();
+            log.append(&entry).unwrap();
+        }
+        log.append(&CostEntry {
+            provider: "integers".into(),
+            status: 200,
+            estimated_cost_usd: Some(0.25),
+            ..CostEntry::default()
+        })
+        .unwrap();
+        let before = std::fs::read(log.path()).unwrap();
+        let totals = serde_json::to_value(log.totals().unwrap()).unwrap();
+        for total in totals.as_array().unwrap() {
+            assert!(total["sttSeconds"].as_f64().unwrap().is_finite());
+            assert_eq!(
+                total["calls"],
+                if total["provider"] == "integers" {
+                    3
+                } else {
+                    2
+                }
+            );
+            if total["provider"] == "valid" {
+                assert_eq!(total["invalidValues"], false);
+                assert_eq!(total["bytesIn"], 24);
+                assert_eq!(total["sttSeconds"], 3.0);
+                assert_eq!(total["totalTokens"], 60);
+                assert_eq!(total["estimatedCostUsd"], 0.5);
+            } else {
+                assert_eq!(total["invalidValues"], true, "{total}");
+                assert!(total["estimatedCostUsd"].is_null(), "{total}");
+            }
+        }
+        assert_eq!(totals.as_array().unwrap().len(), 6);
+        assert_eq!(std::fs::read(log.path()).unwrap(), before);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn speech_units_include_uncertain_requests_and_old_logs_stay_readable() {
@@ -554,10 +849,14 @@ mod tests {
         ] {
             log.append(&entry).unwrap();
         }
-        let totals = log.totals();
+        let totals = log.totals().unwrap();
         assert_eq!(totals[0].calls, 3);
         assert_eq!(totals[0].failures, 1);
         assert_eq!(totals[0].unpriced_calls, 1);
+        assert!(
+            !totals[0].invalid_values,
+            "missing estimates are allowed in old logs"
+        );
         assert_eq!(totals[0].stt_seconds, 3.5);
         assert_eq!(totals[0].tts_characters, 12);
         assert!((totals[0].estimated_cost_usd.unwrap() - 0.013).abs() < 1e-12);
@@ -583,6 +882,13 @@ mod tests {
         assert_eq!(chat.total, Some(10));
         assert_eq!(llm_tokens("not-json").total, None);
         assert_eq!(llm_tokens(r#"{"ok":true}"#).prompt, None);
+        let streamed = llm_tokens(
+            r#"[{"candidates":[]},{"candidates":[],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":20,"totalTokenCount":30}}]"#,
+        );
+        assert_eq!(
+            (streamed.prompt, streamed.completion, streamed.total),
+            (Some(10), Some(20), Some(30))
+        );
         let dir = std::env::temp_dir().join(format!("jam-token-cost-{}", std::process::id()));
         let log = CostLog::new(dir.join("usage.jsonl"));
         log.append(&CostEntry {
@@ -598,7 +904,7 @@ mod tests {
         let line = std::fs::read_to_string(log.path()).unwrap();
         assert!(!line.contains("secret"));
         assert!(line.contains("promptTokens"));
-        assert_eq!(log.totals()[0].total_tokens, 15);
+        assert_eq!(log.totals().unwrap()[0].total_tokens, 15);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -636,6 +942,8 @@ mod tests {
         assert!(validate(&req("gemini", "https://evil.example/x")).is_err());
         assert!(validate(&req("gemini", "//evil.example/x")).is_err());
         assert!(validate(&req("gemini", "/a/../b")).is_err());
+        assert!(validate(&req("gemini", "/%2e%2e/admin")).is_err());
+        assert!(validate(&req("gemini", "/%2E%2E/admin")).is_err());
         assert!(validate(&req("gemini", "/x@y")).is_err());
         assert!(validate(&req("gemini", "/with space")).is_err());
         let mut r = req("gemini", "/x");
@@ -695,7 +1003,7 @@ mod tests {
             .unwrap_err();
         assert!(err.contains("No API key"), "{err}");
         assert!(
-            log.list(10).is_empty(),
+            log.list(10).unwrap().is_empty(),
             "nothing is logged when nothing was sent"
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -715,7 +1023,7 @@ mod tests {
         assert!(err.contains("keychain unavailable"), "{err}");
         assert!(!err.contains("No API key"), "{err}");
         assert!(
-            log.list(10).is_empty(),
+            log.list(10).unwrap().is_empty(),
             "nothing is logged when the keychain cannot be read"
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -735,7 +1043,10 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("Headless tests cannot call"), "{err}");
-        assert!(log.list(10).is_empty(), "the refused request is not logged");
+        assert!(
+            log.list(10).unwrap().is_empty(),
+            "the refused request is not logged"
+        );
         assert!(live_guard("x").is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -770,7 +1081,7 @@ mod tests {
             .write_all(b"{ torn")
             .unwrap();
 
-        let last2 = log.list(2);
+        let last2 = log.list(2).unwrap();
         assert_eq!(last2.len(), 2);
         assert_eq!(last2[1].at_ms, 1004);
         assert_eq!(last2[1].path, "/v1/x");
@@ -780,12 +1091,84 @@ mod tests {
             .unwrap()
             .contains("SECRET"));
 
-        let totals = log.totals();
+        let totals = log.totals().unwrap();
         assert_eq!(totals.len(), 2);
         let g = totals.iter().find(|t| t.provider == "gemini").unwrap();
         assert_eq!(g.calls, 3);
         assert_eq!(g.failures, 1);
         assert_eq!(g.bytes_in, 600);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn transport_failures_do_not_persist_the_reqwest_url() {
+        let err = reqwest::Client::builder()
+            .timeout(Duration::from_millis(1))
+            .build()
+            .unwrap()
+            .get("http://127.0.0.1:1/v1/x?key=SECRET")
+            .send()
+            .await
+            .unwrap_err();
+        let display = err.to_string();
+        assert!(
+            display.contains("http") || display.contains("SECRET") || display.contains("127.0.0.1"),
+            "reqwest Display includes the URL: {display}"
+        );
+        let mapped = map_transport_error("gemini", err);
+        assert!(!mapped.contains("SECRET"), "{mapped}");
+        assert!(!mapped.contains("http://"), "{mapped}");
+        assert!(!mapped.contains("127.0.0.1"), "{mapped}");
+        assert!(mapped.contains("gemini"), "{mapped}");
+        let mut cost = CostEntry {
+            provider: "gemini".into(),
+            path: strip_query("/v1/x?key=SECRET"),
+            error: Some(mapped),
+            ..CostEntry::default()
+        };
+        assert_eq!(cost.path, "/v1/x");
+        assert!(!serde_json::to_string(&cost).unwrap().contains("SECRET"));
+        cost.error = None;
+    }
+
+    #[test]
+    fn cost_log_skips_invalid_utf8_and_keeps_later_entries() {
+        let dir = std::env::temp_dir().join(format!("jam-costlog-utf8-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        log.append(&CostEntry {
+            at_ms: 1,
+            provider: "gemini".into(),
+            method: "POST".into(),
+            path: "/v1/early".into(),
+            status: 200,
+            ..CostEntry::default()
+        })
+        .unwrap();
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(log.path())
+            .unwrap()
+            .write_all(b"\n\x80\xff not utf8\n")
+            .unwrap();
+        log.append(&CostEntry {
+            at_ms: 2,
+            provider: "gemini".into(),
+            method: "GET".into(),
+            path: "/v1/later".into(),
+            status: 200,
+            bytes_in: 9,
+            ..CostEntry::default()
+        })
+        .unwrap();
+        let listed = log.list(10).unwrap();
+        assert_eq!(listed.len(), 2, "{listed:?}");
+        assert_eq!(listed[0].at_ms, 1);
+        assert_eq!(listed[1].at_ms, 2);
+        assert_eq!(listed[1].path, "/v1/later");
+        assert_eq!(log.totals().unwrap()[0].calls, 2);
+        assert_eq!(log.list(1).unwrap()[0].at_ms, 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

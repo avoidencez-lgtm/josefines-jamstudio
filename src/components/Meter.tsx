@@ -11,10 +11,45 @@ export interface MeterProps {
   live?: boolean;
 }
 
-function clampPercent(db: number): number {
+/** Fill used by the meter canvas. Peak is a tick; RMS is the bar. */
+export interface MeterCanvas {
+  clearRect(x: number, y: number, w: number, h: number): void;
+  fillRect(x: number, y: number, w: number, h: number): void;
+  fillStyle: CanvasRenderingContext2D["fillStyle"];
+}
+
+export function clampPercent(db: number): number {
   if (db < -60) return 0;
   if (db > 0) return 100;
   return ((db + 60) / 60) * 100;
+}
+
+export function paintMeter(
+  ctx: MeterCanvas,
+  width: number,
+  height: number,
+  meter: {
+    peakDb: number;
+    rmsDb: number;
+    clip: boolean;
+    colors: { bg: string; accent: string; ink: string; record: string };
+  },
+): void {
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = meter.colors.bg;
+  ctx.fillRect(0, 0, width, height);
+  const rmsPct = clampPercent(meter.rmsDb) / 100;
+  ctx.fillStyle = meter.colors.accent;
+  ctx.fillRect(0, 0, width * rmsPct, height);
+  const peakPct = clampPercent(meter.peakDb) / 100;
+  if (peakPct > 0) {
+    ctx.fillStyle = meter.colors.ink;
+    ctx.fillRect(Math.min(width - 2, width * peakPct), 0, 2, height);
+  }
+  if (meter.clip) {
+    ctx.fillStyle = meter.colors.record;
+    ctx.fillRect(width - 4, 0, 4, height);
+  }
 }
 
 export function Meter({
@@ -48,25 +83,17 @@ export function Meter({
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const style = getComputedStyle(canvas);
-    const bg = style.getPropertyValue("--bg-2").trim() || "#1f1c1a";
-    const accent = style.getPropertyValue("--accent").trim() || "#e0a24a";
-    const ink = style.getPropertyValue("--fg-0").trim() || "#f3ede4";
-    const record = style.getPropertyValue("--record").trim() || "#e0534e";
-    ctx.clearRect(0, 0, widthPx, heightPx);
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, widthPx, heightPx);
-    const rmsPct = clampPercent(rms) / 100;
-    ctx.fillStyle = accent;
-    ctx.fillRect(0, 0, widthPx * rmsPct, heightPx);
-    const peakPct = clampPercent(peak) / 100;
-    if (peakPct > 0) {
-      ctx.fillStyle = ink;
-      ctx.fillRect(Math.min(widthPx - 2, widthPx * peakPct), 0, 2, heightPx);
-    }
-    if (performance.now() < clipUntil.current) {
-      ctx.fillStyle = record;
-      ctx.fillRect(widthPx - 4, 0, 4, heightPx);
-    }
+    paintMeter(ctx, widthPx, heightPx, {
+      peakDb: peak,
+      rmsDb: rms,
+      clip: performance.now() < clipUntil.current,
+      colors: {
+        bg: style.getPropertyValue("--bg-2").trim() || "#1f1c1a",
+        accent: style.getPropertyValue("--accent").trim() || "#e0a24a",
+        ink: style.getPropertyValue("--fg-0").trim() || "#f3ede4",
+        record: style.getPropertyValue("--record").trim() || "#e0534e",
+      },
+    });
   });
 
   return (
@@ -78,6 +105,7 @@ export function Meter({
         </span>
       </div>
       <canvas
+        ref={canvasRef}
         className="h-2 w-full rounded-[var(--radius-s)] border border-[var(--line)] bg-[var(--bg-2)]"
         aria-hidden
       />

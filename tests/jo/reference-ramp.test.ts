@@ -127,3 +127,47 @@ it("routes explicit ramp commands through one native action and rejects stale or
   invoke.mockRejectedValueOnce(new Error("Native refusal"));
   await expect(dispatchJoToolCall(call)).rejects.toThrow("Native refusal");
 });
+
+it("falls back to the session ramp draft when optional percents and bars are omitted", async () => {
+  useEngineStore.setState({
+    isPreview: false,
+    telemetry: {
+      ...before.telemetry,
+      reference: {
+        asset_id: "fixture",
+        label: "Fixture",
+        seconds: 5,
+        position: 0,
+        state: "stopped",
+        loop_start: 0,
+        loop_end: 5,
+        loop_enabled: false,
+        grid: {
+          origin: "confirmed-local",
+          beats_per_bar: 4,
+          bars: 2,
+          sections: [],
+          position: null,
+        },
+      },
+    },
+  });
+  const draft = useReferenceRamp.getState().config;
+  const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue({
+    config: draft,
+    active: true,
+    completed_bars: 0,
+    speed_percent: draft.startPercent,
+  });
+  expect(
+    await dispatchJoToolCall({
+      name: "ramp",
+      arguments: { assetId: "fixture" },
+    }),
+  ).toContain(`${draft.startPercent}%`);
+  expect(invoke).toHaveBeenCalledWith("media_reference_ramp", {
+    assetId: "fixture",
+    config: draft,
+    toggle: false,
+  });
+});

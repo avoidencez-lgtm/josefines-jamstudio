@@ -1,3 +1,4 @@
+import blackSpiritMap from "../../controls/black-spirit-200.json";
 import defaultMap from "../../controls/default.json";
 import { JO_TOOLS, validateToolCall } from "./jo/tools";
 import { STAGE_ACTIONS } from "./stageActions";
@@ -28,6 +29,32 @@ export function bindingArgs(binding: ControlBinding): Record<string, unknown> {
 /** Bundled Stage map. Unknown action ids fail; `ptt` is allowed. */
 export function bundledControlMap(): ControlMap {
   return defaultMap as ControlMap;
+}
+
+/** Every bundled control map the registry ships. */
+export function bundledControlMaps(): ControlMap[] {
+  return [defaultMap as ControlMap, blackSpiritMap as ControlMap];
+}
+
+/** MIDI PC/CC binding from a control map (pedal `controller.json` wins first). */
+export function matchControlMidi(press: {
+  kind: string;
+  number: number;
+}): ControlBinding | undefined {
+  for (const map of bundledControlMaps()) {
+    const hit = map.bindings.find((binding) => {
+      const src = binding.source;
+      if (press.kind === "program" && src.kind === "midi_pc") {
+        return src.program === press.number;
+      }
+      if (press.kind === "cc" && src.kind === "midi_cc") {
+        return src.cc === press.number;
+      }
+      return false;
+    });
+    if (hit) return hit;
+  }
+  return undefined;
 }
 
 export function validateControlMap(map: ControlMap): void {

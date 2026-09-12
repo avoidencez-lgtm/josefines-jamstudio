@@ -192,8 +192,13 @@ export function handleShortcut(
     return false;
   }
   // Leave Ctrl/Cmd chords to the browser. Alt is ignored except when it is
-  // how the layout typed `[` / `]` (Option+8/9 on a Norwegian Mac).
-  if (e.ctrlKey || e.metaKey) return false;
+  // how the layout typed `[` / `]` (Option+8/9 on a Norwegian Mac; AltGr+8/9
+  // on Windows Nordic layouts, where Chromium also sets ctrlKey).
+  if (
+    e.metaKey ||
+    (e.ctrlKey && (!e.altKey || (e.key !== "[" && e.key !== "]")))
+  )
+    return false;
   if (e.altKey && e.key !== "[" && e.key !== "]") return false;
   if (
     e.repeat &&

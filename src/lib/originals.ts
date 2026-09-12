@@ -4,7 +4,7 @@ import type { Chart, TakeMetadata } from "../ipc/contract";
 import { requireCommand, useEngineStore } from "../store/engine";
 import { parseChartText } from "./chart/text";
 import type { Blueprint, RigSnapshot } from "./roomTools";
-import { checkWritingForm } from "./writingTools";
+import { checkWritingForm, deleteSection } from "./writingTools";
 
 export const PARTS = ["Drums", "Bass", "Comp"] as const;
 export interface PartSettings {
@@ -44,6 +44,26 @@ export interface SongBody {
     assetId: string | null;
     rows: Blueprint;
   };
+}
+
+/** Snapshot the song only after the unused section actually leaves the document. */
+export function commitSectionDeletion(sectionId: string): boolean {
+  const w = useWriting.getState();
+  const song = w.song;
+  if (!song) return false;
+  const selected = song.body.chart.sections.find((s) => s.id === sectionId);
+  if (!selected) return false;
+  if (song.versions.length >= 20) {
+    useWriting.setState({
+      message:
+        "Remove an unused version first so the song before the deletion can be kept.",
+    });
+    return false;
+  }
+  const previous = structuredClone(song.body);
+  if (!w.edit((b) => deleteSection(b, selected.id))) return false;
+  w.version(`Before deleting ${selected.name}`, previous);
+  return true;
 }
 
 export function arrangementRanges(chart: Chart) {
@@ -160,7 +180,7 @@ interface WritingState {
   select: (id: string) => void;
   undo: () => void;
   redo: () => void;
-  version: (name?: string) => void;
+  version: (name?: string, body?: SongBody) => void;
   restore: (id: string) => boolean;
   refresh: () => Promise<void>;
   save: () => Promise<void>;
@@ -291,7 +311,7 @@ export const useWriting = create<WritingState>((set, get) => ({
       lastEdit: null,
     });
   },
-  version: (name) => {
+  version: (name, body) => {
     const song = get().song;
     if (!song) return;
     if (song.versions.length >= 20) {
@@ -310,7 +330,7 @@ export const useWriting = create<WritingState>((set, get) => ({
             id: crypto.randomUUID(),
             name:
               name?.trim() || `This is version ${song.versions.length + 1}.`,
-            body: structuredClone(song.body),
+            body: structuredClone(body ?? song.body),
           },
         ],
       },
@@ -319,13 +339,20 @@ export const useWriting = create<WritingState>((set, get) => ({
   },
   restore: (id) => {
     const v = get().song?.versions.find((v) => v.id === id);
-    if (v)
-      return get().edit((b) => {
-        for (const key of Object.keys(b))
-          delete (b as unknown as Record<string, unknown>)[key];
-        Object.assign(b, structuredClone(v.body));
-      });
-    return false;
+    if (!v) return false;
+    get().edit((b) => {
+      for (const key of Object.keys(b))
+        delete (b as unknown as Record<string, unknown>)[key];
+      Object.assign(b, structuredClone(v.body));
+    });
+    const selectedInForm = v.body.chart.arrangement.some(
+      (a) => a.sectionId === get().selected,
+    );
+    set({
+      selected: selectedInForm ? get().selected : v.body.chart.sections[0].id,
+      rehearsalIndex: -1,
+    });
+    return true;
   },
   refresh: async () => {
     const saved = await ipc.invoke<Original[]>("originals_list");
@@ -362,11 +389,11 @@ export const useWriting = create<WritingState>((set, get) => ({
     copy.revision = 0;
     copy.body.chart.id = copy.id;
     copy.body.chart.name += " (copy)";
-    const saved = await ipc.invoke<Original>("originals_save", {
+    await ipc.invoke<Original>("originals_save", {
       document: copy,
     });
     if (get().song === song) {
-      set({ song: saved, dirty: false, message: "Copy saved. Original kept." });
+      set({ message: "Copy saved. Original kept." });
     } else {
       set({
         message: "Copy saved. Your newer draft is still open and needs saving.",

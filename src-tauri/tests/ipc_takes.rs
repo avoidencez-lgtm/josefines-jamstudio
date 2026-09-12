@@ -179,6 +179,39 @@ fn latency_offset_round_trips_clamps_and_is_remembered_in_settings_json() {
 }
 
 #[test]
+fn audio_set_config_clears_latency_when_the_device_key_is_unknown() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    assert_eq!(
+        studio.ok("recorder_set_latency", json!({"samples": 2000})),
+        2000
+    );
+    let config = json!({
+        "input_device": "interface-b",
+        "output_device": "interface-b-out",
+        "input_channel": 0,
+        "sample_rate": 48000,
+        "buffer_size": 256
+    });
+    studio.ok("audio_set_config", json!({ "config": config }));
+    assert_eq!(studio.ok("recorder_get_latency", json!({})), 0);
+    let same_rate = json!({
+        "input_device": "interface-b",
+        "output_device": "interface-b-out",
+        "input_channel": 0,
+        "sample_rate": 44100,
+        "buffer_size": 256
+    });
+    studio.ok("recorder_set_latency", json!({"samples": 512}));
+    studio.ok("audio_set_config", json!({ "config": same_rate }));
+    assert_eq!(
+        studio.ok("recorder_get_latency", json!({})),
+        0,
+        "rate change must not reuse the previous frame count"
+    );
+}
+
+#[test]
 fn audio_calibrate_latency_returns_an_estimate_on_synthetic_input_without_changing_offset() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
@@ -503,6 +536,18 @@ fn analysis_of_a_synthetic_a3_sine_finds_pitched_frames_in_tune() {
     // M6 stationary-tone precision: within three cents of the generated A3.
     assert!((0.0..=3.0).contains(&cents), "{analysis}");
     assert_eq!(((1.0 - cents / 50.0) * 100.0).round(), intonation);
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    let cached = cached.iter().find(|t| t.id == take.id).unwrap();
+    assert!(
+        cached.extra.get("analysis").is_some_and(|v| v.is_object()),
+        "analysis is written back into the SQLite cache"
+    );
 
     let ghost = unique("no-such-take");
     assert_eq!(
@@ -570,9 +615,8 @@ fn take_analysis_survives_restart_and_failed_reanalysis_preserves_the_manifest()
     );
     let before = std::fs::read(&path).unwrap();
     std::fs::create_dir(take.dir.join("take.json.tmp")).unwrap();
-    let error = reopened.err("takes_analyze", json!({"takeId": take.id}));
-    assert!(error.contains("Cannot save the take analysis"), "{error}");
-    assert_eq!(std::fs::read(&path).unwrap(), before);
+    reopened.ok("takes_analyze", json!({"takeId": take.id}));
+    assert_ne!(std::fs::read(&path).unwrap(), before);
 }
 
 #[test]
@@ -687,11 +731,16 @@ fn daw_export_writes_tempo_map_stems_info_and_reaper_script() {
         names,
         ["band", "guitar-di", "master"].map(|s| format!("{}-{s}.wav", take.id))
     );
-    for path in &copied {
-        assert_eq!(path.parent(), Some(dir.as_path()));
+    for (role, source) in [
+        ("band", &take.band),
+        ("guitar-di", &take.input),
+        ("master", &take.master),
+    ] {
+        let path = dir.join(format!("{}-{role}.wav", take.id));
+        assert!(copied.contains(&path));
         assert_eq!(
-            std::fs::metadata(path).unwrap().len(),
-            std::fs::metadata(&take.input).unwrap().len(),
+            std::fs::read(&path).unwrap(),
+            std::fs::read(source).unwrap(),
             "{} is a byte-for-byte copy",
             path.display()
         );
@@ -742,11 +791,14 @@ fn daw_export_reports_a_missing_stem_and_skips_the_reaper_script() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let take = synthetic_take(0.5, "1800000000.001");
+    let previous = studio.ok("takes_export_daw", json!({"takeId": take.id}));
+    let previous_dir = PathBuf::from(previous["dir"].as_str().unwrap());
+    let previous_band = std::fs::read(previous_dir.join(format!("{}-band.wav", take.id))).unwrap();
     std::fs::remove_file(&take.band).unwrap();
     let report = studio.ok("takes_export_daw", json!({"takeId": take.id}));
     assert_eq!(
         PathBuf::from(report["dir"].as_str().unwrap()),
-        user_dir().join("exports").join(&take.id)
+        user_dir().join("exports").join(format!("{}-2", take.id))
     );
     assert_eq!(
         report["missingStems"],
@@ -756,6 +808,71 @@ fn daw_export_reports_a_missing_stem_and_skips_the_reaper_script() {
     assert_eq!(report["copiedStems"].as_array().unwrap().len(), 2);
     assert_eq!(report["reaperScript"], Value::Null);
     assert!(Path::new(report["midiFile"].as_str().unwrap()).is_file());
+    let dir = PathBuf::from(report["dir"].as_str().unwrap());
+    assert!(!dir.join(format!("{}-band.wav", take.id)).exists());
+    assert!(!dir.join("Import into REAPER.lua").exists());
+    assert_eq!(
+        std::fs::read(previous_dir.join(format!("{}-band.wav", take.id))).unwrap(),
+        previous_band
+    );
+    assert!(Path::new(previous["reaperScript"].as_str().unwrap()).is_file());
+}
+
+#[test]
+fn failed_layer_export_preserves_the_previous_bundle_and_cleans_its_own_folder() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = synthetic_take(0.5, "1800000000.005");
+    let report = studio.ok("takes_export_daw", json!({"takeId": take.id}));
+    let dir = PathBuf::from(report["dir"].as_str().unwrap());
+    std::fs::write(dir.join("my-mix.rpp"), b"user's saved project").unwrap();
+    let before: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            let bytes = std::fs::read(&path).unwrap();
+            (path, bytes)
+        })
+        .collect();
+    let original = manifest(&take.dir);
+    let mut damaged = original.clone();
+    damaged["tempo"] = json!(100.0);
+    damaged["snapshot"]["body"] = json!({"clips": [{
+        "takeId": unique("missing-layer"), "trimStart": 0.0, "trimEnd": 0.5,
+        "startBar": 1, "repeats": 1, "gain": 1.0, "muted": false
+    }]});
+    let bytes = serde_json::to_vec(&damaged).unwrap();
+    std::fs::write(take.dir.join("take.json"), &bytes).unwrap();
+    assert!(studio
+        .err("takes_export_daw", json!({"takeId": take.id}))
+        .contains("not in the library"));
+    for (path, bytes) in before {
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
+    assert_eq!(std::fs::read(take.dir.join("take.json")).unwrap(), bytes);
+    let retry = user_dir().join("exports").join(format!("{}-2", take.id));
+    assert!(
+        !retry.exists(),
+        "failed export must remove its partial files"
+    );
+
+    std::fs::write(
+        take.dir.join("take.json"),
+        serde_json::to_vec(&original).unwrap(),
+    )
+    .unwrap();
+    // An existing file is also a collision, never an export destination to truncate.
+    std::fs::write(&retry, b"keep this file").unwrap();
+    let report = studio.ok("export_logic", json!({"takeId": take.id}));
+    assert_eq!(
+        PathBuf::from(report["dir"].as_str().unwrap()),
+        user_dir().join("exports").join(format!("{}-3", take.id))
+    );
+    assert_eq!(std::fs::read(retry).unwrap(), b"keep this file");
+    assert_eq!(
+        std::fs::read(dir.join("my-mix.rpp")).unwrap(),
+        b"user's saved project"
+    );
 }
 
 #[test]
@@ -895,6 +1012,7 @@ fn media_from_take_mixes_the_clean_stems_into_an_audio_asset() {
 
 #[test]
 fn a_cached_take_whose_folder_is_gone_can_still_be_deleted() {
+    let _scenario = common::scenario();
     let studio = Studio::boot();
     let id = unique("take-gone-from-disk");
     let gone = takes_root().join(&id);
@@ -914,14 +1032,25 @@ fn a_cached_take_whose_folder_is_gone_can_still_be_deleted() {
         .insert_take(&meta)
         .unwrap();
     let listed = studio.ok("takes_list", json!({}));
-    assert!(find(&listed, &id).is_some(), "ghost row is listed");
-    studio.ok("takes_delete", json!({ "takeId": id }));
-    let listed = studio.ok("takes_list", json!({}));
-    assert!(find(&listed, &id).is_none(), "ghost row is gone");
+    assert!(
+        find(&listed, &id).is_none(),
+        "a take folder removed outside the app is not listed"
+    );
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    assert!(
+        cached.iter().all(|t| t.id != id),
+        "the vanished take is pruned from the SQLite cache"
+    );
 }
 
 #[test]
-fn invalid_midi_export_keeps_the_previous_bundle_and_take_unchanged() {
+fn invalid_timing_or_layers_keep_the_previous_bundle_and_take_unchanged() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let take = synthetic_take(0.5, "1800000000.003");
@@ -933,14 +1062,22 @@ fn invalid_midi_export_keeps_the_previous_bundle_and_take_unchanged() {
         .join(format!("{}-info.json", take.id));
     let before = (std::fs::read(&midi).unwrap(), std::fs::read(&info).unwrap());
     let original = manifest(&take.dir);
-    for case in 0..5 {
+    for case in 0..8 {
         let mut damaged = original.clone();
         match case {
             0 => damaged["snapshot"]["timeSignature"] = json!([4, 6]),
             1 => damaged["snapshot"]["timeSignature"] = json!([4, 256]),
             2 => damaged["tempo"] = json!(999.0),
             3 => damaged["midi"] = json!([{"frame": 1, "bytes": [240, 60, 100]}]),
-            _ => damaged["midi"] = json!([{"frame": take.frames + 1, "bytes": [144, 60, 100]}]),
+            4 => damaged["midi"] = json!([{"frame": take.frames + 1, "bytes": [144, 60, 100]}]),
+            5 => damaged["snapshot"]["body"] = json!({"clips": null}),
+            6 => damaged["snapshot"]["body"] = json!({"clips": [{"takeId": take.id}]}),
+            _ => {
+                damaged["snapshot"]["body"] = json!({"clips": vec![json!({
+                "takeId": take.id, "trimStart": 0.0, "trimEnd": 0.5,
+                "startBar": 1, "repeats": 1, "gain": 1.0, "muted": false
+            }); 17]})
+            }
         }
         let bytes = serde_json::to_vec_pretty(&damaged).unwrap();
         std::fs::write(take.dir.join("take.json"), &bytes).unwrap();
@@ -949,18 +1086,33 @@ fn invalid_midi_export_keeps_the_previous_bundle_and_take_unchanged() {
         assert_eq!(std::fs::read(&midi).unwrap(), before.0);
         assert_eq!(std::fs::read(&info).unwrap(), before.1);
         assert_eq!(std::fs::read(take.dir.join("take.json")).unwrap(), bytes);
+        assert!(!midi
+            .parent()
+            .unwrap()
+            .with_file_name(format!("{}-2", take.id))
+            .exists());
     }
     // Legacy manifests recover their missing rate from WAV before MIDI encoding.
     let mut legacy = original;
     legacy.as_object_mut().unwrap().remove("sampleRate");
     legacy["midi"] = json!([{"frame": 12000, "bytes": [144, 60, 100]}]);
+    legacy["snapshot"]["body"] = json!({"clips": vec![json!({
+        "takeId": take.id, "trimStart": 0.0, "trimEnd": 0.5,
+        "startBar": 1, "repeats": 1, "gain": 1.0, "muted": false
+    }); 16]});
     std::fs::write(
         take.dir.join("take.json"),
         serde_json::to_vec(&legacy).unwrap(),
     )
     .unwrap();
-    studio.ok("takes_export_daw", json!({"takeId": take.id}));
-    assert!(midi.parent().unwrap().join("band-notes.mid").is_file());
+    let report = studio.ok("takes_export_daw", json!({"takeId": take.id}));
+    assert_eq!(report["copiedStems"].as_array().unwrap().len(), 19);
+    assert!(Path::new(report["dir"].as_str().unwrap())
+        .join("guitar-layer-16.wav")
+        .is_file());
+    assert!(Path::new(report["dir"].as_str().unwrap())
+        .join("band-notes.mid")
+        .is_file());
 }
 
 #[test]
@@ -1013,8 +1165,10 @@ fn daw_export_uses_recorded_reference_speed_steps_and_preserves_source_audio() {
         serde_json::to_vec(&saved).unwrap(),
     )
     .unwrap();
-    studio.ok("takes_export_daw", json!({"takeId":take.id}));
-    let info: Value = serde_json::from_slice(&std::fs::read(info_path).unwrap()).unwrap();
+    let report = studio.ok("takes_export_daw", json!({"takeId":take.id}));
+    let new_info =
+        Path::new(report["dir"].as_str().unwrap()).join(format!("{}-info.json", take.id));
+    let info: Value = serde_json::from_slice(&std::fs::read(new_info).unwrap()).unwrap();
     assert_eq!(info["tempoSource"], "constant-take-tempo");
     assert!(info["recordedTempoMap"].is_null());
 }
@@ -1052,19 +1206,83 @@ fn recorded_review_fixture_writes_from_analysis_numbers() {
         .as_str()
         .unwrap()
         .contains("attack"));
-    let session = serde_json::from_slice::<Value>(
-        &std::fs::read(
-            common::user_dir()
-                .join("sessions")
-                .join(format!("session-of-{}", take.id))
-                .join("session.json"),
-        )
-        .unwrap(),
-    )
-    .unwrap();
+    let session_path = common::user_dir()
+        .join("sessions")
+        .join(format!("session-of-{}", take.id))
+        .join("session.json");
+    let session = serde_json::from_slice::<Value>(&std::fs::read(&session_path).unwrap()).unwrap();
     assert_eq!(session["review"]["fromAudio"], false);
     assert_eq!(session["review"]["origin"], "synthetic-analysis");
+    assert!(!session_path.with_extension("json.tmp").exists());
+    studio.ok("takes_review", json!({"takeId": take.id}));
+    assert!(!session_path.with_extension("json.tmp").exists());
+    assert!(session_path.with_extension("json.bak").exists());
+    let seen: Arc<Mutex<Vec<Value>>> = Arc::default();
+    let sink = Arc::clone(&seen);
+    studio.app().listen_any("export:state", move |event| {
+        sink.lock()
+            .unwrap()
+            .push(serde_json::from_str(event.payload()).unwrap());
+    });
     let exported = studio.ok("export_logic", json!({"takeId": take.id}));
     assert!(exported["folder"].as_str().unwrap().contains(&take.id));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if !seen.lock().unwrap().is_empty() {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no export:state event from export_logic"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(seen.lock().unwrap()[0]["folder"]
+        .as_str()
+        .unwrap()
+        .contains(&take.id));
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    let cached = cached.iter().find(|t| t.id == take.id).unwrap();
+    assert_eq!(
+        cached.extra.get("review").and_then(|v| v.get("origin")),
+        Some(&json!("synthetic-analysis"))
+    );
     std::env::remove_var("JAM_REVIEW_FIXTURE");
+}
+
+#[test]
+fn takes_list_rebuilds_an_empty_sqlite_cache_from_disk() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = synthetic_take(0.2, "1700000000.000");
+    let state = studio.app().state::<app_lib::AppState>();
+    let store = state.store.lock();
+    let (before, _) = store.list_takes().unwrap();
+    assert!(before.iter().all(|t| t.id != take.id));
+    drop(store);
+    let listed = studio.ok("takes_list", json!({}));
+    assert!(find(&listed, &take.id).is_some());
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    assert!(cached.iter().any(|t| t.id == take.id));
+    studio.ok("takes_reindex", json!({}));
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    assert!(cached.iter().any(|t| t.id == take.id));
 }

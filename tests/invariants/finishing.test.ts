@@ -1,7 +1,11 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { FinishingDesk } from "../../src/components/FinishingDesk";
 import { __setIpcForTests, ipc } from "../../src/ipc/client";
 import type { TakeMetadata } from "../../src/ipc/contract";
 import {
+  applyFinishingChange,
   buildSectionComp,
   contrastVariation,
   finishingReview,
@@ -34,6 +38,85 @@ it("isolates contrast to one appearance, preserves locked parts and exact timing
   expect(() => contrastVariation(song.body, 1, "lift", 0.3, "locked")).toThrow(
     /locked|unchanged/,
   );
+});
+
+it("keeps a unique-appearance lift in the form without nested variation names (#428)", () => {
+  const song = newOriginal();
+  const first = contrastVariation(song.body, 1, "lift", 0.3, "lifted-chorus");
+  expect(first.chart.arrangement.map((a) => a.sectionId)).toEqual([
+    "verse",
+    "lifted-chorus",
+  ]);
+  expect(first.chart.sections.map((s) => s.id)).toEqual([
+    "verse",
+    "lifted-chorus",
+  ]);
+  expect(first.chart.sections[1].name).toBe("This is Chorus variation 3.");
+  expect(
+    finishingReview(first, [], false).some((r) => r.id.startsWith("unused-")),
+  ).toBe(false);
+  const second = contrastVariation(first, 1, "lift", 0.2, "lifted-again");
+  expect(second.chart.sections.map((s) => s.id)).toEqual([
+    "verse",
+    "lifted-again",
+  ]);
+  expect(second.chart.sections[1].name).toBe("This is Chorus variation 4.");
+  expect(second.chart.sections[1].name).not.toMatch(/This is This is/);
+  expect(second.chart.sections[1].name.split(".").length).toBe(2);
+});
+
+it("keeps a finishing preview when Keep cannot apply (#427)", () => {
+  const song = newOriginal();
+  song.versions = Array.from({ length: 20 }, (_, i) => ({
+    id: `v${i}`,
+    name: `This is version ${i + 1}.`,
+    body: structuredClone(song.body),
+  }));
+  useWriting.setState({
+    song,
+    past: [],
+    future: [],
+    busy: false,
+    dirty: false,
+    message: "",
+  });
+  useEngineStore.setState({ isRecording: false });
+  const next = contrastVariation(song.body, 1, "lift", 0.3, "kept-lift");
+  const base = JSON.stringify([song.id, song.body]);
+  expect(() =>
+    applyFinishingChange(next, "This is a section lift.", base),
+  ).toThrow(/version/);
+  expect(useWriting.getState().song?.body).toEqual(song.body);
+  expect(useWriting.getState().song?.versions).toHaveLength(20);
+  useWriting.setState({
+    song: { ...newOriginal(), id: song.id },
+    busy: false,
+  });
+  useEngineStore.setState({ isRecording: true });
+  expect(applyFinishingChange(next, "This is a section lift.", base)).toBe(
+    false,
+  );
+  useEngineStore.setState({ isRecording: false });
+  const fresh = newOriginal();
+  useWriting.setState({
+    song: fresh,
+    past: [],
+    future: [],
+    busy: false,
+    dirty: false,
+    message: "",
+  });
+  const applied = contrastVariation(fresh.body, 1, "lift", 0.3, "kept-lift");
+  expect(
+    applyFinishingChange(
+      applied,
+      "This is a section lift.",
+      JSON.stringify([fresh.id, fresh.body]),
+    ),
+  ).toBe(true);
+  expect(
+    useWriting.getState().song?.body.chart.arrangement.map((a) => a.sectionId),
+  ).toEqual(["verse", "kept-lift"]);
 });
 
 it("comps the correct bars, replaces only the same comp slot and rejects stale takes", () => {
@@ -89,6 +172,33 @@ it("reviews missing and overlong clips without treating instrumental lyrics as a
   expect(
     finishingReview(song.body, [], true).some((r) => r.id.startsWith("lyrics")),
   ).toBe(true);
+});
+
+it("offers Stop listening for a guitar selection audition (#361)", async () => {
+  const original = { ...ipc };
+  const writing = useWriting.getState();
+  const initial = useWriting.getInitialState();
+  const previousSong = initial.song;
+  const calls: string[] = [];
+  __setIpcForTests({
+    invoke: async <T>(command: string) => {
+      calls.push(command);
+      return undefined as T;
+    },
+  });
+  try {
+    initial.song = newOriginal();
+    useWriting.setState({ song: initial.song, busy: false });
+    const html = renderToStaticMarkup(createElement(FinishingDesk));
+    expect(html).toContain("Listen to this selection.");
+    expect(html).toContain("Stop listening.");
+    await useWriting.getState().action(() => ipc.invoke("clip_audition_stop"));
+    expect(calls).toEqual(["clip_audition_stop"]);
+  } finally {
+    initial.song = previousSong;
+    __setIpcForTests(original);
+    useWriting.setState(writing);
+  }
 });
 
 it("loops a boundary through native transport and refuses an out-of-song loop or active recording", async () => {

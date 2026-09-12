@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { beforeEach, expect, it } from "vitest";
 import { __setIpcForTests, ipc } from "../../src/ipc/client";
 import { BRAINS, askBrain, readPreferences } from "../../src/lib/jo/providers";
@@ -134,6 +136,20 @@ it("uses the installed agent contract without provider keys and validates its pr
     });
   }
 });
+it("kills the Windows agent process tree on cancel, not only the .cmd shim (#153)", () => {
+  const agents = fs.readFileSync(
+    path.resolve(process.cwd(), "src-tauri/src/agents.rs"),
+    "utf8",
+  );
+  const platform = fs.readFileSync(
+    path.resolve(process.cwd(), "src-tauri/src/platform/mod.rs"),
+    "utf8",
+  );
+  expect(agents).toContain("KillTree::bind");
+  expect(platform).toContain("JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE");
+  expect(platform).toContain("agent_stem_matches");
+});
+
 it("reads provider catalogs and excludes non-generative Gemini and non-tool OpenRouter models", () => {
   expect(BRAINS.openai.catalog?.read(fixture.catalog)).toEqual(["model-one"]);
   expect(BRAINS.anthropic.catalog?.read(fixture.catalog)).toEqual([

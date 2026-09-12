@@ -4,15 +4,22 @@
 //! style or chart never requires touching Rust.
 
 use jam_core::chart::Chart;
-use jam_core::registry::{SeamRegistry, BUNDLED_CHARTS, BUNDLED_RIGS, BUNDLED_STYLES};
-use jam_core::style::Style;
+use jam_core::registry::{
+    ControlMapManifest, SeamRegistry, BUNDLED_CHARTS, BUNDLED_CONTROLS, BUNDLED_RIGS,
+    BUNDLED_STYLES,
+};
+use jam_core::style::{
+    BassPattern, CompPattern, DrumHit, DrumPattern, PatternEntry, Style, StyleFeel, StyleHumanize,
+};
 use jam_rig::RigProfile;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub struct Library {
     styles: SeamRegistry<Style>,
     charts: SeamRegistry<Chart>,
     rigs: SeamRegistry<RigProfile>,
+    controls: SeamRegistry<ControlMapManifest>,
     user_root: PathBuf,
     load_errors: Vec<String>,
     user_chart_ids: Vec<String>,
@@ -38,6 +45,7 @@ impl Library {
             styles: SeamRegistry::new(),
             charts: SeamRegistry::new(),
             rigs: SeamRegistry::new(),
+            controls: SeamRegistry::new(),
             user_root,
             load_errors: Vec::new(),
             user_chart_ids: Vec::new(),
@@ -51,6 +59,7 @@ impl Library {
         self.styles = SeamRegistry::new();
         self.charts = SeamRegistry::new();
         self.rigs = SeamRegistry::new();
+        self.controls = SeamRegistry::new();
         self.load_errors.clear();
         self.user_chart_ids.clear();
 
@@ -66,9 +75,15 @@ impl Library {
             self.load_errors
                 .push(format!("The bundled rigs could not load. {e}"));
         }
+        if let Err(e) = self.controls.load_from_dir(&BUNDLED_CONTROLS) {
+            self.load_errors
+                .push(format!("The bundled control maps could not load. {e}"));
+        }
         let (_, errs) = self.styles.load_from_fs_dir(self.styles_dir());
         self.load_errors.extend(errs);
         let (_, errs) = self.rigs.load_from_fs_dir(self.rigs_dir());
+        self.load_errors.extend(errs);
+        let (_, errs) = self.controls.load_from_fs_dir(self.controls_dir());
         self.load_errors.extend(errs);
         for rig in self.rigs.list() {
             if let Err(e) = rig.validate() {
@@ -113,6 +128,14 @@ impl Library {
         self.user_root.join("rigs")
     }
 
+    pub fn controls_dir(&self) -> PathBuf {
+        self.user_root.join("controls")
+    }
+
+    pub fn control_maps(&self) -> Vec<ControlMapManifest> {
+        self.controls.list().into_iter().cloned().collect()
+    }
+
     pub fn rig(&self, id: &str) -> Result<RigProfile, String> {
         self.rigs
             .get(id)
@@ -150,7 +173,7 @@ impl Library {
                 .into_iter()
                 .find(|s| s.feel.time_sig == chart.time_sig)
                 .cloned()
-                .ok_or("No style matches this chart's meter.")?,
+                .unwrap_or_else(|| metronome_fallback(chart.time_sig)),
         };
         if style.feel.time_sig != chart.time_sig {
             return Err(
@@ -195,17 +218,12 @@ impl Library {
             .map_err(|e| format!("Cannot create {}. {e}", dir.display()))?;
         let file = dir.join(format!("{}.json", safe_file_stem(&chart.id)));
         let json = serde_json::to_string_pretty(chart).map_err(|e| e.to_string())?;
-        let temp = file.with_extension("json.tmp");
-        std::fs::write(&temp, json).map_err(|e| format!("Cannot write {}. {e}", temp.display()))?;
-        std::fs::OpenOptions::new()
-            .write(true)
-            .open(&temp)
-            .and_then(|f| f.sync_all())
-            .map_err(|e| e.to_string())?;
-        if file.exists() {
-            std::fs::copy(&file, file.with_extension("json.bak")).map_err(|e| e.to_string())?;
-        }
-        std::fs::rename(temp, &file).map_err(|e| e.to_string())?;
+        crate::persistence::write(
+            &file,
+            json.as_bytes(),
+            Some(&file.with_extension("json.bak")),
+        )
+        .map_err(|e| format!("Cannot write {}. {e}", file.display()))?;
         self.charts.insert(chart.clone());
         if !self.user_chart_ids.contains(&chart.id) {
             self.user_chart_ids.push(chart.id.clone());
@@ -246,6 +264,66 @@ impl Library {
     }
 }
 
+fn metronome_fallback(time_sig: (u8, u8)) -> Style {
+    let beats = f64::from(time_sig.0);
+    let hits = (0..time_sig.0)
+        .map(|beat| DrumHit {
+            extra: Default::default(),
+            instrument: if beat == 0 {
+                "kick".into()
+            } else {
+                "sidestick".into()
+            },
+            at_beats: f64::from(beat),
+            velocity: if beat == 0 { 0.8 } else { 0.45 },
+            prob: None,
+        })
+        .collect();
+    Style {
+        schema_version: 1,
+        id: format!("metronome-{}-{}", time_sig.0, time_sig.1),
+        name: format!("{}/{} Metronome", time_sig.0, time_sig.1),
+        genre: "Metronome".into(),
+        feel: StyleFeel {
+            extra: Default::default(),
+            swing: 0.0,
+            time_sig,
+            bpm_range: (40.0, 240.0),
+        },
+        kit_id: "standard-rock-kit".into(),
+        bass_program: "finger-bass".into(),
+        comp_program: "clean-guitar".into(),
+        patterns: vec![PatternEntry {
+            extra: Default::default(),
+            intensity: (0.0, 1.0),
+            drums: DrumPattern {
+                extra: Default::default(),
+                length_beats: beats,
+                hits,
+            },
+            bass: BassPattern {
+                extra: Default::default(),
+                length_beats: beats,
+                notes: vec![],
+            },
+            comp: CompPattern {
+                extra: Default::default(),
+                length_beats: beats,
+                voicing: "shell".into(),
+                strums: vec![],
+            },
+        }],
+        fills: vec![],
+        endings: vec![],
+        humanize: StyleHumanize {
+            extra: Default::default(),
+            timing_ms: 0.0,
+            velocity: 0.0,
+        },
+        extra: HashMap::new(),
+    }
+}
+
 fn safe_file_stem(id: &str) -> String {
     let stem: String = id
         .chars()
@@ -266,11 +344,26 @@ fn safe_file_stem(id: &str) -> String {
 
 /// Structural checks a chart must pass before the band will play it.
 pub fn validate_chart(chart: &Chart) -> Result<(), String> {
+    if chart.schema_version > jam_core::registry::SUPPORTED_SCHEMA_VERSION {
+        return Err(format!(
+            "schemaVersion {} is newer than this app supports ({}). Update the app before loading this file.",
+            chart.schema_version,
+            jam_core::registry::SUPPORTED_SCHEMA_VERSION
+        ));
+    }
     if !chart.default_bpm.is_finite() || !(40.0..=240.0).contains(&chart.default_bpm) {
         return Err("Chart tempo must be within 40–240 BPM.".into());
     }
     if chart.id.trim().is_empty() {
         return Err("chart id is empty".into());
+    }
+    if chart.id.len() > 120
+        || !chart
+            .id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+    {
+        return Err("Chart id may only contain letters, numbers, hyphens and underscores.".into());
     }
     if chart.sections.is_empty() {
         return Err("chart has no sections".into());
@@ -344,7 +437,7 @@ mod tests {
     fn bundled_content_is_available_without_a_user_dir() {
         let lib = Library::load_from(temp_root("bundled"));
         assert!(lib.load_errors().is_empty(), "{:?}", lib.load_errors());
-        assert_eq!(lib.styles().len(), 6);
+        assert_eq!(lib.styles().len(), 8);
         assert_eq!(lib.charts().len(), 9);
         assert_eq!(lib.rigs().len(), 6);
         assert!(lib.style("blues-shuffle").is_ok());
@@ -370,6 +463,26 @@ mod tests {
 
         lib.delete_user_chart("blues-12-bar").unwrap();
         assert_ne!(lib.chart("blues-12-bar").unwrap().name, "My Blues");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn save_chart_keeps_unknown_chart_and_section_fields() {
+        let root = temp_root("extra-chart");
+        let mut lib = Library::load_from(root.clone());
+        let mut value = serde_json::to_value(lib.chart("blues-12-bar").unwrap()).unwrap();
+        value["rigSceneId"] = serde_json::json!("verse-clean");
+        value["sections"][0]["intensity"] = serde_json::json!(0.7);
+        let chart: Chart = serde_json::from_value(value).unwrap();
+        let file = lib.save_chart(&chart).unwrap();
+        let on_disk: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        assert_eq!(on_disk["rigSceneId"], "verse-clean");
+        assert_eq!(on_disk["sections"][0]["intensity"], 0.7);
+        lib.reload();
+        let reloaded = lib.chart("blues-12-bar").unwrap();
+        assert_eq!(reloaded.extra.get("rigSceneId").unwrap(), "verse-clean");
+        assert_eq!(reloaded.sections[0].extra.get("intensity").unwrap(), 0.7);
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -410,5 +523,97 @@ mod tests {
         chart.sections[0].bars[0][0].beats = f64::NAN;
         assert!(validate_chart(&chart).is_err());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn chart_ids_that_sanitize_onto_one_file_are_refused() {
+        let lib = Library::load_from(temp_root("id-charset"));
+        let mut spaced = lib.chart("blues-12-bar").unwrap();
+        spaced.id = "My Chart".into();
+        assert!(validate_chart(&spaced)
+            .unwrap_err()
+            .contains("letters, numbers, hyphens and underscores"));
+        let mut dotted = lib.chart("blues-12-bar").unwrap();
+        dotted.id = "foo.bar".into();
+        assert!(validate_chart(&dotted).is_err());
+        let mut dashed = lib.chart("blues-12-bar").unwrap();
+        dashed.id = "My-Chart".into();
+        validate_chart(&dashed).unwrap();
+    }
+
+    #[test]
+    fn style_for_chart_loads_three_four_and_five_four_or_a_metronome_fallback() {
+        let lib = Library::load_from(temp_root("meters"));
+        let mut waltz = lib.chart("blues-12-bar").unwrap();
+        waltz.default_style_id = None;
+        waltz.time_sig = (3, 4);
+        waltz.sections[0].bars = vec![vec![jam_core::chart::BarChord {
+            extra: Default::default(),
+            chord: "G".into(),
+            beats: 3.0,
+        }]];
+        let style = lib.style_for_chart(&waltz).unwrap();
+        assert_eq!(style.id, "waltz-34");
+        assert_eq!(style.feel.time_sig, (3, 4));
+
+        let mut five = waltz.clone();
+        five.time_sig = (5, 4);
+        five.sections[0].bars = vec![vec![jam_core::chart::BarChord {
+            extra: Default::default(),
+            chord: "Em".into(),
+            beats: 5.0,
+        }]];
+        let style = lib.style_for_chart(&five).unwrap();
+        assert_eq!(style.id, "five-four");
+        assert_eq!(style.feel.time_sig, (5, 4));
+
+        let mut odd = five.clone();
+        odd.time_sig = (7, 8);
+        odd.sections[0].bars = vec![vec![jam_core::chart::BarChord {
+            extra: Default::default(),
+            chord: "Am".into(),
+            beats: 7.0,
+        }]];
+        let style = lib.style_for_chart(&odd).unwrap();
+        assert_eq!(style.id, "metronome-7-8");
+        assert_eq!(style.feel.time_sig, (7, 8));
+        assert!(!style.patterns.is_empty());
+    }
+
+    #[test]
+    fn save_chart_replaces_an_existing_file_and_keeps_a_backup() {
+        let root = temp_root("replace-chart");
+        let mut lib = Library::load_from(root.clone());
+        let mut chart = lib.chart("blues-12-bar").unwrap();
+        let dest = lib.save_chart(&chart).unwrap();
+        let previous = std::fs::read(&dest).unwrap();
+        chart.name = "Revised blues".into();
+        lib.save_chart(&chart).unwrap();
+        assert_eq!(
+            std::fs::read(dest.with_extension("json.bak")).unwrap(),
+            previous
+        );
+        lib.reload();
+        assert_eq!(lib.chart(&chart.id).unwrap().name, "Revised blues");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn save_chart_keeps_an_existing_directory_when_replacement_fails() {
+        let root = temp_root("chart-rename-fail");
+        let mut lib = Library::load_from(root.clone());
+        let chart = lib.chart("blues-12-bar").unwrap();
+        std::fs::create_dir_all(lib.charts_dir()).unwrap();
+        let file = lib.charts_dir().join("blues-12-bar.json");
+        std::fs::create_dir(&file).unwrap();
+        std::fs::write(file.join("keep.txt"), b"existing folder").unwrap();
+        let err = lib.save_chart(&chart).unwrap_err();
+        assert!(!err.is_empty(), "{err}");
+        assert_eq!(
+            std::fs::read(file.join("keep.txt")).unwrap(),
+            b"existing folder"
+        );
+        assert_eq!(std::fs::read_dir(lib.charts_dir()).unwrap().count(), 1);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

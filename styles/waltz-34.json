@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "id": "waltz-34",
+  "name": "Waltz 3/4",
+  "genre": "Waltz",
+  "feel": { "swing": 0.0, "timeSig": [3, 4], "bpmRange": [70.0, 180.0] },
+  "kitId": "standard-rock-kit",
+  "bassProgram": "finger-bass",
+  "compProgram": "clean-guitar",
+  "patterns": [
+    {
+      "intensity": [0.0, 0.34],
+      "drums": {
+        "lengthBeats": 3.0,
+        "hits": [
+          { "instrument": "kick", "atBeats": 0.0, "velocity": 0.65 },
+          { "instrument": "hihat_closed", "atBeats": 0.0, "velocity": 0.4 },
+          { "instrument": "sidestick", "atBeats": 1.0, "velocity": 0.45 },
+          { "instrument": "hihat_closed", "atBeats": 1.0, "velocity": 0.3 },
+          { "instrument": "sidestick", "atBeats": 2.0, "velocity": 0.45 },
+          { "instrument": "hihat_closed", "atBeats": 2.0, "velocity": 0.3 }
+        ]
+      },
+      "bass": {
+        "lengthBeats": 3.0,
+        "notes": [
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.0,
+            "durBeats": 2.8,
+            "velocity": 0.7
+          }
+        ]
+      },
+      "comp": {
+        "lengthBeats": 3.0,
+        "voicing": "triad",
+        "strums": [
+          {
+            "atBeats": 0.0,
+            "durBeats": 2.8,
+            "velocity": 0.5,
+            "direction": "down"
+          }
+        ]
+      }
+    },
+    {
+      "intensity": [0.34, 0.67],
+      "drums": {
+        "lengthBeats": 3.0,
+        "hits": [
+          { "instrument": "kick", "atBeats": 0.0, "velocity": 0.8 },
+          { "instrument": "ride", "atBeats": 0.0, "velocity": 0.55 },
+          { "instrument": "snare", "atBeats": 1.0, "velocity": 0.55 },
+          { "instrument": "ride", "atBeats": 1.0, "velocity": 0.4 },
+          { "instrument": "snare", "atBeats": 2.0, "velocity": 0.5 },
+          { "instrument": "ride", "atBeats": 2.0, "velocity": 0.4 }
+        ]
+      },
+      "bass": {
+        "lengthBeats": 3.0,
+        "notes": [
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.0,
+            "durBeats": 0.9,
+            "velocity": 0.75
+          },
+          {
+            "degree": 5,
+            "octave": 0,
+            "atBeats": 1.0,
+            "durBeats": 0.9,
+            "velocity": 0.6
+          },
+          {
+            "degree": 5,
+            "octave": 1,
+            "atBeats": 2.0,
+            "durBeats": 0.9,
+            "velocity": 0.6
+          }
+        ]
+      },
+      "comp": {
+        "lengthBeats": 3.0,
+        "voicing": "triad",
+        "strums": [
+          {
+            "atBeats": 0.0,
+            "durBeats": 0.9,
+            "velocity": 0.6,
+            "direction": "down"
+          },
+          {
+            "atBeats": 1.0,
+            "durBeats": 0.9,
+            "velocity": 0.4,
+            "direction": "up"
+          },
+          {
+            "atBeats": 2.0,
+            "durBeats": 0.9,
+            "velocity": 0.45,
+            "direction": "down"
+          }
+        ]
+      }
+    },
+    {
+      "intensity": [0.67, 1.0],
+      "drums": {
+        "lengthBeats": 3.0,
+        "hits": [
+          { "instrument": "kick", "atBeats": 0.0, "velocity": 0.95 },
+          { "instrument": "crash", "atBeats": 0.0, "velocity": 0.7 },
+          { "instrument": "snare", "atBeats": 1.0, "velocity": 0.75 },
+          { "instrument": "ride", "atBeats": 1.0, "velocity": 0.55 },
+          { "instrument": "kick", "atBeats": 2.0, "velocity": 0.7 },
+          { "instrument": "snare", "atBeats": 2.0, "velocity": 0.65 }
+        ]
+      },
+      "bass": {
+        "lengthBeats": 3.0,
+        "notes": [
+          {
+            "degree": 1,
+            "octave": 0,
+            "atBeats": 0.0,
+            "durBeats": 0.9,
+            "velocity": 0.85
+          },
+          {
+            "degree": 5,
+            "octave": 0,
+            "atBeats": 1.0,
+            "durBeats": 0.9,
+            "velocity": 0.7
+          },
+          {
+            "degree": 1,
+            "octave": 1,
+            "atBeats": 2.0,
+            "durBeats": 0.9,
+            "velocity": 0.75
+          }
+        ]
+      },
+      "comp": {
+        "lengthBeats": 3.0,
+        "voicing": "shell",
+        "strums": [
+          {
+            "atBeats": 0.0,
+            "durBeats": 0.9,
+            "velocity": 0.75,
+            "direction": "down"
+          },
+          {
+            "atBeats": 1.0,
+            "durBeats": 0.9,
+            "velocity": 0.55,
+            "direction": "up"
+          },
+          {
+            "atBeats": 2.0,
+            "durBeats": 0.9,
+            "velocity": 0.6,
+            "direction": "down"
+          }
+        ]
+      }
+    }
+  ],
+  "humanize": { "timingMs": 4.0, "velocity": 0.08 }
+}

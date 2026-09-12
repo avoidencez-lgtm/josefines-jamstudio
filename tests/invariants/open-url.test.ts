@@ -52,6 +52,20 @@ describe("desktop opener", () => {
     expect(useEngineStore.getState().notices).toEqual([]);
   });
 
+  it("opens Windows https links through ShellExecute rather than hidden explorer (#284)", () => {
+    const src = fs.readFileSync(
+      path.resolve(process.cwd(), "src-tauri/src/platform/mod.rs"),
+      "utf8",
+    );
+    expect(src).toContain("ShellExecuteW");
+    expect(src).toContain("windows_shell_open");
+    const https =
+      src
+        .split("pub async fn open_https")[1]
+        ?.split("pub async fn open_media")[0] ?? "";
+    expect(https).not.toMatch(/explorer\.exe/);
+  });
+
   it("has no target=_blank leftovers in src", () => {
     const root = path.resolve(process.cwd(), "src");
     const hits = walk(root).flatMap((file) => {

@@ -2677,7 +2677,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "} variation ${body.chart.sections.length + 1}`",
   );
   expect(readFileSync("src/lib/writingTools.ts", "utf8")).toContain(
-    "This is ${source.name.slice(0, 60)} variation ${body.chart.sections.length + 1}.",
+    "This is ${base} variation ${n}.",
   );
   expect(
     readFileSync("src/components/tools/AudioProfilesTool.tsx", "utf8"),
@@ -2694,8 +2694,11 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).not.toContain(
     'name: "New section"',
   );
+  expect(readFileSync("src/lib/writingTools.ts", "utf8")).toContain(
+    'const first = "This is a new section.";',
+  );
   expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).toContain(
-    'name: "This is a new section."',
+    "uniqueSectionName(b.chart.sections.map((s) => s.name))",
   );
   expect(readFileSync("src/lib/jo/songLab.ts", "utf8")).not.toContain(
     'chords: "Alternative chords"',
@@ -2785,13 +2788,13 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     'run("Tuner"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
-    'run("The tuner"',
+    'command("The tuner"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'run("Count-in"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
-    'run("The count-in"',
+    'command("The count-in"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'run("Time signature"',
@@ -2914,7 +2917,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     'runOk("Transpose song"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).toContain(
-    'runOk("The transpose song"',
+    'command("The transpose song"',
   );
   expect(readFileSync("src/store/engine.ts", "utf8")).not.toContain(
     'command("Record"',
@@ -3177,10 +3180,10 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/lib/roomActions.ts", "utf8")).toContain(
     "`This is before ${label}.`",
   );
-  expect(
-    readFileSync("src/components/FinishingDesk.tsx", "utf8"),
-  ).not.toContain("`Before ${label}`");
-  expect(readFileSync("src/components/FinishingDesk.tsx", "utf8")).toContain(
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).not.toContain(
+    "`Before ${label}`",
+  );
+  expect(readFileSync("src/lib/finishing.ts", "utf8")).toContain(
     "`This is before ${label}.`",
   );
   expect(readFileSync("src/lib/jo/songLab.ts", "utf8")).not.toContain(
@@ -3786,8 +3789,11 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "This is rolling.",
   );
   expect(readFileSync("src/lib/jo/intent.ts", "utf8")).not.toContain("Got it.");
-  expect(readFileSync("src/lib/jo/intent.ts", "utf8")).toContain(
+  expect(readFileSync("src/lib/jo/intent.ts", "utf8")).not.toContain(
     "This is understood.",
+  );
+  expect(readFileSync("src/lib/jo/intent.ts", "utf8")).toContain(
+    "I didn't catch that.",
   );
   expect(readFileSync("src/lib/jo/gemini.ts", "utf8")).not.toContain("On it.");
   expect(readFileSync("src/lib/jo/gemini.ts", "utf8")).toContain(
@@ -3839,7 +3845,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "Driving straight 8th rock groove.",
   );
   expect(readFileSync("src/lib/jo/intent.ts", "utf8")).toContain(
-    "This is driving a straight 8th rock groove.",
+    "This is switching to",
   );
   expect(readFileSync("src/screens/Jo.tsx", "utf8")).not.toContain('"Ready."');
   expect(readFileSync("src/screens/Jo.tsx", "utf8")).toContain(
@@ -5767,7 +5773,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "Send PC {programInput}",
   );
   expect(readFileSync("src/screens/Rig.tsx", "utf8")).toContain(
-    "Send this PC {programInput}.",
+    "Send this PC {value}.",
   );
   expect(readFileSync("src/components/WritingDesk.tsx", "utf8")).not.toContain(
     "Theme, images, rhyme ideas",
@@ -9548,7 +9554,7 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "Cannot write {}. {e}",
   );
   expect(readFileSync("src-tauri/src/net.rs", "utf8")).toContain(
-    "The {} request failed.",
+    "The {provider} request failed.",
   );
   expect(readFileSync("src-tauri/src/net.rs", "utf8")).not.toContain(
     "path must start with a single '/':",

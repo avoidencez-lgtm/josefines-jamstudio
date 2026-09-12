@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  dawExportBanner,
   drillFor,
   formatJamTime,
   practiceStreakDays,
   sessionProgress,
   takeMeasurements,
+  totalRecordedSecs,
 } from "../../src/lib/sessions/stats";
 
 const day = (offset: number, now: Date) => {
@@ -165,6 +167,32 @@ describe("jam time", () => {
     expect(formatJamTime(42)).toBe("42 s");
     expect(formatJamTime(15 * 60)).toBe("15 min");
     expect(formatJamTime(2 * 3600 + 5 * 60)).toBe("2 h 5 min");
+  });
+
+  it("skips non-finite take durations so the header is not NaN min", () => {
+    expect(
+      totalRecordedSecs([
+        { durationSecs: 60 },
+        { durationSecs: Number.NaN },
+        { durationSecs: Number.POSITIVE_INFINITY },
+        { durationSecs: -100 },
+        { durationSecs: 15 },
+      ]),
+    ).toBe(75);
+    expect(
+      formatJamTime(totalRecordedSecs([{ durationSecs: Number.NaN }])),
+    ).toBe("0 s");
+  });
+
+  it("styles a failed DAW export as an alert, not a success banner", () => {
+    const failed = dawExportBanner(false);
+    expect(failed.role).toBe("alert");
+    expect(failed.className).toContain("bg-[var(--error-soft)]");
+    expect(failed.className).toContain("border-[var(--error)]");
+    expect(failed.className).toContain("text-[var(--error)]");
+    const ok = dawExportBanner(true);
+    expect(ok.role).toBeUndefined();
+    expect(ok.className).toContain("bg-[var(--ok-soft)]");
   });
 });
 

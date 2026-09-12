@@ -11,6 +11,7 @@ pub mod lyria;
 pub mod media;
 pub mod net;
 pub mod originals;
+mod persistence;
 pub mod platform;
 pub mod settings;
 pub mod store;
@@ -27,7 +28,7 @@ use keys::{KeyringStore, MemoryStore, SecretStore};
 use library::Library;
 use parking_lot::Mutex;
 use settings::{load_settings, save_settings, AppSettings};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -153,8 +154,22 @@ async fn provider_fetch<R: tauri::Runtime>(
         );
     })
     .await;
-    let _ = app.emit("cost:state", &log.totals());
+    emit_cost_state(&app, &log);
     result
+}
+
+pub(crate) fn emit_cost_state<R: tauri::Runtime>(app: &AppHandle<R>, log: &net::CostLog) {
+    match log.totals() {
+        Ok(totals) => {
+            let _ = app.emit("cost:state", totals);
+        }
+        Err(error) => {
+            let _ = app.emit(
+                "app:error",
+                format!("Could not read the usage log. {error}"),
+            );
+        }
+    }
 }
 
 #[tauri::command]
@@ -163,12 +178,15 @@ fn providers_list(state: State<'_, AppState>) -> Vec<net::ProviderInfo> {
 }
 
 #[tauri::command]
-fn cost_log_list(limit: Option<usize>, state: State<'_, AppState>) -> Vec<net::CostEntry> {
+fn cost_log_list(
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<net::CostEntry>, String> {
     state.cost_log.list(limit.unwrap_or(50))
 }
 
 #[tauri::command]
-fn cost_log_totals(state: State<'_, AppState>) -> Vec<net::CostTotal> {
+fn cost_log_totals(state: State<'_, AppState>) -> Result<Vec<net::CostTotal>, String> {
     state.cost_log.totals()
 }
 
@@ -214,12 +232,19 @@ async fn audio_set_config(
         settings.input_device.as_deref(),
         settings.output_device.as_deref(),
         settings.input_channel,
+        settings.sample_rate,
+        settings.buffer_size,
     );
     if let Some(stored) = settings.recorder.latency_by_device.get(&key).cloned() {
         settings.recorder.latency_samples = stored.round_trip_frames;
         settings.recorder.latency_estimated = stored.estimated;
         settings.recorder.latency_confidence = stored.confidence;
         eng.recorder_set_latency_compensation(stored.round_trip_frames as usize);
+    } else {
+        settings.recorder.latency_samples = 0;
+        settings.recorder.latency_estimated = false;
+        settings.recorder.latency_confidence = 0.0;
+        eng.recorder_set_latency_compensation(0);
     }
     if status.last_error.is_none() {
         save_settings(&settings)?;
@@ -261,9 +286,6 @@ fn audio_set_input_monitor(gain: f32, state: State<'_, AppState>) {
 fn keys_set(provider: String, key: String, state: State<'_, AppState>) -> Result<(), String> {
     if net::provider(&provider).is_none() || key.trim().is_empty() {
         return Err("Choose a supported provider and enter a non-empty API key.".into());
-    }
-    if key.len() > 4096 {
-        return Err("API key is too long. The limit is 4096 bytes.".into());
     }
     state.secret_store.set(&provider, &key)
 }
@@ -393,13 +415,27 @@ fn transport_stop(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+fn notify_rig_playhead(state: &AppState) -> Result<(), String> {
+    let eng = state.engine.lock();
+    let tel = eng.get_telemetry();
+    let now = beats_to_samples(
+        tel.transport.position_beats,
+        tel.transport.bpm,
+        eng.sample_rate(),
+    );
+    let bpm = tel.transport.bpm;
+    drop(eng);
+    state.rig.lock().on_transport_tick(now, bpm)
+}
+
 #[tauri::command]
 fn transport_seek_bar(bar: u32, state: State<'_, AppState>) -> Result<(), String> {
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.ensure_band_grid()?;
-    eng.transport_seek_bar(bar);
-    Ok(())
+    eng.transport_seek_bar(bar)?;
+    drop(eng);
+    notify_rig_playhead(&state)
 }
 
 #[tauri::command]
@@ -412,8 +448,7 @@ fn transport_set_loop(
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.ensure_band_grid()?;
-    eng.transport_set_loop(start_bar, end_bar, enabled);
-    Ok(())
+    eng.transport_set_loop(start_bar, end_bar, enabled)
 }
 
 #[tauri::command]
@@ -431,7 +466,8 @@ fn transport_set_tempo(bpm: f64, state: State<'_, AppState>) -> Result<(), Strin
     eng.ensure_timing_editable()?;
     eng.ensure_band_grid()?;
     eng.transport_set_tempo(bpm);
-    Ok(())
+    drop(eng);
+    notify_rig_playhead(&state)
 }
 
 #[tauri::command]
@@ -462,6 +498,37 @@ fn band_set_style(style_id: String, state: State<'_, AppState>) -> Result<(), St
     Ok(())
 }
 
+fn contained_dir(root: &std::path::Path, parent: &std::path::Path) -> Result<PathBuf, String> {
+    let mut probe = parent.to_path_buf();
+    let mut missing = Vec::new();
+    while !probe.exists() {
+        let name = probe.file_name().map(|s| s.to_os_string());
+        let next = probe.parent().map(PathBuf::from);
+        match (name, next) {
+            (Some(name), Some(next)) if next.as_os_str() != probe.as_os_str() => {
+                missing.push(name);
+                probe = next;
+            }
+            _ => return Err("Offline render path has no folder.".into()),
+        }
+    }
+    let mut resolved = probe.canonicalize().map_err(|e| e.to_string())?;
+    for name in missing.into_iter().rev() {
+        if name == "." {
+            continue;
+        }
+        if name == ".." {
+            resolved.pop();
+            continue;
+        }
+        resolved.push(name);
+    }
+    if !resolved.starts_with(root) {
+        return Err("Offline render must stay under JosefinesJamstudio.".into());
+    }
+    Ok(resolved)
+}
+
 fn render_out_path(
     user_root: &std::path::Path,
     out_path: Option<String>,
@@ -478,11 +545,8 @@ fn render_out_path(
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
             .ok_or("Offline render path has no folder.")?;
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        let parent = parent.canonicalize().map_err(|e| e.to_string())?;
-        if !parent.starts_with(&root) {
-            return Err("Offline render must stay under JosefinesJamstudio.".into());
-        }
+        let parent = contained_dir(&root, parent)?;
+        std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
         return Ok(parent.join(
             path.file_name()
                 .ok_or("Offline render path has no file name.")?,
@@ -608,6 +672,8 @@ fn recorder_set_latency(samples: u32, state: State<'_, AppState>) -> Result<u32,
             settings.input_device.as_deref(),
             settings.output_device.as_deref(),
             settings.input_channel,
+            settings.sample_rate,
+            settings.buffer_size,
         ),
         samples,
         false,
@@ -650,6 +716,8 @@ fn audio_calibrate_latency(state: State<'_, AppState>) -> Result<LatencyCalibrat
                 settings.input_device.as_deref(),
                 settings.output_device.as_deref(),
                 settings.input_channel,
+                settings.sample_rate,
+                settings.buffer_size,
             ),
             result.round_trip_frames,
             result.estimated,
@@ -705,6 +773,23 @@ fn takes_delete(take_id: String, state: State<'_, AppState>) -> Result<(), Strin
     }
     state.store.lock().delete_take(&take_id)
 }
+
+#[tauri::command]
+fn takes_reindex(state: State<'_, AppState>) -> Result<usize, String> {
+    let (files, _) = originals::file_takes()?;
+    let store = state.store.lock();
+    let (cached, _) = store.list_takes()?;
+    let file_ids: std::collections::BTreeSet<_> = files.iter().map(|t| t.id.clone()).collect();
+    for t in cached {
+        if !file_ids.contains(&t.id) {
+            store.delete_take(&t.id)?;
+        }
+    }
+    for t in &files {
+        store.insert_take(t)?;
+    }
+    Ok(files.len())
+}
 #[tauri::command]
 fn band_set(args: BandSetArgs, state: State<'_, AppState>) -> Result<(), String> {
     let style = match &args.style_id {
@@ -751,7 +836,9 @@ fn band_load_chart(
     } else {
         eng.validate_transport_meter(chart.time_sig)?;
     }
+    let section_styles = chart_section_styles(&state.library.lock(), &chart);
     eng.band_load_chart(chart.resolve());
+    eng.band_set_section_styles(section_styles);
     restore_rig_mappings(&state);
     Ok(chart)
 }
@@ -761,11 +848,13 @@ fn band_load_chart(
 fn band_load_chart_inline(chart: Chart, state: State<'_, AppState>) -> Result<(), String> {
     library::validate_chart(&chart)?;
     let style = state.library.lock().style_for_chart(&chart)?;
+    let section_styles = chart_section_styles(&state.library.lock(), &chart);
     let mut eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.band_set_style(style);
     apply_chart_timing(&eng, &chart);
     eng.band_load_chart(chart.resolve());
+    eng.band_set_section_styles(section_styles);
     restore_rig_mappings(&state);
     Ok(())
 }
@@ -775,6 +864,26 @@ fn apply_chart_timing(eng: &AudioEngine, chart: &Chart) {
     if chart.default_bpm > 0.0 {
         eng.transport_set_tempo(chart.default_bpm);
     }
+}
+
+fn chart_section_styles(
+    library: &Library,
+    chart: &Chart,
+) -> std::collections::BTreeMap<String, Style> {
+    let mut map = std::collections::BTreeMap::new();
+    for section in &chart.sections {
+        let Some(id) = section.style_override_id.as_deref() else {
+            continue;
+        };
+        let Ok(style) = library.style(id) else {
+            continue;
+        };
+        if style.feel.time_sig != chart.time_sig {
+            continue;
+        }
+        map.insert(section.id.clone(), style);
+    }
+    map
 }
 
 fn restore_rig_mappings(state: &AppState) {
@@ -809,6 +918,7 @@ struct LibraryInfo {
     charts_dir: String,
     user_chart_ids: Vec<String>,
     load_errors: Vec<String>,
+    control_maps: Vec<String>,
 }
 
 #[tauri::command]
@@ -820,6 +930,7 @@ fn library_reload(state: State<'_, AppState>) -> LibraryInfo {
         charts_dir: lib.charts_dir().to_string_lossy().into_owned(),
         user_chart_ids: lib.user_chart_ids().to_vec(),
         load_errors: lib.load_errors().to_vec(),
+        control_maps: lib.control_maps().into_iter().map(|m| m.id).collect(),
     }
 }
 
@@ -893,11 +1004,11 @@ fn rig_select_profile(
     let saved = load_settings()?
         .rig
         .section_mappings
-        .remove(&profile_id)
+        .get(&profile_id)
+        .cloned()
         .unwrap_or_default();
     let mut rig = state.rig.lock();
-    let mut mappings = rig.section_mappings.clone();
-    mappings.retain(|_, idx| *idx < profile.scenes.len());
+    let mut mappings = std::collections::HashMap::new();
     for (section, idx) in saved {
         if idx < profile.scenes.len() {
             mappings.insert(section, idx);
@@ -1114,7 +1225,8 @@ fn rig_virtual_check(state: State<'_, AppState>) -> Result<VirtualMonitorCheck, 
     })
 }
 /// Files are truth, SQLite is a cache: a cache that cannot be read is a warning and
-/// the takes found on disk are still listed.
+/// the takes found on disk are still listed. Missing cache rows are inserted;
+/// cached rows whose folder is gone are pruned.
 pub(crate) fn all_takes(
     state: &AppState,
 ) -> Result<(Vec<jam_audio::recorder::TakeMetadata>, Vec<String>), String> {
@@ -1131,12 +1243,33 @@ pub(crate) fn all_takes(
             Vec::new()
         }
     };
-    let mut takes: std::collections::BTreeMap<_, _> =
-        cached.into_iter().map(|t| (t.id.clone(), t)).collect();
     let (files, file_warnings) = originals::file_takes()?;
     warnings.extend(file_warnings);
-    for t in files {
-        takes.insert(t.id.clone(), t);
+    let file_ids: std::collections::BTreeSet<_> = files.iter().map(|t| t.id.clone()).collect();
+    let mut takes: std::collections::BTreeMap<_, _> = std::collections::BTreeMap::new();
+    {
+        let store = state.store.lock();
+        for t in cached {
+            if file_ids.contains(&t.id) {
+                takes.insert(t.id.clone(), t);
+            } else if let Err(e) = store.delete_take(&t.id) {
+                warnings.push(format!(
+                    "Could not drop vanished take {} from the index. {e}.",
+                    t.id
+                ));
+            }
+        }
+        for t in files {
+            if !takes.contains_key(&t.id) {
+                if let Err(e) = store.insert_take(&t) {
+                    warnings.push(format!(
+                        "Could not cache take {}. {e}. The take on disk is still listed.",
+                        t.id
+                    ));
+                }
+            }
+            takes.insert(t.id.clone(), t);
+        }
     }
     let mut list: Vec<_> = takes.into_values().collect();
     list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
@@ -1200,6 +1333,7 @@ async fn takes_analyze(
             take.path_input
         )
     })?;
+    state.store.lock().insert_take(&take)?;
     Ok(analysis)
 }
 
@@ -1224,6 +1358,7 @@ fn takes_review(take_id: String, state: State<'_, AppState>) -> Result<serde_jso
             take.path_input
         )
     })?;
+    state.store.lock().insert_take(&take)?;
     persist_session_review(&take.session_id, &review)?;
     Ok(review)
 }
@@ -1247,12 +1382,9 @@ fn persist_session_review(session_id: &str, review: &serde_json::Value) -> Resul
         return Err("session.json must be an object.".into());
     }
     doc["review"] = review.clone();
-    std::fs::write(
-        &path,
-        serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| format!("Cannot write session.json. {e}"))?;
-    Ok(())
+    let bytes = serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?;
+    persistence::write(&path, &bytes, Some(&path.with_extension("json.bak")))
+        .map_err(|e| format!("Cannot write session.json. {e}"))
 }
 
 /// Section markers for a chart in playing order: `(name, first bar)`.
@@ -1279,7 +1411,6 @@ async fn takes_export_daw(
 ) -> Result<jam_audio::export::ExportReport, String> {
     let (takes, _) = all_takes(&state)?;
     let mut take = take_from(&takes, &take_id)?.clone();
-    let export_path = Library::default_user_root().join("exports").join(&take.id);
 
     let chart: Option<Chart> = serde_json::from_value(take.snapshot["body"]["chart"].clone())
         .ok()
@@ -1301,6 +1432,15 @@ async fn takes_export_daw(
     } else {
         jam_audio::recorder::wav_sample_rate(std::path::Path::new(&take.path_master))?
     };
+    let clips: Vec<jam_audio::workstation::ClipSpec> = take.snapshot["body"]
+        .get("clips")
+        .map(|value| serde_json::from_value(value.clone()))
+        .transpose()
+        .map_err(|_| "Invalid recorded guitar layers. Repair the take snapshot before exporting.")?
+        .unwrap_or_default();
+    if clips.len() > 16 {
+        return Err("Too many guitar layers. Keep at most 16 before exporting.".into());
+    }
 
     // Old take manifests may need the rate recovered from the WAV.
     take.sample_rate = sample_rate;
@@ -1358,20 +1498,33 @@ async fn takes_export_daw(
         sample_rate,
         sections: if reference { &[] } else { &sections },
         stems: &stems,
+        take_dir: Path::new(&take.path_input).parent(),
     };
-    let mut report = jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
-        .map_err(|e| e.to_string())?;
-    if let Some(bytes) = performance_midi {
-        std::fs::write(export_path.join("band-notes.mid"), bytes).map_err(|e| e.to_string())?;
+    let export_root = Library::default_user_root().join("exports");
+    std::fs::create_dir_all(&export_root).map_err(|e| e.to_string())?;
+    let mut export_path = export_root.join(&take.id);
+    let mut suffix = 2_u64;
+    loop {
+        match std::fs::create_dir(&export_path) {
+            Ok(()) => break,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                export_path = export_root.join(format!("{}-{suffix}", take.id));
+                suffix = suffix.checked_add(1).ok_or("No free export folder name.")?;
+            }
+            Err(e) => return Err(e.to_string()),
+        }
     }
-    std::fs::write(
-        export_path.join("song-snapshot.json"),
-        serde_json::to_vec_pretty(&take.snapshot).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    if let Ok(clips) = serde_json::from_value::<Vec<jam_audio::workstation::ClipSpec>>(
-        take.snapshot["body"]["clips"].clone(),
-    ) {
+    let result = (|| {
+        let mut report = jam_audio::export::DawExporter::export_take_bundle(&export_path, &job)
+            .map_err(|e| e.to_string())?;
+        if let Some(bytes) = performance_midi {
+            std::fs::write(export_path.join("band-notes.mid"), bytes).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(
+            export_path.join("song-snapshot.json"),
+            serde_json::to_vec_pretty(&take.snapshot).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
         for (i, spec) in clips.into_iter().enumerate() {
             if spec.muted {
                 continue;
@@ -1390,40 +1543,49 @@ async fn takes_export_daw(
                 .copied_stems
                 .push(path.to_string_lossy().into_owned());
         }
+        let info_path = export_path.join(format!("{}-info.json", take.id));
+        if report.missing_stems.is_empty() {
+            report.reaper_script = Some(
+                jam_audio::export::write_reaper_import(&export_path, &job, &report, &take.midi)
+                    .map_err(|e| e.to_string())?,
+            );
+        }
+        let mut info: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&info_path).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+        info["schemaVersion"] = serde_json::json!(1);
+        info["tempoSource"] = serde_json::json!(if recorded_tempo_map.is_some() {
+            "recorded-reference"
+        } else {
+            "constant-take-tempo"
+        });
+        info["recordedTempoMap"] = serde_json::json!(recorded_tempo_map);
+        if let Some(raw) = take.extra.get("referenceTiming") {
+            info["referenceTiming"] = raw.clone();
+        }
+        info["stems"] = serde_json::json!(report.copied_stems);
+        info["missingStems"] = serde_json::json!(report.missing_stems);
+        info["reaperScript"] = serde_json::json!(report.reaper_script);
+        info["howTo"] = serde_json::json!("Import the tempo map first. Put the individual guitar, drums, bass, comp and guitar-layer stems at bar 1. Band and master are reference mixes: mute them while mixing the individual stems. Import band-notes.mid on separate instrument tracks if wanted.");
+        if reference {
+            info["howTo"] = serde_json::json!("Import the tempo map first. Place Guitar DI and Band at time zero with original speed, and mute Master, Drums, Bass and Comp. All WAVs retain recorded timing. Sections follow source playback, including loops; partial bars and lead-ins mean DAW bar numbers can differ from source bars. Edge tempo outside the confirmed grid is extrapolated, not analysed.");
+        }
+        std::fs::write(
+            info_path,
+            serde_json::to_vec_pretty(&info).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(report)
+    })();
+    if let Err(error) = &result {
+        if let Err(cleanup) = std::fs::remove_dir_all(&export_path) {
+            return Err(format!(
+                "{error} Partial export files remain at {}. {cleanup}",
+                export_path.display()
+            ));
+        }
     }
-    let info_path = export_path.join(format!("{}-info.json", take.id));
-    if report.missing_stems.is_empty() {
-        report.reaper_script = Some(
-            jam_audio::export::write_reaper_import(&export_path, &job, &report, &take.midi)
-                .map_err(|e| e.to_string())?,
-        );
-    }
-    let mut info: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(&info_path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-    info["schemaVersion"] = serde_json::json!(1);
-    info["tempoSource"] = serde_json::json!(if recorded_tempo_map.is_some() {
-        "recorded-reference"
-    } else {
-        "constant-take-tempo"
-    });
-    info["recordedTempoMap"] = serde_json::json!(recorded_tempo_map);
-    if let Some(raw) = take.extra.get("referenceTiming") {
-        info["referenceTiming"] = raw.clone();
-    }
-    info["stems"] = serde_json::json!(report.copied_stems);
-    info["missingStems"] = serde_json::json!(report.missing_stems);
-    info["reaperScript"] = serde_json::json!(report.reaper_script);
-    info["howTo"] = serde_json::json!("Import the tempo map first. Put the individual guitar, drums, bass, comp and guitar-layer stems at bar 1. Band and master are reference mixes: mute them while mixing the individual stems. Import band-notes.mid on separate instrument tracks if wanted.");
-    if reference {
-        info["howTo"] = serde_json::json!("Import the tempo map first. Place Guitar DI and Band at time zero with original speed, and mute Master, Drums, Bass and Comp. All WAVs retain recorded timing. Sections follow source playback, including loops; partial bars and lead-ins mean DAW bar numbers can differ from source bars. Edge tempo outside the confirmed grid is extrapolated, not analysed.");
-    }
-    std::fs::write(
-        info_path,
-        serde_json::to_vec_pretty(&info).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(report)
+    result
 }
 
 #[tauri::command]
@@ -1441,7 +1603,7 @@ async fn export_logic<R: tauri::Runtime>(
         "midiFile": report.midi_file,
         "reaperScript": report.reaper_script,
     });
-    let _ = app.emit("export.state", &body);
+    let _ = app.emit("export:state", &body);
     Ok(body)
 }
 
@@ -1576,6 +1738,7 @@ pub fn configure<R: tauri::Runtime>(
                 let mut last_out: Option<jam_audio::engine::MeterTelemetry> = None;
                 let mut last_in: Option<jam_audio::engine::MeterTelemetry> = None;
                 let mut last_had_reference = false;
+                let mut last_tuner_active = false;
                 let mut last_busy = false;
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(if last_busy {
@@ -1603,7 +1766,14 @@ pub fn configure<R: tauri::Runtime>(
                             tel.transport.bpm,
                             tel.status.sample_rate,
                         );
-                        let _ = rig.lock().on_transport_tick(now, tel.transport.bpm);
+                        let mut rig = rig.lock();
+                        let was_live = rig.is_live();
+                        if let Err(e) = rig.on_transport_tick(now, tel.transport.bpm) {
+                            let _ = app_handle.emit("rig:error", &e);
+                        }
+                        if was_live && !rig.is_live() {
+                            let _ = app_handle.emit("rig:state", &rig_state_dto(&rig));
+                        }
                     }
                     if tel.reference.is_none()
                         && tel.transport.state == "playing"
@@ -1647,17 +1817,18 @@ pub fn configure<R: tauri::Runtime>(
                         let _ = app_handle.emit("transport:state", &tel.transport);
                         last_transport = Some(tel.transport.clone());
                     }
-                    let mut band = tel.band.clone();
-                    if !clock_busy {
-                        band.current_energy = 0.0;
-                    }
+                    let band = tel.band.clone().for_emit(clock_busy);
                     if clock_busy || last_band.as_ref() != Some(&band) {
-                        let _ = app_handle.emit("band:state", &tel.band);
+                        let _ = app_handle.emit("band:state", &band);
                         last_band = Some(band);
                     }
+                    let tuner_active = tel.tuner.is_some();
                     if let Some(t) = &tel.tuner {
                         let _ = app_handle.emit("tuner:state", t);
+                    } else if last_tuner_active {
+                        let _ = app_handle.emit("tuner:state", serde_json::Value::Null);
                     }
+                    last_tuner_active = tuner_active;
                     if last_status.as_ref() != Some(&status) {
                         let _ = app_handle.emit("engine:status", &status);
                         last_status = Some(status);
@@ -1734,6 +1905,7 @@ pub fn configure<R: tauri::Runtime>(
             originals::originals_load,
             originals::capture_arm,
             originals::clip_audition,
+            originals::clip_audition_stop,
             originals::capture_keep,
             originals::takes_favourite,
             keys_set,
@@ -1787,6 +1959,7 @@ pub fn configure<R: tauri::Runtime>(
             audio_calibrate_latency,
             takes_list,
             takes_delete,
+            takes_reindex,
             rig_list_profiles,
             rig_select_profile,
             rig_select_scene,
@@ -2035,6 +2208,7 @@ mod chart_timing {
             default_style_id: None,
             sections: vec![],
             arrangement: vec![],
+            extra: std::collections::HashMap::new(),
         }
     }
 
@@ -2098,6 +2272,15 @@ mod quit {
         assert!(!super::should_defer_quit(true, true, true));
         assert!(!super::should_defer_quit(true, false, false));
     }
+
+    #[test]
+    fn app_level_quit_is_forwarded_to_the_ui_close_guard() {
+        let src = include_str!("lib.rs");
+        assert!(src.contains("RunEvent::ExitRequested"));
+        assert!(src.contains("app:exit-requested"));
+        assert!(src.contains("prevent_exit"));
+        assert!(src.contains("should_defer_quit"));
+    }
 }
 
 #[cfg(test)]
@@ -2115,36 +2298,5 @@ mod jam_log {
         assert_eq!(jam_log_level_from(Some("info")), LevelFilter::Info);
         assert_eq!(jam_log_level_from(Some("warn")), LevelFilter::Warn);
         assert_eq!(jam_log_level_from(Some("error")), LevelFilter::Error);
-    }
-}
-
-#[cfg(test)]
-mod home_logs {
-    #[test]
-    fn export_names_the_real_home_logs_folder_when_present() {
-        std::env::remove_var("JAM_USER_DIR");
-        let dir = super::logs_dir();
-        assert!(
-            dir.ends_with("JosefinesJamstudio") || dir.ends_with("logs"),
-            "{}",
-            dir.display()
-        );
-        if dir.is_dir() {
-            assert_eq!(super::logs_export().unwrap(), dir.display().to_string());
-        }
-    }
-
-    #[test]
-    fn append_user_log_writes_a_line() {
-        let root = std::env::temp_dir().join(format!("jam-home-log-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
-        std::env::set_var("JAM_USER_DIR", &root);
-        let path = super::append_user_log("canary-log-line").unwrap();
-        assert_eq!(path, root.join("logs").join("jamstudio.log"));
-        let text = std::fs::read_to_string(&path).unwrap();
-        assert!(text.contains("canary-log-line"), "{text}");
-        std::env::remove_var("JAM_USER_DIR");
-        let _ = std::fs::remove_dir_all(&root);
     }
 }

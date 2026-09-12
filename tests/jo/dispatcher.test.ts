@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ipc } from "../../src/ipc/client";
 import { dispatchJoToolCall } from "../../src/lib/jo/dispatcher";
 import type { JoToolCall } from "../../src/lib/jo/persona";
+import { validateToolCall } from "../../src/lib/jo/tools";
 import { newShot, newVideo, useMedia } from "../../src/lib/media";
 import { newOriginal, useWriting } from "../../src/lib/originals";
 import { useEngineStore } from "../../src/store/engine";
@@ -35,6 +36,50 @@ const calls: JoToolCall[] = [
   { name: "record_take", arguments: { action: "start" } },
   { name: "record_take", arguments: { action: "stop" } },
 ];
+
+it("does not ack generate_track when the provider job already failed", async () => {
+  const invoke = vi
+    .spyOn(ipc, "invoke")
+    .mockResolvedValueOnce({
+      jobId: "job-1",
+      job: {
+        status: "unknown",
+        message: "Live provider calls are disabled without JAM_LIVE=1.",
+      },
+    })
+    .mockResolvedValueOnce({
+      jobId: "job-2",
+      job: { status: "pending", message: "" },
+    });
+  await expect(
+    dispatchJoToolCall({
+      name: "generate_track",
+      arguments: { prompt: "instrumental funk", provider: "lyria3" },
+    }),
+  ).rejects.toThrow(/JAM_LIVE|did not start/i);
+  await expect(
+    dispatchJoToolCall({
+      name: "generate_track",
+      arguments: { prompt: "instrumental funk", provider: "lyria3" },
+    }),
+  ).resolves.toMatch(/started/i);
+  expect(invoke).toHaveBeenCalledTimes(2);
+});
+
+it("skips null and undefined optional tool arguments at the shared validator", () => {
+  const call = {
+    name: "songwriting",
+    arguments: { action: "save", name: null, part: undefined },
+  };
+  expect(() => validateToolCall(call)).not.toThrow();
+  expect(call.arguments).toEqual({ action: "save" });
+  expect(() =>
+    validateToolCall({
+      name: "songwriting",
+      arguments: { action: null },
+    }),
+  ).toThrow(/Invalid action/);
+});
 
 describe("Jo reports accepted actions", () => {
   it.each(calls)(
@@ -161,6 +206,90 @@ describe("Jo reports accepted actions", () => {
     expect(useMedia.getState().project).toBe(project);
     expect(useMedia.getState().undo).toEqual([]);
     expect(useMedia.getState().renderPath).toBe("movie.mp4");
+  });
+
+  it("does not claim count-in, seek, tuner or transpose succeeded when the engine refused", async () => {
+    vi.spyOn(ipc, "invoke").mockRejectedValue(
+      "Save the take before changing the band.",
+    );
+    for (const call of [
+      { name: "set_count_in", arguments: { bars: 1 } },
+      { name: "seek_bar", arguments: { bar: 8 } },
+      { name: "toggle_tuner", arguments: { enabled: true } },
+    ] as JoToolCall[]) {
+      await expect(dispatchJoToolCall(call)).rejects.toThrow(
+        "Save the take before changing the band.",
+      );
+    }
+    await expect(
+      dispatchJoToolCall({
+        name: "transpose_chart",
+        arguments: { semitones: 2 },
+      }),
+    ).rejects.toThrow("Load a chart first.");
+    useEngineStore.setState({ currentChart: newOriginal().body.chart });
+    await expect(
+      dispatchJoToolCall({
+        name: "transpose_chart",
+        arguments: { semitones: 2 },
+      }),
+    ).rejects.toThrow("Save the take before changing the band.");
+  });
+
+  it("says the section loop is playing because rehearse starts transport", async () => {
+    const song = newOriginal();
+    useWriting.setState({ song, selected: "verse", busy: false });
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    const result = await dispatchJoToolCall({
+      name: "songwriting",
+      arguments: { action: "loop", name: "verse" },
+    });
+    expect(invoke).toHaveBeenCalledWith("transport_play");
+    expect(result).toMatch(/looping/i);
+    expect(result).not.toMatch(/Press Play/i);
+  });
+
+  it("says tap again only when there are not enough taps", async () => {
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    await expect(
+      dispatchJoToolCall({ name: "tap_tempo", arguments: {} }),
+    ).resolves.toBe("Tap again to set tempo.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("fails loud when the engine refuses the tapped tempo", async () => {
+    let now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    vi.spyOn(ipc, "invoke").mockRejectedValue(
+      "Save the take before changing the band.",
+    );
+    now = 0;
+    await expect(
+      dispatchJoToolCall({ name: "tap_tempo", arguments: {} }),
+    ).resolves.toBe("Tap again to set tempo.");
+    now = 500;
+    await expect(
+      dispatchJoToolCall({ name: "tap_tempo", arguments: {} }),
+    ).rejects.toThrow("Save the take before changing the band.");
+    expect(
+      useEngineStore.getState().notices.some((n) => n.kind === "error"),
+    ).toBe(true);
+  });
+
+  it("fails loud when the tapped BPM is out of range", async () => {
+    let now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const invoke = vi.spyOn(ipc, "invoke").mockResolvedValue(null);
+    now = 0;
+    await dispatchJoToolCall({ name: "tap_tempo", arguments: {} });
+    now = 10;
+    await expect(
+      dispatchJoToolCall({ name: "tap_tempo", arguments: {} }),
+    ).rejects.toThrow(/20–300/);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(
+      useEngineStore.getState().notices.some((n) => n.kind === "error"),
+    ).toBe(true);
   });
 
   it("action acks are sentences, not JSON dumps", async () => {

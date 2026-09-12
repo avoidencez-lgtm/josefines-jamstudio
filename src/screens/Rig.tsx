@@ -13,6 +13,7 @@ import { StatusPill } from "../components/States";
 import { Toggle } from "../components/Toggle";
 import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import type { RigControl, RigProfile } from "../ipc/contract";
+import { clampProgramNumber, committedSliderValue } from "../lib/rigControls";
 import { useEngineStore } from "../store/engine";
 
 const FALLBACK_SECTIONS = [
@@ -372,42 +373,12 @@ export const Rig: React.FC = () => {
               an amp preset) to find out which number is which.
             </p>
             <div className="flex items-center gap-2">
-              {profile && profile.programs.length > 0 ? (
-                <select
-                  aria-label="This is the program number."
-                  value={programInput}
-                  onChange={(e) =>
-                    setProgramInput(Number.parseInt(e.target.value, 10))
-                  }
-                  className="bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] focus:border-[var(--accent)]"
-                >
-                  {profile.programs.map((p) => (
-                    <option key={p.number} value={p.number}>
-                      Program {p.number} is {p.name}.
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="number"
-                  min={0}
-                  max={127}
-                  aria-label="This is the program number."
-                  value={programInput}
-                  onChange={(e) =>
-                    setProgramInput(
-                      Math.min(
-                        127,
-                        Math.max(0, Number.parseInt(e.target.value || "0", 10)),
-                      ),
-                    )
-                  }
-                  className="w-20 bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] focus:border-[var(--accent)]"
-                />
-              )}
-              <Button size="sm" onClick={() => sendRigProgram(programInput)}>
-                Send this PC {programInput}.
-              </Button>
+              <ProgramChangeControls
+                programs={profile?.programs ?? []}
+                value={programInput}
+                onChange={setProgramInput}
+                onSend={() => sendRigProgram(programInput)}
+              />
             </div>
           </div>
         </Panel>
@@ -485,6 +456,46 @@ function sceneSummary(profile: RigProfile, idx: number): string {
     .join(" · ");
 }
 
+/** Named presets never hide freeform MIDI program entry (0–127). */
+export const ProgramChangeControls: React.FC<{
+  programs: { number: number; name: string }[];
+  value: number;
+  onChange: (n: number) => void;
+  onSend: () => void;
+}> = ({ programs, value, onChange, onSend }) => (
+  <>
+    {programs.length > 0 && (
+      <select
+        aria-label="This is a named program."
+        value={programs.some((p) => p.number === value) ? value : ""}
+        onChange={(e) => onChange(Number.parseInt(e.target.value, 10))}
+        className="bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] focus:border-[var(--accent)]"
+      >
+        <option value="" disabled>
+          Named presets
+        </option>
+        {programs.map((p) => (
+          <option key={p.number} value={p.number}>
+            Program {p.number} is {p.name}.
+          </option>
+        ))}
+      </select>
+    )}
+    <input
+      type="number"
+      min={0}
+      max={127}
+      aria-label="This is the program number."
+      value={value}
+      onChange={(e) => onChange(clampProgramNumber(e.target.value))}
+      className="w-20 bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] focus:border-[var(--accent)]"
+    />
+    <Button size="sm" onClick={onSend}>
+      Send this PC {value}.
+    </Button>
+  </>
+);
+
 function formatMs(ms: number): string {
   const s = Math.floor(ms / 1000);
   const m = Math.floor(s / 60);
@@ -532,9 +543,14 @@ const ControlRow: React.FC<{
         max={control.max}
         value={local}
         onChange={(e) => setLocal(Number.parseInt(e.target.value, 10))}
-        onPointerUp={() => onChange(local)}
-        onKeyUp={() => onChange(local)}
-        onBlur={() => local !== value && onChange(local)}
+        onPointerUp={(e) =>
+          onChange(committedSliderValue(e.currentTarget.value))
+        }
+        onKeyUp={(e) => onChange(committedSliderValue(e.currentTarget.value))}
+        onBlur={(e) => {
+          const next = committedSliderValue(e.currentTarget.value);
+          if (next !== value) onChange(next);
+        }}
         className="w-full accent-[var(--accent)]"
       />
     </div>

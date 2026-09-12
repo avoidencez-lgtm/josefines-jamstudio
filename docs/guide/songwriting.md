@@ -56,7 +56,10 @@ connection and enable switch require deliberate activation each session.
 Actions include Keep this riff. Record or save this take. Play or stop this. Loop this selected section.
 Loop this next section. and Keep this version. (also saves the song). Capture must already be
 armed for Keep. CC pedals trigger on a rising value of at least 64; note pedals on
-note-on. Releases and held values do not repeat actions. Program Change duplicates
+note-on. Leave **Use toggle CC pedals** off for momentary pedals that send 0 on
+release. Enable it for pedals that alternate 127 and 0 on successive presses.
+Changing this saved mode reconnects the selected input and disables actions until
+you enable them again. Held values do not repeat actions. Program Change duplicates
 inside 250 ms are ignored. Incoming messages matching a live rig message the app
 sent within 500 ms are suppressed to avoid immediate MIDI Thru feedback.
 

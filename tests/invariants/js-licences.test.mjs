@@ -1,4 +1,9 @@
 import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 vi.mock("node:child_process", () => ({ execSync: vi.fn() }));
@@ -68,6 +73,32 @@ it("fails when pnpm exits unsuccessfully", async () => {
   await expect(import("../../scripts/check-js-licences.mjs")).rejects.toThrow(
     "exit 1",
   );
+});
+
+it("rejects extra vendor files and an empty sources table", async () => {
+  vi.mocked(execSync).mockReturnValue(JSON.stringify({ MIT: packages }));
+  const { checkNativeVendor } = await import(
+    "../../scripts/check-js-licences.mjs"
+  );
+  expect(() => checkNativeVendor(new URL("./", import.meta.url), [])).toThrow(
+    /empty/,
+  );
+
+  const root = mkdtempSync(join(tmpdir(), "jam-vendor-"));
+  try {
+    const extra = join(root, "extra.h");
+    writeFileSync(extra, "/* gpl */\n");
+    const hashed = createHash("sha256").update("ok").digest("hex");
+    writeFileSync(join(root, "keep.h"), "ok");
+    const vendor = pathToFileURL(`${root}/`);
+    expect(() =>
+      checkNativeVendor(vendor, [
+        { name: "keep", license: "MIT", files: { "keep.h": hashed } },
+      ]),
+    ).toThrow(/not in sources\.json: extra\.h/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 it("accepts compound permitted choices and only the recorded package exceptions", async () => {

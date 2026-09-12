@@ -148,7 +148,7 @@ export function chordVoicings(symbol: string, max = 3): Voicing[] {
   const parsed = chordChromas(symbol);
   if (!parsed) return [];
   const { root, bass } = parsed;
-  const tones = new Set(parsed.chromas);
+  const tones = new Set([...parsed.chromas, bass]);
   const required = requiredTones(root, parsed.chromas, parsed.chromas);
   const relTones = new Set(parsed.chromas.map((c) => mod12(c - root)));
   const minSounding = tones.size <= 2 ? 3 : 4;

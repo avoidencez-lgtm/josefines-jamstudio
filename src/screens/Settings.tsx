@@ -8,20 +8,17 @@ import { StatusPill } from "../components/States";
 import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import { ipc } from "../ipc/client";
 import type {
-  AppSettings,
   AudioConfig,
   CostEntry,
   CostTotal,
   EngineStatus,
   IdleCpuSample,
 } from "../ipc/contract";
+import { bundledControlMaps } from "../lib/controls";
 import { withNextStep } from "../lib/loudError";
 import { lastMeterFps, lastPlayheadFps } from "../lib/meterFps";
-import {
-  type ReducedMotion,
-  applyReducedMotion,
-  readReducedMotion,
-} from "../lib/reducedMotion";
+import { type ReducedMotion, readReducedMotion } from "../lib/reducedMotion";
+import { saveReducedMotion } from "../lib/roomActions";
 import { useSettingsView } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
 
@@ -134,6 +131,7 @@ export const Settings: React.FC = () => {
     isRecording,
     calibrateLatency,
     ensureAssets,
+    assetPacks,
     exportLogs,
     xruns,
     kitMessage,
@@ -155,6 +153,7 @@ export const Settings: React.FC = () => {
       isRecording: s.isRecording,
       calibrateLatency: s.calibrateLatency,
       ensureAssets: s.ensureAssets,
+      assetPacks: s.assetPacks,
       exportLogs: s.exportLogs,
       xruns: s.telemetry.xruns,
       kitMessage: s.telemetry.band.kit_message,
@@ -336,6 +335,15 @@ export const Settings: React.FC = () => {
           <p className="text-xs font-mono text-[var(--fg-2)] mb-3">
             {bassMessage}
           </p>
+          {assetPacks.map((pack) => (
+            <p
+              key={pack.id}
+              className="text-xs font-mono text-[var(--fg-0)] mb-1"
+            >
+              {pack.name}: {pack.state}
+              {pack.state === "downloading" ? ` ${pack.percent ?? 0}%` : ""}
+            </p>
+          ))}
           <Button size="sm" onClick={() => void ensureAssets()}>
             Check these sample packs.
           </Button>
@@ -369,8 +377,10 @@ export const Settings: React.FC = () => {
                 Control map
               </dt>
               <dd className="text-[var(--fg-0)]">
-                Default Stage map (controls/default.json). Bindings are Jo tools
-                plus push-to-talk.
+                {bundledControlMaps()
+                  .map((map) => `${map.name} (${map.id})`)
+                  .join(". ")}
+                . Bindings are Jo tools plus push-to-talk.
               </dd>
             </div>
             <div className="contents">
@@ -412,34 +422,7 @@ export const Settings: React.FC = () => {
                   value={readReducedMotion(settings)}
                   onChange={(e) => {
                     const reducedMotion = e.target.value as ReducedMotion;
-                    void ipc
-                      .invoke<AppSettings>("settings_get")
-                      .then((current) =>
-                        ipc
-                          .invoke("settings_set", {
-                            settings: {
-                              ...current,
-                              ui: {
-                                theme: "dark",
-                                showAdvanced: false,
-                                reducedMotion,
-                              },
-                            },
-                          })
-                          .then(() => {
-                            applyReducedMotion(reducedMotion);
-                            useEngineStore.setState({
-                              settings: {
-                                ...current,
-                                ui: {
-                                  theme: "dark",
-                                  showAdvanced: false,
-                                  reducedMotion,
-                                },
-                              },
-                            });
-                          }),
-                      );
+                    void saveReducedMotion(reducedMotion);
                   }}
                 >
                   <option value="system">Match the OS.</option>
@@ -701,42 +684,52 @@ const UsageLog: React.FC = () => {
     <Panel title="This is the network usage log.">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="flex flex-wrap gap-3 text-xs font-mono text-[var(--fg-1)]">
-          {totals.length === 0 && (
+          {!error && totals.length === 0 && (
             <span className="text-[var(--fg-2)]">No provider calls yet.</span>
           )}
-          {totals.map((t) => (
-            <span
-              key={t.provider}
-              className="px-2 py-1 rounded-[var(--radius-m)] border border-[var(--line)] bg-[var(--bg-2)]"
-            >
-              {t.provider} has {t.calls} call{t.calls === 1 ? "" : "s"}
-              {t.failures > 0 && ` (${t.failures} failed)`}.{" "}
-              {formatBytes(t.bytesOut)} out. {formatBytes(t.bytesIn)} in.
-              {t.sttSeconds > 0 && ` ${t.sttSeconds.toFixed(1)} STT seconds.`}
-              {t.ttsCharacters > 0 && ` ${t.ttsCharacters} TTS characters.`}
-              {t.totalTokens > 0 && ` ${t.totalTokens} LLM tokens.`}
-              {t.estimatedCostUsd != null &&
-                ` Estimated cost is $${t.estimatedCostUsd.toFixed(4)}.`}
-              {t.unpricedCalls > 0 &&
-                ` ${t.unpricedCalls} calls have unknown cost.`}
-            </span>
-          ))}
+          {!error &&
+            totals.map((t) => (
+              <span
+                key={t.provider}
+                className="px-2 py-1 rounded-[var(--radius-m)] border border-[var(--line)] bg-[var(--bg-2)]"
+              >
+                {t.provider} has {t.calls} call{t.calls === 1 ? "" : "s"}
+                {t.failures > 0 && ` (${t.failures} failed)`}.{" "}
+                {t.invalidValues ? (
+                  "Usage amounts are unavailable. Check this provider's local usage log for invalid values."
+                ) : (
+                  <>
+                    {formatBytes(t.bytesOut)} out. {formatBytes(t.bytesIn)} in.
+                    {t.sttSeconds > 0 &&
+                      ` ${t.sttSeconds.toFixed(1)} STT seconds.`}
+                    {t.ttsCharacters > 0 &&
+                      ` ${t.ttsCharacters} TTS characters.`}
+                    {t.totalTokens > 0 && ` ${t.totalTokens} LLM tokens.`}
+                    {t.estimatedCostUsd != null &&
+                      ` Estimated cost is $${t.estimatedCostUsd.toFixed(4)}.`}
+                    {t.unpricedCalls > 0 &&
+                      ` ${t.unpricedCalls} calls have unknown cost.`}
+                  </>
+                )}
+              </span>
+            ))}
         </div>
         <Button size="sm" variant="secondary" onClick={() => load()}>
           Refresh this usage.
         </Button>
       </div>
       <p className="text-xs text-[var(--fg-1)] mb-3">
-        All-time submitted usage, including failed or interrupted requests.
-        Estimates use the price saved for each request, exclude unknown costs,
-        and are not invoices or spending limits. LLM token counts are
+        Totals cover the latest 10,000 valid log entries across all providers,
+        including failed or interrupted requests. Older entries remain in the
+        log. Estimates use the price saved for each request, exclude unknown
+        costs, and are not invoices or spending limits. LLM token counts are
         provider-reported when present. Set speech prices in Jo AI → Voice
         setup; check your provider dashboard for actual charges.
       </p>
       {error && (
         <div className="text-xs font-mono text-[var(--record)]">{error}</div>
       )}
-      {entries.length > 0 && (
+      {!error && entries.length > 0 && (
         <ul className="font-mono text-xs divide-y divide-[var(--line)] max-h-56 overflow-y-auto">
           {[...entries].reverse().map((e) => (
             <li

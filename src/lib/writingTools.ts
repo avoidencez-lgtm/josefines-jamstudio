@@ -49,6 +49,53 @@ export function checkWritingForm(body: SongBody): void {
     throw new Error(
       "Keep the song within 256 arranged bars, 64 sections and 128 form entries. Undo or shorten a section to make room.",
     );
+  if (body.clips && body.clips.length > 16)
+    throw new Error(
+      "Songwriting supports 4/4, 40–240 BPM, up to 64 sections and 16 guitar clips.",
+    );
+  const missing = c.sections.find((s) => !body.sections?.[s.id]);
+  if (missing) throw new Error(`Missing band settings for ${missing.name}`);
+  if (
+    body.clips.some(
+      (clip) =>
+        !Number.isFinite(clip.trimStart) ||
+        !Number.isFinite(clip.trimEnd) ||
+        clip.trimEnd <= clip.trimStart,
+    )
+  )
+    throw new Error("Each guitar layer needs a trim end after its trim start.");
+}
+
+/** Distinct sentence names so chartToText/parseChartText can round-trip additions. */
+function variationSourceName(name: string): string {
+  let base = name.trim();
+  for (;;) {
+    const nested = /^This is (.+) variation \d+\.$/.exec(base);
+    if (!nested) return base.slice(0, 60);
+    base = nested[1];
+  }
+}
+
+function variationSectionName(sourceName: string, existing: string[]): string {
+  const base = variationSourceName(sourceName);
+  let n = existing.length + 1;
+  let name = `This is ${base} variation ${n}.`;
+  while (existing.includes(name)) {
+    n += 1;
+    name = `This is ${base} variation ${n}.`;
+  }
+  return name;
+}
+
+export function uniqueSectionName(existing: string[]): string {
+  const used = new Set(existing);
+  const first = "This is a new section.";
+  if (!used.has(first)) return first;
+  for (let n = 2; n <= 64; n++) {
+    const name = `This is a new section ${n}.`;
+    if (!used.has(name)) return name;
+  }
+  throw new Error("Keep the song within 64 sections.");
 }
 
 export function duplicateSection(
@@ -66,7 +113,10 @@ export function duplicateSection(
   body.chart.sections.push({
     ...structuredClone(source),
     id,
-    name: `This is ${source.name.slice(0, 60)} variation ${body.chart.sections.length + 1}.`,
+    name: variationSectionName(
+      source.name,
+      body.chart.sections.map((s) => s.name),
+    ),
   });
   body.sections[id] = structuredClone(body.sections[sectionId]);
   if (body.lyrics?.[sectionId]) body.lyrics[id] = body.lyrics[sectionId];
@@ -156,9 +206,11 @@ export function harmonyChoices(
       ? ["", "m", "m", "", "", "m", "dim"]
       : ["m", "dim", "", "m", "m", "", ""];
   const degrees =
-    mode === "major"
-      ? ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
-      : ["i", "ii°", "III", "iv", "v", "VI", "VII"];
+    family === "borrowed" && chart.mode === "major"
+      ? ["i", "ii°", "bIII", "iv", "v", "bVI", "bVII"]
+      : mode === "major"
+        ? ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
+        : ["i", "ii°", "III", "iv", "v", "VI", "VII"];
   const previousPcs = new Set(chordNotes(previous).map(Note.chroma));
   return notes
     .map((root, i) => {

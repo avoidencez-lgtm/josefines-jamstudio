@@ -101,6 +101,20 @@ export function contextSummary(ctx: JoContext): string {
     ctx.film
       ? `Film project is ${JSON.stringify(ctx.film)}. Use edit_video_shot with these project and shot ids.`
       : "No Film project is open.",
+    ctx.reference
+      ? [
+          `Reference is ${ctx.reference.label} (assetId ${ctx.reference.assetId}) at ${Math.round(ctx.reference.speed * 100)}% and ${ctx.reference.semitones > 0 ? "+" : ""}${ctx.reference.semitones} semitones.`,
+          `${ctx.reference.confirmedBars ?? 0} confirmed bars.`,
+          ctx.reference.sections?.length
+            ? `Confirmed section ids are ${ctx.reference.sections
+                .map((s) => `${s.id} (${s.label})`)
+                .join(", ")}.`
+            : "No confirmed reference sections.",
+          ctx.reference.ramp
+            ? `Practice ramp is ${JSON.stringify(ctx.reference.ramp)}.`
+            : "No practice ramp is armed.",
+        ].join(" ")
+      : "No reference is loaded.",
   ].join("\n");
 }
 
@@ -110,15 +124,23 @@ export function buildRequest(
   userText: string,
   ctx: JoContext,
 ): GeminiRequest {
-  const turns: GeminiContent[] = history
-    .filter((m) => m.id !== "welcome")
-    .slice(-8)
-    .map((m) => ({
-      role: m.sender === "user" ? "user" : "model",
-      parts: [{ text: m.text }],
-    }));
+  const turns: GeminiContent[] = [];
+  for (const m of history.filter((m) => m.id !== "welcome").slice(-8)) {
+    const role = m.sender === "user" ? "user" : "model";
+    const last = turns.at(-1);
+    if (last?.role === role) {
+      last.parts[0].text = `${last.parts[0].text}\n${m.text}`;
+    } else {
+      turns.push({ role, parts: [{ text: m.text }] });
+    }
+  }
   while (turns[0]?.role === "model") turns.shift();
-  turns.push({ role: "user", parts: [{ text: userText }] });
+  const tail = turns.at(-1);
+  if (tail?.role === "user") {
+    tail.parts[0].text = `${tail.parts[0].text}\n${userText}`;
+  } else {
+    turns.push({ role: "user", parts: [{ text: userText }] });
+  }
   return {
     systemInstruction: {
       parts: [

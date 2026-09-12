@@ -88,7 +88,7 @@ export const Library: React.FC = () => {
     })),
   );
 
-  const { text, editingId, dirty } = useLibraryDraft();
+  const { text, editingId, source, dirty } = useLibraryDraft();
   const [query, setQuery] = useState("");
   const [collection, setCollection] = useState("All charts");
   useEffect(() => {
@@ -98,11 +98,15 @@ export const Library: React.FC = () => {
         text: baseline,
         baseline,
         editingId: currentChart.id,
+        source: currentChart,
       });
     }
   }, [currentChart, text]);
 
-  const parsed = useMemo(() => parseChartText(text ?? ""), [text]);
+  const parsed = useMemo(
+    () => parseChartText(text ?? "", { source }),
+    [source, text],
+  );
   const grooves = useMemo(
     () => stylesInMeter(styles, meter, styleId),
     [styles, meter, styleId],
@@ -130,7 +134,7 @@ export const Library: React.FC = () => {
   );
   const openChart = (chart: Chart) => {
     if (dirty) return;
-    useLibraryDraft.setState({ baseline: chartToText(chart) });
+    useLibraryDraft.setState({ baseline: chartToText(chart), source: chart });
     setText(chartToText(chart));
     setEditingId(chart.id);
     setDirty(false);
@@ -155,13 +159,16 @@ export const Library: React.FC = () => {
         baseline: text ?? "",
         dirty: current.text !== text,
         editingId: draft.id,
+        source: draft,
       }));
     }
   };
 
   const transposeDraft = (semis: number) => {
     if (!draft || parsed.problems.length) return;
-    setText(chartToText(transposeChart(draft, semis)));
+    const transposed = transposeChart(draft, semis);
+    useLibraryDraft.setState({ source: transposed });
+    setText(chartToText(transposed));
     setDirty(true);
   };
 
@@ -302,7 +309,10 @@ export const Library: React.FC = () => {
                 size="sm"
                 disabled={dirty}
                 onClick={() => {
-                  useLibraryDraft.setState({ baseline: TEMPLATE });
+                  useLibraryDraft.setState({
+                    baseline: TEMPLATE,
+                    source: null,
+                  });
                   setText(TEMPLATE);
                   setEditingId(null);
                   setDirty(true);
@@ -430,7 +440,10 @@ export const Library: React.FC = () => {
                     variant="danger"
                     onClick={async () => {
                       await deleteUserChart(editingId);
-                      setEditingId(null);
+                      useLibraryDraft.setState({
+                        editingId: null,
+                        source: null,
+                      });
                     }}
                   >
                     Delete

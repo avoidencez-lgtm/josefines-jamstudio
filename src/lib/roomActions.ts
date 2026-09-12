@@ -5,6 +5,7 @@ import { useEngineStore } from "../store/engine";
 import { helpLanguageSchema } from "./help";
 import { songFingerprint } from "./jo/studioTools";
 import { type SongBody, useWriting } from "./originals";
+import { type ReducedMotion, applyReducedMotion } from "./reducedMotion";
 import {
   type Setlist,
   audioProfileSchema,
@@ -19,9 +20,11 @@ import { checkWritingForm } from "./writingTools";
  * not close during (an edit, save or recall in flight); a request that only waits
  * for advice is `busy` but not blocking, so the close guard lets the window go.
  */
-export const useRoomOperation = create<{ busy: boolean; blocking: boolean }>(
-  () => ({ busy: false, blocking: false }),
-);
+export const useRoomOperation = create<{
+  busy: boolean;
+  blocking: boolean;
+  cancel: (() => void) | null;
+}>(() => ({ busy: false, blocking: false, cancel: null }));
 export function applySongIdea(body: SongBody, base: string, label: string) {
   const w = useWriting.getState();
   if (!w.song || w.busy || useEngineStore.getState().isRecording)
@@ -60,6 +63,28 @@ export async function saveRoomPreference(
   const next = { ...current, [key]: value };
   await ipc.invoke("settings_set", { settings: next });
   useEngineStore.setState({ settings: next });
+}
+
+export async function saveReducedMotion(reducedMotion: ReducedMotion) {
+  const current = await ipc.invoke<AppSettings>("settings_get");
+  const ui = {
+    ...((current.ui as Record<string, unknown> | undefined) ?? {}),
+    reducedMotion,
+  };
+  const next = { ...current, ui };
+  try {
+    await ipc.invoke("settings_set", { settings: next });
+    applyReducedMotion(reducedMotion);
+    useEngineStore.setState({ settings: next });
+  } catch (error) {
+    useEngineStore
+      .getState()
+      .notify(
+        "error",
+        `Could not save reduced motion. ${error instanceof Error ? error.message : String(error)}`,
+      );
+    throw error;
+  }
 }
 
 export async function cueSetlistItem(item: Setlist[number]) {

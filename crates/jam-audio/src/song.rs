@@ -334,6 +334,13 @@ impl ReferenceSong {
             let mut c = s.chars();
             matches!(c.next(), Some('A'..='G')) && matches!(c.as_str(), "" | "#" | "b")
         };
+        fn chord_root(s: &str) -> &str {
+            s.strip_suffix("maj7")
+                .or_else(|| s.strip_suffix("m7"))
+                .or_else(|| s.strip_suffix('7'))
+                .or_else(|| s.strip_suffix('m'))
+                .unwrap_or(s)
+        }
         if analysis.schema_version != 1
             || analysis.analyzer != "local-chroma-v1"
             || analysis.confidence != "low"
@@ -358,9 +365,7 @@ impl ReferenceSong {
                     || c.end <= c.start
                     || c.end > analysis.seconds
                     || (i > 0 && c.start < analysis.chords[i - 1].end)
-                    || c.chord
-                        .as_ref()
-                        .is_some_and(|s| !valid_note(s.strip_suffix('m').unwrap_or(s)))
+                    || c.chord.as_ref().is_some_and(|s| !valid_note(chord_root(s)))
             })
             || analysis.key.as_ref().is_some_and(|s| {
                 !s.strip_suffix(" major")
@@ -373,6 +378,14 @@ impl ReferenceSong {
         self.analysis = Some(analysis);
         self.info.analysis_error = None;
         Ok(())
+    }
+
+    pub(crate) fn source_serial(&self) -> u32 {
+        self.serial
+    }
+
+    pub(crate) fn analysis_bpm(&self) -> Option<f64> {
+        self.analysis.as_ref().and_then(|a| a.bpm)
     }
 
     /// One atomic word identifies both the decoded source and its 48 kHz frame.
@@ -421,7 +434,7 @@ impl ReferenceSong {
                 .chords
                 .iter()
                 .skip(index)
-                .find(|c| c.start > state.position && c.chord != chord)
+                .find(|c| c.start > state.position && c.chord.is_some() && c.chord != chord)
                 .and_then(|c| c.chord.clone());
             let beat = a.beats.partition_point(|b| *b <= state.position);
             ReferenceAnalysisState {
@@ -461,9 +474,14 @@ impl ReferenceSong {
         self.invalidate_streams();
         self.last_frame = [0.0; 2];
         self.transition_from = None;
-        self.position = 0.0;
+        let frames = if self.info.loop_enabled {
+            self.info.loop_start * 48_000.0
+        } else {
+            0.0
+        };
+        self.position = frames;
         self.fade_in = 96.0;
-        self.info.position = 0.0;
+        self.info.position = frames / 48_000.0;
         self.info.state = "stopped".into();
         if let Err(error) = self.configure_ramp(self.info.ramp.map(|r| r.config)) {
             self.info.processing_error = Some(error);
@@ -610,7 +628,13 @@ impl ReferenceSong {
                     };
                     let frame = if processing {
                         let limit = (end.ceil() as usize).min(length) * 2;
-                        match self.streams[index].frame(&samples[..limit], self.position, rate) {
+                        let wrap = self.info.loop_enabled.then_some(loop_start as usize);
+                        match self.streams[index].frame(
+                            &samples[..limit],
+                            self.position,
+                            rate,
+                            wrap,
+                        ) {
                             Ok(frame) => frame,
                             Err(error) => {
                                 self.info.processing_error = Some(error);
@@ -666,6 +690,52 @@ impl ReferenceSong {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn next_chord_skips_unclassified_rests() {
+        let mut song =
+            ReferenceSong::new("chords".into(), "Fixture".into(), vec![0.0; 192_000]).unwrap();
+        song.set_analysis(jam_dsp::offline::SongAnalysis {
+            schema_version: 1,
+            analyzer: "local-chroma-v1".into(),
+            confidence: "low".into(),
+            seconds: 2.0,
+            bpm: Some(120.0),
+            beats: vec![0.0, 0.5, 1.0, 1.5],
+            key: Some("A minor".into()),
+            chords: vec![
+                jam_dsp::offline::ChordEstimate {
+                    start: 0.0,
+                    end: 1.0,
+                    chord: Some("Am".into()),
+                },
+                jam_dsp::offline::ChordEstimate {
+                    start: 1.0,
+                    end: 1.2,
+                    chord: None,
+                },
+                jam_dsp::offline::ChordEstimate {
+                    start: 1.2,
+                    end: 2.0,
+                    chord: Some("F".into()),
+                },
+            ],
+        })
+        .unwrap();
+        song.play();
+        song.seek(0.5).unwrap();
+        let mut left = vec![0.0; 256];
+        let mut right = left.clone();
+        let mut stamps = vec![0; 256];
+        song.render_timed(48_000, &mut left, &mut right, &mut stamps, &mut []);
+        let analysis = song.played_state(stamps[0]).analysis.unwrap();
+        assert_eq!(analysis.chord.as_deref(), Some("Am"));
+        assert_eq!(
+            analysis.next_chord.as_deref(),
+            Some("F"),
+            "rest windows must not blank the upcoming chord"
+        );
+    }
+
     #[test]
     fn queued_positions_cannot_override_stop_or_paused_edits() {
         let mut song =
@@ -1019,6 +1089,34 @@ mod tests {
             corrupt(&mut invalid);
             assert!(song.set_analysis(invalid).is_err());
         }
+    }
+
+    #[test]
+    fn set_analysis_accepts_seventh_chords_from_the_offline_analyzer() {
+        let mut song =
+            ReferenceSong::new("sevenths".into(), "Sevenths".into(), vec![0.2; 384_000]).unwrap();
+        let analysis = jam_dsp::offline::SongAnalysis {
+            schema_version: 1,
+            analyzer: "local-chroma-v1".into(),
+            confidence: "low".into(),
+            seconds: 4.0,
+            bpm: Some(120.0),
+            beats: vec![0.0, 1.0, 2.0, 3.0],
+            chords: ["C7", "Gmaj7", "Am7", "Dm"]
+                .iter()
+                .enumerate()
+                .map(|(i, c)| jam_dsp::offline::ChordEstimate {
+                    start: i as f64,
+                    end: i as f64 + 1.0,
+                    chord: Some((*c).into()),
+                })
+                .collect(),
+            key: Some("C major".into()),
+        };
+        song.set_analysis(analysis).unwrap();
+        let mut invalid = song.analysis.clone().unwrap();
+        invalid.chords[0].chord = Some("C9".into());
+        assert!(song.set_analysis(invalid).is_err());
     }
     #[test]
     fn stereo_reference_uses_output_frames_and_obeys_pause_seek_loop_and_end() {

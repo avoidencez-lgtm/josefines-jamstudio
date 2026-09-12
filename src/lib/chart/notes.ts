@@ -146,6 +146,10 @@ export function parseKey(
     (LETTER_PC[m[1].toUpperCase()] + accidentalOffset(m[2] ?? "") + 12) % 12;
   const modeText = (m[3] ?? "major").toLowerCase();
   const mode =
-    modeText.startsWith("m") && !modeText.startsWith("maj") ? "minor" : "major";
+    m[3] === "M"
+      ? "major"
+      : modeText.startsWith("m") && !modeText.startsWith("maj")
+        ? "minor"
+        : "major";
   return { keyTonic: tonic, mode };
 }

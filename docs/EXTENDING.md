@@ -126,6 +126,21 @@ licence line. Commands `assets_status` and `assets_ensure` live in
 synthetic kit (not acoustic). Headless download needs `JAM_LIVE=1`; resume
 writes a `.part` file and checks SHA-256 before unpack. `JAM_ASSETS_FIXTURE=1`
 reports the bundled synthetic kit only and never writes files. After unpack,
+ready status checks every installed file against the retained, SHA-256-verified
+release ZIP. Missing or modified samples require reinstalling the pack; status
+checks run off the UI thread. A failed install preserves the previous pack.
+The old ZIP is kept as `.zip.previous` until the new directory is published;
+publication failure restores it and retains the new download when possible.
+Existing recovery archives/folders are refused without replacement. If an OS
+error prevents restoration, the error names the retained archive or pack folder.
+Resume validates the full HTTP `Content-Range` and declared response length
+against the manifest and saved prefix. A valid response starting at zero replaces
+the prefix. An invalid range or HTTP 416 retries once without `Range`. The prefix
+is kept until a valid response can replace it. See [HTTP range semantics](https://www.rfc-editor.org/rfc/rfc9110.html#name-content-range).
+Response lengths and each streamed chunk are checked against the manifest size
+(or the 64 MiB ceiling when size is unknown) before writing. A clean EOF before
+the expected size reports an incomplete download and retains the `.part` file
+for retry; it never reaches checksum verification or replaces the installed pack.
 `Sampler::open` loads `kit.json` and WAVs from
 `~/JosefinesJamstudio/assets/<id>/` (or `JAM_KIT_DIR` / `JAM_USER_DIR`).
 `Sf2Synth::open` loads `freepats-bass-comp` (`bass.sf2`, `comp.sf2`) with
@@ -166,6 +181,8 @@ Each recipe below names the exact files to add and the test that proves it worke
 5. Play it on the Stage. No code change is needed; the registry picks it up at startup.
 
 Ask Jo to author one: the `create_style` tool (backlog) writes the same JSON.
+Selecting a style replaces the sequencer's cached pattern even if its ID and
+intensity ranges match the previous style. This also applies to queued style changes.
 
 ## Add a chart preset
 
@@ -190,8 +207,8 @@ Ask Jo to author one: the `create_style` tool (backlog) writes the same JSON.
 ## Add a control map (pedal, keyboard, MIDI controller)
 
 1. Write `controls/<id>.json`: bindings from `key`, `midi_pc` or `midi_cc` sources to action ids. Action ids are the Jo tool names plus `ptt`; arguments are the tool's arguments.
-2. `pnpm test -- controls` validates every binding against the tool registry (unknown action ids fail).
-3. Select it in Settings → Controls.
+2. `pnpm vitest run tests/invariants/controls.test.ts` validates every bundled binding against the tool registry (unknown action ids fail). Pedal learning still lives in `controller.json` / `PEDAL_ACTIONS`; those bindings win over a control map.
+3. MIDI PC/CC bindings are dispatched by `matchControlMidi` from the foot-controller listener. Settings → diagnostics names every loaded map.
 
 ## Add a Jo tool
 
@@ -289,7 +306,9 @@ The step-by-step guide is [songwriting.md](guide/songwriting.md).
   H works with keyboard-emulating foot pedals. Raw MIDI input is learned in Write;
   `controller.json` stores the same action and press data illustrated in
   `tests/fixtures/seams/controller.json`. The Rust press filter accepts PC, CC and
-  notes; the frontend action registry lives in `src/lib/controller.ts`.
+  notes; `ccToggle` defaults to false for momentary pedals. Set it to true for
+  alternating CC values and reopen the input to apply it. The frontend action
+  registry lives in `src/lib/controller.ts`.
 - Song tones use `body.toneProfileId` and `body.sections[id].rigScene` (a scene index
   in the existing rig profile). To rename or change available hardware scenes,
   copy the rig's JSON into the user `rigs/` folder and edit its `scenes` commands;
@@ -511,8 +530,10 @@ keep this stamp beside the corresponding audio through `OutputTap`. Readouts use
 `played_state`, never the render cursor. Do not publish the full chord map at
 30 Hz or introduce a JS clock. The existing synthetic analysis seam fixture is
 also consumed by the reference timing test; invalid/stale results stay visible.
-Keep source switching and seeking protected during recording. Synthetic rate,
-pause/seek/loop/end tests live in `jam-audio::song`, native stereo recording in
+Keep source switching and seeking protected during recording.
+Seek indices must be bounded before adding one for interpolation; very large
+finite beat positions still clamp to the last confirmed beat without overflow.
+Synthetic rate/pause/seek/loop/end tests live in `jam-audio::song`, native stereo recording in
 `engine`, command boundaries in `ipc_rig_media`, and the shared UI invariant in
 `tests/invariants/practice-copy.test.tsx`. The opt-in FFmpeg scenario also loads
 the rendered practice copy and plays one second through the native source.

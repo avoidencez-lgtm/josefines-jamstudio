@@ -86,6 +86,7 @@ pub fn estimate_grid(analysis: &SongAnalysis) -> Result<EstimatedGrid, String> {
         });
         start = end;
     }
+    cap_estimated_sections(&mut sections);
     Ok(EstimatedGrid {
         schema_version: 1,
         origin: "estimated-local".into(),
@@ -93,6 +94,39 @@ pub fn estimate_grid(analysis: &SongAnalysis) -> Result<EstimatedGrid, String> {
         beats,
         sections,
     })
+}
+
+const MAX_GRID_SECTIONS: usize = 64;
+
+fn cap_estimated_sections(sections: &mut Vec<EstimatedSection>) {
+    while sections.len() > MAX_GRID_SECTIONS {
+        let mut merge_at = 0;
+        let mut best = usize::MAX;
+        for i in 0..sections.len() - 1 {
+            let left = sections[i].end_bar - sections[i].start_bar;
+            let right = sections[i + 1].end_bar - sections[i + 1].start_bar;
+            let score = left.min(right);
+            if score < best {
+                best = score;
+                merge_at = i;
+            }
+        }
+        let next = sections.remove(merge_at + 1);
+        let left = &mut sections[merge_at];
+        if next.end_bar - next.start_bar > left.end_bar - left.start_bar {
+            left.label = next.label;
+        }
+        left.end_bar = next.end_bar;
+    }
+    for (i, section) in sections.iter_mut().enumerate() {
+        let slug: String = section
+            .label
+            .to_ascii_lowercase()
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .collect();
+        section.id = format!("{}-{}", slug.trim_matches('-'), i + 1);
+    }
 }
 
 /// How much of the guitar stem remains in the minus-guitar mix, in dB.
@@ -142,9 +176,22 @@ pub fn onsets(input: &[f32]) -> Vec<f64> {
     if peak < 1e-6 {
         return Vec::new();
     }
+    pick_peaks(&flux, peak)
+        .into_iter()
+        .map(|i| i as f64 * HOP as f64 / RATE as f64)
+        .collect()
+}
+
+fn pick_peaks(flux: &[f64], peak: f64) -> Vec<usize> {
     let mut hops = Vec::new();
     for (i, value) in flux.iter().enumerate() {
         if *value < peak * 0.2 {
+            continue;
+        }
+        if i > 0 && *value < flux[i - 1] {
+            continue;
+        }
+        if i + 1 < flux.len() && *value < flux[i + 1] {
             continue;
         }
         if hops.last().is_some_and(|last: &usize| i - *last < 5) {
@@ -156,9 +203,7 @@ pub fn onsets(input: &[f32]) -> Vec<f64> {
             hops.push(i);
         }
     }
-    hops.into_iter()
-        .map(|i| i as f64 * HOP as f64 / RATE as f64)
-        .collect()
+    hops
 }
 
 fn canceled(cancel: &AtomicBool) -> Result<(), String> {
@@ -290,20 +335,7 @@ fn tempo(onset: &[f64], seconds: f64) -> (Option<f64>, Vec<f64>) {
     if best.1 < 0.2 {
         return (None, vec![]);
     }
-    let mut peaks = Vec::new();
-    for (i, value) in onset.iter().enumerate() {
-        if *value < peak * 0.2 {
-            continue;
-        }
-        if peaks.last().is_some_and(|last: &usize| i - *last < 5) {
-            let last = peaks.last_mut().unwrap();
-            if *value > onset[*last] {
-                *last = i;
-            }
-        } else {
-            peaks.push(i);
-        }
-    }
+    let peaks = pick_peaks(onset, peak);
     let period = best.0 as f64 * dt;
     let intervals: Vec<f64> = peaks
         .windows(2)
@@ -527,6 +559,33 @@ mod tests {
     }
 
     #[test]
+    fn decaying_attack_does_not_emit_periodic_phantom_onsets() {
+        // Positive energy-flux that falls slowly stays above 0.2*peak for more
+        // than 5 hops. Without a local-max gate, pick_peaks pushed a phantom
+        // every 5 hops. Tolerance: one onset within 12 ms of the attack.
+        let frames = RATE * 2;
+        let mut input = vec![0.0f32; frames * 2];
+        let tau = 0.5_f64;
+        // 187.5 Hz is one cycle per 256-sample hop, so hop RMS is monotonic.
+        for i in 0..frames {
+            let t = i as f64 / RATE as f64;
+            let env = 1.0 - (-t / tau).exp();
+            let v = (i as f64 * 187.5 * std::f64::consts::TAU / RATE as f64).sin() as f32
+                * 0.4
+                * env as f32;
+            input[i * 2] = v;
+            input[i * 2 + 1] = v;
+        }
+        let found = onsets(&input);
+        assert_eq!(
+            found.len(),
+            1,
+            "phantom onsets on a monotonic attack: {found:?}"
+        );
+        assert!(found[0] <= 0.012, "onset {} expected at 0 ±12 ms", found[0]);
+    }
+
+    #[test]
     fn chord_loop_has_ninety_percent_chords_and_tempo_within_one_bpm() {
         for (bpm, progression, names, expected_key) in [
             (
@@ -633,6 +692,46 @@ mod tests {
             ..analysis
         })
         .is_err());
+    }
+
+    #[test]
+    fn estimate_grid_caps_sections_at_sixty_four() {
+        // Chord-per-bar maps exceed Grid::validate's 64-section limit. Merge
+        // adjacent shorts so any estimated grid stays at or under 64 sections.
+        let bars = 70;
+        let beat = 0.5;
+        let analysis = SongAnalysis {
+            schema_version: 1,
+            analyzer: "local-chroma-v1".into(),
+            confidence: "low".into(),
+            seconds: bars as f64 * 2.0,
+            bpm: Some(120.0),
+            beats: (0..=bars * 4).map(|i| i as f64 * beat).collect(),
+            chords: (0..bars)
+                .map(|b| ChordEstimate {
+                    start: b as f64 * 2.0,
+                    end: (b + 1) as f64 * 2.0,
+                    chord: Some(NOTES[b % 12].into()),
+                })
+                .collect(),
+            key: Some("C major".into()),
+        };
+        let grid = estimate_grid(&analysis).unwrap();
+        assert!(
+            grid.sections.len() <= 64,
+            "estimated sections {} exceed Grid::validate cap",
+            grid.sections.len()
+        );
+        assert_eq!(grid.sections[0].start_bar, 1);
+        assert_eq!(grid.sections.last().unwrap().end_bar, bars + 1);
+        for pair in grid.sections.windows(2) {
+            assert_eq!(pair[0].end_bar, pair[1].start_bar);
+        }
+        let ids: Vec<_> = grid.sections.iter().map(|s| s.id.as_str()).collect();
+        let mut unique = ids.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), ids.len());
     }
 
     #[test]

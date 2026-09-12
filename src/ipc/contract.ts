@@ -15,6 +15,8 @@ export interface PackStatus {
   state: string;
   live: boolean;
   message: string;
+  percent?: number;
+  licence?: string;
 }
 
 export interface LatencyCalibration {
@@ -76,6 +78,7 @@ export interface EngineStatus {
   last_error: string | null;
   stream_errors: number;
   input_gaps: number;
+  xruns: number;
 }
 
 export interface TransportTelemetry {
@@ -136,6 +139,7 @@ export interface StyleSummary {
 export interface BarChord {
   chord: string;
   beats: number;
+  [key: string]: unknown;
 }
 
 export interface ChartSection {
@@ -143,11 +147,13 @@ export interface ChartSection {
   name: string;
   bars: BarChord[][];
   styleOverrideId?: string | null;
+  [key: string]: unknown;
 }
 
 export interface ArrangementItem {
   sectionId: string;
   repeats: number;
+  [key: string]: unknown;
 }
 
 export interface Chart {
@@ -162,6 +168,7 @@ export interface Chart {
   defaultStyleId?: string | null;
   sections: ChartSection[];
   arrangement: ArrangementItem[];
+  [key: string]: unknown;
 }
 
 export interface LibraryInfo {
@@ -170,6 +177,7 @@ export interface LibraryInfo {
   /** Ids of charts that come from the user folder (deletable, editable in place). */
   userChartIds: string[];
   loadErrors: string[];
+  controlMaps: string[];
 }
 
 export interface BandPatch {
@@ -407,6 +415,8 @@ export interface CostEntry {
 
 export interface CostTotal {
   provider: string;
+  /** Hide numeric amounts when true; estimatedCostUsd is null. */
+  invalidValues?: boolean;
   calls: number;
   failures: number;
   bytesIn: number;

@@ -11,6 +11,14 @@ export const MEDIA_MODELS = catalog;
 /** Same allow-list as `src-tauri/src/net/media.rs` for `runway-veo`. */
 export const VEO_SECONDS = [4, 6, 8] as const;
 
+/** Latest clip offset that still leaves `shotSeconds` of footage. */
+export function maxClipTrimStart(
+  clipSeconds: number | undefined,
+  shotSeconds: number,
+): number {
+  return Math.max(0, (clipSeconds ?? 0) - shotSeconds);
+}
+
 export function clampGenerationSeconds(
   catalogId: string,
   seconds: number,
@@ -59,6 +67,15 @@ export async function loadReference(
     loadedOriginal: null,
     tempoTrainer: { ...s.tempoTrainer, enabled: false },
   }));
+}
+
+/** Catch a refused cancel so Film is not stuck busy without a next step. */
+export async function cancelFilmWork() {
+  try {
+    await ipc.invoke("media_cancel");
+  } catch (e) {
+    useMedia.setState({ message: String(e) });
+  }
 }
 
 export async function applyReferencePractice(

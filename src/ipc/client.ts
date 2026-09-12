@@ -15,6 +15,11 @@ export interface IpcClient {
   listen<T>(event: string, handler: (payload: T) => void): Promise<Unlisten>;
 }
 
+/** Tauri event names use colons; the UI listens with dotted domain names. */
+export function toTauriEventName(event: string): string {
+  return event.replaceAll(".", ":");
+}
+
 function hasTauri(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -52,7 +57,7 @@ const tauriClient: IpcClient = {
   ): Promise<Unlisten> {
     const { listen } = await import("@tauri-apps/api/event");
     // Tauri wire names cannot contain dots. Keep logical domain names in the UI.
-    return listen<T>(event.replaceAll(".", ":"), (e) => handler(e.payload));
+    return listen<T>(toTauriEventName(event), (e) => handler(e.payload));
   },
 };
 

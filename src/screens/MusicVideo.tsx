@@ -12,9 +12,11 @@ import {
   type MediaJob,
   type MediaShot,
   applyShotIdeas,
+  cancelFilmWork,
   clampGenerationSeconds,
   completeGeneratedAudio,
   fitShots,
+  maxClipTrimStart,
   newShot,
   newVideo,
   shotsFromChart,
@@ -436,7 +438,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             "Importing",
             "Refreshing this existing job.",
           ].some((label) => m.busy.startsWith(label)) && (
-            <Button onClick={() => void ipc.invoke("media_cancel")}>
+            <Button onClick={() => void cancelFilmWork()}>
               Cancel this local work.
             </Button>
           )}
@@ -950,9 +952,16 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                     step={0.1}
                     disabled={locked}
                     value={Number(shot.seconds.toFixed(3))}
-                    onChange={(e) =>
-                      editShot({ seconds: Number(e.target.value) })
-                    }
+                    onChange={(e) => {
+                      const seconds = Number(e.target.value);
+                      editShot({
+                        seconds,
+                        trimStart: Math.min(
+                          shot.trimStart,
+                          maxClipTrimStart(clip?.seconds, seconds),
+                        ),
+                      });
+                    }}
                   />
                 </label>
                 <label>
@@ -960,12 +969,17 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                   <input
                     type="number"
                     min={0}
-                    max={clip?.seconds ?? 600}
+                    max={maxClipTrimStart(clip?.seconds, shot.seconds)}
                     step={0.1}
                     disabled={locked}
                     value={shot.trimStart}
                     onChange={(e) =>
-                      editShot({ trimStart: Number(e.target.value) })
+                      editShot({
+                        trimStart: Math.min(
+                          Math.max(0, Number(e.target.value)),
+                          maxClipTrimStart(clip?.seconds, shot.seconds),
+                        ),
+                      })
                     }
                   />
                 </label>
