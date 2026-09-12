@@ -4,15 +4,21 @@ use crate::net;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
 use tauri::Emitter;
 
 const EMPTY_SHA: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const RELEASE_PREFIX: &str =
     "https://github.com/avoidencez-lgtm/josefines-jamstudio/releases/download/";
 const MAX_ZIP: u64 = 64 * 1024 * 1024;
+const MAX_FILES: usize = 64;
+const STAMP_NAME: &str = "installed.sha256";
+/// Wire name: frontend `listen("assets.state")` maps dots to colons.
+const ASSETS_STATE: &str = "assets:state";
 pub const NOT_CONFIGURED: &str = "Sample pack download is not configured. This pack's SHA-256 is the empty-file placeholder. Publish a real assets-v1 zip and record its SHA-256 in assets/manifest.json. The band uses the bundled synthetic kit until then.";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -23,6 +29,10 @@ pub struct PackStatus {
     pub state: String,
     pub live: bool,
     pub message: String,
+    #[serde(default)]
+    pub percent: u8,
+    #[serde(default)]
+    pub licence: String,
 }
 
 #[derive(Clone)]
@@ -32,6 +42,7 @@ struct Pack {
     url: String,
     sha256: String,
     bytes: u64,
+    licence: String,
 }
 
 fn manifest() -> Value {
@@ -50,6 +61,7 @@ fn packs() -> Vec<Pack> {
                 url: pack["url"].as_str()?.to_string(),
                 sha256: pack["sha256"].as_str()?.to_ascii_lowercase(),
                 bytes: pack["bytes"].as_u64().unwrap_or(0),
+                licence: pack["licence"].as_str()?.to_string(),
             })
         })
         .collect()
@@ -61,6 +73,31 @@ fn pack_dir(id: &str) -> PathBuf {
 
 fn placeholder(sha: &str) -> bool {
     sha == EMPTY_SHA || sha.len() != 64 || !sha.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn parse_sha256(hex: &str) -> Option<[u8; 32]> {
+    if hex.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = u8::from_str_radix(hex.get(i * 2..i * 2 + 2)?, 16).ok()?;
+    }
+    Some(out)
+}
+
+/// Constant-time compare of SHA-256 hex digests. Length/charset mismatches are public.
+fn sha256_eq(left: &str, right: &str) -> bool {
+    match (parse_sha256(left), parse_sha256(right)) {
+        (Some(a), Some(b)) => {
+            let mut diff = 0u8;
+            for (x, y) in a.iter().zip(b.iter()) {
+                diff |= x ^ y;
+            }
+            diff == 0
+        }
+        _ => false,
+    }
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
@@ -77,13 +114,71 @@ fn sha256_file(path: &Path) -> Result<String, String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+fn stamp_path(dir: &Path) -> PathBuf {
+    dir.join(STAMP_NAME)
+}
+
+fn write_stamp(dir: &Path, sha: &str) -> Result<(), String> {
+    fs::write(stamp_path(dir), sha.as_bytes()).map_err(|e| e.to_string())
+}
+
+fn pack_files_present(dir: &Path) -> bool {
+    dir.join("kit.json").is_file()
+        || (dir.join("bass.sf2").is_file() && dir.join("comp.sf2").is_file())
+}
+
+fn pack_ready(dir: &Path, sha: &str) -> bool {
+    pack_files_present(dir)
+        && fs::read_to_string(stamp_path(dir))
+            .ok()
+            .is_some_and(|got| sha256_eq(got.trim(), sha))
+}
+
+fn allowed_pack_url(url: &str) -> bool {
+    url.starts_with(RELEASE_PREFIX)
+        || (cfg!(test)
+            && (url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:")))
+}
+
+fn replace_dir(src: &Path, dest: &Path) -> Result<(), String> {
+    if dest.exists() {
+        fs::remove_dir_all(dest).map_err(|e| format!("Cannot replace {}. {e}", dest.display()))?;
+    }
+    fs::rename(src, dest).map_err(|e| format!("Cannot publish {}. {e}", dest.display()))
+}
+
+fn replace_file(src: &Path, dest: &Path) -> Result<(), String> {
+    if dest.exists() {
+        fs::remove_file(dest).map_err(|e| e.to_string())?;
+    }
+    fs::rename(src, dest).map_err(|e| e.to_string())
+}
+
+fn pack_mutexes() -> &'static tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>> {
+    static LOCKS: OnceLock<tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> =
+        OnceLock::new();
+    LOCKS.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()))
+}
+
+async fn lock_pack(id: &str) -> tokio::sync::OwnedMutexGuard<()> {
+    let slot = {
+        let mut map = pack_mutexes().lock().await;
+        map.entry(id.to_string())
+            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+            .clone()
+    };
+    slot.lock_owned().await
+}
+
 fn unpack_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
     let file = File::open(zip_path).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipArchive::new(file).map_err(|_| "Invalid sample-pack ZIP.")?;
-    if zip.is_empty() || zip.len() > 64 {
+    if zip.is_empty() {
         return Err("Sample-pack ZIP has an unexpected number of files.".into());
     }
     fs::create_dir_all(dest).map_err(|e| e.to_string())?;
+    let mut files = 0usize;
+    let mut total = 0u64;
     for i in 0..zip.len() {
         let mut entry = zip
             .by_index(i)
@@ -93,6 +188,10 @@ fn unpack_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
             .ok_or("Unsafe path in sample-pack ZIP.")?;
         if entry.is_dir() {
             continue;
+        }
+        files += 1;
+        if files > MAX_FILES {
+            return Err("Sample-pack ZIP has an unexpected number of files.".into());
         }
         if entry.encrypted() || entry.is_symlink() {
             return Err("Encrypted files and links are not supported in sample packs.".into());
@@ -122,46 +221,57 @@ fn unpack_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
                     .into(),
             );
         }
-        let max = if ext == "sf2" {
+        let max: u64 = if ext == "sf2" {
             32 * 1024 * 1024
         } else {
             8 * 1024 * 1024
         };
-        if entry.size() > max {
-            return Err("A sample-pack file is larger than the allowed size.".into());
-        }
         let out = dest.join(rel);
         if let Some(parent) = out.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let mut dst = File::create(&out).map_err(|e| e.to_string())?;
-        std::io::copy(&mut entry, &mut dst).map_err(|e| e.to_string())?;
+        // ZIP uncompressed-size headers are untrusted; bound the actual stream.
+        let mut limited = Read::take(&mut entry, max.saturating_add(1));
+        let written = std::io::copy(&mut limited, &mut dst).map_err(|e| e.to_string())?;
+        if written > max {
+            drop(dst);
+            let _ = fs::remove_file(&out);
+            return Err("A sample-pack file is larger than the allowed size.".into());
+        }
+        total += written;
+        if total > MAX_ZIP {
+            drop(dst);
+            let _ = fs::remove_file(&out);
+            return Err("Sample pack is larger than 64 MB.".into());
+        }
     }
-    if !pack_ready(dest) {
+    if files == 0 {
+        return Err("Sample-pack ZIP has an unexpected number of files.".into());
+    }
+    if !pack_files_present(dest) {
         return Err("Sample-pack ZIP is missing kit.json or bass.sf2/comp.sf2.".into());
     }
     Ok(())
 }
 
-fn pack_ready(dir: &Path) -> bool {
-    dir.join("kit.json").is_file()
-        || (dir.join("bass.sf2").is_file() && dir.join("comp.sf2").is_file())
+fn content_range_start(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    let value = headers.get(reqwest::header::CONTENT_RANGE)?.to_str().ok()?;
+    let rest = value.trim().strip_prefix("bytes")?.trim_start();
+    rest.split(['-', '/']).next()?.parse().ok()
 }
 
-async fn download_resume(url: &str, part: &Path, expected: u64) -> Result<(), String> {
-    if !url.starts_with(RELEASE_PREFIX) {
+async fn download_resume(
+    url: &str,
+    part: &Path,
+    expected: u64,
+    mut progress: impl FnMut(u8),
+) -> Result<(), String> {
+    if !allowed_pack_url(url) {
         return Err("Sample pack URL must be this repo's GitHub Release.".into());
     }
-    let have = part.metadata().map(|m| m.len()).unwrap_or(0);
-    if expected > 0 && have > expected {
-        let _ = fs::remove_file(part);
-    }
-    let have = part.metadata().map(|m| m.len()).unwrap_or(0);
     if expected > MAX_ZIP {
         return Err("Sample pack is larger than 64 MB.".into());
-    }
-    if expected > 0 && have == expected {
-        return Ok(());
     }
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(4))
@@ -169,49 +279,92 @@ async fn download_resume(url: &str, part: &Path, expected: u64) -> Result<(), St
         .user_agent("josefines-jamstudio/0.1")
         .build()
         .map_err(|e| e.to_string())?;
-    let mut req = client.get(url);
-    if have > 0 {
-        req = req.header(reqwest::header::RANGE, format!("bytes={have}-"));
-    }
-    let mut response = req.send().await.map_err(|e| e.to_string())?;
-    let status = response.status();
-    if have > 0 && status == reqwest::StatusCode::OK {
-        let _ = fs::remove_file(part);
-    } else if !status.is_success() && status != reqwest::StatusCode::PARTIAL_CONTENT {
-        return Err(format!("Sample pack download failed ({status})."));
-    }
-    if let Some(len) = response.content_length() {
-        let total = if status == reqwest::StatusCode::PARTIAL_CONTENT {
-            have + len
+    let mut restarted = false;
+    loop {
+        let mut have = part.metadata().map(|m| m.len()).unwrap_or(0);
+        if expected > 0 && have > expected {
+            let _ = fs::remove_file(part);
+            have = 0;
+        }
+        if expected > 0 && have == expected {
+            progress(100);
+            return Ok(());
+        }
+        let mut req = client.get(url);
+        if have > 0 {
+            req = req.header(reqwest::header::RANGE, format!("bytes={have}-"));
+        }
+        let mut response = req.send().await.map_err(|e| e.to_string())?;
+        let status = response.status();
+        if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+            let _ = fs::remove_file(part);
+            if restarted {
+                return Err(format!("Sample pack download failed ({status})."));
+            }
+            restarted = true;
+            continue;
+        }
+        if !status.is_success() && status != reqwest::StatusCode::PARTIAL_CONTENT {
+            return Err(format!("Sample pack download failed ({status})."));
+        }
+        let range_start = content_range_start(response.headers());
+        let resume =
+            status == reqwest::StatusCode::PARTIAL_CONTENT && have > 0 && range_start == Some(have);
+        if !resume && have > 0 {
+            let _ = fs::remove_file(part);
+            have = 0;
+        }
+        if let Some(len) = response.content_length() {
+            let total = if resume { have + len } else { len };
+            if total > MAX_ZIP {
+                return Err("Sample pack is larger than 64 MB.".into());
+            }
+        }
+        fs::create_dir_all(part.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
+        let mut file = if resume {
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(part)
+                .map_err(|e| e.to_string())?
         } else {
-            len
+            File::create(part).map_err(|e| e.to_string())?
         };
-        if total > MAX_ZIP {
-            return Err("Sample pack is larger than 64 MB.".into());
+        let total = if expected > 0 {
+            expected
+        } else {
+            response
+                .content_length()
+                .map(|len| if resume { have + len } else { len })
+                .unwrap_or(0)
+        };
+        let mut last = 255u8;
+        let mut emit_pct = |written: u64| {
+            if total == 0 {
+                return;
+            }
+            let pct = ((written.saturating_mul(100)) / total).min(100) as u8;
+            if pct != last {
+                last = pct;
+                progress(pct);
+            }
+        };
+        emit_pct(have);
+        while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+            file.write_all(&chunk).map_err(|e| e.to_string())?;
+            let pos = file.stream_position().map_err(|e| e.to_string())?;
+            if pos > MAX_ZIP {
+                return Err("Sample pack is larger than 64 MB.".into());
+            }
+            emit_pct(pos);
         }
+        return Ok(());
     }
-    fs::create_dir_all(part.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-    let mut file = if status == reqwest::StatusCode::PARTIAL_CONTENT && have > 0 {
-        OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(part)
-            .map_err(|e| e.to_string())?
-    } else {
-        File::create(part).map_err(|e| e.to_string())?
-    };
-    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
-        file.write_all(&chunk).map_err(|e| e.to_string())?;
-        if file.stream_position().map_err(|e| e.to_string())? > MAX_ZIP {
-            return Err("Sample pack is larger than 64 MB.".into());
-        }
-    }
-    Ok(())
 }
 
 fn status_for(pack: &Pack) -> PackStatus {
     let dest = pack_dir(&pack.id);
-    let ready = pack_ready(&dest);
+    let ready = pack_ready(&dest, &pack.sha256);
     let missing = placeholder(&pack.sha256);
     PackStatus {
         id: pack.id.clone(),
@@ -225,10 +378,12 @@ fn status_for(pack: &Pack) -> PackStatus {
         }
         .into(),
         live: false,
-        message: if dest.join("kit.json").is_file() {
+        percent: if ready { 100 } else { 0 },
+        licence: pack.licence.clone(),
+        message: if ready && dest.join("kit.json").is_file() {
             "Pack is unpacked. The band loads kit.json and WAVs from this folder when you play."
                 .into()
-        } else if dest.join("bass.sf2").is_file() {
+        } else if ready {
             "Pack is unpacked. The band loads bass.sf2 and comp.sf2 when you play.".into()
         } else if missing {
             NOT_CONFIGURED.into()
@@ -243,15 +398,24 @@ pub fn status() -> Vec<PackStatus> {
 }
 
 pub async fn ensure(ids: &[String]) -> Result<Vec<PackStatus>, String> {
+    ensure_emitting(ids, |_| {}).await
+}
+
+async fn ensure_emitting(
+    ids: &[String],
+    mut emit: impl FnMut(&[PackStatus]),
+) -> Result<Vec<PackStatus>, String> {
     if std::env::var("JAM_ASSETS_FIXTURE").as_deref() == Ok("1") {
-        return Ok(status()
+        let packs = status()
             .into_iter()
             .map(|mut pack| {
                 pack.state = "synthetic".into();
                 pack.message = "Synthetic kit only. No GitHub Release zip was downloaded.".into();
                 pack
             })
-            .collect());
+            .collect::<Vec<_>>();
+        emit(&packs);
+        return Ok(packs);
     }
     let known = packs();
     if !ids.is_empty() && ids.iter().any(|id| known.iter().all(|pack| pack.id != *id)) {
@@ -270,18 +434,30 @@ pub async fn ensure(ids: &[String]) -> Result<Vec<PackStatus>, String> {
     }
     net::live_guard("sample pack download")?;
     for pack in &wanted {
-        install(pack).await?;
+        if let Err(e) = install(pack, |status| emit(std::slice::from_ref(status))).await {
+            let mut err = status_for(pack);
+            err.state = "error".into();
+            err.message = e.clone();
+            emit(std::slice::from_ref(&err));
+            return Err(e);
+        }
     }
-    Ok(wanted.iter().map(status_for).collect())
+    let packs = wanted.iter().map(status_for).collect::<Vec<_>>();
+    emit(&packs);
+    Ok(packs)
 }
 
-async fn install(pack: &Pack) -> Result<(), String> {
+async fn install(pack: &Pack, mut on_state: impl FnMut(&PackStatus)) -> Result<(), String> {
+    let _guard = lock_pack(&pack.id).await;
     let dest = pack_dir(&pack.id);
-    if pack_ready(&dest) {
+    if pack_ready(&dest, &pack.sha256) {
         return Ok(());
     }
     let zip_path = dest.with_extension("zip");
     let part = dest.with_extension("zip.part");
+    let mut downloading = status_for(pack);
+    downloading.state = "downloading".into();
+    downloading.message = "Downloading this sample pack.".into();
     if let Ok(path) = std::env::var("JAM_ASSETS_LOCAL") {
         let local = PathBuf::from(path);
         if !local.is_file() {
@@ -289,12 +465,24 @@ async fn install(pack: &Pack) -> Result<(), String> {
         }
         fs::create_dir_all(dest.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
         fs::copy(&local, &zip_path).map_err(|e| e.to_string())?;
+        downloading.percent = 100;
+        on_state(&downloading);
     } else {
-        download_resume(&pack.url, &part, pack.bytes).await?;
-        fs::rename(&part, &zip_path).map_err(|e| e.to_string())?;
+        let mut progress_status = downloading.clone();
+        download_resume(&pack.url, &part, pack.bytes, |percent| {
+            progress_status.percent = percent;
+            on_state(&progress_status);
+        })
+        .await?;
+        replace_file(&part, &zip_path)?;
     }
+    let mut verifying = status_for(pack);
+    verifying.state = "verifying".into();
+    verifying.percent = 100;
+    verifying.message = "Verifying this sample pack.".into();
+    on_state(&verifying);
     let digest = sha256_file(&zip_path)?;
-    if digest != pack.sha256 {
+    if !sha256_eq(&digest, &pack.sha256) {
         let _ = fs::remove_file(&zip_path);
         return Err(format!(
             "Sample pack checksum failed. Expected {}, got {digest}.",
@@ -311,7 +499,23 @@ async fn install(pack: &Pack) -> Result<(), String> {
             ));
         }
     }
-    unpack_zip(&zip_path, &dest)?;
+    let staging = dest.with_file_name(format!("{}.unpacking", pack.id));
+    let _ = fs::remove_dir_all(&staging);
+    if let Err(e) = unpack_zip(&zip_path, &staging) {
+        let _ = fs::remove_dir_all(&staging);
+        let _ = fs::remove_dir_all(&dest);
+        return Err(e);
+    }
+    write_stamp(&staging, &pack.sha256)?;
+    if !pack_ready(&staging, &pack.sha256) {
+        let _ = fs::remove_dir_all(&staging);
+        let _ = fs::remove_dir_all(&dest);
+        return Err("Sample-pack ZIP is missing kit.json or bass.sf2/comp.sf2.".into());
+    }
+    if let Err(e) = replace_dir(&staging, &dest) {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(e);
+    }
     Ok(())
 }
 
@@ -325,15 +529,53 @@ pub async fn assets_ensure<R: tauri::Runtime>(
     ids: Option<Vec<String>>,
     app: tauri::AppHandle<R>,
 ) -> Result<Vec<PackStatus>, String> {
-    let packs = ensure(&ids.unwrap_or_default()).await?;
-    let _ = app.emit("assets.state", &packs);
-    Ok(packs)
+    let app2 = app.clone();
+    ensure_emitting(&ids.unwrap_or_default(), move |packs| {
+        let _ = app2.emit(ASSETS_STATE, packs);
+    })
+    .await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Mutex;
+    use std::thread;
+    use std::time::Duration;
+
+    static ENV: Mutex<()> = Mutex::new(());
+
+    struct TestRoot {
+        dir: PathBuf,
+        _guard: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Drop for TestRoot {
+        fn drop(&mut self) {
+            std::env::remove_var("JAM_USER_DIR");
+            std::env::remove_var("JAM_ASSETS_LOCAL");
+            let _ = fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    fn test_root() -> TestRoot {
+        let guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!(
+            "jam-assets-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("JAM_USER_DIR", &dir);
+        TestRoot { dir, _guard: guard }
+    }
 
     fn tiny_kit_zip(path: &Path) {
         let mut zip = zip::ZipWriter::new(File::create(path).unwrap());
@@ -344,6 +586,500 @@ mod tests {
         zip.start_file("LICENSE.txt", opts).unwrap();
         zip.write_all(b"CC0-1.0").unwrap();
         zip.finish().unwrap();
+    }
+
+    fn kit_pack(id: &str, zip: &Path) -> Pack {
+        Pack {
+            id: id.into(),
+            name: id.into(),
+            url: "http://127.0.0.1:1/missing".into(),
+            sha256: sha256_file(zip).unwrap(),
+            bytes: zip.metadata().unwrap().len(),
+            licence: "CC0-1.0".into(),
+        }
+    }
+
+    struct HttpReply {
+        status: u16,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+        delay: Duration,
+    }
+
+    fn read_http_request(stream: &mut std::net::TcpStream) -> Vec<u8> {
+        let mut buf = Vec::new();
+        let mut tmp = [0u8; 1024];
+        stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
+        while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+            match stream.read(&mut tmp) {
+                Ok(0) => break,
+                Ok(n) => buf.extend_from_slice(&tmp[..n]),
+                Err(_) => break,
+            }
+            if buf.len() > 64 * 1024 {
+                break;
+            }
+        }
+        buf
+    }
+
+    fn spawn_http(replies: Vec<HttpReply>) -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = thread::spawn(move || {
+            for reply in replies {
+                let deadline = std::time::Instant::now() + Duration::from_secs(3);
+                let mut stream = loop {
+                    match listener.accept() {
+                        Ok((stream, _)) => break stream,
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            if std::time::Instant::now() >= deadline {
+                                return;
+                            }
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(_) => return,
+                    }
+                };
+                stream.set_nonblocking(false).ok();
+                let _ = read_http_request(&mut stream);
+                if !reply.delay.is_zero() {
+                    thread::sleep(reply.delay);
+                }
+                let mut head = format!(
+                    "HTTP/1.1 {} TEST\r\nContent-Length: {}\r\nConnection: close\r\n",
+                    reply.status,
+                    reply.body.len()
+                );
+                for (k, v) in &reply.headers {
+                    head.push_str(&format!("{k}: {v}\r\n"));
+                }
+                head.push_str("\r\n");
+                let _ = stream.write_all(head.as_bytes());
+                let _ = stream.write_all(&reply.body);
+            }
+        });
+        (format!("http://127.0.0.1:{}", addr.port()), handle)
+    }
+
+    fn patch_zip_uncompressed_sizes(data: &mut [u8], size: u32) {
+        let new = size.to_le_bytes();
+        let mut i = 0;
+        while i + 30 <= data.len() {
+            if data[i..i + 4] == [0x50, 0x4b, 0x03, 0x04] {
+                data[i + 22..i + 26].copy_from_slice(&new);
+                i += 30;
+                continue;
+            }
+            if i + 46 <= data.len() && data[i..i + 4] == [0x50, 0x4b, 0x01, 0x02] {
+                data[i + 24..i + 28].copy_from_slice(&new);
+                i += 46;
+                continue;
+            }
+            i += 1;
+        }
+    }
+
+    #[test]
+    fn sha256_eq_compares_decoded_digests_in_constant_time() {
+        let empty = EMPTY_SHA;
+        let other = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b856";
+        assert!(sha256_eq(empty, empty));
+        assert!(sha256_eq(&empty.to_ascii_uppercase(), empty));
+        assert!(!sha256_eq(empty, other));
+        assert!(!sha256_eq(empty, &empty[..63]));
+        assert!(!sha256_eq("not-a-digest", empty));
+        assert!(!sha256_eq(
+            empty,
+            "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"
+        ));
+        let kit = std::env::temp_dir().join(format!("jam-sha256-eq-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&kit);
+        fs::create_dir_all(&kit).unwrap();
+        let zip_path = kit.join("kit.zip");
+        tiny_kit_zip(&zip_path);
+        let digest = sha256_file(&zip_path).unwrap();
+        assert!(sha256_eq(&digest, &digest));
+        let mut mismatch = digest.clone();
+        mismatch.replace_range(62..64, if digest.ends_with("00") { "01" } else { "00" });
+        assert!(!sha256_eq(&digest, &mismatch));
+        let _ = fs::remove_dir_all(&kit);
+    }
+
+    #[test]
+    fn unpack_zip_ignores_directory_records_in_the_file_limit() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-assets-dirs-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let zip_path = dir.join("dirs.zip");
+        let mut zip = zip::ZipWriter::new(File::create(&zip_path).unwrap());
+        let opts = zip::write::SimpleFileOptions::default();
+        zip.start_file("kit.json", opts).unwrap();
+        zip.write_all(br#"{"schemaVersion":1,"id":"dirs-kit"}"#)
+            .unwrap();
+        zip.start_file("kick/hit.wav", opts).unwrap();
+        zip.write_all(b"RIFF").unwrap();
+        for i in 0..63 {
+            zip.add_directory(&format!("layer{i}/"), opts).unwrap();
+        }
+        zip.finish().unwrap();
+        let archive = zip::ZipArchive::new(File::open(&zip_path).unwrap()).unwrap();
+        assert!(archive.len() > 64, "zip.len()={}", archive.len());
+        drop(archive);
+        unpack_zip(&zip_path, &dir.join("out")).unwrap();
+        assert!(dir.join("out/kit.json").is_file());
+        assert!(dir.join("out/kick/hit.wav").is_file());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unpack_zip_bounds_actual_bytes_not_the_header_size() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-assets-bomb-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let zip_path = dir.join("bomb.zip");
+        let mut zip = zip::ZipWriter::new(File::create(&zip_path).unwrap());
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file("kit.json", opts).unwrap();
+        zip.write_all(br#"{"schemaVersion":1}"#).unwrap();
+        zip.start_file("kick.wav", opts).unwrap();
+        zip.write_all(&vec![0u8; 9 * 1024 * 1024]).unwrap();
+        zip.finish().unwrap();
+        let mut data = fs::read(&zip_path).unwrap();
+        patch_zip_uncompressed_sizes(&mut data, 1000);
+        fs::write(&zip_path, &data).unwrap();
+        let err = unpack_zip(&zip_path, &dir.join("out")).unwrap_err();
+        assert!(err.contains("larger than the allowed size"), "{err}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unpack_zip_enforces_cumulative_uncompressed_size() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-assets-sum-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let zip_path = dir.join("sum.zip");
+        let mut zip = zip::ZipWriter::new(File::create(&zip_path).unwrap());
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file("kit.json", opts).unwrap();
+        zip.write_all(br#"{"schemaVersion":1}"#).unwrap();
+        let chunk = vec![0u8; 7 * 1024 * 1024];
+        for i in 0..10 {
+            zip.start_file(format!("pad{i}.wav"), opts).unwrap();
+            zip.write_all(&chunk).unwrap();
+        }
+        zip.finish().unwrap();
+        let err = unpack_zip(&zip_path, &dir.join("out")).unwrap_err();
+        assert!(err.contains("larger than 64 MB"), "{err}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pack_ready_rejects_a_folder_with_only_kit_json() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-assets-ready-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("kit.json"), br#"{"schemaVersion":1}"#).unwrap();
+        assert!(!pack_ready(&dir, EMPTY_SHA));
+        write_stamp(&dir, EMPTY_SHA).unwrap();
+        assert!(pack_ready(&dir, EMPTY_SHA));
+        assert!(!pack_ready(
+            &dir,
+            "afb6b9c5239d65f0630e5bab7770750db72aa146d4ea7c32a156ad0d5085cf75"
+        ));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn leftover_kit_json_is_replaced_only_after_a_stamped_unpack() {
+        let _root = test_root();
+        let dest = pack_dir("leftover-kit");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("kit.json"), br#"{"schemaVersion":1}"#).unwrap();
+        let zip = _root.dir.join("kit.zip");
+        tiny_kit_zip(&zip);
+        let pack = kit_pack("leftover-kit", &zip);
+        assert!(!pack_ready(&dest, &pack.sha256));
+        std::env::set_var("JAM_ASSETS_LOCAL", &zip);
+        tauri::async_runtime::block_on(install(&pack, |_| {})).unwrap();
+        assert!(pack_ready(&dest, &pack.sha256));
+        assert!(dest.join("LICENSE.txt").is_file());
+        assert_eq!(
+            fs::read_to_string(stamp_path(&dest)).unwrap().trim(),
+            pack.sha256
+        );
+    }
+
+    #[test]
+    fn failed_unpack_wipes_dest_and_does_not_publish_staging() {
+        let _root = test_root();
+        let zip = _root.dir.join("bad.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&zip).unwrap());
+        let opts = zip::write::SimpleFileOptions::default();
+        writer.start_file("kit.json", opts).unwrap();
+        writer
+            .write_all(br#"{"schemaVersion":1,"id":"bad"}"#)
+            .unwrap();
+        writer.start_file("evil.exe", opts).unwrap();
+        writer.write_all(b"MZ").unwrap();
+        writer.finish().unwrap();
+        let pack = kit_pack("bad-kit", &zip);
+        std::env::set_var("JAM_ASSETS_LOCAL", &zip);
+        let err = tauri::async_runtime::block_on(install(&pack, |_| {})).unwrap_err();
+        assert!(
+            err.contains("WAV files only") || err.contains("missing"),
+            "{err}"
+        );
+        let dest = pack_dir("bad-kit");
+        assert!(!pack_ready(&dest, &pack.sha256));
+        assert!(!dest.join("kit.json").is_file());
+        assert!(!dest
+            .with_file_name("bad-kit.unpacking")
+            .join("kit.json")
+            .is_file());
+    }
+
+    #[test]
+    fn download_resume_drops_part_on_416_and_restarts() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-assets-416-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("pack.zip.part");
+        fs::write(&part, vec![0u8; 80]).unwrap();
+        let body = b"restored-pack-bytes".to_vec();
+        let (url, handle) = spawn_http(vec![
+            HttpReply {
+                status: 416,
+                headers: vec![],
+                body: Vec::new(),
+                delay: Duration::ZERO,
+            },
+            HttpReply {
+                status: 200,
+                headers: vec![],
+                body: body.clone(),
+                delay: Duration::ZERO,
+            },
+        ]);
+        tauri::async_runtime::block_on(download_resume(&url, &part, body.len() as u64, |_| {}))
+            .unwrap();
+        handle.join().unwrap();
+        assert_eq!(fs::read(&part).unwrap(), body);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn download_resume_truncates_when_content_range_does_not_match() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-assets-range-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("pack.zip.part");
+        fs::write(&part, b"AAAAA").unwrap();
+        let body = b"BBBBBBBBBB".to_vec();
+        let (url, handle) = spawn_http(vec![HttpReply {
+            status: 206,
+            headers: vec![("Content-Range".into(), "bytes 0-9/10".into())],
+            body: body.clone(),
+            delay: Duration::ZERO,
+        }]);
+        tauri::async_runtime::block_on(download_resume(&url, &part, 10, |_| {})).unwrap();
+        handle.join().unwrap();
+        assert_eq!(fs::read(&part).unwrap(), body);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn download_resume_appends_only_when_content_range_starts_at_have() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-assets-resume-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("pack.zip.part");
+        fs::write(&part, b"AAAAA").unwrap();
+        let (url, handle) = spawn_http(vec![HttpReply {
+            status: 206,
+            headers: vec![("Content-Range".into(), "bytes 5-9/10".into())],
+            body: b"BBBBB".to_vec(),
+            delay: Duration::ZERO,
+        }]);
+        tauri::async_runtime::block_on(download_resume(&url, &part, 10, |_| {})).unwrap();
+        handle.join().unwrap();
+        assert_eq!(fs::read(&part).unwrap(), b"AAAAABBBBB");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn download_resume_emits_percent_from_expected_bytes() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-assets-pct-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("pack.zip.part");
+        let body = vec![7u8; 40];
+        let (url, handle) = spawn_http(vec![HttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.clone(),
+            delay: Duration::ZERO,
+        }]);
+        let seen = std::sync::Mutex::new(Vec::new());
+        tauri::async_runtime::block_on(download_resume(&url, &part, body.len() as u64, |pct| {
+            seen.lock().unwrap().push(pct);
+        }))
+        .unwrap();
+        handle.join().unwrap();
+        let pcts = seen.lock().unwrap().clone();
+        assert!(pcts.contains(&100), "{pcts:?}");
+        assert!(pcts.windows(2).all(|w| w[0] <= w[1]), "{pcts:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_install_of_the_same_pack_serializes() {
+        let _root = test_root();
+        let zip = _root.dir.join("kit.zip");
+        tiny_kit_zip(&zip);
+        let bytes = fs::read(&zip).unwrap();
+        let pack = kit_pack("concurrent-kit", &zip);
+        let inflight = Arc::new(AtomicU32::new(0));
+        let max = Arc::new(AtomicU32::new(0));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let inflight2 = Arc::clone(&inflight);
+        let max2 = Arc::clone(&max);
+        let body = bytes.clone();
+        listener.set_nonblocking(true).unwrap();
+        let server = thread::spawn(move || {
+            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            while std::time::Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        stream.set_nonblocking(false).ok();
+                        let _ = read_http_request(&mut stream);
+                        let now = inflight2.fetch_add(1, Ordering::SeqCst) + 1;
+                        max2.fetch_max(now, Ordering::SeqCst);
+                        thread::sleep(Duration::from_millis(80));
+                        inflight2.fetch_sub(1, Ordering::SeqCst);
+                        let head = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            body.len()
+                        );
+                        let _ = stream.write_all(head.as_bytes());
+                        let _ = stream.write_all(&body);
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+        let mut pack_a = pack.clone();
+        pack_a.url = format!("http://127.0.0.1:{}/a", addr.port());
+        let mut pack_b = pack.clone();
+        pack_b.url = format!("http://127.0.0.1:{}/b", addr.port());
+        let (ra, rb) = tauri::async_runtime::block_on(async {
+            tokio::join!(install(&pack_a, |_| {}), install(&pack_b, |_| {}))
+        });
+        ra.unwrap();
+        rb.unwrap();
+        let _ = server.join();
+        assert!(
+            max.load(Ordering::SeqCst) <= 1,
+            "overlapping downloads {}",
+            max.load(Ordering::SeqCst)
+        );
+        assert!(pack_ready(&pack_dir("concurrent-kit"), &pack.sha256));
+    }
+
+    #[test]
+    fn manifest_packs_have_allowlisted_licence_and_licenses_heading() {
+        const ALLOWED: &[&str] = &[
+            "CC0-1.0",
+            "CC-BY-3.0",
+            "CC-BY-4.0",
+            "Apache-2.0",
+            "MIT",
+            "BSD-2-Clause",
+            "BSD-3-Clause",
+            "ISC",
+            "0BSD",
+            "Zlib",
+        ];
+        let licenses = include_str!("../../assets/LICENSES.md");
+        let listed = packs();
+        assert!(!listed.is_empty());
+        for pack in &listed {
+            assert!(
+                ALLOWED.contains(&pack.licence.as_str()),
+                "{} {}",
+                pack.id,
+                pack.licence
+            );
+            let heading = format!("## {}", pack.id);
+            assert!(
+                licenses.lines().any(|line| line.trim() == heading),
+                "{}",
+                pack.id
+            );
+        }
     }
 
     #[test]
