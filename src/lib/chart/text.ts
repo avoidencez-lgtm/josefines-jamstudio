@@ -387,7 +387,11 @@ function isChordToken(tok: string): boolean {
   const chord = splitChord(tok);
   return (
     chord !== null &&
-    !Chord.get(chord.rootName + tok.slice(chord.rootName.length)).empty
+    !Chord.get(
+      chord.rootName +
+        chord.quality +
+        (chord.bassName ? `/${chord.bassName}` : ""),
+    ).empty
   );
 }
 

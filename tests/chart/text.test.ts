@@ -39,6 +39,17 @@ describe("chart text parser", () => {
     expect(resolveChart(chart as Chart)).toHaveLength(24);
   });
 
+  it("accepts slash chords with a lowercase bass note (#350)", () => {
+    const { chart, problems } = parseChartText("[A]\n| C/e | G/b | D/f# | Am/g |");
+    expect(problems).toEqual([]);
+    expect(chart?.sections[0].bars.map((b) => b[0].chord)).toEqual([
+      "C/e",
+      "G/b",
+      "D/f#",
+      "Am/g",
+    ]);
+  });
+
   it("treats N.C., rest and - as playable rest bars (#130)", () => {
     for (const tok of [
       "N.C.",
