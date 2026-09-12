@@ -16,7 +16,6 @@ const RELEASE_PREFIX: &str =
     "https://github.com/avoidencez-lgtm/josefines-jamstudio/releases/download/";
 const MAX_ZIP: u64 = 64 * 1024 * 1024;
 const MAX_FILES: usize = 64;
-const STAMP_NAME: &str = "installed.sha256";
 /// Wire name: frontend `listen("assets.state")` maps dots to colons.
 const ASSETS_STATE: &str = "assets:state";
 pub const NOT_CONFIGURED: &str = "Sample pack download is not configured. This pack's SHA-256 is the empty-file placeholder. Publish a real assets-v1 zip and record its SHA-256 in assets/manifest.json. The band uses the bundled synthetic kit until then.";
@@ -101,7 +100,11 @@ fn sha256_eq(left: &str, right: &str) -> bool {
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
-    let mut file = File::open(path).map_err(|e| format!("Cannot read {}. {e}", path.display()))?;
+    let file = File::open(path).map_err(|e| format!("Cannot read {}. {e}", path.display()))?;
+    sha256_reader(file)
+}
+
+fn sha256_reader(mut file: impl Read) -> Result<String, String> {
     let mut hasher = Sha256::new();
     let mut buf = [0u8; 8192];
     loop {
@@ -114,24 +117,80 @@ fn sha256_file(path: &Path) -> Result<String, String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-fn stamp_path(dir: &Path) -> PathBuf {
-    dir.join(STAMP_NAME)
-}
-
-fn write_stamp(dir: &Path, sha: &str) -> Result<(), String> {
-    fs::write(stamp_path(dir), sha.as_bytes()).map_err(|e| e.to_string())
-}
-
 fn pack_files_present(dir: &Path) -> bool {
     dir.join("kit.json").is_file()
         || (dir.join("bass.sf2").is_file() && dir.join("comp.sf2").is_file())
 }
 
 fn pack_ready(dir: &Path, sha: &str) -> bool {
-    pack_files_present(dir)
-        && fs::read_to_string(stamp_path(dir))
-            .ok()
-            .is_some_and(|got| sha256_eq(got.trim(), sha))
+    if !pack_files_present(dir) {
+        return false;
+    }
+    let Ok(root) = dir.canonicalize() else {
+        return false;
+    };
+    let Ok(mut file) = File::open(dir.with_extension("zip")) else {
+        return false;
+    };
+    // The retained release archive is the manifest: verify its identity, then
+    // compare every installed file. A receipt alone cannot detect a damaged WAV.
+    if !sha256_reader((&mut file).take(MAX_ZIP + 1)).is_ok_and(|got| sha256_eq(&got, sha))
+        || file.rewind().is_err()
+    {
+        return false;
+    }
+    let Ok(mut zip) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+    let mut files = 0;
+    let mut total = 0u64;
+    for i in 0..zip.len() {
+        let Ok(entry) = zip.by_index(i) else {
+            return false;
+        };
+        if entry.is_dir() {
+            continue;
+        }
+        files += 1;
+        if files > MAX_FILES || entry.is_symlink() || entry.encrypted() {
+            return false;
+        }
+        let Some(rel) = entry.enclosed_name() else {
+            return false;
+        };
+        let Ok(path) = root.join(rel).canonicalize() else {
+            return false;
+        };
+        if !path.starts_with(&root) {
+            return false;
+        }
+        let Ok(installed) = File::open(&path) else {
+            return false;
+        };
+        if !installed
+            .metadata()
+            .is_ok_and(|m| m.is_file() && m.len() == entry.size())
+        {
+            return false;
+        }
+        total = total.saturating_add(entry.size());
+        if total > MAX_ZIP {
+            return false;
+        }
+        // Read one byte beyond the declared size so an understated ZIP entry
+        // cannot make two truncated prefixes look like complete matching files.
+        let limit = entry.size() + 1;
+        let Ok(expected) = sha256_reader(entry.take(limit)) else {
+            return false;
+        };
+        let Ok(actual) = sha256_reader(installed.take(limit)) else {
+            return false;
+        };
+        if !sha256_eq(&expected, &actual) {
+            return false;
+        }
+    }
+    files > 0
 }
 
 fn allowed_pack_url(url: &str) -> bool {
@@ -522,10 +581,6 @@ async fn install(pack: &Pack, mut on_state: impl FnMut(&PackStatus)) -> Result<(
     }
     let result = (|| {
         unpack_zip(&part, &staging)?;
-        write_stamp(&staging, &pack.sha256)?;
-        if !pack_ready(&staging, &pack.sha256) {
-            return Err("Sample-pack ZIP is missing kit.json or bass.sf2/comp.sf2.".into());
-        }
         fs::rename(&part, &zip_path).map_err(|e| e.to_string())?;
         replace_dir(&staging, &dest)
     })();
@@ -536,8 +591,10 @@ async fn install(pack: &Pack, mut on_state: impl FnMut(&PackStatus)) -> Result<(
 }
 
 #[tauri::command]
-pub fn assets_status() -> Vec<PackStatus> {
-    status()
+pub async fn assets_status() -> Result<Vec<PackStatus>, String> {
+    tokio::task::spawn_blocking(status)
+        .await
+        .map_err(|e| format!("Cannot check the sample packs. {e}"))
 }
 
 #[tauri::command]
@@ -815,30 +872,46 @@ mod tests {
     }
 
     #[test]
-    fn pack_ready_rejects_a_folder_with_only_kit_json() {
-        let dir = std::env::temp_dir().join(format!(
-            "jam-assets-ready-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
+    fn pack_ready_verifies_installed_files_against_the_release_archive() {
+        let root = test_root();
+        let dir = root.dir.join("kit");
+        let archive = dir.with_extension("zip");
+        let mut zip = zip::ZipWriter::new(File::create(&archive).unwrap());
+        let opts = zip::write::SimpleFileOptions::default();
+        zip.start_file("kit.json", opts).unwrap();
+        zip.write_all(br#"{"schemaVersion":1}"#).unwrap();
+        zip.start_file("kick/hit.wav", opts).unwrap();
+        let samples: Vec<u8> = (0..20_001).map(|i| (i % 251) as u8).collect();
+        zip.write_all(&samples).unwrap();
+        zip.finish().unwrap();
+        let sha = sha256_file(&archive).unwrap();
+        fs::create_dir(&dir).unwrap();
         fs::write(dir.join("kit.json"), br#"{"schemaVersion":1}"#).unwrap();
-        assert!(!pack_ready(&dir, EMPTY_SHA));
-        write_stamp(&dir, EMPTY_SHA).unwrap();
-        assert!(pack_ready(&dir, EMPTY_SHA));
-        assert!(!pack_ready(
-            &dir,
-            "afb6b9c5239d65f0630e5bab7770750db72aa146d4ea7c32a156ad0d5085cf75"
-        ));
-        let _ = fs::remove_dir_all(&dir);
+        // Even an old matching receipt must not conceal a missing sample.
+        fs::write(dir.join("installed.sha256"), &sha).unwrap();
+        assert!(!pack_ready(&dir, &sha));
+
+        unpack_zip(&archive, &dir).unwrap();
+        assert!(pack_ready(&dir, &sha));
+        let sample = dir.join("kick/hit.wav");
+        let mut damaged = samples.clone();
+        *damaged.last_mut().unwrap() ^= 1;
+        fs::write(&sample, damaged).unwrap();
+        assert!(
+            !pack_ready(&dir, &sha),
+            "same-size corruption must be found"
+        );
+        fs::write(&sample, &samples).unwrap();
+        assert!(pack_ready(&dir, &sha));
+        fs::remove_file(&sample).unwrap();
+        assert!(!pack_ready(&dir, &sha));
+        unpack_zip(&archive, &dir).unwrap();
+        fs::write(&archive, b"invalid replacement archive").unwrap();
+        assert!(!pack_ready(&dir, &sha));
     }
 
     #[test]
-    fn leftover_kit_json_is_replaced_only_after_a_stamped_unpack() {
+    fn leftover_kit_json_is_replaced_only_after_a_complete_unpack() {
         let _root = test_root();
         let dest = pack_dir("leftover-kit");
         fs::create_dir_all(&dest).unwrap();
@@ -851,10 +924,6 @@ mod tests {
         tauri::async_runtime::block_on(install(&pack, |_| {})).unwrap();
         assert!(pack_ready(&dest, &pack.sha256));
         assert!(dest.join("LICENSE.txt").is_file());
-        assert_eq!(
-            fs::read_to_string(stamp_path(&dest)).unwrap().trim(),
-            pack.sha256
-        );
         assert_eq!(
             sha256_file(&dest.with_extension("zip")).unwrap(),
             pack.sha256

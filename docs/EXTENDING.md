@@ -126,6 +126,9 @@ licence line. Commands `assets_status` and `assets_ensure` live in
 synthetic kit (not acoustic). Headless download needs `JAM_LIVE=1`; resume
 writes a `.part` file and checks SHA-256 before unpack. `JAM_ASSETS_FIXTURE=1`
 reports the bundled synthetic kit only and never writes files. After unpack,
+ready status checks every installed file against the retained, SHA-256-verified
+release ZIP. Missing or modified samples require reinstalling the pack; status
+checks run off the UI thread. A failed install preserves the previous pack.
 `Sampler::open` loads `kit.json` and WAVs from
 `~/JosefinesJamstudio/assets/<id>/` (or `JAM_KIT_DIR` / `JAM_USER_DIR`).
 `Sf2Synth::open` loads `freepats-bass-comp` (`bass.sf2`, `comp.sf2`) with
