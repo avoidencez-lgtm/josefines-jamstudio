@@ -9,6 +9,8 @@ pub struct EnergyFollower {
     max_db: f32,
     hysteresis_threshold: f32,
     current_mapped: f32,
+    output: f32,
+    direction: i8,
 }
 
 impl EnergyFollower {
@@ -26,6 +28,8 @@ impl EnergyFollower {
             max_db: -12.0,
             hysteresis_threshold: 0.03,
             current_mapped: 0.5,
+            output: 0.5,
+            direction: 0,
         }
     }
 
@@ -48,16 +52,24 @@ impl EnergyFollower {
         // Linear interpolation from [min_db, max_db] to [0.0, 1.0]
         let raw_mapped = ((db - self.min_db) / (self.max_db - self.min_db)).clamp(0.0, 1.0);
 
-        // Apply hysteresis to prevent rapid jitter
-        if (raw_mapped - self.current_mapped).abs() > self.hysteresis_threshold {
-            self.current_mapped = self.current_mapped * 0.95 + raw_mapped * 0.05;
+        // IIR always runs; hysteresis only gates output direction changes.
+        self.current_mapped = self.current_mapped * 0.95 + raw_mapped * 0.05;
+        let delta = self.current_mapped - self.output;
+        if self.direction == 0
+            || self.direction as f32 * delta >= 0.0
+            || delta.abs() > self.hysteresis_threshold
+        {
+            if delta.abs() > f32::EPSILON {
+                self.direction = if delta > 0.0 { 1 } else { -1 };
+            }
+            self.output = self.current_mapped;
         }
 
-        self.current_mapped
+        self.output
     }
 
     pub fn process_block(&mut self, samples: &[f32]) -> f32 {
-        let mut last = self.current_mapped;
+        let mut last = self.output;
         for &s in samples {
             last = self.process_sample(s);
         }
@@ -98,6 +110,30 @@ mod tests {
             high_energy > low_energy + 0.3,
             "Expected energy to rise significantly on loud section within 2 seconds, got {}",
             high_energy
+        );
+    }
+
+    #[test]
+    fn envelope_follower_iir_reaches_mapped_level_within_one_percent() {
+        // Gating the IIR on |raw - state| > 0.03 froze tracking ~3% below the
+        // mapped level. Continuous smoothing must settle inside 0.01 of the
+        // 0/1 rails on a 2 s synthetic DC step (tolerance: 0.01 of full scale).
+        let sample_rate = 48_000u32;
+        let mut follower = EnergyFollower::new(sample_rate);
+        let n = sample_rate as usize * 2;
+        let loud = vec![0.25f32; n];
+        let high = follower.process_block(&loud);
+        assert!(
+            (high - 1.0).abs() <= 0.01,
+            "loud DC must reach mapped 1.0 ±0.01, got {high}"
+        );
+
+        let mut follower = EnergyFollower::new(sample_rate);
+        let quiet = vec![0.001f32; n];
+        let low = follower.process_block(&quiet);
+        assert!(
+            low <= 0.01,
+            "quiet DC must reach mapped 0.0 ±0.01, got {low}"
         );
     }
 }
