@@ -15,4 +15,12 @@ describe("IPC Invariant", () => {
     expect(backend).toContain('emit("controller:press"');
     expect(toTauriEventName("controller.press")).toBe("controller:press");
   });
+
+  it("maps rig.state onto the backend rig:state emit", () => {
+    const backend = readFileSync("src-tauri/src/lib.rs", "utf8");
+    const engine = readFileSync("src/store/engine.ts", "utf8");
+    expect(engine).toContain('"rig.state"');
+    expect(backend).toContain('emit("rig:state"');
+    expect(toTauriEventName("rig.state")).toBe("rig:state");
+  });
 });
