@@ -12,6 +12,7 @@ mod ffi {
         fn seek_length(&self) -> usize;
         fn seek(self: Pin<&mut Stretch>, input: &[f32]) -> Result<()>;
         fn process(self: Pin<&mut Stretch>, input: &[f32], output: &mut [f32]) -> Result<()>;
+        fn flush(self: Pin<&mut Stretch>, output: &mut [f32]) -> Result<()>;
     }
 }
 
@@ -33,6 +34,7 @@ pub struct Stream {
     produced: usize,
     phase: f64,
     speed: f64,
+    loop_start: Option<usize>,
 }
 
 impl Stream {
@@ -51,6 +53,7 @@ impl Stream {
             produced: 0,
             phase: 0.0,
             speed: 1.0,
+            loop_start: None,
         })
     }
 
@@ -72,9 +75,28 @@ impl Stream {
             .get_mut(..frames * 2)
             .ok_or("Stretch input block exceeded its prepared capacity.")?;
         block.fill(0.0);
-        if start < samples.len() / 2 {
-            let available = (samples.len() - start * 2).min(block.len());
-            block[..available].copy_from_slice(&samples[start * 2..start * 2 + available]);
+        let total = samples.len() / 2;
+        if let Some(loop_origin) = self.loop_start.filter(|origin| *origin < total) {
+            let span = total - loop_origin;
+            let mut dest = 0;
+            let mut src = if start < loop_origin {
+                start
+            } else {
+                loop_origin + (start - loop_origin) % span
+            };
+            while dest < frames {
+                if src >= total {
+                    src = loop_origin;
+                }
+                let chunk = (total - src).min(frames - dest);
+                let copy = chunk * 2;
+                block[dest * 2..dest * 2 + copy].copy_from_slice(&samples[src * 2..src * 2 + copy]);
+                dest += chunk;
+                src = loop_origin;
+            }
+        } else if start < total {
+            let available = (total - start).min(frames);
+            block[..available * 2].copy_from_slice(&samples[start * 2..start * 2 + available * 2]);
         }
         if block.iter().any(|s| !s.is_finite()) {
             return Err("Stretch source contains invalid audio.".into());
@@ -100,15 +122,23 @@ impl Stream {
         Ok(())
     }
 
-    /// `samples` ends at the active loop/file boundary. Lookahead is zero-padded.
+    /// `samples` ends at the active loop/file boundary. When `loop_start` is set,
+    /// lookahead wraps to that frame; otherwise it is zero-padded.
     /// `position` is in original 48 kHz frames and is read only after invalidation.
-    pub fn frame(&mut self, samples: &[f32], position: f64, rate: u32) -> Result<[f32; 2], String> {
+    pub fn frame(
+        &mut self,
+        samples: &[f32],
+        position: f64,
+        rate: u32,
+        loop_start: Option<usize>,
+    ) -> Result<[f32; 2], String> {
         if rate == 0 || !position.is_finite() || position < 0.0 || !samples.len().is_multiple_of(2)
         {
             return Err("Invalid stretch source position or output rate.".into());
         }
         if !self.primed {
             self.origin = position.floor() as usize;
+            self.loop_start = loop_start;
             self.lead = self.dsp.seek_length();
             self.copy_input(samples, self.origin, self.lead)?;
             self.dsp
@@ -180,15 +210,22 @@ pub fn stereo(
     dsp.pin_mut()
         .seek(&block[..lead * 2])
         .map_err(|e| e.to_string())?;
+    let flush_frames = ((lead as f64 / speed).round() as usize).min(output_frames);
+    let process_frames = output_frames - flush_frames;
+    let remaining_input = frames.saturating_sub(lead);
     let mut result = vec![0.0; output_frames * 2];
     let mut consumed = 0;
-    for start in (0..output_frames).step_by(4096) {
+    for start in (0..process_frames).step_by(4096) {
         if cancel.load(Ordering::Relaxed) {
             return Err("Practice copy canceled.".into());
         }
-        let end = (start + 4096).min(output_frames);
-        let next = (end as f64 * speed).round() as usize;
-        let count = next - consumed;
+        let end = (start + 4096).min(process_frames);
+        let next = if process_frames == 0 {
+            0
+        } else {
+            (end as f64 * remaining_input as f64 / process_frames as f64).round() as usize
+        };
+        let count = next.saturating_sub(consumed);
         let source = (lead + consumed) * 2;
         block[..count * 2].fill(0.0);
         if source < input.len() {
@@ -199,6 +236,14 @@ pub fn stereo(
             .process(&block[..count * 2], &mut result[start * 2..end * 2])
             .map_err(|e| e.to_string())?;
         consumed = next;
+    }
+    if flush_frames > 0 {
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Practice copy canceled.".into());
+        }
+        dsp.pin_mut()
+            .flush(&mut result[process_frames * 2..])
+            .map_err(|e| e.to_string())?;
     }
     if result.iter().any(|v| !v.is_finite()) {
         return Err("Stretch produced invalid audio.".into());
@@ -348,5 +393,66 @@ mod tests {
         for speed in [0.0, 1.51, f64::NAN] {
             assert!(validate(speed, 0.0).is_err());
         }
+    }
+
+    #[test]
+    fn offline_stereo_flush_keeps_the_tail_within_six_db_of_the_steady_tone() {
+        // Without Signalsmith flush(), the last ~90–150 ms is stretched zeros.
+        // Tail RMS of a 2 s 1 kHz tone at 0.5× must stay within 6 dB of the
+        // middle (tolerance: last 50 ms vs mid-second RMS).
+        let input: Vec<f32> = (0..96_000)
+            .flat_map(|i| {
+                let v = (i as f64 * 1000.0 * std::f64::consts::TAU / 48_000.0).sin() as f32 * 0.2;
+                [v, v]
+            })
+            .collect();
+        let output = stereo(&input, 0.5, 0.0, &AtomicBool::new(false)).unwrap();
+        let frames = output.len() / 2;
+        let rms = |start: usize, count: usize| {
+            let sum: f32 = output
+                .chunks_exact(2)
+                .skip(start)
+                .take(count)
+                .map(|c| c[0] * c[0])
+                .sum();
+            (sum / count as f32).sqrt()
+        };
+        let mid = rms(frames / 2, 48_000);
+        let tail = rms(frames - 2_400, 2_400);
+        assert!(
+            tail > 0.05 && tail >= mid / 2.0,
+            "tail RMS {tail} vs mid {mid} (6 dB)"
+        );
+    }
+
+    #[test]
+    fn live_loop_lookahead_wraps_to_loop_start_instead_of_silence() {
+        // Seek 1.85 s into a 1–2 s loop at 0.5×. Lookahead past loop_end must
+        // wrap to loop_start so the last 100 ms of output is still the 1 kHz
+        // tone, not stretched zeros (tolerance: RMS > 0.05).
+        let full: Vec<f32> = (0..96_000)
+            .flat_map(|i| {
+                let v = (i as f64 * 1000.0 * std::f64::consts::TAU / 48_000.0).sin() as f32 * 0.2;
+                [v, v]
+            })
+            .collect();
+        let loop_end = 96_000;
+        let samples = &full[..loop_end * 2];
+        let mut stream = Stream::new().unwrap();
+        stream.set_parameters(0.5, 0.0).unwrap();
+        let mut out = Vec::with_capacity(14_400);
+        for i in 0..14_400 {
+            let position = 1.85 * 48_000.0;
+            let frame = stream
+                .frame(samples, position, 48_000, Some(48_000))
+                .unwrap_or_else(|e| panic!("frame {i}: {e}"));
+            out.push(frame[0]);
+        }
+        let tail = &out[out.len() - 4_800..];
+        let rms = (tail.iter().map(|s| s * s).sum::<f32>() / tail.len() as f32).sqrt();
+        assert!(
+            rms > 0.05,
+            "loop wrap lookahead was silence: tail RMS {rms}"
+        );
     }
 }

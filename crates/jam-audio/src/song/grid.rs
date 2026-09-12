@@ -161,4 +161,44 @@ mod tests {
         estimated.validate(5.0).unwrap();
         assert_eq!(estimated.section_bounds("chorus").unwrap(), (2.2, 4.6));
     }
+
+    #[test]
+    fn estimated_grid_from_many_chord_changes_validates_under_section_cap() {
+        let bars = 70;
+        let analysis = jam_dsp::offline::SongAnalysis {
+            schema_version: 1,
+            analyzer: "local-chroma-v1".into(),
+            confidence: "low".into(),
+            seconds: bars as f64 * 2.0,
+            bpm: Some(120.0),
+            beats: (0..=bars * 4).map(|i| i as f64 * 0.5).collect(),
+            chords: (0..bars)
+                .map(|b| jam_dsp::offline::ChordEstimate {
+                    start: b as f64 * 2.0,
+                    end: (b + 1) as f64 * 2.0,
+                    chord: Some(jam_dsp::offline::NOTES[b % 12].into()),
+                })
+                .collect(),
+            key: Some("C major".into()),
+        };
+        let estimated = jam_dsp::offline::estimate_grid(&analysis).unwrap();
+        let grid = Grid {
+            schema_version: estimated.schema_version,
+            origin: estimated.origin,
+            beats_per_bar: estimated.beats_per_bar,
+            beats: estimated.beats,
+            sections: estimated
+                .sections
+                .into_iter()
+                .map(|s| Section {
+                    id: s.id,
+                    label: s.label,
+                    start_bar: s.start_bar,
+                    end_bar: s.end_bar,
+                })
+                .collect(),
+        };
+        assert!(grid.sections.len() <= 64);
+        grid.validate(analysis.seconds).unwrap();
+    }
 }
