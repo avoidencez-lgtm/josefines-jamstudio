@@ -705,7 +705,7 @@ export function createPreviewEngine(
     audio_get_config: () => config,
     audio_set_config: (a) => {
       config = a.config as AudioConfig;
-      status.sample_rate = config.sample_rate;
+      status.sample_rate = 48_000;
       status.buffer_size = config.buffer_size;
       return status;
     },

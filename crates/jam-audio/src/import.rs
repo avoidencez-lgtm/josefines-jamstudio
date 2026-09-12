@@ -23,8 +23,8 @@ struct Converter {
     delay: usize,
 }
 
-fn fft_resampler(from: u32, to: u32) -> Result<Fft<f32>, String> {
-    let mut r = Fft::new(from as usize, to as usize, 1024, 2, FixedSync::Both)
+pub(crate) fn fft_resampler(from: u32, to: u32, channels: usize) -> Result<Fft<f32>, String> {
+    let mut r = Fft::new(from as usize, to as usize, 1024, channels, FixedSync::Both)
         .map_err(|e| e.to_string())?;
     // Even FFT lengths keep the filter delay on whole input/output frames.
     // Odd rational blocks otherwise retain a fractional-frame phase shift.
@@ -33,7 +33,7 @@ fn fft_resampler(from: u32, to: u32) -> Result<Fft<f32>, String> {
             from as usize,
             to as usize,
             r.fft_size_in() * 2,
-            2,
+            channels,
             FixedSync::Both,
         )
         .map_err(|e| e.to_string())?;
@@ -51,7 +51,7 @@ fn resample_stereo(input: &[f32], from: u32, to: u32) -> Result<Vec<f32>, String
         return Ok(input.to_vec());
     }
     let frames = input.len() / 2;
-    let mut r = fft_resampler(from, to)?;
+    let mut r = fft_resampler(from, to, 2)?;
     let delay = Resampler::output_delay(&r);
     let count = (frames as u64 * u64::from(to)).div_ceil(u64::from(from)) as usize;
     let mut pending = Vec::new();
@@ -88,7 +88,7 @@ impl Converter {
         let resampler = if rate == 48000 {
             None
         } else {
-            Some(fft_resampler(rate, 48000)?)
+            Some(fft_resampler(rate, 48000, 2)?)
         };
         let delay = resampler.as_ref().map_or(0, Resampler::output_delay);
         Ok(Self {

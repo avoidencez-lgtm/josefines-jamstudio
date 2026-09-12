@@ -126,6 +126,7 @@ Implementations: `CpalInput`, `CpalOutput` (real devices, resampled to and from 
 ### 4.3 Clock, timeline, render-ahead
 
 - The transport position is a `u64` frame counter owned by the render worker and derived from the output callback's counter plus the lookahead the worker has already rendered.
+- At a non-48 kHz device edge, the hardware callback only drains or fills a bounded ring. Device demand drives a Rubato worker that converts between the negotiated rate and 48 kHz; the musical frame counter stays in the 48 kHz domain. Use one interface for input and output where possible so independent hardware clocks do not accumulate drift.
 - `jam-core::timeline::Timeline` is a pure piecewise map between samples and beats built from `TempoPoint`s (`atBeats`, `bpm`, `timeSig`). It provides `beats_to_samples`, `samples_to_beats`, `bar_beat_at(samples)`, `next_bar_boundary(samples)`. Tested to a round-trip error below 1e-9 beats.
 - The render worker renders 256-frame blocks until the master ring holds 200 ms. Commands with `when: 'next_bar'` are applied at the first block whose start is at or after the next bar boundary (block-quantised; documented precision 5.3 ms at 48 kHz). `stop` has a fast path: clear the ring and apply a 10 ms fade.
 - Nothing renders in the callback. This makes the band renderable offline (`band_render_offline`) with the same code.

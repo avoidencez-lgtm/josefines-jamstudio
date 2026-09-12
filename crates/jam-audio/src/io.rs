@@ -3,14 +3,16 @@
 //!
 //! Both cpal drivers open their stream on a dedicated thread (cpal streams are not
 //! `Send` on every backend) and report the *actual* negotiated stream parameters via
-//! [`StreamInfo`], so the engine can run its clock at the true device rate instead of
-//! assuming 48 kHz. Stream errors are counted and surfaced instead of being swallowed.
+//! [`StreamInfo`]. Device rates that differ from the engine's fixed 48 kHz domain are
+//! converted on bounded worker threads. Stream errors are counted and surfaced.
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{
     BufferSize, FromSample, Sample, SampleFormat, SampleRate, SizedSample, StreamConfig,
     SupportedBufferSize, SupportedStreamConfig,
 };
+use rtrb::RingBuffer;
+use rubato::{audioadapter_buffers::direct::InterleavedSlice, Resampler};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc};
@@ -42,6 +44,10 @@ pub trait AudioInput: Send + Sync {
     fn info(&self) -> Option<StreamInfo> {
         None
     }
+    /// Rate delivered to the engine callback after any device-edge conversion.
+    fn callback_sample_rate(&self) -> Option<u32> {
+        self.info().map(|info| info.sample_rate)
+    }
     /// Number of backend stream errors since `start`.
     fn error_count(&self) -> u64 {
         0
@@ -50,6 +56,8 @@ pub trait AudioInput: Send + Sync {
 
 pub trait AudioOutput: Send + Sync {
     fn start(&mut self, callback: OutputCallback) -> Result<(), String>;
+    /// Release a driver whose device edge was opened before the engine render worker.
+    fn activate(&self) {}
     fn stop(&mut self) -> Result<(), String>;
     fn is_running(&self) -> bool;
     fn info(&self) -> Option<StreamInfo> {
@@ -392,6 +400,12 @@ struct StreamWorker {
     thread_handle: Option<JoinHandle<()>>,
 }
 
+struct OpenedStream {
+    stream: cpal::Stream,
+    info: StreamInfo,
+    edge: Option<JoinHandle<()>>,
+}
+
 impl StreamWorker {
     fn new() -> Self {
         Self {
@@ -406,7 +420,7 @@ impl StreamWorker {
     /// keeps the thread (and therefore the stream) alive until `stop`.
     fn spawn<F>(&mut self, open: F) -> Result<(), String>
     where
-        F: FnOnce() -> Result<(cpal::Stream, StreamInfo), String> + Send + 'static,
+        F: FnOnce(Arc<AtomicBool>) -> Result<OpenedStream, String> + Send + 'static,
     {
         if self.running.load(Ordering::SeqCst) {
             return Ok(());
@@ -416,8 +430,8 @@ impl StreamWorker {
         let running = Arc::clone(&self.running);
         let (tx, rx) = mpsc::channel::<Result<StreamInfo, String>>();
 
-        let handle = thread::spawn(move || match open() {
-            Ok((stream, info)) => {
+        let handle = thread::spawn(move || match open(Arc::clone(&running)) {
+            Ok(OpenedStream { stream, info, edge }) => {
                 if let Err(e) = stream.play() {
                     let _ = tx.send(Err(format!("Cannot start the audio stream. {e}")));
                     return;
@@ -427,6 +441,9 @@ impl StreamWorker {
                     thread::sleep(Duration::from_millis(20));
                 }
                 drop(stream);
+                if let Some(edge) = edge {
+                    let _ = edge.join();
+                }
             }
             Err(e) => {
                 let _ = tx.send(Err(e));
@@ -461,13 +478,146 @@ impl StreamWorker {
     }
 }
 
+fn resampled_output(
+    mut source: OutputCallback,
+    source_rate: u32,
+    device_rate: u32,
+    running: Arc<AtomicBool>,
+    active: Arc<AtomicBool>,
+    errors: Arc<AtomicU64>,
+) -> Result<(OutputCallback, JoinHandle<()>), String> {
+    let mut resampler = crate::import::fft_resampler(source_rate, device_rate, 2)?;
+    let input_frames = resampler.input_frames_next();
+    let output_frames = resampler.output_frames_max();
+    let (mut producer, mut consumer) = RingBuffer::new(output_frames * 16);
+    let callback_errors = Arc::clone(&errors);
+    let callback_active = Arc::clone(&active);
+    let device_callback: OutputCallback = Box::new(move |buffer| {
+        let mut starved = false;
+        for sample in buffer {
+            *sample = consumer.pop().unwrap_or_else(|_| {
+                starved = true;
+                0.0
+            });
+        }
+        if starved && callback_active.load(Ordering::Acquire) {
+            callback_errors.fetch_add(1, Ordering::Relaxed);
+        }
+    });
+    let edge = thread::Builder::new()
+        .name("jam-output-resampler".into())
+        .spawn(move || {
+            let mut input = vec![0.0; input_frames * 2];
+            let mut output = vec![0.0; output_frames * 2];
+            while running.load(Ordering::SeqCst) {
+                if !active.load(Ordering::Acquire) {
+                    thread::sleep(Duration::from_millis(1));
+                    continue;
+                }
+                if producer.slots() < output.len() {
+                    thread::sleep(Duration::from_millis(1));
+                    continue;
+                }
+                source(&mut input);
+                let input_adapter = match InterleavedSlice::new(&input, 2, input_frames) {
+                    Ok(adapter) => adapter,
+                    Err(_) => break,
+                };
+                let mut output_adapter =
+                    match InterleavedSlice::new_mut(&mut output, 2, output_frames) {
+                        Ok(adapter) => adapter,
+                        Err(_) => break,
+                    };
+                let produced = match resampler.process_into_buffer(
+                    &input_adapter,
+                    &mut output_adapter,
+                    None,
+                ) {
+                    Ok((_, frames)) => frames * 2,
+                    Err(_) => {
+                        errors.fetch_add(1, Ordering::Relaxed);
+                        break;
+                    }
+                };
+                for &sample in &output[..produced] {
+                    if producer.push(sample).is_err() {
+                        errors.fetch_add(1, Ordering::Relaxed);
+                        break;
+                    }
+                }
+            }
+        })
+        .map_err(|e| format!("Cannot start the output resampler. {e}"))?;
+    Ok((device_callback, edge))
+}
+
+fn resampled_input(
+    mut sink: InputCallback,
+    device_rate: u32,
+    sink_rate: u32,
+    running: Arc<AtomicBool>,
+    errors: Arc<AtomicU64>,
+) -> Result<(InputCallback, JoinHandle<()>), String> {
+    let mut resampler = crate::import::fft_resampler(device_rate, sink_rate, 1)?;
+    let input_frames = resampler.input_frames_next();
+    let output_frames = resampler.output_frames_max();
+    let (mut producer, mut consumer) = RingBuffer::new(input_frames * 8);
+    let callback_errors = Arc::clone(&errors);
+    let device_callback: InputCallback = Box::new(move |buffer| {
+        let mut overflowed = false;
+        for &sample in buffer {
+            if producer.push(sample).is_err() {
+                overflowed = true;
+            }
+        }
+        if overflowed {
+            callback_errors.fetch_add(1, Ordering::Relaxed);
+        }
+    });
+    let edge = thread::Builder::new()
+        .name("jam-input-resampler".into())
+        .spawn(move || {
+            let mut input = vec![0.0; input_frames];
+            let mut output = vec![0.0; output_frames];
+            while running.load(Ordering::SeqCst) {
+                if consumer.slots() < input_frames {
+                    thread::sleep(Duration::from_millis(1));
+                    continue;
+                }
+                for sample in &mut input {
+                    *sample = consumer.pop().unwrap_or(0.0);
+                }
+                let input_adapter = match InterleavedSlice::new(&input, 1, input_frames) {
+                    Ok(adapter) => adapter,
+                    Err(_) => break,
+                };
+                let mut output_adapter =
+                    match InterleavedSlice::new_mut(&mut output, 1, output_frames) {
+                        Ok(adapter) => adapter,
+                        Err(_) => break,
+                    };
+                match resampler.process_into_buffer(&input_adapter, &mut output_adapter, None) {
+                    Ok((_, frames)) => sink(&output[..frames]),
+                    Err(_) => {
+                        errors.fetch_add(1, Ordering::Relaxed);
+                        break;
+                    }
+                }
+            }
+        })
+        .map_err(|e| format!("Cannot start the input resampler. {e}"))?;
+    Ok((device_callback, edge))
+}
+
 /// Real output through the OS audio stack. The engine callback always produces
 /// interleaved stereo f32; this driver converts to the device's channel count and
 /// sample format.
 pub struct CpalOutput {
     device_name: Option<String>,
     wanted_rate: u32,
+    callback_rate: u32,
     wanted_buffer: u32,
+    active: Arc<AtomicBool>,
     worker: StreamWorker,
 }
 
@@ -476,7 +626,25 @@ impl CpalOutput {
         Self {
             device_name,
             wanted_rate: sample_rate,
+            callback_rate: sample_rate,
             wanted_buffer: buffer_size,
+            active: Arc::new(AtomicBool::new(true)),
+            worker: StreamWorker::new(),
+        }
+    }
+
+    pub fn new_resampled(
+        device_name: Option<String>,
+        device_rate: u32,
+        callback_rate: u32,
+        buffer_size: u32,
+    ) -> Self {
+        Self {
+            device_name,
+            wanted_rate: device_rate,
+            callback_rate,
+            wanted_buffer: buffer_size,
+            active: Arc::new(AtomicBool::new(false)),
             worker: StreamWorker::new(),
         }
     }
@@ -551,10 +719,12 @@ impl AudioOutput for CpalOutput {
     fn start(&mut self, callback: OutputCallback) -> Result<(), String> {
         let device_name = self.device_name.clone();
         let wanted_rate = self.wanted_rate;
+        let callback_rate = self.callback_rate;
         let wanted_buffer = self.wanted_buffer;
+        let active = Arc::clone(&self.active);
         let errors = Arc::clone(&self.worker.errors);
 
-        self.worker.spawn(move || {
+        self.worker.spawn(move |running| {
             let device = named_or_default_device(device_name.as_deref(), false)?;
             let name = device.name().unwrap_or_else(|_| "unknown".into());
             let default = device
@@ -567,6 +737,19 @@ impl AudioOutput for CpalOutput {
             let supported = pick_config(ranges, default, wanted_rate, 2);
             let mut cfg = supported.config();
             cfg.buffer_size = fixed_buffer_within(supported.buffer_size(), wanted_buffer);
+            let (callback, edge) = if cfg.sample_rate.0 == callback_rate {
+                (callback, None)
+            } else {
+                let (callback, edge) = resampled_output(
+                    callback,
+                    callback_rate,
+                    cfg.sample_rate.0,
+                    running,
+                    active,
+                    Arc::clone(&errors),
+                )?;
+                (callback, Some(edge))
+            };
 
             // The callback is owned by exactly one stream. If a fixed buffer is rejected,
             // report the device error; a new start creates a fresh callback.
@@ -584,17 +767,22 @@ impl AudioOutput for CpalOutput {
                 BufferSize::Default => None,
             };
 
-            Ok((
+            Ok(OpenedStream {
                 stream,
-                StreamInfo {
+                info: StreamInfo {
                     device_name: name,
                     sample_rate: cfg.sample_rate.0,
                     channels: cfg.channels,
                     buffer_frames,
                     sample_format: format_name(supported.sample_format()),
                 },
-            ))
+                edge,
+            })
         })
+    }
+
+    fn activate(&self) {
+        self.active.store(true, Ordering::Release);
     }
 
     fn stop(&mut self) -> Result<(), String> {
@@ -621,6 +809,7 @@ pub struct CpalInput {
     device_name: Option<String>,
     channel: u16,
     wanted_rate: u32,
+    callback_rate: u32,
     wanted_buffer: u32,
     worker: StreamWorker,
 }
@@ -636,6 +825,24 @@ impl CpalInput {
             device_name,
             channel,
             wanted_rate: sample_rate,
+            callback_rate: sample_rate,
+            wanted_buffer: buffer_size,
+            worker: StreamWorker::new(),
+        }
+    }
+
+    pub fn new_resampled(
+        device_name: Option<String>,
+        channel: u16,
+        device_rate: u32,
+        callback_rate: u32,
+        buffer_size: u32,
+    ) -> Self {
+        Self {
+            device_name,
+            channel,
+            wanted_rate: device_rate,
+            callback_rate,
             wanted_buffer: buffer_size,
             worker: StreamWorker::new(),
         }
@@ -672,10 +879,11 @@ impl AudioInput for CpalInput {
         let device_name = self.device_name.clone();
         let channel = self.channel as usize;
         let wanted_rate = self.wanted_rate;
+        let callback_rate = self.callback_rate;
         let wanted_buffer = self.wanted_buffer;
         let errors = Arc::clone(&self.worker.errors);
 
-        self.worker.spawn(move || {
+        self.worker.spawn(move |running| {
             let device = named_or_default_device(device_name.as_deref(), true)?;
             let name = device.name().unwrap_or_else(|_| "unknown".into());
             let default = device
@@ -698,6 +906,18 @@ impl AudioInput for CpalInput {
             };
             let mut cfg = supported.config();
             cfg.buffer_size = fixed_buffer_within(supported.buffer_size(), wanted_buffer);
+            let (callback, edge) = if cfg.sample_rate.0 == callback_rate {
+                (callback, None)
+            } else {
+                let (callback, edge) = resampled_input(
+                    callback,
+                    cfg.sample_rate.0,
+                    callback_rate,
+                    running,
+                    Arc::clone(&errors),
+                )?;
+                (callback, Some(edge))
+            };
 
             let stream = match supported.sample_format() {
                 SampleFormat::F32 => build_input::<f32>(&device, &cfg, channel, callback, errors),
@@ -713,16 +933,17 @@ impl AudioInput for CpalInput {
                 BufferSize::Default => None,
             };
 
-            Ok((
+            Ok(OpenedStream {
                 stream,
-                StreamInfo {
+                info: StreamInfo {
                     device_name: name,
                     sample_rate: cfg.sample_rate.0,
                     channels: cfg.channels,
                     buffer_frames,
                     sample_format: format_name(supported.sample_format()),
                 },
-            ))
+                edge,
+            })
         })
     }
 
@@ -739,6 +960,10 @@ impl AudioInput for CpalInput {
         self.worker.info.clone()
     }
 
+    fn callback_sample_rate(&self) -> Option<u32> {
+        self.is_running().then_some(self.callback_rate)
+    }
+
     fn error_count(&self) -> u64 {
         self.worker.errors.load(Ordering::Relaxed)
     }
@@ -747,6 +972,80 @@ impl AudioInput for CpalInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn device_edges_convert_between_44100_and_48000_off_the_callback() {
+        let running = Arc::new(AtomicBool::new(true));
+        let errors = Arc::new(AtomicU64::new(0));
+        let rendered = Arc::new(AtomicU64::new(0));
+        let rendered_in_callback = Arc::clone(&rendered);
+        let output_active = Arc::new(AtomicBool::new(false));
+        let (mut output, output_thread) = resampled_output(
+            Box::new(move |buffer| {
+                rendered_in_callback.fetch_add((buffer.len() / 2) as u64, Ordering::Relaxed);
+                buffer.fill(0.25);
+            }),
+            48_000,
+            44_100,
+            Arc::clone(&running),
+            Arc::clone(&output_active),
+            Arc::clone(&errors),
+        )
+        .unwrap();
+        thread::sleep(Duration::from_millis(20));
+        assert_eq!(rendered.load(Ordering::Relaxed), 0);
+        output_active.store(true, Ordering::Release);
+        let mut heard = vec![0.0; 441 * 2];
+        let mut nonzero = 0;
+        for _ in 0..100 {
+            output(&mut heard);
+            nonzero += heard.iter().filter(|sample| sample.abs() > 0.2).count();
+            thread::sleep(Duration::from_millis(1));
+        }
+        running.store(false, Ordering::SeqCst);
+        output_thread.join().unwrap();
+        assert!(rendered.load(Ordering::Relaxed) >= 48_000);
+        assert!(
+            nonzero > 80_000,
+            "resampled output should contain the source"
+        );
+
+        let running = Arc::new(AtomicBool::new(true));
+        let captured = Arc::new(AtomicU64::new(0));
+        let captured_nonzero = Arc::new(AtomicU64::new(0));
+        let captured_in_callback = Arc::clone(&captured);
+        let nonzero_in_callback = Arc::clone(&captured_nonzero);
+        let (mut input, input_thread) = resampled_input(
+            Box::new(move |buffer| {
+                captured_in_callback.fetch_add(buffer.len() as u64, Ordering::Relaxed);
+                nonzero_in_callback.fetch_add(
+                    buffer.iter().filter(|sample| sample.abs() > 0.1).count() as u64,
+                    Ordering::Relaxed,
+                );
+            }),
+            44_100,
+            48_000,
+            Arc::clone(&running),
+            errors,
+        )
+        .unwrap();
+        let block = [0.25; 441];
+        for _ in 0..100 {
+            input(&block);
+            thread::sleep(Duration::from_millis(1));
+        }
+        for _ in 0..100 {
+            if captured.load(Ordering::Relaxed) >= 48_000 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(2));
+        }
+        running.store(false, Ordering::SeqCst);
+        input_thread.join().unwrap();
+        let captured = captured.load(Ordering::Relaxed);
+        assert!((46_000..=49_000).contains(&captured), "captured {captured}");
+        assert!(captured_nonzero.load(Ordering::Relaxed) > 40_000);
+    }
 
     #[test]
     fn file_input_emits_a_lead_burst_before_the_wall_clock() {

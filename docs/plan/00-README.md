@@ -3287,13 +3287,11 @@ and decoded-audio caching remain in place. Songs without clips skip the catalog
 entirely, so a broken take folder cannot block their load. A native IPC regression
 uses an unreadable catalog fixture and verifies this independence.
 
-The rate-mismatch follow-up (#211, awaiting renewed review and CI) closes an input
-whose rate differs from the output and refuses jam/song recording and recent-idea
-capture before creating files. A dedicated input-error state supplies the shared
-guard; displayed error wording does not control eligibility. The isolated
-file-input regression verifies all three paths and recovery after a matching
-restart. Settings help explains this in English/Bokmål. This is damage prevention;
-edge resampling and the fixed internal 48 kHz requirement remain unfinished (#184).
+The fixed-rate follow-up (#184, awaiting review and CI) keeps the timeline,
+instruments and recorder at 48 kHz. CPAL callbacks only move samples through
+bounded rings while existing Rubato FFT workers convert at non-48 kHz input and
+output edges. Actual device rates remain visible in Settings. The earlier
+rate-mismatch guard still protects synthetic inputs that bypass edge conversion.
 
 The licence-gate follow-up for #157 (awaiting review and CI) uses the existing
 SPDX evaluator so grouped AND/OR expressions retain their meaning. Malformed

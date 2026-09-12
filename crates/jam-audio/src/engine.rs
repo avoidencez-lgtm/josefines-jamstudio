@@ -32,6 +32,7 @@ use std::time::{Duration, Instant};
 /// Frames rendered per pass. Independent from the device buffer: the ring buffer
 /// decouples the two.
 const RENDER_BLOCK: usize = 256;
+pub const INTERNAL_SAMPLE_RATE: u32 = 48_000;
 /// Number of render blocks kept ready in the output ring.
 const RENDER_AHEAD_BLOCKS: usize = 6;
 /// Metronome click length.
@@ -301,7 +302,7 @@ pub struct EngineStatus {
     pub output: Option<StreamInfo>,
     /// Negotiated input stream, if any.
     pub input: Option<StreamInfo>,
-    /// Rate the clock and instruments run at (the output device's real rate).
+    /// Rate the clock, instruments and recorder run at (always 48 kHz).
     pub sample_rate: u32,
     pub buffer_size: u32,
     /// Human-readable reason for a fallback or the last failure. `None` when healthy.
@@ -522,7 +523,7 @@ fn render_ahead_needed(
 
 impl AudioEngine {
     pub fn new(config: AudioConfig) -> Self {
-        let sample_rate = config.sample_rate;
+        let sample_rate = INTERNAL_SAMPLE_RATE;
         let sequencer = BandSequencer::new(default_style(), sample_rate, 42);
         let recorder = crate::recorder::TakeRecorder::new(sample_rate, dirs_base().join("takes"));
 
@@ -559,7 +560,7 @@ impl AudioEngine {
             calib_epoch: AtomicU64::new(0),
             latest_telemetry: Arc::new(Mutex::new(EngineTelemetry::default())),
             status: Arc::new(Mutex::new(EngineStatus {
-                sample_rate: config.sample_rate,
+                sample_rate,
                 buffer_size: config.buffer_size,
                 ..Default::default()
             })),
@@ -1380,7 +1381,7 @@ impl AudioEngine {
             running: false,
             output: None,
             input: None,
-            sample_rate: requested_rate,
+            sample_rate: INTERNAL_SAMPLE_RATE,
             buffer_size: requested_buffer,
             last_error: None,
             stream_errors: 0,
@@ -1434,14 +1435,15 @@ impl AudioEngine {
         ) = if headless_requested() {
             status.mode = EngineMode::Headless;
             let (prod, cb, input, captured) = make_output();
-            let mut null = NullOutput::new(requested_rate, requested_buffer as usize);
+            let mut null = NullOutput::new(INTERNAL_SAMPLE_RATE, requested_buffer as usize);
             null.start(cb)?;
             (Box::new(null), prod, input, captured)
         } else {
             let (prod, cb, input, captured) = make_output();
-            let mut cpal_out = CpalOutput::new(
+            let mut cpal_out = CpalOutput::new_resampled(
                 self.config.output_device.clone(),
                 requested_rate,
+                INTERNAL_SAMPLE_RATE,
                 requested_buffer,
             );
             match cpal_out.start(cb) {
@@ -1452,7 +1454,7 @@ impl AudioEngine {
                     ));
                     status.mode = EngineMode::Headless;
                     let (prod, cb, input, captured) = make_output();
-                    let mut null = NullOutput::new(requested_rate, requested_buffer as usize);
+                    let mut null = NullOutput::new(INTERNAL_SAMPLE_RATE, requested_buffer as usize);
                     null.start(cb)?;
                     (Box::new(null), prod, input, captured)
                 }
@@ -1460,18 +1462,17 @@ impl AudioEngine {
         };
 
         status.output = output_driver.info();
-        let effective_rate = status
+        let device_rate = status
             .output
             .as_ref()
             .map(|i| i.sample_rate)
             .filter(|r| *r > 0)
-            .unwrap_or(requested_rate);
-        if effective_rate != requested_rate {
+            .unwrap_or(INTERNAL_SAMPLE_RATE);
+        if device_rate != INTERNAL_SAMPLE_RATE {
             problems.push(format!(
-                "device runs at {effective_rate} Hz, not the requested {requested_rate} Hz; following the device"
+                "device runs at {device_rate} Hz; converting at the 48 kHz engine boundary"
             ));
         }
-        status.sample_rate = effective_rate;
 
         // --- input ---
         let fake_wav = std::env::var("JAM_FAKE_INPUT").ok();
@@ -1500,18 +1501,19 @@ impl AudioEngine {
                     ));
                     Box::new(FileInput::sine_440(
                         requested_buffer as usize,
-                        effective_rate,
+                        INTERNAL_SAMPLE_RATE,
                     ))
                 }
             },
             (None, true) => Box::new(FileInput::sine_440(
                 requested_buffer as usize,
-                effective_rate,
+                INTERNAL_SAMPLE_RATE,
             )),
-            (None, false) => Box::new(CpalInput::new(
+            (None, false) => Box::new(CpalInput::new_resampled(
                 self.config.input_device.clone(),
                 self.config.input_channel,
-                effective_rate,
+                device_rate,
+                INTERNAL_SAMPLE_RATE,
                 requested_buffer,
             )),
         };
@@ -1523,29 +1525,36 @@ impl AudioEngine {
                 ));
                 // The failed driver consumed the callback; the silent input needs none
                 // because nothing reads from it.
-                Box::new(FileInput::silent(requested_buffer as usize, effective_rate))
+                Box::new(FileInput::silent(
+                    requested_buffer as usize,
+                    INTERNAL_SAMPLE_RATE,
+                ))
             }
         };
         status.input = input_driver.info().filter(|_| input_driver.is_running());
         self.input_rate_error = status
             .input
             .as_ref()
-            .and_then(|input| input_rate_mismatch(input.sample_rate, effective_rate));
+            .and_then(|_| input_driver.callback_sample_rate())
+            .and_then(|rate| input_rate_mismatch(rate, INTERNAL_SAMPLE_RATE));
         if let Some(msg) = &self.input_rate_error {
             problems.push(msg.clone());
             let _ = input_driver.stop();
-            input_driver = Box::new(FileInput::silent(requested_buffer as usize, effective_rate));
+            input_driver = Box::new(FileInput::silent(
+                requested_buffer as usize,
+                INTERNAL_SAMPLE_RATE,
+            ));
             status.input = None;
         }
 
-        // --- clock and instruments follow the device rate ---
+        // --- the musical clock and recorder always stay in the 48 kHz domain ---
         {
             let mut tl = self.timeline.lock();
             tl.stop();
-            tl.sample_rate = effective_rate;
+            tl.sample_rate = INTERNAL_SAMPLE_RATE;
         }
-        self.sequencer.lock().set_sample_rate(effective_rate);
-        let _ = self.recorder.lock().set_sample_rate(effective_rate);
+        self.sequencer.lock().set_sample_rate(INTERNAL_SAMPLE_RATE);
+        let _ = self.recorder.lock().set_sample_rate(INTERNAL_SAMPLE_RATE);
         // Audio from before a device restart has a different clock/rate.
         let mut capture = self.capture.lock();
         let seconds = capture.seconds;
@@ -1567,9 +1576,10 @@ impl AudioEngine {
             output_prod,
             input_cons,
             captured,
-            effective_rate,
+            INTERNAL_SAMPLE_RATE,
             wait_for_input,
         );
+        output_driver.activate();
 
         self.output_driver = Some(output_driver);
         self.input_driver = Some(input_driver);
@@ -2282,6 +2292,17 @@ fn dirs_base() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn musical_domain_is_always_48k_before_devices_start() {
+        let engine = AudioEngine::new(AudioConfig {
+            sample_rate: 44_100,
+            ..AudioConfig::default()
+        });
+        assert_eq!(engine.sample_rate(), INTERNAL_SAMPLE_RATE);
+        assert_eq!(engine.timeline.lock().sample_rate, INTERNAL_SAMPLE_RATE);
+        assert_eq!(engine.status.lock().sample_rate, INTERNAL_SAMPLE_RATE);
+    }
 
     #[test]
     fn band_locate_refuses_unrepresentable_positions_without_changing_the_playhead() {
