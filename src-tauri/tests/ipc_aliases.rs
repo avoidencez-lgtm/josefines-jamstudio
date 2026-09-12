@@ -32,6 +32,23 @@ fn transport_locate_moves_by_beats_and_seek_bar_still_works() {
     studio.ok("transport_seek_bar", json!({"bar": 1}));
     let back = wait_bar(&studio, 1);
     assert_eq!(back["transport"]["bar"], 1);
+    for (command, args) in [
+        ("transport_locate", json!({"beats": f64::MAX})),
+        ("transport_locate", json!({"beats": u32::MAX})),
+        ("transport_seek_bar", json!({"bar": u32::MAX})),
+        (
+            "transport_set_loop",
+            json!({"startBar": 1, "endBar": u32::MAX, "enabled": true}),
+        ),
+        (
+            "transport_set_loop",
+            json!({"startBar": u32::MAX, "endBar": 1, "enabled": true}),
+        ),
+    ] {
+        assert!(studio.err(command, args).contains("position"));
+        let after = studio.ok("audio_get_telemetry", json!({}));
+        assert_eq!(after["transport"], back["transport"], "{command}");
+    }
 }
 
 #[test]

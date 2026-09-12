@@ -673,19 +673,27 @@ impl AudioEngine {
         self.voice.lock().stop();
     }
 
-    pub fn transport_seek_bar(&self, bar: u32) {
-        let _gate = self.render_gate.lock();
-        self.timeline.lock().seek_bar(bar);
-        self.sequencer.lock().reset();
-    }
-
-    pub fn transport_locate(&self, beats: f64) {
+    pub fn transport_seek_bar(&self, bar: u32) -> Result<(), String> {
         let _gate = self.render_gate.lock();
         let mut timeline = self.timeline.lock();
-        let sample = beats_to_samples(beats.max(0.0), timeline.bpm, timeline.sample_rate);
+        let sample = band_position_sample(
+            &timeline,
+            (bar.max(1) - 1) as f64 * timeline.time_signature.0 as f64,
+        )?;
         timeline.seek_sample(sample);
         drop(timeline);
         self.sequencer.lock().reset();
+        Ok(())
+    }
+
+    pub fn transport_locate(&self, beats: f64) -> Result<(), String> {
+        let _gate = self.render_gate.lock();
+        let mut timeline = self.timeline.lock();
+        let sample = band_position_sample(&timeline, beats)?;
+        timeline.seek_sample(sample);
+        drop(timeline);
+        self.sequencer.lock().reset();
+        Ok(())
     }
 
     /// Locate the active timeline: the reference when one is loaded, otherwise the band grid.
@@ -711,13 +719,27 @@ impl AudioEngine {
             };
             self.reference_seek(seconds)
         } else {
-            self.transport_locate(beats);
-            Ok(())
+            self.transport_locate(beats)
         }
     }
 
-    pub fn transport_set_loop(&self, start_bar: u32, end_bar: u32, enabled: bool) {
-        self.timeline.lock().set_loop(start_bar, end_bar, enabled);
+    pub fn transport_set_loop(
+        &self,
+        start_bar: u32,
+        end_bar: u32,
+        enabled: bool,
+    ) -> Result<(), String> {
+        let mut timeline = self.timeline.lock();
+        let end = end_bar.max(start_bar.max(1).saturating_add(1));
+        if end <= start_bar.max(1) {
+            return Err("Loop end position must be after its start.".into());
+        }
+        band_position_sample(
+            &timeline,
+            (end - 1) as f64 * timeline.time_signature.0 as f64,
+        )?;
+        timeline.set_loop(start_bar, end_bar, enabled);
+        Ok(())
     }
 
     pub fn transport_set_count_in(&self, bars: u32) {
@@ -1048,7 +1070,9 @@ impl AudioEngine {
                 .map(|c| c.bars.len() as u32)
                 .filter(|n| *n > 0)
                 .unwrap_or(1);
-            self.transport_set_loop(1, chart_bars.saturating_add(1), false);
+            self.timeline
+                .lock()
+                .set_loop(1, chart_bars.saturating_add(1), false);
         }
         let id = self.install_recorder(prepared);
         self.transport_play();
@@ -1106,7 +1130,9 @@ impl AudioEngine {
         self.clear_reference();
         self.transport_set_tempo(chart.default_bpm);
         self.transport_set_time_signature(chart.time_sig);
-        self.transport_set_loop(1, chart.bars.len() as u32 + 1, false);
+        self.timeline
+            .lock()
+            .set_loop(1, chart.bars.len() as u32 + 1, false);
         let mut seq = self.sequencer.lock();
         seq.set_follow_energy(false);
         seq.section_bands = sections;
@@ -1166,7 +1192,7 @@ impl AudioEngine {
         };
         if let Some((count_in, start, end, enabled)) = self.take_transport_restore.lock().take() {
             self.transport_set_count_in(count_in);
-            self.transport_set_loop(start, end, enabled);
+            self.timeline.lock().set_loop(start, end, enabled);
         }
         finished.stop_and_save()
     }
@@ -2216,6 +2242,20 @@ fn output_meter(left: &[f32], right: &[f32]) -> MeterTelemetry {
     }
 }
 
+// Beat events use u32 indices. Reject unrepresentable user positions before mutation.
+fn band_position_sample(timeline: &Timeline, beats: f64) -> Result<u64, String> {
+    if !(0.0..u32::MAX as f64).contains(&beats) {
+        return Err(
+            "Beat position is outside the supported timeline. Choose an earlier position.".into(),
+        );
+    }
+    let sample = beats_to_samples(beats, timeline.bpm, timeline.sample_rate);
+    if sample == u64::MAX {
+        return Err("Beat position exceeds the audio clock. Choose an earlier position.".into());
+    }
+    Ok(sample)
+}
+
 fn tuner_window(sample_rate: u32) -> usize {
     ((TUNER_WINDOW as u64 * u64::from(sample_rate.max(1))) / 48_000).max(TUNER_WINDOW as u64)
         as usize
@@ -2240,6 +2280,35 @@ fn dirs_base() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn band_locate_refuses_unrepresentable_positions_without_changing_the_playhead() {
+        let engine = AudioEngine::new(AudioConfig::default());
+        engine.locate(8.5).unwrap();
+        let before = engine.timeline.lock().current_sample;
+        for beats in [f64::MAX, u32::MAX as f64, f64::NAN, -1.0] {
+            let result = engine.locate(beats);
+            let position = engine.timeline.lock().current_position();
+            assert!(result.is_err(), "accepted beat position {beats}");
+            assert_eq!(position.samples, before);
+        }
+        assert!(engine.transport_seek_bar(u32::MAX).is_err());
+        assert_eq!(engine.timeline.lock().current_sample, before);
+        engine.transport_set_loop(2, 5, true).unwrap();
+        for (start, end) in [(1, u32::MAX), (u32::MAX, 1)] {
+            assert!(engine.transport_set_loop(start, end, true).is_err());
+            let timeline = engine.timeline.lock();
+            assert_eq!((timeline.loop_start_bar, timeline.loop_end_bar), (2, 5));
+            assert_eq!(timeline.current_sample, before);
+        }
+        engine.transport_set_time_signature((1, 4));
+        assert!(engine.transport_set_loop(u32::MAX, u32::MAX, true).is_err());
+        engine.transport_set_time_signature((4, 4));
+        engine.transport_seek_bar(100).unwrap();
+        assert_eq!(engine.timeline.lock().current_position().bar, 100);
+        engine.transport_seek_bar(0).unwrap();
+        assert_eq!(engine.timeline.lock().current_sample, 0);
+    }
 
     #[test]
     fn idle_band_emit_zeros_energy() {
@@ -3032,7 +3101,7 @@ mod tests {
             .configure_song(resolved, sections, vec![], doc)
             .unwrap();
         engine.transport_set_count_in(1);
-        engine.transport_set_loop(1, 8, true);
+        engine.transport_set_loop(1, 8, true).unwrap();
         engine.start().unwrap();
         engine.record_song("loop-restore".into()).unwrap();
         {
@@ -3236,7 +3305,7 @@ mod tests {
 
         engine.transport_set_count_in(0);
         engine.transport_set_tempo(120.0);
-        engine.transport_set_loop(1, 5, true);
+        engine.transport_set_loop(1, 5, true).unwrap();
         engine.transport_play();
 
         let mut ctx = RenderContext::new(48_000);

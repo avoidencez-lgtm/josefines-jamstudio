@@ -193,6 +193,8 @@ export type TransportState = {
 // transport_set_tempo(bpm, when)  // engine clamp 20–300; charts/Write/setlist stay 40–240
 // transport_set_time_sig(num, den, when) · transport_tap_tempo() -> { tempoBpm, taps }
 // event 'transport.state' @30 Hz
+// Band locate/seek/loop positions must fit the u32 beat-event range and audio sample clock.
+// Invalid positions fail before changing the playhead, loop or queued band events.
 
 // mixer and meters
 export type BusState = { id: BusId; gainDb: Db; muted: boolean; soloed: boolean };

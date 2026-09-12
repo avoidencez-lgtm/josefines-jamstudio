@@ -341,7 +341,16 @@ export function createPreviewEngine(
     if (transport.state === "playing" && c.section) rigOnSection(c.section);
   }
 
+  function validateBandPosition(beats: number) {
+    if (!(beats >= 0 && beats < 0xffff_ffff)) {
+      throw new Error(
+        "Beat position is outside the supported timeline. Choose an earlier position.",
+      );
+    }
+  }
+
   function seekBar(bar: number) {
+    validateBandPosition((Math.max(1, bar) - 1) * beatsPerBar());
     const clamped = Math.min(Math.max(1, bar), barCount());
     transport.bar = clamped;
     transport.beat = 1;
@@ -763,6 +772,7 @@ export function createPreviewEngine(
       if (!Number.isFinite(beats) || beats < 0) {
         throw new Error("Locate needs a non-negative beat position.");
       }
+      validateBandPosition(beats);
       seekBar(Math.floor(beats / beatsPerBar()) + 1);
     },
     mixer_set_bus: (a) => {
@@ -819,11 +829,11 @@ export function createPreviewEngine(
       ];
     },
     transport_set_loop: (a) => {
-      transport.loop_start_bar = Math.max(1, Number(a.startBar));
-      transport.loop_end_bar = Math.max(
-        transport.loop_start_bar + 1,
-        Number(a.endBar),
-      );
+      const start = Math.max(1, Number(a.startBar));
+      const end = Math.max(start + 1, Number(a.endBar));
+      validateBandPosition((end - 1) * beatsPerBar());
+      transport.loop_start_bar = start;
+      transport.loop_end_bar = end;
       transport.loop_enabled = Boolean(a.enabled);
     },
     transport_set_count_in: (a) => {

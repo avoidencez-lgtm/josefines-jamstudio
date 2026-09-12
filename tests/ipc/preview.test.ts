@@ -24,6 +24,34 @@ describe("browser preview engine", () => {
   });
   afterEach(() => engine.dispose());
 
+  it("refuses unrepresentable band positions without changing transport", async () => {
+    await engine.invoke("transport_locate", { beats: 4 });
+    const before = await engine.invoke<{ transport: TransportTelemetry }>(
+      "audio_get_telemetry",
+      {},
+    );
+    for (const [command, args] of [
+      ["transport_locate", { beats: Number.MAX_VALUE }],
+      ["transport_locate", { beats: 0xffff_ffff }],
+      ["transport_seek_bar", { bar: 0xffff_ffff }],
+      [
+        "transport_set_loop",
+        { startBar: 1, endBar: 0xffff_ffff, enabled: true },
+      ],
+      [
+        "transport_set_loop",
+        { startBar: 0xffff_ffff, endBar: 1, enabled: true },
+      ],
+    ] as const) {
+      await expect(engine.invoke(command, args)).rejects.toThrow("position");
+      const after = await engine.invoke<{ transport: TransportTelemetry }>(
+        "audio_get_telemetry",
+        {},
+      );
+      expect(after.transport).toEqual(before.transport);
+    }
+  });
+
   it("refuses malformed program changes without sending MIDI", async () => {
     const before = await engine.invoke("rig_get_state", {});
     for (const program of [

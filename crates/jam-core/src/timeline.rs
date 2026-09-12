@@ -512,7 +512,7 @@ pub fn samples_to_beats(samples: u64, bpm: f64, sample_rate: u32) -> f64 {
 pub fn bar_beat_at(beats: f64, time_sig: (u8, u8)) -> (u32, u32) {
     let beats_per_bar = time_sig.0 as f64;
     let total_beats = beats.max(0.0);
-    let bar = (total_beats / beats_per_bar).floor() as u32 + 1;
+    let bar = ((total_beats / beats_per_bar).floor() as u32).saturating_add(1);
     let beat = (total_beats % beats_per_bar).floor() as u32 + 1;
     (bar, beat)
 }
@@ -584,6 +584,8 @@ mod tests {
         assert_eq!(bar_beat_at(3.5, (4, 4)), (1, 4));
         assert_eq!(bar_beat_at(4.0, (4, 4)), (2, 1));
         assert_eq!(bar_beat_at(7.9, (4, 4)), (2, 4));
+        assert_eq!(bar_beat_at(u32::MAX as f64 * 4.0, (4, 4)), (u32::MAX, 1));
+        assert_eq!(bar_beat_at(f64::MAX, (4, 4)), (u32::MAX, 1));
     }
 
     #[test]

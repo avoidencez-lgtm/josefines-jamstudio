@@ -416,7 +416,7 @@ fn transport_seek_bar(bar: u32, state: State<'_, AppState>) -> Result<(), String
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.ensure_band_grid()?;
-    eng.transport_seek_bar(bar);
+    eng.transport_seek_bar(bar)?;
     drop(eng);
     notify_rig_playhead(&state)
 }
@@ -431,8 +431,7 @@ fn transport_set_loop(
     let eng = state.engine.lock();
     eng.ensure_timing_editable()?;
     eng.ensure_band_grid()?;
-    eng.transport_set_loop(start_bar, end_bar, enabled);
-    Ok(())
+    eng.transport_set_loop(start_bar, end_bar, enabled)
 }
 
 #[tauri::command]
