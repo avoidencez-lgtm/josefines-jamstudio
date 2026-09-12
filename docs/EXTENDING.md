@@ -522,8 +522,10 @@ keep this stamp beside the corresponding audio through `OutputTap`. Readouts use
 `played_state`, never the render cursor. Do not publish the full chord map at
 30 Hz or introduce a JS clock. The existing synthetic analysis seam fixture is
 also consumed by the reference timing test; invalid/stale results stay visible.
-Keep source switching and seeking protected during recording. Synthetic rate,
-pause/seek/loop/end tests live in `jam-audio::song`, native stereo recording in
+Keep source switching and seeking protected during recording.
+Seek indices must be bounded before adding one for interpolation; very large
+finite beat positions still clamp to the last confirmed beat without overflow.
+Synthetic rate/pause/seek/loop/end tests live in `jam-audio::song`, native stereo recording in
 `engine`, command boundaries in `ipc_rig_media`, and the shared UI invariant in
 `tests/invariants/practice-copy.test.tsx`. The opt-in FFmpeg scenario also loads
 the rendered practice copy and plays one second through the native source.

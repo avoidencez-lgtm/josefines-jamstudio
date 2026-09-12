@@ -697,7 +697,7 @@ impl AudioEngine {
                 if let Some(grid) = &song.grid {
                     let i = beats.max(0.0) as usize;
                     let frac = beats.max(0.0) - i as f64;
-                    if i + 1 < grid.beats.len() {
+                    if i < grid.beats.len().saturating_sub(1) {
                         grid.beats[i] + frac * (grid.beats[i + 1] - grid.beats[i])
                     } else if let Some(&last) = grid.beats.last() {
                         last.min(song.info.seconds)
@@ -2843,8 +2843,20 @@ mod tests {
         })
         .unwrap();
         engine.load_reference(song).unwrap();
-        engine.locate(2.0).unwrap();
-        assert!((engine.get_telemetry().reference.unwrap().position - 1.0).abs() < 1e-6);
+        for (beats, seconds) in [
+            (2.0, 1.0),
+            (2.5, 1.25),
+            (4.0, 2.0),
+            (usize::MAX as f64, 2.0),
+            (f64::MAX, 2.0),
+            (0.0, 0.0),
+        ] {
+            engine.locate(beats).unwrap();
+            assert!(
+                (engine.get_telemetry().reference.unwrap().position - seconds).abs() < 1e-6,
+                "beat {beats} should locate to {seconds} s"
+            );
+        }
     }
 
     #[test]
