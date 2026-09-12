@@ -3,6 +3,7 @@ import type {
   BandTelemetry,
   Chart,
   EngineStatus,
+  LatencyCalibration,
   RigProfile,
   RigState,
   StyleSummary,
@@ -93,6 +94,20 @@ describe("browser preview engine", () => {
     const status = await engine.invoke<EngineStatus>("engine_status", {});
     expect(status.mode).toBe("Headless");
     expect(status.last_error).toMatch(/preview/i);
+  });
+
+  it("cannot measure a physical loopback and leaves the offset untouched", async () => {
+    await engine.invoke("recorder_set_latency", { samples: 12 });
+    const result = await engine.invoke<LatencyCalibration>(
+      "audio_calibrate_latency",
+      {},
+    );
+    expect(result).toEqual({
+      roundTripFrames: 512,
+      confidence: 0,
+      estimated: true,
+    });
+    expect(await engine.invoke("recorder_get_latency", {})).toBe(12);
   });
 
   it("follows a chart bar by bar and reports chords", async () => {
@@ -193,6 +208,24 @@ describe("browser preview engine", () => {
     expect(seen.band?.pending_style_id).toBeNull();
   });
 
+  it("refuses offline render and live key tests in preview", async () => {
+    await expect(
+      engine.invoke("band_render_offline", {
+        styleId: "rock-straight",
+        bars: 1,
+      }),
+    ).rejects.toThrow(/desktop app/);
+    await expect(
+      engine.invoke("keys_test", { provider: "gemini" }),
+    ).rejects.toThrow(/not configured/);
+    const idle = await engine.invoke<{
+      proven: boolean;
+      message: string;
+    }>("diagnostics_idle_cpu", {});
+    expect(idle.proven).toBe(false);
+    expect(idle.message).toMatch(/Idle CPU is not proven/);
+  });
+
   it("rejects unknown ids like the real engine", async () => {
     await expect(
       engine.invoke("band_set_style", { styleId: "nope" }),
@@ -286,6 +319,52 @@ describe("browser preview engine", () => {
     for (let i = 0; i < 100; i++) engine.tick(0.1);
     const quiet = await engine.invoke<RigState>("rig_get_state", {});
     expect(quiet.monitor.length).toBe(0);
+  });
+
+  it("clock follows play pause and stop only when enabled", async () => {
+    await engine.invoke("transport_set_count_in", { bars: 0 });
+    await engine.invoke("rig_clear_monitor", {});
+    await engine.invoke("transport_play", {});
+    expect(
+      (await engine.invoke<RigState>("rig_get_state", {})).monitor,
+    ).toEqual([]);
+    await engine.invoke("transport_stop", {});
+    const on = await engine.invoke<RigState>("rig_set_clock", { on: true });
+    expect(on.sendClock).toBe(true);
+    await engine.invoke("rig_dry_run", { on: true });
+    expect((await engine.invoke<RigState>("rig_get_state", {})).dryRun).toBe(
+      true,
+    );
+    await engine.invoke("rig_clear_monitor", {});
+    await engine.invoke("transport_play", {});
+    let state = await engine.invoke<RigState>("rig_get_state", {});
+    expect(state.monitor[0]?.bytes).toEqual([0xfa]);
+    expect(state.monitor.some((m) => m.bytes[0] === 0xf8)).toBe(true);
+    await engine.invoke("rig_clear_monitor", {});
+    await engine.invoke("transport_pause", {});
+    expect(
+      (await engine.invoke<RigState>("rig_get_state", {})).monitor[0]?.bytes,
+    ).toEqual([0xfc]);
+    await engine.invoke("rig_clear_monitor", {});
+    await engine.invoke("transport_play", {});
+    expect(
+      (await engine.invoke<RigState>("rig_get_state", {})).monitor[0]?.bytes,
+    ).toEqual([0xfb]);
+    await engine.invoke("transport_stop", {});
+    state = await engine.invoke<RigState>("rig_get_state", {});
+    expect(state.monitor.at(-1)?.bytes).toEqual([0xfc]);
+  });
+
+  it("panic sends all notes off and reset controllers", async () => {
+    await engine.invoke("rig_select_profile", {
+      profileId: "headrush-pedalboard",
+    });
+    await engine.invoke("rig_clear_monitor", {});
+    const state = await engine.invoke<RigState>("rig_panic", {});
+    expect(state.monitor.map((m) => m.bytes)).toEqual([
+      [0xb0, 123, 0],
+      [0xb0, 121, 0],
+    ]);
   });
 
   it("clamps knobs to the declared range and remembers them", async () => {

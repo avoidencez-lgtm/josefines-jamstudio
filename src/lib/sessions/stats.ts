@@ -32,6 +32,105 @@ export function practiceStreakDays(
   return streak;
 }
 
+function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** Rolling seven local days ending today. */
+export function weekWindowStart(now = new Date()): Date {
+  const start = startOfLocalDay(now);
+  start.setDate(start.getDate() - 6);
+  return start;
+}
+
+export type SessionProgress = {
+  sessionsThisWeek: number;
+  minutesThisWeek: number;
+  minutesAll: number;
+  tempoRecords: { chartId: string; tempo: number }[];
+  trendTakes: number;
+  meanTimingMs: number | null;
+  meanCents: number | null;
+};
+
+/** Files-as-truth activity from take manifests. Not a quality score. */
+export function sessionProgress(
+  takes: {
+    id: string;
+    sessionId: string;
+    timestamp: string;
+    durationSecs: number;
+    chartId: string;
+    tempo: number;
+  }[],
+  analysis: Record<string, TakeAnalysis>,
+  now = new Date(),
+): SessionProgress {
+  const weekStart = weekWindowStart(now);
+  const weekSessions = new Set<string>();
+  let weekSecs = 0;
+  let allSecs = 0;
+  const tempoByChart = new Map<string, number>();
+  const dated = takes
+    .map((t) => ({ take: t, date: takeDate(t.timestamp) }))
+    .filter((row): row is { take: (typeof takes)[number]; date: Date } =>
+      Boolean(row.date),
+    )
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
+  for (const { take, date } of dated) {
+    if (Number.isFinite(take.durationSecs) && take.durationSecs > 0) {
+      allSecs += take.durationSecs;
+    }
+    if (date >= weekStart) {
+      weekSessions.add(take.sessionId || take.id);
+      if (Number.isFinite(take.durationSecs) && take.durationSecs > 0) {
+        weekSecs += take.durationSecs;
+      }
+    }
+    if (
+      take.chartId &&
+      Number.isFinite(take.tempo) &&
+      take.tempo >= 20 &&
+      take.tempo <= 300
+    ) {
+      const prev = tempoByChart.get(take.chartId);
+      if (prev === undefined || take.tempo > prev) {
+        tempoByChart.set(take.chartId, take.tempo);
+      }
+    }
+  }
+  const recent = dated.slice(0, 20);
+  let timingSum = 0;
+  let timingN = 0;
+  let centsSum = 0;
+  let centsN = 0;
+  let trendTakes = 0;
+  for (const { take } of recent) {
+    const a = analysis[take.id];
+    if (!a || a.meanGridDistanceMs === undefined) continue;
+    trendTakes += 1;
+    if (a.meanGridDistanceMs != null) {
+      timingSum += a.meanGridDistanceMs;
+      timingN += 1;
+    }
+    if (a.meanAbsCents != null) {
+      centsSum += a.meanAbsCents;
+      centsN += 1;
+    }
+  }
+  return {
+    sessionsThisWeek: weekSessions.size,
+    minutesThisWeek: weekSecs / 60,
+    minutesAll: allSecs / 60,
+    tempoRecords: [...tempoByChart.entries()]
+      .map(([chartId, tempo]) => ({ chartId, tempo }))
+      .sort((a, b) => b.tempo - a.tempo || a.chartId.localeCompare(b.chartId)),
+    trendTakes,
+    meanTimingMs: timingN ? timingSum / timingN : null,
+    meanCents: centsN ? centsSum / centsN : null,
+  };
+}
+
 export function formatJamTime(totalSecs: number): string {
   if (totalSecs < 60) return `${Math.round(totalSecs)} s`;
   const h = Math.floor(totalSecs / 3600);
@@ -43,15 +142,29 @@ export function takeMeasurements(a: TakeAnalysis): [string, string][] {
   if (a.meanGridDistanceMs === undefined)
     return [["Measurements", "Analyze again to get evidence and coverage."]];
   const value = (n: number | null | undefined, unit: string) =>
-    n == null ? "Not enough evidence" : `${n.toFixed(1)} ${unit}`;
+    n == null ? "not enough evidence" : `${n.toFixed(1)} ${unit}`;
   return [
-    ["Detected attacks", String(a.detectedTransients)],
-    ["Quarter-note grid distance", value(a.meanGridDistanceMs, "ms")],
-    ["Grid bias (+ late / − early)", value(a.gridBiasMs, "ms")],
-    ["Grid spread", value(a.gridSpreadMs, "ms")],
-    ["Attack-level variation", value(a.attackLevelCvPct, "% CV")],
-    ["Pitch distance to nearest note", value(a.meanAbsCents, "cents")],
-    ["Pitched frames", String(a.pitchedFrames ?? 0)],
+    ["Attacks", `The take has ${a.detectedTransients} detected attacks.`],
+    [
+      "Distance",
+      `Quarter-note grid distance is ${value(a.meanGridDistanceMs, "ms")}.`,
+    ],
+    [
+      "Bias",
+      a.gridBiasMs == null
+        ? "Grid bias does not have enough evidence."
+        : `Grid bias is ${a.gridBiasMs.toFixed(1)} ms (positive is late).`,
+    ],
+    ["Spread", `Grid spread is ${value(a.gridSpreadMs, "ms")}.`],
+    [
+      "Variation",
+      `Attack-level variation is ${value(a.attackLevelCvPct, "% CV")}.`,
+    ],
+    [
+      "Pitch",
+      `Pitch distance to the nearest note is ${value(a.meanAbsCents, "cents")}.`,
+    ],
+    ["Frames", `Pitched frames are ${a.pitchedFrames ?? 0}.`],
   ];
 }
 

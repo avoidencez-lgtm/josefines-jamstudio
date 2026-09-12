@@ -43,6 +43,7 @@ export const Rig: React.FC = () => {
     setRigControl,
     sendRigProgram,
     clearRigMonitor,
+    checkVirtualMidi,
   } = useEngineStore(
     useShallow((s) => ({
       rigState: s.rigState,
@@ -62,6 +63,7 @@ export const Rig: React.FC = () => {
       setRigControl: s.setRigControl,
       sendRigProgram: s.sendRigProgram,
       clearRigMonitor: s.clearRigMonitor,
+      checkVirtualMidi: s.checkVirtualMidi,
     })),
   );
 
@@ -100,24 +102,47 @@ export const Rig: React.FC = () => {
         <Guitar size={23} aria-hidden="true" /> Jamstudio scenes{" "}
         <ArrowRight size={18} aria-hidden="true" />
         <PlugsConnected size={23} aria-hidden="true" />{" "}
-        {live ? rigState?.port : "MIDI disconnected"}{" "}
+        {live ? rigState?.port : "This MIDI is disconnected."}{" "}
         <ArrowRight size={18} aria-hidden="true" />
         <SpeakerHifi size={23} aria-hidden="true" />{" "}
-        {profile?.name ?? "Choose a profile"}
+        {profile?.name ?? "Choose this profile."}
         <span>
-          {live ? "Sending control messages" : "Preview only · messages logged"}
+          {live ? "Sending these control messages." : "Preview only. Messages are logged."}
         </span>
       </div>
       {midiPortsError && (
-        <div className="text-xs font-mono text-[var(--danger,#e5534b)] px-1">
-          MIDI unavailable: {midiPortsError}
+        <div className="text-xs font-mono text-[var(--record)] px-1 workspace-stack">
+          <p>
+            MIDI port disappeared. {midiPortsError} Rescan or pick another port.
+          </p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setView("Connection & MIDI");
+              refreshMidiPorts();
+            }}
+          >
+            Rescan
+          </Button>
         </div>
       )}
       {!midiPortsError && midiPorts.length === 0 && (
-        <div className="text-xs font-mono text-[var(--fg-2)] px-1">
-          No MIDI output ports found. Plug in the USB-MIDI interface (Roland
-          UM-ONE or similar) and press Rescan. The HeadRush and the Black Spirit
-          have no USB-MIDI of their own.
+        <div className="text-xs font-mono text-[var(--fg-2)] px-1 workspace-stack">
+          <p>
+            No MIDI output found. Plug in the interface. Create a loopMIDI port
+            named Jam Virtual (Windows) or enable the IAC Driver (macOS), then
+            press Rescan. A USB interface is still required for HeadRush and
+            Black Spirit; this check does not claim those devices.
+          </p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setView("Connection & MIDI");
+              refreshMidiPorts();
+            }}
+          >
+            Rescan
+          </Button>
         </div>
       )}
 
@@ -131,33 +156,37 @@ export const Rig: React.FC = () => {
           <div>
             <div className="flex items-center gap-3">
               <h2 className="text-sm font-semibold tracking-wide uppercase font-mono text-[var(--fg-0)]">
-                Rig control over MIDI
+                Control the rig over MIDI.
               </h2>
               <StatusPill
                 status={live ? "ok" : "idle"}
-                label={live ? `Live: ${rigState?.port}` : "No MIDI port open"}
+                label={
+                  live
+                    ? `Open on ${rigState?.port}.`
+                    : "No MIDI port is open."
+                }
               />
             </div>
             <p className="text-xs font-mono text-[var(--fg-2)] mt-0.5">
               {profile
-                ? `${profile.name} on MIDI channel ${profile.midiChannel + 1}`
-                : "Loading rig profile..."}
+                ? `${profile.name} on MIDI channel ${profile.midiChannel + 1}.`
+                : "The rig profile is loading."}
               {!live &&
-                " · messages are logged in the monitor below until a port is opened"}
+                " Messages are logged in the monitor below until a port is opened."}
             </p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <label className="text-xs font-mono text-[var(--fg-2)] flex items-center gap-2">
-              MIDI out
+              Choose the MIDI output.
               <select
                 value={rigState?.port ?? ""}
                 onChange={(e) =>
                   openMidiPort(e.target.value === "" ? null : e.target.value)
                 }
-                className="bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded focus:outline-none focus:border-[var(--accent)] max-w-[260px]"
+                className="bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] focus:border-[var(--accent)] max-w-[260px]"
               >
-                <option value="">Not connected</option>
+                <option value="">Not connected.</option>
                 {rigState?.port &&
                   !midiPorts.some((p) => p.name === rigState.port) && (
                     <option value={rigState.port}>{rigState.port}</option>
@@ -176,10 +205,18 @@ export const Rig: React.FC = () => {
             >
               Rescan
             </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={isPreview}
+              onClick={() => void checkVirtualMidi()}
+            >
+              Check this virtual MIDI.
+            </Button>
           </div>
         </div>
 
-        <Panel title="Hardware profile">
+        <Panel title="This is the hardware profile.">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {availableProfiles.map((p) => (
               <button
@@ -187,7 +224,7 @@ export const Rig: React.FC = () => {
                 key={p.id}
                 aria-pressed={profile?.id === p.id}
                 onClick={() => selectRigProfile(p.id)}
-                className={`p-3 rounded border text-left font-mono transition-colors ${
+                className={`p-3 rounded-[var(--radius-m)] border text-left font-mono ${
                   profile?.id === p.id
                     ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--fg-0)]"
                     : "border-[var(--line)] bg-[var(--bg-2)] text-[var(--fg-2)] hover:text-[var(--fg-0)]"
@@ -198,7 +235,7 @@ export const Rig: React.FC = () => {
                   ch {p.midiChannel + 1} ·{" "}
                   {p.sceneCc !== null
                     ? `scenes via CC ${p.sceneCc}`
-                    : "Program Change"}
+                    : "Uses Program Change."}
                 </div>
               </button>
             ))}
@@ -211,7 +248,7 @@ export const Rig: React.FC = () => {
         </Panel>
       </div>
       <div hidden={view !== "Play scenes"} className="workspace-stack">
-        <Panel title={`Scenes (${profile?.name ?? "..."})`}>
+        <Panel title={`These are the ${profile?.name ?? "..."} scenes.`}>
           {profile ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {profile.scenes.map((scene, idx) => {
@@ -223,7 +260,7 @@ export const Rig: React.FC = () => {
                     aria-pressed={isActive}
                     onClick={() => selectRigScene(idx)}
                     title={sceneSummary(profile, idx)}
-                    className={`p-4 rounded-[var(--radius-m)] border text-center font-mono transition-all ${
+                    className={`p-4 rounded-[var(--radius-m)] border text-center font-mono ${
                       isActive
                         ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--bg-0)]"
                         : "border-[var(--line)] bg-[var(--bg-2)] text-[var(--fg-0)] hover:border-[var(--accent)]/50"
@@ -242,13 +279,13 @@ export const Rig: React.FC = () => {
             </div>
           ) : (
             <div className="text-center py-6 text-xs font-mono text-[var(--fg-2)]">
-              Loading rig profile...
+              The rig profile is loading.
             </div>
           )}
         </Panel>
 
         {profile && profile.controls.length > 0 && (
-          <Panel title={`Knobs (${profile.name})`}>
+          <Panel title={`These are the ${profile.name} knobs.`}>
             <p className="text-xs font-mono text-[var(--fg-2)] mb-4">
               Real-time Control Change. Values are clamped to the profile's
               declared range.
@@ -267,7 +304,7 @@ export const Rig: React.FC = () => {
         )}
       </div>
       <div hidden={view !== "Section automation"}>
-        <Panel title="Section automation">
+        <Panel title="This is section automation.">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <p className="text-xs font-mono text-[var(--fg-2)] max-w-2xl">
               When the band enters a section, the mapped scene is sent once.
@@ -278,7 +315,7 @@ export const Rig: React.FC = () => {
             <Toggle
               checked={rigState?.followSections ?? true}
               onChange={(v) => setRigFollowSections(v)}
-              label="Follow sections"
+              label="Follow the chart sections."
             />
           </div>
 
@@ -302,7 +339,7 @@ export const Rig: React.FC = () => {
                     )}
                   </span>
                   <select
-                    aria-label={`${sec} scene`}
+                    aria-label={`This is the ${sec} scene.`}
                     value={mapped ?? ""}
                     onChange={(e) =>
                       setRigSectionMapping(
@@ -312,9 +349,9 @@ export const Rig: React.FC = () => {
                           : Number.parseInt(e.target.value, 10),
                       )
                     }
-                    className="bg-[var(--bg-1)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded focus:outline-none focus:border-[var(--accent)]"
+                    className="bg-[var(--bg-1)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] focus:border-[var(--accent)]"
                   >
-                    <option value="">— no change —</option>
+                    <option value="">Leave this scene unchanged.</option>
                     {profile?.scenes.map((s, idx) => (
                       <option key={s.name} value={idx}>
                         {s.name}
@@ -328,7 +365,7 @@ export const Rig: React.FC = () => {
         </Panel>
       </div>
       <div hidden={view !== "Connection & MIDI"} className="workspace-stack">
-        <Panel title="Program Change">
+        <Panel title="Send a Program Change.">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-xs font-mono text-[var(--fg-2)] flex-1 min-w-[200px]">
               Send any program number directly (a HeadRush rig's "MIDI Prog" or
@@ -337,16 +374,16 @@ export const Rig: React.FC = () => {
             <div className="flex items-center gap-2">
               {profile && profile.programs.length > 0 ? (
                 <select
-                  aria-label="Program number"
+                  aria-label="This is the program number."
                   value={programInput}
                   onChange={(e) =>
                     setProgramInput(Number.parseInt(e.target.value, 10))
                   }
-                  className="bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded focus:outline-none focus:border-[var(--accent)]"
+                  className="bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] focus:border-[var(--accent)]"
                 >
                   {profile.programs.map((p) => (
                     <option key={p.number} value={p.number}>
-                      {p.number}: {p.name}
+                      Program {p.number} is {p.name}.
                     </option>
                   ))}
                 </select>
@@ -355,7 +392,7 @@ export const Rig: React.FC = () => {
                   type="number"
                   min={0}
                   max={127}
-                  aria-label="Program number"
+                  aria-label="This is the program number."
                   value={programInput}
                   onChange={(e) =>
                     setProgramInput(
@@ -365,21 +402,20 @@ export const Rig: React.FC = () => {
                       ),
                     )
                   }
-                  className="w-20 bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded focus:outline-none focus:border-[var(--accent)]"
+                  className="w-20 bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] focus:border-[var(--accent)]"
                 />
               )}
               <Button size="sm" onClick={() => sendRigProgram(programInput)}>
-                Send PC {programInput}
+                Send this PC {programInput}.
               </Button>
             </div>
           </div>
         </Panel>
 
-        <Panel title="MIDI monitor">
+        <Panel title="This is the MIDI monitor.">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-mono text-[var(--fg-2)]">
               {rigState?.portDescription}
-              {isPreview && " · browser preview"}
             </span>
             <Button
               size="sm"
@@ -403,7 +439,7 @@ export const Rig: React.FC = () => {
                     className={`w-2 h-2 rounded-full shrink-0 ${
                       m.live ? "bg-[var(--accent)]" : "bg-[var(--fg-2)]/40"
                     }`}
-                    title={m.live ? "sent to the port" : "logged only"}
+                    title={m.live ? "Sent to the port." : "This is logged only."}
                   />
                   <span className="text-[var(--fg-0)] w-40 shrink-0">
                     {m.text}

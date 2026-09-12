@@ -70,7 +70,7 @@ export function ReferenceGridEditor({
   return (
     <details className="workspace-stack">
       <summary className="cursor-pointer text-sm">
-        Confirm bars & sections
+        Confirm these bars and sections.
       </summary>
       <p className="workspace-note">
         Local analysis estimates beats, not downbeats or song sections. Listen
@@ -80,17 +80,17 @@ export function ReferenceGridEditor({
       </p>
       {!analysis && (
         <p className="workspace-note">
-          Analyze tempo & chords first. A confirmed map needs at least one
+          Analyze tempo and chords first. A confirmed map needs at least one
           complete bar plus its ending downbeat.
         </p>
       )}
       <form
-        aria-label="Confirm reference bars and sections"
+        aria-label="Confirm these bars and sections."
         className="workspace-stack"
         onSubmit={(e) => {
           e.preventDefault();
           if (disabled || !confirmed || !analysis) return;
-          void m.work("Saving confirmed reference map", async () => {
+          void m.work("Saving this confirmed reference map.", async () => {
             await ipc.invoke("media_reference_grid_save", {
               assetId: song.id,
               confirmation: {
@@ -111,10 +111,10 @@ export function ReferenceGridEditor({
         }}
       >
         <fieldset disabled={disabled} className="workspace-stack">
-          <legend className="sr-only">Reference map confirmation</legend>
+          <legend className="sr-only">Confirm these bars and sections.</legend>
           <div className="workspace-actions">
             <label className="room-tool-field">
-              First downbeat · estimated beat number
+              First downbeat is the estimated beat number.
               <input
                 type="number"
                 required
@@ -129,7 +129,7 @@ export function ReferenceGridEditor({
               />
             </label>
             <label className="room-tool-field">
-              Estimated beats per bar
+              These are the estimated beats per bar.
               <select
                 value={meter}
                 onChange={(e) => {
@@ -146,15 +146,17 @@ export function ReferenceGridEditor({
             </label>
           </div>
           <p className="workspace-note">
-            Bar 1 starts at {analysis?.beats[first - 1]?.toFixed(3) ?? "—"}{" "}
-            source seconds. {bars} complete bars available. Pickup audio and the
-            incomplete ending remain outside this map. For compound meters,
-            count the beats detected by the analysis.
+            {analysis?.beats[first - 1] != null
+              ? `Bar 1 starts at ${analysis.beats[first - 1].toFixed(3)} source seconds.`
+              : "No beat time."}{" "}
+            {bars} complete bars available. Pickup audio and the incomplete
+            ending remain outside this map. For compound meters, count the
+            beats detected by the analysis.
           </p>
           {sections.map((section, index) => (
             <div key={section.id} className="workspace-actions">
               <label className="room-tool-field">
-                Section {index + 1} name
+                This is the name of section {index + 1}.
                 <input
                   required
                   maxLength={80}
@@ -163,7 +165,7 @@ export function ReferenceGridEditor({
                 />
               </label>
               <label className="room-tool-field">
-                Start bar
+                This section starts at this bar.
                 <input
                   type="number"
                   required
@@ -177,7 +179,7 @@ export function ReferenceGridEditor({
                 />
               </label>
               <label className="room-tool-field">
-                End before bar
+                This section ends before this bar.
                 <input
                   type="number"
                   required
@@ -197,7 +199,7 @@ export function ReferenceGridEditor({
                   setConfirmed(false);
                 }}
               >
-                Remove section {index + 1}
+                Remove this section {index + 1}.
               </Button>
             </div>
           ))}
@@ -217,7 +219,7 @@ export function ReferenceGridEditor({
               setConfirmed(false);
             }}
           >
-            Add section
+            Add this section.
           </Button>
           <p className="workspace-note">
             Enter sections in time order without overlap. “Start 1, end before
@@ -235,7 +237,7 @@ export function ReferenceGridEditor({
           </label>
         </fieldset>
         <Button type="submit" disabled={disabled || !confirmed || bars < 1}>
-          Save confirmed map
+          Save this confirmed map.
         </Button>
       </form>
     </details>

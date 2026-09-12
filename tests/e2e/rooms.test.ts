@@ -48,7 +48,11 @@ import {
   useRoomOperation,
 } from "../../src/lib/roomActions";
 import { validateAudioProfile } from "../../src/lib/roomTools";
-import { openAiSettings, useSettingsView } from "../../src/lib/settingsView";
+import {
+  openAiSettings,
+  openSettings,
+  useSettingsView,
+} from "../../src/lib/settingsView";
 import { requireCommand, useEngineStore } from "../../src/store/engine";
 
 type PreviewHolder = { __jamPreviewEngine?: Promise<PreviewEngine> };
@@ -192,7 +196,9 @@ describe("rooms, end to end through the preview engine", () => {
     const failing = observeInvoke(new Error("exit blocked by the OS"));
     await discardAndClose();
     expect(failing.exits).toEqual(["app_exit"]);
-    expect(lastNotice()).toBe("Error: exit blocked by the OS");
+    expect(lastNotice()).toBe(
+      "Error: exit blocked by the OS. Retry after the OS allows the window to close.",
+    );
     expect(useEngineStore.getState().notices.at(-1)?.kind).toBe("error");
   });
 
@@ -336,10 +342,10 @@ describe("rooms, end to end through the preview engine", () => {
     await useEngineStore.getState().loadSettings();
     const devices = useEngineStore.getState().devices;
     expect(devices.inputs.map((d) => d.name)).toEqual([
-      "Preview Input (simulated)",
+      "Preview Input is simulated.",
     ]);
     expect(devices.outputs.map((d) => d.name)).toEqual([
-      "Preview Output (simulated)",
+      "Preview Output is simulated.",
     ]);
 
     const profile = (name: string, patch: Partial<AudioConfig> = {}) => ({
@@ -420,7 +426,7 @@ describe("rooms, end to end through the preview engine", () => {
     expect(store.rigState?.currentProfile.id).toBe("headrush-pedalboard");
     expect(store.rigState?.followSections).toBe(true);
     expect(store.rigState?.live).toBe(false);
-    expect(store.midiPorts).toEqual([{ name: "Preview MIDI Out (simulated)" }]);
+    expect(store.midiPorts).toEqual([{ name: "Preview MIDI Out is simulated." }]);
     expect(store.midiPortsError).toBeNull();
 
     await store.selectRigProfile("black-spirit-200");
@@ -448,11 +454,13 @@ describe("rooms, end to end through the preview engine", () => {
 
     await store.selectRigScene(9);
     expect(lastNotice()).toBe(
-      "Rig scene: scene 9 does not exist on Hughes & Kettner Black Spirit 200",
+      "The rig scene failed. scene 9 does not exist on Hughes & Kettner Black Spirit 200. Pick a scene this profile can play.",
     );
     expect(useEngineStore.getState().rigState?.currentScene).toBe(2);
     await store.selectRigProfile("nope");
-    expect(lastNotice()).toBe('Rig profile: unknown rig profile "nope"');
+    expect(lastNotice()).toBe(
+      'The rig profile failed. unknown rig profile "nope". Pick a listed rig profile.',
+    );
     expect(useEngineStore.getState().rigState?.currentProfile.id).toBe(
       "black-spirit-200",
     );
@@ -475,7 +483,7 @@ describe("rooms, end to end through the preview engine", () => {
 
     await store.setRigSectionMapping("Chorus", 8);
     expect(lastNotice()).toBe(
-      "Rig mapping: scene 8 does not exist on Fractal Axe-Fx III",
+      "The rig mapping failed. scene 8 does not exist on Fractal Axe-Fx III. Pick a scene this profile can play.",
     );
     expect(useEngineStore.getState().rigState?.sectionMappings).toEqual({
       Solo: 7,
@@ -502,7 +510,7 @@ describe("rooms, end to end through the preview engine", () => {
     await store.selectRigProfile("black-spirit-200");
     await store.setRigSectionMapping("Verse", -1);
     expect(lastNotice()).toMatch(
-      /^Rig mapping: scene -1 does not exist on Hughes & Kettner Black Spirit 200/,
+      /^The rig mapping failed. scene -1 does not exist on Hughes & Kettner Black Spirit 200/,
     );
     expect(useEngineStore.getState().rigState?.sectionMappings).toEqual({});
   });
@@ -628,7 +636,9 @@ describe("rooms, end to end through the preview engine", () => {
     await store.selectRigProfile("quad-cortex");
     const before = useEngineStore.getState().rigState;
     await store.setRigControl(200, 1);
-    expect(lastNotice()).toBe("Rig control: CC 200 is above 127");
+    expect(lastNotice()).toBe(
+      "The rig control failed. CC 200 is above 127. Use a CC from 0 to 127.",
+    );
     expect(useEngineStore.getState().rigState).toBe(before);
   });
 
@@ -648,7 +658,7 @@ describe("rooms, end to end through the preview engine", () => {
       { action: "play", press: pc3 },
       { action: "record", press: cc64 },
     ]);
-    expect(describePress(cc64)).toBe("CC 64 · channel 1");
+    expect(describePress(cc64)).toBe("CC 64 is on channel 1.");
     await expect(
       ipc.invoke("controller_save", { document: config }),
     ).rejects.toThrow("Pedal setup requires the desktop app.");
@@ -698,11 +708,11 @@ describe("rooms, end to end through the preview engine", () => {
     await useController
       .getState()
       .receive({ kind: "note", channel: 1, number: 60 });
-    expect(useController.getState().message).toBe("NOTE 60 · channel 1");
+    expect(useController.getState().message).toBe("NOTE 60 is on channel 1.");
     expect(useWriting.getState().message).toBe("");
 
     await useController.getState().receive(pc3);
-    expect(useController.getState().message).toBe("PROGRAM 3 · channel 1");
+    expect(useController.getState().message).toBe("PROGRAM 3 is on channel 1.");
     expect(useWriting.getState().message).toBe(
       "Error: Playback requires the desktop app.",
     );
@@ -747,11 +757,14 @@ describe("rooms, end to end through the preview engine", () => {
     });
     // The preview never produces audio and says so through the engine's last_error.
     expect(lastNotice()).toBe(
-      "Browser preview: simulated engine, no audio is produced",
+      "This browser preview is a simulated engine. No audio is produced.",
     );
 
     expect(useSettingsView.getState().view).toBe("Audio devices");
     useEngineStore.getState().setScreen("stage");
+    openSettings("First run");
+    expect(useSettingsView.getState().view).toBe("First run");
+    expect(useEngineStore.getState().currentScreen).toBe("settings");
     openAiSettings();
     expect(useSettingsView.getState().view).toBe("AI & models");
     expect(useEngineStore.getState().currentScreen).toBe("settings");

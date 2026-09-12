@@ -39,14 +39,14 @@ export function ArrangementDesk() {
   const select = (id: string) => w.select(id);
   const inForm = chart.arrangement.some((a) => a.sectionId === selected.id);
   return (
-    <section className="write-arrange" aria-label="Song arrangement">
+    <section className="write-arrange" aria-label="This is the song arrangement.">
       <div className="song-section-heading">
         <div className="write-inline">
-          <h2>Song map</h2>
+          <h2>This is the song map.</h2>
           <span className="write-meta">
-            {total} bars · {Math.floor(seconds / 60)}:
+            This song is {total} bars and {Math.floor(seconds / 60)}:
             {String(Math.round(seconds % 60)).padStart(2, "0")} at{" "}
-            {chart.defaultBpm} BPM
+            {chart.defaultBpm} BPM.
           </span>
         </div>
         <div className="song-actions">
@@ -57,7 +57,7 @@ export function ArrangementDesk() {
               w.edit((b) => {
                 b.chart.sections.push({
                   id,
-                  name: "New section",
+                  name: "This is a new section.",
                   bars: structuredClone(selected.bars),
                 });
                 b.sections[id] = defaultSection();
@@ -66,7 +66,7 @@ export function ArrangementDesk() {
               if (useWriting.getState().song?.body.sections[id]) select(id);
             }}
           >
-            <Plus size={15} /> Add section
+            <Plus size={15} /> Add this section.
           </Button>
           <Button
             size="sm"
@@ -76,15 +76,15 @@ export function ArrangementDesk() {
               if (useWriting.getState().song?.body.sections[id]) select(id);
             }}
           >
-            <Copy size={15} /> Make variation
+            <Copy size={15} /> Make this variation.
           </Button>
           <Button
             size="sm"
             disabled={inForm || chart.sections.length === 1}
             title={
               inForm
-                ? "Remove this section's form entries first"
-                : "Delete this unused section with its lyrics and band settings"
+                ? "Remove this section's form entries first."
+                : "Delete this unused section with its lyrics and band settings."
             }
             onClick={() => {
               if (song.versions.length >= 20) {
@@ -101,7 +101,7 @@ export function ArrangementDesk() {
                 select(sections[0].id);
             }}
           >
-            <Trash size={15} /> Delete section
+            <Trash size={15} /> Delete this section.
           </Button>
         </div>
       </div>
@@ -121,16 +121,17 @@ export function ArrangementDesk() {
               key={`${a.sectionId}-${i}`}
               className="write-region"
               aria-pressed={selected.id === s.id}
-              aria-label={`${s.name}, bars ${ranges[i].startBar} to ${ranges[i].endBar - 1}`}
+              aria-label={`${s.name}, bars ${ranges[i].startBar} to ${ranges[i].endBar - 1}.`}
               style={{ flexGrow: s.bars.length * a.repeats }}
               onClick={() => select(s.id)}
             >
               <span className="write-meta">
-                {ranges[i].startBar}–{ranges[i].endBar - 1}{" "}
-                {a.repeats > 1 ? `· ×${a.repeats}` : ""}
+                {a.repeats > 1
+                  ? `Bars ${ranges[i].startBar}–${ranges[i].endBar - 1}, repeated ${a.repeats} times.`
+                  : `Bars ${ranges[i].startBar}–${ranges[i].endBar - 1}.`}
               </span>
               <strong>{s.name}</strong>
-              <span className="write-meta">{energy}% band intensity</span>
+              <span className="write-meta">Band intensity is {energy}%.</span>
               <span className="write-energy-track">
                 <span style={{ transform: `scaleX(${energy / 100})` }} />
               </span>
@@ -139,16 +140,16 @@ export function ArrangementDesk() {
         })}
       </div>
       <details className="write-disclosure">
-        <summary>Edit order and repeats</summary>
+        <summary>Edit the order and repeats.</summary>
         {chart.arrangement.map((a, i) => (
           <div className="write-order-row" key={`${a.sectionId}-${i}`}>
             <span>
               {i + 1}. {chart.sections.find((s) => s.id === a.sectionId)?.name}
             </span>
             <label>
-              Repeats{" "}
+              How many repeats.{" "}
               <select
-                aria-label={`Repeats for form entry ${i + 1}`}
+                aria-label={`Repeats for form entry ${i + 1}.`}
                 value={a.repeats}
                 onChange={(e) =>
                   w.edit((b) => {
@@ -163,7 +164,7 @@ export function ArrangementDesk() {
             </label>
             <Button
               size="sm"
-              aria-label={`Move form entry ${i + 1} earlier`}
+              aria-label={`Move form entry ${i + 1} earlier.`}
               disabled={!i}
               onClick={() =>
                 w.edit((b) => {
@@ -178,7 +179,7 @@ export function ArrangementDesk() {
             </Button>
             <Button
               size="sm"
-              aria-label={`Move form entry ${i + 1} later`}
+              aria-label={`Move form entry ${i + 1} later.`}
               disabled={i === chart.arrangement.length - 1}
               onClick={() =>
                 w.edit((b) => {
@@ -200,12 +201,12 @@ export function ArrangementDesk() {
                 })
               }
             >
-              Remove
+              Remove this section.
             </Button>
           </div>
         ))}
         <label>
-          Add an existing section
+          Add an existing section.
           <select
             value=""
             onChange={(e) => {
@@ -218,7 +219,7 @@ export function ArrangementDesk() {
                 });
             }}
           >
-            <option value="">Choose a section</option>
+            <option value="">Choose a section.</option>
             {chart.sections.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -227,10 +228,8 @@ export function ArrangementDesk() {
           </select>
         </label>
         <p className="song-help">
-          Repeated sections share chords, lyrics and band settings. Make a
-          variation for an independent edit. Guitar layers stay at their
-          numbered bars when you rearrange. Delete section removes a section
-          that is no longer in the form; a version is kept first.
+          Repeated sections share chords, lyrics and band settings. Make this variation for an independent edit.
+          Guitar layers stay at their numbered bars when you rearrange. Delete this section removes a section that is no longer in the form. A version is kept first.
         </p>
       </details>
     </section>
@@ -263,7 +262,7 @@ export function HarmonyDesk() {
       const bars = sectionBars(text);
       if (bars.length !== 1)
         throw new Error(
-          "Enter exactly one bar here. Use Add bar for a longer phrase.",
+          "Enter exactly one bar here. Use Add this bar for a longer phrase.",
         );
       w.edit((b) => {
         const s = b.chart.sections.find((s) => s.id === section.id);
@@ -272,14 +271,16 @@ export function HarmonyDesk() {
       setError("");
       setPosition({ bar: barIndex, chord: 0 });
     } catch (e) {
-      setError(`Not applied: ${String(e)}. Your saved bar is unchanged.`);
+      setError(
+        `The change was not applied. ${String(e).replace(/^Error:\s*/, "")} Your saved bar is unchanged.`,
+      );
     }
   };
   return (
     <div className="write-harmony">
-      <section className="write-score" aria-label="Chord grid">
+      <section className="write-score" aria-label="This is the chord grid.">
         <div className="song-section-heading">
-          <h2>{section.name} chords</h2>
+          <h2>These are the {section.name} chords.</h2>
           <div className="song-actions">
             <Button
               size="sm"
@@ -290,10 +291,10 @@ export function HarmonyDesk() {
                 })
               }
             >
-              <Plus size={15} /> Add bar
+              <Plus size={15} /> Add this bar.
             </Button>
             <details className="write-transform">
-              <summary>Transform phrase</summary>
+              <summary>Transform this phrase.</summary>
               <div className="song-actions">
                 {Object.entries(PHRASE_MOVES).map(([id, label]) => (
                   <Button
@@ -330,7 +331,7 @@ export function HarmonyDesk() {
                     key={`${section.id}-${i}-chord-${j}`}
                     style={{ flexGrow: c.beats }}
                     aria-pressed={i === barIndex && j === chordIndex}
-                    aria-label={`Bar ${i + 1}, chord ${j + 1}: ${c.chord}, ${c.beats} beats`}
+                    aria-label={`Bar ${i + 1}, chord ${j + 1} is ${c.chord} for ${c.beats} beats.`}
                     onClick={() => {
                       setPosition({ bar: i, chord: j });
                       setError("");
@@ -354,7 +355,7 @@ export function HarmonyDesk() {
         </div>
         <div className="write-bar-editor">
           <label>
-            Bar {barIndex + 1} · chord symbols and beats
+            Bar {barIndex + 1}. Chord symbols and beats.
             <input
               key={`${section.id}-${barIndex}-${barText}`}
               defaultValue={barText}
@@ -393,7 +394,7 @@ export function HarmonyDesk() {
               })
             }
           >
-            Remove bar
+            Remove this bar.
           </Button>
         </div>
         <p id="write-bar-help" className="song-help">
@@ -406,29 +407,33 @@ export function HarmonyDesk() {
           </p>
         )}
       </section>
-      <aside className="write-harmony-inspector" aria-label="Harmony explorer">
-        <h2>Find the next colour</h2>
+      <aside className="write-harmony-inspector" aria-label="This is the harmony explorer.">
+        <h2>Find the next colour.</h2>
         <p className="song-help">
           Replace the selected chord. Its beat length stays the same.
         </p>
         <div className="write-chord-readout">
           <strong>{current.chord}</strong>
-          <span>{notes.length ? notes.join(" · ") : "Rest / no chord"}</span>
+          <span>
+            {notes.length
+              ? `These tones are ${notes.join(", ")}.`
+              : "This is a rest or no chord."}
+          </span>
         </div>
         {notes.length > 0 && (
           <ChordShapes key={current.chord} now={current.chord} compact />
         )}
         <label>
-          Explore harmony
+          Explore the harmony.
           <select
             value={family}
             onChange={(e) => setFamily(e.target.value as typeof family)}
           >
             <option value="key">
-              In {keyName(song.body.chart.keyTonic, song.body.chart.mode)}
+              In {keyName(song.body.chart.keyTonic, song.body.chart.mode)}.
             </option>
-            <option value="borrowed">Borrow from the parallel key</option>
-            <option value="dominant">Dominants that lead somewhere</option>
+            <option value="borrowed">Borrow from the parallel key.</option>
+            <option value="dominant">Dominants that lead somewhere.</option>
           </select>
         </label>
         <div className="write-palette">
@@ -436,10 +441,10 @@ export function HarmonyDesk() {
             <button
               type="button"
               key={choice.chord}
-              aria-label={`Use ${choice.chord}: ${choice.reason}`}
+              aria-label={`Use ${choice.chord}. ${choice.reason}`}
               title={
                 previous
-                  ? `${choice.shared} shared pitch classes with ${previous}`
+                  ? `${choice.shared} shared pitch classes with ${previous}.`
                   : choice.reason
               }
               onClick={() =>
@@ -455,15 +460,14 @@ export function HarmonyDesk() {
               <span>{choice.degree}</span>
               <small>
                 {choice.reason}
-                {previous ? ` · ${choice.shared} shared` : ""}
+                {previous ? ` ${choice.shared} notes are shared.` : ""}
               </small>
             </button>
           ))}
         </div>
         <p className="song-help">
           {previous ? `“Shared” counts notes in common with ${previous}. ` : ""}
-          Theory suggestions run locally. Your ear chooses the chord; Play or
-          Loop section auditions the band.
+          Theory suggestions run locally. Your ear chooses the chord; Play this song or Loop this section auditions the band.
         </p>
       </aside>
     </div>
@@ -487,9 +491,15 @@ export function EnergyDesk() {
   return (
     <div className="write-energy-controls">
       <label>
-        Section energy · {unlocked.length ? `${amount}%` : "all parts locked"}
+        {unlocked.length
+          ? `Section energy is ${amount}%.`
+          : "Section energy. All parts are locked."}
         <input
-          aria-label="Section energy"
+          aria-label={
+            unlocked.length
+              ? `Section energy is ${amount}%.`
+              : "Section energy. All parts are locked."
+          }
           type="range"
           min={0}
           max={100}
@@ -521,17 +531,17 @@ export function LyricsDesk() {
   const lyric = song.body.lyrics?.[section.id] ?? "";
   const lines = lyric.split("\n").filter((l) => l.trim());
   return (
-    <section className="write-lyrics" aria-label="Section lyrics">
+    <section className="write-lyrics" aria-label="These are the section lyrics.">
       <div>
         <div className="song-section-heading">
-          <h2>{section.name} lyrics</h2>
+          <h2>These are the {section.name} lyrics.</h2>
           <span className="write-meta">
-            {lines.length} lines ·{" "}
-            {lyric.trim() ? lyric.trim().split(/\s+/).length : 0} words
+            This section has {lines.length} lines and{" "}
+            {lyric.trim() ? lyric.trim().split(/\s+/).length : 0} words.
           </span>
         </div>
         <label>
-          Words for this section
+          Write words for this section.
           <textarea
             className="write-lyric-page"
             rows={12}
@@ -547,12 +557,11 @@ export function LyricsDesk() {
           />
         </label>
         <p className="song-help">
-          Saved with this section. Repeated sections share these words; Make
-          variation creates a separate draft.
+          Saved with this section. Repeated sections share these words; Make this variation creates a separate draft.
         </p>
       </div>
       <aside>
-        <h2>Phrase reference</h2>
+        <h2>This is the phrase reference.</h2>
         <div className="write-lyric-chords">
           {section.bars.map((bar, i) => (
             <div key={`${section.id}-lyric-bar-${i}`}>
@@ -562,12 +571,12 @@ export function LyricsDesk() {
           ))}
         </div>
         <label>
-          Song notebook
+          This is the song notebook.
           <textarea
             rows={6}
             maxLength={24000}
             value={song.body.notes}
-            placeholder="Theme, images, rhyme ideas, the line to return to…"
+            placeholder="Start with the theme, images, rhyme ideas, or the line to return to."
             onChange={(e) =>
               w.edit((b) => {
                 b.notes = e.target.value;

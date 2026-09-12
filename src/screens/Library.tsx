@@ -11,6 +11,7 @@ import { keyName } from "../lib/chart/notes";
 import { chartToText, parseChartText, resolveChart } from "../lib/chart/text";
 import { transposeChart } from "../lib/chart/transpose";
 import { useLibraryDraft } from "../lib/libraryDraft";
+import { transportClockLive } from "../lib/meterFps";
 import { meterLabel, stylesInMeter } from "../lib/styles";
 import { useEngineStore } from "../store/engine";
 
@@ -46,6 +47,7 @@ export const Library: React.FC = () => {
     meter,
     currentBar,
     barProgress,
+    transportState,
     loopEnabled,
     loopStartBar,
     loopEndBar,
@@ -69,6 +71,7 @@ export const Library: React.FC = () => {
       meter: s.telemetry.transport.time_signature,
       currentBar: s.telemetry.transport.bar,
       barProgress: s.telemetry.transport.bar_progress,
+      transportState: s.telemetry.transport.state,
       loopEnabled: s.telemetry.transport.loop_enabled,
       loopStartBar: s.telemetry.transport.loop_start_bar,
       loopEndBar: s.telemetry.transport.loop_end_bar,
@@ -181,26 +184,26 @@ export const Library: React.FC = () => {
       />
       <div className="workspace-search">
         <label>
-          Search
+          Search the library.
           <input
             type="search"
-            aria-label="Search charts and grooves"
-            placeholder="Title, key, genre or tempo"
+            aria-label="Search the library."
+            placeholder="Title, key, genre or tempo."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
         <select
-          aria-label="Chart collection"
+          aria-label="Choose the chart collection."
           value={collection}
           onChange={(e) => setCollection(e.target.value)}
         >
-          <option>All charts</option>
-          <option>Your charts</option>
-          <option>Bundled charts</option>
+          <option value="All charts">Show all charts.</option>
+          <option value="Your charts">Show your charts.</option>
+          <option value="Bundled charts">Show bundled charts.</option>
         </select>
         <Button onClick={() => useEngineStore.getState().setScreen("stage")}>
-          Go to Stage
+          Go to this Stage.
         </Button>
       </div>
       {dirty && (
@@ -218,18 +221,31 @@ export const Library: React.FC = () => {
               })
             }
           >
-            Discard draft changes
+            Discard these draft changes.
           </Button>
         </div>
       )}
       <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-6">
         {/* Left: charts and styles */}
         <div className="flex flex-col gap-6 min-w-0">
-          <Panel title={`Charts (${visibleCharts.length} of ${charts.length})`}>
+          <Panel title={`These are ${visibleCharts.length} of ${charts.length} charts.`}>
             {!visibleCharts.length && (
-              <p className="workspace-note py-4">
-                No charts match. Try another search or collection.
-              </p>
+              <div className="workspace-stack py-4">
+                <p className="workspace-note">
+                  No charts match. Try another search or collection.
+                </p>
+                <div className="workspace-actions">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setQuery("");
+                      setCollection("All charts");
+                    }}
+                  >
+                    Clear search
+                  </Button>
+                </div>
+              </div>
             )}
             <div className="flex flex-col gap-1 max-h-[360px] overflow-y-auto pr-1">
               {visibleCharts.map((c) => {
@@ -249,26 +265,26 @@ export const Library: React.FC = () => {
                       className="flex-1 text-left cursor-pointer min-w-0"
                       disabled={dirty}
                       onClick={() => openChart(c)}
-                      title="Open in the editor"
+                      title="Open this chart in the editor."
                     >
                       <div className="text-sm text-[var(--fg-0)] truncate">
                         {c.name}
                         {editing && (
-                          <span className="text-[var(--fg-2)]"> · editing</span>
+                          <span className="text-[var(--fg-2)]"> This is editing.</span>
                         )}
                       </div>
                       <div className="text-[10px] font-mono text-[var(--fg-2)]">
                         {keyName(c.keyTonic, c.mode)} · {c.timeSig[0]}/
                         {c.timeSig[1]} · {Math.round(c.defaultBpm)} BPM ·{" "}
                         {resolveChart(c).length} bars
-                        {isUserChart(c) ? " · yours" : ""}
+                        {isUserChart(c) ? " This is yours." : ""}
                       </div>
                     </button>
                     <Button
                       size="sm"
                       variant={active ? "primary" : "secondary"}
                       onClick={() => bandLoadChart(c.id)}
-                      title="Load into the band (adopts its tempo and style)"
+                      title="Load this into the band. This adopts its tempo and style."
                     >
                       {active ? "Loaded" : "Load"}
                     </Button>
@@ -287,22 +303,22 @@ export const Library: React.FC = () => {
                   setDirty(true);
                 }}
               >
-                New chart
+                Create this new chart.
               </Button>
               <Button size="sm" variant="ghost" onClick={() => reloadLibrary()}>
-                Reload folder
+                Reload this folder.
               </Button>
             </div>
             {libraryInfo && (
               <p className="text-[10px] font-mono text-[var(--fg-2)] mt-2 break-all">
-                Your charts: {libraryInfo.chartsDir}
+                Charts live in {libraryInfo.chartsDir}.
                 <br />
-                Your styles: {libraryInfo.stylesDir}
+                Styles live in {libraryInfo.stylesDir}.
               </p>
             )}
           </Panel>
 
-          <Panel title={`Styles (${grooves.length})`}>
+          <Panel title={`These are ${grooves.length} styles.`}>
             <div className="flex flex-col gap-1">
               {grooves
                 .filter((s) =>
@@ -317,7 +333,7 @@ export const Library: React.FC = () => {
                       key={s.id}
                       type="button"
                       onClick={() => bandSetStyle(s.id)}
-                      className={`text-left rounded-[var(--radius-m)] border px-2.5 py-1.5 cursor-pointer transition-colors ${
+                      className={`text-left rounded-[var(--radius-m)] border px-2.5 py-1.5 cursor-pointer ${
                         active
                           ? "bg-[var(--accent-soft)] border-[var(--accent)]"
                           : "bg-[var(--bg-2)] border-[var(--line)] hover:bg-[var(--bg-3)]"
@@ -328,7 +344,7 @@ export const Library: React.FC = () => {
                         {s.genre} · {s.feel.timeSig[0]}/{s.feel.timeSig[1]} ·{" "}
                         {Math.round(s.feel.bpmRange[0])}–
                         {Math.round(s.feel.bpmRange[1])} BPM
-                        {s.feel.swing > 0.55 ? " · swung" : ""}
+                        {s.feel.swing > 0.55 ? " This is swung." : ""}
                       </div>
                     </button>
                   );
@@ -347,7 +363,7 @@ export const Library: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
               <div className="flex items-center gap-3">
                 <h3 className="text-xs uppercase tracking-wider font-mono text-[var(--fg-2)]">
-                  Chart editor
+                  This is the chart editor.
                 </h3>
                 {draft ? (
                   <StatusPill
@@ -355,15 +371,15 @@ export const Library: React.FC = () => {
                     label={
                       parsed.problems.length === 0
                         ? `${bars.length} bars · ${formatDuration(durationSecs)}`
-                        : `${parsed.problems.length} note${parsed.problems.length > 1 ? "s" : ""}`
+                        : `This chart has ${parsed.problems.length} note${parsed.problems.length > 1 ? "s" : ""}.`
                     }
                   />
                 ) : (
-                  <StatusPill status="error" label="Not playable yet" />
+                  <StatusPill status="error" label="This chart is not playable yet." />
                 )}
                 {dirty && (
                   <span className="text-[10px] font-mono text-[var(--fg-2)]">
-                    unsaved
+                    This is unsaved.
                   </span>
                 )}
               </div>
@@ -371,14 +387,14 @@ export const Library: React.FC = () => {
                 <Button
                   size="sm"
                   onClick={() => transposeDraft(-1)}
-                  title="Down a semitone"
+                  title="Transpose this down a semitone."
                 >
                   ♭ −1
                 </Button>
                 <Button
                   size="sm"
                   onClick={() => transposeDraft(1)}
-                  title="Up a semitone"
+                  title="Transpose this up a semitone."
                 >
                   ♯ +1
                 </Button>
@@ -388,15 +404,15 @@ export const Library: React.FC = () => {
                   variant="primary"
                   onClick={play}
                   disabled={!draft || parsed.problems.length > 0}
-                  title="Ctrl/Cmd+Enter"
+                  title="Play this with Ctrl/Cmd+Enter."
                 >
-                  Play this
+                  Play this chart.
                 </Button>
                 <Button
                   size="sm"
                   onClick={save}
                   disabled={!draft || parsed.problems.length > 0}
-                  title="Ctrl/Cmd+S"
+                  title="Save this with Ctrl/Cmd+S."
                 >
                   Save
                 </Button>
@@ -416,7 +432,7 @@ export const Library: React.FC = () => {
             </div>
 
             <textarea
-              aria-label="Chart editor"
+              aria-label="This is the chart editor."
               value={text ?? ""}
               onChange={(e) => {
                 setText(e.target.value);
@@ -425,7 +441,7 @@ export const Library: React.FC = () => {
               onKeyDown={onEditorKey}
               spellCheck={false}
               rows={16}
-              className="w-full bg-[var(--bg-0)] border border-[var(--line)] rounded-[var(--radius-m)] p-3 font-mono text-sm text-[var(--fg-0)] leading-relaxed resize-y focus:outline-none focus:border-[var(--accent)]"
+              className="w-full bg-[var(--bg-0)] border border-[var(--line)] rounded-[var(--radius-m)] p-3 font-mono text-sm text-[var(--fg-0)] leading-relaxed resize-y focus:border-[var(--accent)]"
               placeholder={TEMPLATE}
             />
 
@@ -436,7 +452,7 @@ export const Library: React.FC = () => {
                     key={`${p.line}-${p.message}`}
                     className="text-xs font-mono text-[var(--record)]"
                   >
-                    line {p.line}: {p.message}
+                    Line {p.line}. {p.message}
                   </li>
                 ))}
               </ul>
@@ -444,7 +460,7 @@ export const Library: React.FC = () => {
 
             <details className="mt-3 text-xs font-mono text-[var(--fg-2)]">
               <summary className="cursor-pointer text-[var(--fg-1)]">
-                How to write a chart
+                How to write this chart.
               </summary>
               <div className="mt-2 space-y-1 leading-relaxed">
                 <p>
@@ -467,9 +483,10 @@ export const Library: React.FC = () => {
             </details>
           </Panel>
 
-          <Panel title="Preview of the form">
+          <Panel title="This is a preview of this form.">
             <ChordStrip
               chart={draft}
+              live={transportClockLive(transportState)}
               currentBar={
                 currentChart &&
                 draft &&
@@ -506,7 +523,7 @@ export const Library: React.FC = () => {
             />
             {isPreview && (
               <p className="text-[10px] font-mono text-[var(--fg-2)] mt-1">
-                Browser preview: saving keeps the chart for this session only.
+                This browser preview keeps the chart for this session only.
               </p>
             )}
           </Panel>

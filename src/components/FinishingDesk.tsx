@@ -103,7 +103,7 @@ export function FinishingDesk() {
           "Remove an unused version first so the current song can be preserved.",
         );
       checkWritingForm(body);
-      current.version(`Before ${label}`);
+      current.version(`This is before ${label}.`);
       current.edit((b) => Object.assign(b, structuredClone(body)));
       useWriting.setState({
         message: `${label} applied. Your previous song is in Versions; Undo also returns to it. Save to keep both on disk.`,
@@ -114,7 +114,7 @@ export function FinishingDesk() {
       <section aria-labelledby="finish-title">
         <div className="song-section-heading">
           <div>
-            <h2 id="finish-title">Make this song land</h2>
+            <h2 id="finish-title">Make this song land.</h2>
             <p className="song-help">
               Review the form, shape its contrasts, and keep the performances
               worth hearing again.
@@ -126,14 +126,14 @@ export function FinishingDesk() {
               checked={vocal}
               onChange={(e) => setVocal(e.target.checked)}
             />{" "}
-            Include lyric reminders
+            Include lyric reminders.
           </label>
         </div>
         <details className="finish-review" open>
           <summary>
             {issues.length
-              ? `${issues.length} ${issues.length === 1 ? "thing" : "things"} to consider`
-              : "No structural issues found"}
+              ? `${issues.length} ${issues.length === 1 ? "thing" : "things"} to consider.`
+              : "No structural issues found."}
           </summary>
           <p className="song-help">
             These are practical checks, not a judgement of musical quality. Your
@@ -150,14 +150,14 @@ export function FinishingDesk() {
         </details>
       </section>
       <section aria-labelledby="transition-title">
-        <h2 id="transition-title">Transition lab</h2>
+        <h2 id="transition-title">This is the transition lab.</h2>
         <p className="song-help">
           Listen across a section boundary. Try a variation at this appearance
           only; every locked part stays as it is.
         </p>
         <div className="song-controls">
           <label>
-            Section appearance
+            Choose the section appearance.
             <select
               value={selectedIndex}
               onChange={(e) => {
@@ -171,20 +171,20 @@ export function FinishingDesk() {
                     song.body.chart.sections.find((s) => s.id === r.sectionId)
                       ?.name
                   }{" "}
-                  · bars {r.startBar}–{r.endBar - 1}
+                  . Bars {r.startBar}–{r.endBar - 1}.
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Context on each side
+            Choose the context on each side.
             <select
               value={context}
               onChange={(e) => setContext(Number(e.target.value))}
             >
               {[1, 2, 3, 4].map((n) => (
                 <option value={n} key={n}>
-                  {n} {n === 1 ? "bar" : "bars"}
+                  {n} {n === 1 ? "bar" : "bars"}.
                 </option>
               ))}
             </select>
@@ -195,7 +195,7 @@ export function FinishingDesk() {
               w.action(() => w.loopRange(loop.startBar, loop.endBar))
             }
           >
-            Loop bars {loop.startBar}–{loop.endBar - 1}
+            Loop these bars {loop.startBar}–{loop.endBar - 1}.
           </Button>
           <Button
             variant="secondary"
@@ -207,7 +207,7 @@ export function FinishingDesk() {
         </div>
         <div className="song-controls finish-recipes">
           <label>
-            Contrast strength · {strength}%
+            Contrast strength is {strength}%.
             <input
               type="range"
               min={5}
@@ -239,14 +239,14 @@ export function FinishingDesk() {
                     base: fingerprint,
                     label:
                       recipe === "lift"
-                        ? "section lift"
-                        : "space for the vocal",
+                        ? "This is a section lift."
+                        : "This is space for the vocal.",
                     sectionId: id,
                   });
                 })
               }
             >
-              {recipe === "lift" ? "Preview a lift" : "Preview more space"}
+              {recipe === "lift" ? "Preview this lift." : "Preview more of this space."}
             </Button>
           ))}
         </div>
@@ -254,18 +254,18 @@ export function FinishingDesk() {
           <div className="finish-proposal">
             <h3>{proposal.label}</h3>
             <p className="song-help">
-              {proposal.label === "section lift"
+              {proposal.label === "This is a section lift."}
                 ? "Raise the intensity of audible, unlocked parts."
                 : "Lower drums and comp intensity while keeping the bass steady."}{" "}
               Chords, duration, guitar clips and rig scenes stay in place.
             </p>
             <table>
-              <caption className="sr-only">Proposed intensity changes</caption>
+              <caption className="sr-only">These are the proposed intensity changes.</caption>
               <thead>
                 <tr>
-                  <th>Part</th>
-                  <th>Current</th>
-                  <th>Proposed</th>
+                  <th>This is the part.</th>
+                  <th>This is current.</th>
+                  <th>This is proposed.</th>
                 </tr>
               </thead>
               <tbody>
@@ -274,7 +274,11 @@ export function FinishingDesk() {
                     <tr key={PARTS[i]}>
                       <th scope="row">
                         {PARTS[i]}
-                        {p.locked ? " · locked" : p.muted ? " · muted" : ""}
+                        {p.locked
+                          ? " is locked."
+                          : p.muted
+                            ? " is muted."
+                            : ""}
                       </th>
                       <td>
                         {Math.round(
@@ -297,10 +301,10 @@ export function FinishingDesk() {
                   setProposal(null);
                 }}
               >
-                Keep variation
+                Keep this variation.
               </Button>
               <Button variant="secondary" onClick={() => setProposal(null)}>
-                Discard preview
+                Discard this preview.
               </Button>
             </div>
             {proposal.base !== fingerprint && (
@@ -318,7 +322,7 @@ export function FinishingDesk() {
         )}
       </section>
       <section aria-labelledby="comp-title">
-        <h2 id="comp-title">Build your guitar performance</h2>
+        <h2 id="comp-title">Build your guitar performance.</h2>
         <p className="song-help">
           Choose a full-song take for bars {range.startBar}–{range.endBar - 1}.
           The source keeps its pitch and speed. Other guitar layers still play
@@ -326,20 +330,20 @@ export function FinishingDesk() {
         </p>
         <div className="song-controls">
           <label>
-            Performance
+            Choose the performance.
             <select
               value={choice?.take.id ?? ""}
               onChange={(e) => setTakeId(e.target.value)}
             >
               <option value="" disabled>
-                Choose a compatible recording
+                Choose a compatible recording.
               </option>
               {choices
                 .filter((c) => c.body)
                 .map((c) => (
                   <option value={c.take.id} key={c.take.id}>
                     {c.take.favourite ? "★ " : ""}
-                    {c.take.timestamp} · {c.take.id.slice(-8)}
+                    {c.take.timestamp}. {c.take.id.slice(-8)}.
                   </option>
                 ))}
             </select>
@@ -354,7 +358,7 @@ export function FinishingDesk() {
               }
             }}
           >
-            Listen to selection
+            Listen to this selection.
           </Button>
           <Button
             disabled={!choice?.body}
@@ -362,7 +366,7 @@ export function FinishingDesk() {
               if (choice?.body) apply(choice.body, "guitar comp", fingerprint);
             }}
           >
-            Use performance
+            Use this performance.
           </Button>
         </div>
         {!choice && (
@@ -374,7 +378,7 @@ export function FinishingDesk() {
         )}
         {choices.some((c) => !c.body) && (
           <details>
-            <summary>Why some takes cannot be used</summary>
+            <summary>Why some takes cannot be used.</summary>
             <ul>
               {choices
                 .filter((c) => !c.body)

@@ -22,7 +22,7 @@ export function StemMixer({ song }: { song: ReferenceState }) {
       });
       setMix(next);
       await useMedia.getState().refresh();
-      setMessage("Mix applied and saved.");
+      setMessage("This mix is applied and saved.");
     } catch (e) {
       setMessage(String(e));
     } finally {
@@ -32,23 +32,23 @@ export function StemMixer({ song }: { song: ReferenceState }) {
   return (
     <form
       className="workspace-stack"
-      aria-label="Stem mixer"
+      aria-label="This is the stem mixer."
       onSubmit={(e) => {
         e.preventDefault();
         void apply(mix);
       }}
     >
-      <h3 className="font-semibold">Reference tracks</h3>
+      <h3 className="font-semibold">These are the reference tracks.</h3>
       <p className="workspace-note">
         Listen to identify the guitar track, then choose it below. Levels and
         mutes apply together and are saved with this song.
       </p>
       <fieldset disabled={locked} className="workspace-stack">
-        <legend className="sr-only">Track levels and mutes</legend>
+        <legend className="sr-only">These are the track levels and mutes.</legend>
         {mix.map((stem, index) => (
           <div key={stem.id} className="workspace-actions">
             <label className="room-tool-field">
-              {stem.label} · {Math.round(stem.gain * 100)}%
+              {stem.label} is {Math.round(stem.gain * 100)}%.
               <input
                 type="range"
                 min={0}
@@ -76,12 +76,12 @@ export function StemMixer({ song }: { song: ReferenceState }) {
                   )
                 }
               />
-              Mute {stem.label}
+              Mute {stem.label}.
             </label>
           </div>
         ))}
         <label className="room-tool-field">
-          Guitar track
+          Choose the guitar track.
           <select
             value={mix.find((s) => s.guitar)?.id ?? ""}
             onChange={(e) =>
@@ -90,7 +90,7 @@ export function StemMixer({ song }: { song: ReferenceState }) {
               )
             }
           >
-            <option value="">Not identified</option>
+            <option value="">This guitar track is not identified.</option>
             {mix.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.label}
@@ -101,7 +101,7 @@ export function StemMixer({ song }: { song: ReferenceState }) {
       </fieldset>
       <div className="workspace-actions">
         <Button type="submit" disabled={locked}>
-          {busy ? "Saving mix…" : "Apply & save mix"}
+          {busy ? "Saving mix…" : "Apply and save this mix."}
         </Button>
         <Button
           type="button"
@@ -113,8 +113,8 @@ export function StemMixer({ song }: { song: ReferenceState }) {
           }
         >
           {mix.some((s) => s.guitar && s.muted)
-            ? "Restore guitar"
-            : "Minus guitar"}
+            ? "Restore this guitar."
+            : "Minus this guitar."}
         </Button>
       </div>
       {message && <output className="workspace-note">{message}</output>}
@@ -141,7 +141,7 @@ export function StemPreparation({
   return (
     <details className="workspace-stack">
       <summary className="cursor-pointer text-sm">
-        Separate instruments / import stems
+        Separate instruments or import stems.
       </summary>
       <p className="workspace-note">
         Prepare separate tracks, then load this song in Jamstudio to set levels
@@ -152,7 +152,7 @@ export function StemPreparation({
         className="workspace-stack"
         onSubmit={(e) => {
           e.preventDefault();
-          void m.work("Separating stems", async () => {
+          void m.work("Separating these stems.", async () => {
             const receipt = await ipc.invoke<{ warning?: string | null }>(
               "media_separate_stems",
               {
@@ -171,7 +171,7 @@ export function StemPreparation({
         }}
       >
         <label className="room-tool-field">
-          Separation provider
+          Choose the separation provider.
           <select
             value={catalogId}
             disabled={disabled}
@@ -191,7 +191,7 @@ export function StemPreparation({
           not stop the provider charge.
         </p>
         <label className="room-tool-field">
-          Your account price · USD per minute (optional)
+          Your account price is in USD per minute. This is optional.
           <input
             type="number"
             min={0}
@@ -204,7 +204,7 @@ export function StemPreparation({
         </label>
         {price !== "" && Number.isFinite(Number(price)) && (
           <p className="workspace-note">
-            Estimated charge: $
+            The estimated charge is $
             {((Number(price) * song.seconds) / 60).toFixed(2)}. Based on your
             entered rate.
           </p>
@@ -222,14 +222,14 @@ export function StemPreparation({
           type="submit"
           disabled={disabled || !confirmed || song.seconds < 2}
         >
-          Upload & separate stems
+          Upload and separate these stems.
         </Button>
       </form>
       <form
         className="workspace-stack"
         onSubmit={(e) => {
           e.preventDefault();
-          void m.work("Importing stems", async () => {
+          void m.work("Importing these stems.", async () => {
             await ipc.invoke("media_stems_import", {
               assetId: song.id,
               path: path.trim(),
@@ -244,11 +244,11 @@ export function StemPreparation({
         }}
       >
         <label className="room-tool-field">
-          Local stem ZIP path
+          Enter the local stem ZIP path.
           <input
             value={path}
             disabled={disabled}
-            placeholder="Full path to stems.zip"
+            placeholder="Paste the full path to stems.zip."
             onChange={(e) => setPath(e.target.value)}
           />
         </label>
@@ -259,9 +259,34 @@ export function StemPreparation({
           also be imported here.
         </p>
         <Button type="submit" disabled={disabled || !path.trim()}>
-          Import stem ZIP
+          Import this stem ZIP.
         </Button>
       </form>
+      <p className="workspace-note">
+        Guitar-removal acceptance needs imported stems with a marked guitar
+        track. Real-song residual at or below -6 dB is not claimed without those
+        stems.
+      </p>
+      <Button
+        disabled={disabled}
+        onClick={() =>
+          void m.work("Checking this guitar residual.", async () => {
+            const result = await ipc.invoke<{
+              db: number;
+              pass: boolean;
+              mixPath: string;
+            }>("media_guitar_residual", { assetId: song.id });
+            await useMedia.getState().refresh();
+            useMedia.setState({
+              message: result.pass
+                ? `Guitar residual ${result.db.toFixed(1)} dB. Wrote ${result.mixPath}. Use Load this minus-guitar mix. Synthetic/local check only. Real-song residual at or below -6 dB is not claimed.`
+                : `Guitar residual ${result.db.toFixed(1)} dB, above -6 dB. Wrote ${result.mixPath}. Load this minus-guitar mix stays not configured until a pass.`,
+            });
+          })
+        }
+      >
+        Check this guitar residual.
+      </Button>
     </details>
   );
 }

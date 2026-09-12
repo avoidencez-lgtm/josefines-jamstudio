@@ -4,7 +4,11 @@ use crate::{net, AppState};
 use jam_audio::{engine::EngineMode, io::CpalInput, voice::Microphone};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::{Emitter, State};
+
+const LIVE_TURNS: usize = 10;
+const LIVE_MEDIAN_MS: u64 = 2500;
 
 #[derive(Default)]
 pub struct VoiceSession {
@@ -13,6 +17,9 @@ pub struct VoiceSession {
     phase: &'static str,
     error: Option<String>,
     shortcut: Option<String>,
+    released_at: Option<Instant>,
+    latencies: Vec<u64>,
+    last_release_to_first_audio_ms: Option<u64>,
 }
 
 #[derive(Default, Deserialize)]
@@ -62,6 +69,8 @@ pub struct VoiceStatus {
     phase: String,
     error: Option<String>,
     shortcut: Option<String>,
+    last_release_to_first_audio_ms: Option<u64>,
+    live_turns: u32,
 }
 
 #[derive(Serialize)]
@@ -88,6 +97,8 @@ pub fn voice_status(state: State<'_, AppState>) -> VoiceStatus {
         .into(),
         error: session.error.clone(),
         shortcut: session.shortcut.clone(),
+        last_release_to_first_audio_ms: session.last_release_to_first_audio_ms,
+        live_turns: session.latencies.len() as u32,
     }
 }
 
@@ -116,6 +127,7 @@ pub async fn voice_cancel(
         }
         session.generation = session.generation.wrapping_add(1);
         session.microphone = None;
+        session.released_at = None;
         session.phase = "idle";
         session.error = None;
         engine.lock().voice.lock().stop();
@@ -186,6 +198,7 @@ pub async fn voice_ptt<R: tauri::Runtime>(
     }
     let (generation, audio) = tauri::async_runtime::spawn_blocking(move || {
         let mut session = voice.lock();
+        session.released_at = Some(Instant::now());
         let mic = session
             .microphone
             .take()
@@ -262,9 +275,110 @@ pub async fn voice_speak<R: tauri::Runtime>(
             return Err("Audio output stopped before Jo could speak.".into());
         }
         let outcome = engine.voice.lock().play(&pcm, cfg.duck_db);
+        if outcome.is_ok() {
+            engine.wake_render();
+        }
         outcome
     });
+    if result.is_ok() {
+        record_first_audio(&mut session);
+    }
     session.phase = if result.is_ok() { "speaking" } else { "idle" };
     session.error = result.as_ref().err().cloned();
     result
+}
+
+fn record_first_audio(session: &mut VoiceSession) {
+    let Some(started) = session.released_at.take() else {
+        return;
+    };
+    let ms = started.elapsed().as_millis() as u64;
+    session.last_release_to_first_audio_ms = Some(ms);
+    session.latencies.push(ms);
+    if session.latencies.len() > LIVE_TURNS {
+        session.latencies.remove(0);
+    }
+}
+
+pub fn median_ms(samples: &[u64]) -> Option<u64> {
+    if samples.is_empty() {
+        return None;
+    }
+    let mut ordered = samples.to_vec();
+    ordered.sort_unstable();
+    let mid = ordered.len() / 2;
+    Some(if ordered.len() % 2 == 1 {
+        ordered[mid]
+    } else {
+        (ordered[mid - 1] + ordered[mid]) / 2
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceLatencyGate {
+    pub median_ms: u64,
+    pub samples: Vec<u64>,
+}
+
+/// Live opt-in gate: ten headset turns, median release→first audio ≤ 2.5 s.
+#[tauri::command]
+pub fn voice_live_latency(state: State<'_, AppState>) -> Result<VoiceLatencyGate, String> {
+    if std::env::var("JAM_LIVE").as_deref() != Ok("1") {
+        return Err(
+            "Live PTT latency is not configured. Set JAM_LIVE=1, save an ElevenLabs key, start hardware audio, and complete ten talk turns. The median from release to first audio must be at most 2.5 s."
+                .into(),
+        );
+    }
+    let session = state.voice.lock();
+    if session.latencies.len() < LIVE_TURNS {
+        return Err(format!(
+            "Need {LIVE_TURNS} live talk turns for the latency gate; {} recorded. Hold this to talk., speak, and release until ten first-audio times are stored.",
+            session.latencies.len()
+        ));
+    }
+    let median = median_ms(&session.latencies).expect("ten samples");
+    if median > LIVE_MEDIAN_MS {
+        return Err(format!(
+            "Median release-to-first-audio is {median} ms (limit {LIVE_MEDIAN_MS} ms)."
+        ));
+    }
+    Ok(VoiceLatencyGate {
+        median_ms: median,
+        samples: session.latencies.clone(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn median_of_ten_release_times_matches_the_2_5s_gate() {
+        assert_eq!(median_ms(&[]), None);
+        assert_eq!(median_ms(&[2400]), Some(2400));
+        assert_eq!(median_ms(&[1000, 4000]), Some(2500));
+        let under = [800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700];
+        assert_eq!(median_ms(&under), Some(1250));
+        assert!(median_ms(&under).unwrap() <= LIVE_MEDIAN_MS);
+        let over = [2000, 2100, 2200, 2300, 2400, 2600, 2700, 2800, 2900, 3000];
+        assert_eq!(median_ms(&over), Some(2500));
+        let fail = [2600, 2700, 2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500];
+        assert!(median_ms(&fail).unwrap() > LIVE_MEDIAN_MS);
+    }
+
+    #[test]
+    fn first_audio_sample_uses_the_release_clock() {
+        let mut session = VoiceSession {
+            released_at: Some(Instant::now() - std::time::Duration::from_millis(40)),
+            ..VoiceSession::default()
+        };
+        record_first_audio(&mut session);
+        let ms = session.last_release_to_first_audio_ms.expect("recorded");
+        assert!(ms >= 40, "{ms}");
+        assert_eq!(session.latencies, [ms]);
+        assert!(session.released_at.is_none());
+        record_first_audio(&mut session);
+        assert_eq!(session.latencies.len(), 1);
+    }
 }

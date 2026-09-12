@@ -1,6 +1,8 @@
 //! jam-band: rhythm section instruments, samplers, and sequencer.
 
 pub mod instruments;
+pub mod kit;
+pub mod offline;
 pub mod sampler;
 pub mod sequencer;
 pub mod voicing;

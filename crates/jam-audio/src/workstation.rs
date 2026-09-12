@@ -37,7 +37,7 @@ impl Capture {
     }
     pub fn snapshot(&self) -> Result<Vec<Frame>, String> {
         if self.frames.is_empty() {
-            return Err("Arm capture, then play something first.".into());
+            return Err("Arm this capture. Then play something first.".into());
         }
         Ok(self.frames.iter().copied().collect())
     }

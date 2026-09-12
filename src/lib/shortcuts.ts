@@ -25,22 +25,21 @@ const key = (k: string) => (e: KeyboardEvent) =>
 export const SHORTCUTS: Shortcut[] = [
   {
     keys: "Q",
-    description:
-      "Toggle reference practice ramp using the current session settings",
+    description: "Toggle this reference practice ramp using the current session settings.",
     group: "Practice",
     matches: code("KeyQ"),
     run: toggleReferenceRamp,
   },
   {
     keys: "H",
-    description: "Keep the recent guitar idea (capture must be armed)",
+    description: "Keep this recent guitar idea. Capture must be armed.",
     group: "Transport",
     matches: code("KeyH"),
     run: () => useWriting.getState().action(useWriting.getState().keep),
   },
   {
     keys: "Space",
-    description: "Play / pause",
+    description: "Play or pause this.",
     group: "Transport",
     matches: code("Space"),
     run: (s) => {
@@ -52,14 +51,14 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     keys: "Enter",
-    description: "Stop and return to the top",
+    description: "Stop and return to the top.",
     group: "Transport",
     matches: code("Enter"),
     run: (s) => s.transportStop(),
   },
   {
     keys: "L",
-    description: "Toggle loop",
+    description: "Toggle this loop.",
     group: "Transport",
     matches: code("KeyL"),
     run: (s) => {
@@ -73,7 +72,7 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     keys: "C",
-    description: "Count-in: off / 1 bar / 2 bars",
+    description: "Count-in cycles off, 1 bar, or 2 bars.",
     group: "Transport",
     matches: code("KeyC"),
     run: (s) =>
@@ -81,14 +80,14 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     keys: "T",
-    description: "Tap tempo (tap on the beat, 2+ times)",
+    description: "Tap tempo. Tap on the beat 2 or more times.",
     group: "Transport",
     matches: code("KeyT"),
     run: (s) => s.tapTempo(),
   },
   {
     keys: "← / →",
-    description: "Tempo −1 / +1 BPM (Shift: ±5)",
+    description: "Tempo falls or rises by 1 BPM. Shift changes it by 5.",
     group: "Transport",
     matches: (e) =>
       (e.code === "ArrowLeft" || e.code === "ArrowRight") &&
@@ -98,35 +97,35 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     keys: "R",
-    description: "Start / stop recording a take",
+    description: "Start or stop recording a take.",
     group: "Transport",
     matches: code("KeyR"),
     run: (s) => (s.isRecording ? s.stopRecording() : s.startRecording()),
   },
   {
     keys: "F / K",
-    description: "Cue a fill / a crash at the next bar",
+    description: "Cue a fill or a crash at the next bar.",
     group: "Band",
     matches: (e) => code("KeyF")(e) || code("KeyK")(e),
     run: () => undefined,
   },
   {
     keys: "S / E",
-    description: "Cue a stop / the ending",
+    description: "Cue a stop or the ending.",
     group: "Band",
     matches: (e) => code("KeyS")(e) || code("KeyE")(e),
     run: () => undefined,
   },
   {
     keys: "M / B / P",
-    description: "Mute drums / bass / comp",
+    description: "Mute drums, bass or comp.",
     group: "Band",
     matches: (e) => code("KeyM")(e) || code("KeyB")(e) || code("KeyP")(e),
     run: () => undefined,
   },
   {
     keys: "↑ / ↓",
-    description: "Intensity +5% / −5%",
+    description: "Intensity rises or falls by 5%.",
     group: "Band",
     matches: (e) =>
       (e.code === "ArrowUp" || e.code === "ArrowDown") &&
@@ -136,7 +135,7 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     keys: "1 – 9",
-    description: "Jump to bar 1–9 (start of the form)",
+    description: "Jump to this bar. The range is 1–9 from the start of the form.",
     group: "Practice",
     matches: (e) =>
       /^Digit[1-9]$/.test(e.code) && !e.ctrlKey && !e.metaKey && !e.altKey,
@@ -144,21 +143,21 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     keys: "[ / ]",
-    description: "Transpose the chart down / up a semitone",
+    description: "Transpose the chart down or up a semitone.",
     group: "Practice",
     matches: (e) => key("[")(e) || key("]")(e),
     run: () => undefined,
   },
   {
     keys: "U",
-    description: "Toggle tuner",
+    description: "Toggle this tuner.",
     group: "Practice",
     matches: code("KeyU"),
     run: (s) => s.setTuner(!s.tunerOn),
   },
   {
     keys: "?",
-    description: "Open Help & guides",
+    description: "Open help and guides.",
     group: "App",
     matches: key("?"),
     run: () => undefined,

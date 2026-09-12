@@ -24,7 +24,7 @@ it("offers native audio generation without FFmpeg while retaining provider-key a
     const html = renderToStaticMarkup(
       createElement(MusicVideo, { audioOnly: true }),
     );
-    expect(html).toContain("Generate song · uses API credits");
+    expect(html).toContain("Generate song. Uses API credits.");
     expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Generate song/);
     expect(html).toContain("Generated audio is saved and analyzed locally");
     expect(html).toContain('class="video-note" hidden=""');

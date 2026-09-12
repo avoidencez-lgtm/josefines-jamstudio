@@ -31,6 +31,7 @@ import {
   drillFor,
   formatJamTime,
   practiceStreakDays,
+  sessionProgress,
   takeDate,
 } from "../../src/lib/sessions/stats";
 import { requireCommand, useEngineStore } from "../../src/store/engine";
@@ -55,7 +56,7 @@ const store = () => useEngineStore.getState();
 const engineTakes = () => engine.invoke<TakeMetadata[]>("takes_list", {});
 const lastNotice = () => store().notices.at(-1)?.text ?? "";
 
-/** What "Record New Take" then "Stop Recording" do, with `seconds` of simulated time between. */
+/** What "Record a new take." then "Stop recording." do, with `seconds` of simulated time between. */
 async function recordTake(at: Date, seconds: number): Promise<TakeMetadata> {
   vi.setSystemTime(at);
   const id = requireCommand(await store().startRecording());
@@ -167,7 +168,7 @@ it("lets Jo start and stop a take by voice and refuses an unknown or missing act
     name: "record_take",
     arguments: { action: "start" },
   });
-  expect(started).toMatch(/^Recording started: preview-\d+$/);
+  expect(started).toMatch(/^Recording started\. Take preview-\d+\.$/);
   expect(store().isRecording).toBe(true);
   engine.tick(2);
   const stopped = await dispatchJoToolCall({
@@ -175,8 +176,8 @@ it("lets Jo start and stop a take by voice and refuses an unknown or missing act
     arguments: { action: "stop" },
   });
   const take = store().takes[0];
-  expect(stopped).toBe(`Recording saved: ${take.id}`);
-  expect(started.endsWith(take.id)).toBe(true);
+  expect(stopped).toBe(`Recording saved. Take ${take.id}.`);
+  expect(started).toContain(take.id);
   expect(take.durationSecs).toBeCloseTo(2, 6);
   expect(store().isRecording).toBe(false);
 
@@ -260,6 +261,11 @@ it("sums recorded jam time and the practice streak in the Sessions header from t
   expect(formatJamTime(totalSecs)).toBe("5 min");
   // Today, yesterday and the day before: three days; the take five days ago is a gap.
   expect(practiceStreakDays(takes)).toBe(3);
+  const progress = sessionProgress(takes, store().takeAnalysis, TODAY);
+  expect(progress.sessionsThisWeek).toBe(1);
+  expect(progress.minutesThisWeek).toBeCloseTo(5, 5);
+  expect(progress.minutesAll).toBeCloseTo(5, 5);
+  expect(progress.trendTakes).toBe(0);
   // Opening the app tomorrow still shows the streak; the day after, it is over.
   expect(practiceStreakDays(takes, daysAgo(-1))).toBe(3);
   expect(practiceStreakDays(takes, daysAgo(-2))).toBe(0);
@@ -309,8 +315,8 @@ it("analyses a take honestly in the preview (no audio, all zeros), caches it per
     name: "analyze_take",
     arguments: { takeId: meta.id },
   });
-  expect(jo).toContain("Local heuristic analysis");
-  expect(jo).toContain(JSON.stringify(analysis));
+  expect(jo).toContain("Take analysis is ready in Sessions");
+  expect(jo).not.toContain("{");
   await expect(
     dispatchJoToolCall({
       name: "analyze_take",
@@ -374,7 +380,7 @@ it("keeps favouriting a desktop-only action: the preview names the missing comma
   const listed = store().takes.find((t) => t.id === meta.id);
   expect(listed).toBeDefined();
   expect(listed?.favourite).toBeUndefined();
-  // So the "Favourites only" filter in Sessions shows nothing here.
+  // So the "Show favourites only." filter in Sessions shows nothing here.
   expect(store().takes.filter((t) => t.favourite)).toEqual([]);
 });
 
@@ -397,6 +403,23 @@ it("round-trips the guitar offset through the engine, clamps it to 0..48000 samp
   await s.loadTakes();
   expect(store().latencySamples).toBe(960);
   expect(await engine.invoke("recorder_get_latency", {})).toBe(960);
+});
+
+it("measures loopback as an explicit estimate in the browser preview without changing the offset", async () => {
+  const s = store();
+  expect(await s.setLatencySamples(0)).toBe(0);
+  const result = requireCommand(await s.calibrateLatency());
+  expect(result).toEqual({
+    roundTripFrames: 512,
+    confidence: 0,
+    estimated: true,
+  });
+  expect(store().latencySamples).toBe(0);
+  expect(store().latencyEstimated).toBe(true);
+  expect(store().calibrating).toBe(false);
+  expect(
+    store().notices.some((n) => n.text.includes("No loopback heard")),
+  ).toBe(true);
 });
 
 it("Film in the preview: refreshing keeps the library empty without asking the engine, and saving is refused with the desktop message", async () => {
@@ -440,7 +463,7 @@ it("Film: \"Use take\" is refused in the preview with the command named, and the
   expect(meta.chartId).toBe("rock-song-form");
 
   // What the "Use take" button runs.
-  await useMedia.getState().work("Importing recording", async () => {
+  await useMedia.getState().work("Importing this recording.", async () => {
     await ipc.invoke("media_from_take", { takeId: meta.id });
   });
   expect(useMedia.getState()).toMatchObject({
@@ -456,15 +479,19 @@ it("Film: \"Use take\" is refused in the preview with the command named, and the
   const shots = shotsFromChart(chart, meta.durationSecs);
   // Intro 4 · Verse 8 · Chorus 8 · Verse 8 · Chorus 8 · Solo 8 · Chorus ×2 · Outro 4 in four-bar shots.
   expect(shots).toHaveLength(16);
-  expect(shots[0].title).toBe("Intro · bars 1–4");
-  expect(shots[1].title).toBe("Verse · bars 1–4");
-  expect(shots[2].title).toBe("Verse · bars 5–8");
-  expect(shots.at(-1)?.title).toBe("Outro · bars 1–4");
+  expect(shots[0].title).toBe("This is Intro, bars 1–4.");
+  expect(shots[1].title).toBe("This is Verse, bars 1–4.");
+  expect(shots[2].title).toBe("This is Verse, bars 5–8.");
+  expect(shots.at(-1)?.title).toBe("This is Outro, bars 1–4.");
   expect(videoDuration(shots)).toBeCloseTo(24, 9);
   for (const shot of shots) expect(shot.seconds).toBeCloseTo(1.5, 9);
   expect(shots.filter((x) => /Chorus/.test(x.title))).toHaveLength(8);
-  expect(shots[3].prompt).toMatch(/Open the space/);
-  expect(shots[0].prompt).toMatch(/Intimate framing/);
+  expect(shots[3].prompt).toContain(
+    "This opens the space with bold camera movement and an emotional lift.",
+  );
+  expect(shots[0].prompt).toContain(
+    "This uses intimate framing, a slow camera move, and attentive performance detail.",
+  );
 
   useMedia.getState().edit({ shots, title: "Evening jam" });
   expect(useMedia.getState().project.shots).toHaveLength(16);
@@ -491,7 +518,7 @@ it("Film: rendering saves first, so the preview never reaches media_render; the 
   expect(useMedia.getState().dirty).toBe(false);
 
   // What "Render music video" runs.
-  await useMedia.getState().work("Rendering the film locally", async () => {
+  await useMedia.getState().work("Rendering the film locally.", async () => {
     await useMedia.getState().save();
     const path = await ipc.invoke<string>("media_render", {
       document: useMedia.getState().project,

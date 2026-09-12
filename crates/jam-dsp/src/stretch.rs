@@ -266,6 +266,79 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn time_stretch_125_length_and_dominant_bin() {
+        // ARCHITECTURE §9.1: 1 kHz sine × 1.25; length ±1 ms; dominant bin ±1 Hz.
+        let input: Vec<f32> = (0..96_000)
+            .flat_map(|i| {
+                let v = (i as f64 * 1000.0 * std::f64::consts::TAU / 48_000.0).sin() as f32 * 0.2;
+                [v, v]
+            })
+            .collect();
+        let output = stereo(&input, 1.25, 0.0, &AtomicBool::new(false)).unwrap();
+        let frames = output.len() / 2;
+        assert!((frames as f64 / 48_000.0 - 2.0 / 1.25).abs() <= 0.001);
+        let start = frames / 2 - 24_000;
+        let mut samples: Vec<f64> = output
+            .chunks_exact(2)
+            .skip(start)
+            .take(48_000)
+            .map(|c| c[0] as f64)
+            .collect();
+        assert_eq!(samples.len(), 48_000);
+        let fft = realfft::RealFftPlanner::<f64>::new().plan_fft_forward(48_000);
+        let mut spectrum = fft.make_output_vec();
+        let mut scratch = fft.make_scratch_vec();
+        fft.process_with_scratch(&mut samples, &mut spectrum, &mut scratch)
+            .unwrap();
+        let bin = spectrum
+            .iter()
+            .enumerate()
+            .skip(1)
+            .max_by(|a, b| a.1.norm_sqr().total_cmp(&b.1.norm_sqr()))
+            .map(|(i, _)| i)
+            .unwrap();
+        assert!((bin as i32 - 1000).abs() <= 1, "dominant bin {bin} Hz");
+    }
+
+    #[test]
+    fn pitch_shift_plus_two_semitones_is_1122_5_hz() {
+        // ARCHITECTURE §9.1: 1 kHz sine +2 semitones; f0 = 1122.5 ±5 Hz.
+        let input: Vec<f32> = (0..96_000)
+            .flat_map(|i| {
+                let v = (i as f64 * 1000.0 * std::f64::consts::TAU / 48_000.0).sin() as f32 * 0.2;
+                [v, v]
+            })
+            .collect();
+        let output = stereo(&input, 1.0, 2.0, &AtomicBool::new(false)).unwrap();
+        let frames = output.len() / 2;
+        let samples: Vec<f32> = output
+            .chunks_exact(2)
+            .skip(frames / 4)
+            .take(frames / 2)
+            .map(|c| c[0])
+            .collect();
+        let crossings: Vec<f64> = samples
+            .windows(2)
+            .enumerate()
+            .filter(|(_, p)| p[0] <= 0.0 && p[1] > 0.0)
+            .map(|(i, p)| i as f64 + (-p[0] / (p[1] - p[0])) as f64)
+            .collect();
+        let f0 = (crossings.len() - 1) as f64 * 48_000.0
+            / (crossings.last().unwrap() - crossings[0]);
+        assert!((f0 - 1122.5).abs() <= 5.0, "f0 {f0} Hz");
+    }
+
+    #[test]
+    fn cancel_and_validate_still_reject() {
+        let input: Vec<f32> = (0..96_000)
+            .flat_map(|i| {
+                [1000.0, 500.0]
+                    .map(|f| (i as f64 * f * std::f64::consts::TAU / 48000.0).sin() as f32 * 0.2)
+            })
+            .collect();
         assert!(stereo(&input, 0.5, 0.0, &AtomicBool::new(true)).is_err());
         assert!(stereo(&[f32::NAN, 0.0], 1.0, 0.0, &AtomicBool::new(false)).is_err());
         for speed in [0.0, 1.51, f64::NAN] {

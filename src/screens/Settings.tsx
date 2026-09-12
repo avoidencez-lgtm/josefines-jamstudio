@@ -8,11 +8,20 @@ import { StatusPill } from "../components/States";
 import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import { ipc } from "../ipc/client";
 import type {
+  AppSettings,
   AudioConfig,
   CostEntry,
   CostTotal,
   EngineStatus,
+  IdleCpuSample,
 } from "../ipc/contract";
+import { withNextStep } from "../lib/loudError";
+import { lastMeterFps, lastPlayheadFps } from "../lib/meterFps";
+import {
+  type ReducedMotion,
+  applyReducedMotion,
+  readReducedMotion,
+} from "../lib/reducedMotion";
 import { useSettingsView } from "../lib/settingsView";
 import { useEngineStore } from "../store/engine";
 
@@ -36,38 +45,44 @@ const EngineStatusView: React.FC<{
   if (!status) {
     return (
       <span className="text-xs font-mono text-[var(--fg-2)]">
-        Waiting for the engine…
+        Waiting for the engine.
       </span>
     );
   }
   const healthy = status.mode === "Hardware" && !status.last_error;
   const rows: [string, string][] = [
     [
-      "Mode",
+      "This is the mode.",
       status.mode === "Hardware"
-        ? "Hardware"
+        ? "This is hardware."
         : status.mode === "Headless"
-          ? "Headless (no audio device)"
-          : "Stopped",
+          ? "This is headless. This has no audio device."
+          : "This is stopped.",
     ],
     [
-      "Output",
+      "This is the output.",
       status.output
-        ? `${status.output.device_name} · ${status.output.channels} ch · ${status.output.sample_format}`
-        : "none",
+        ? `${status.output.device_name}. ${status.output.channels} channels. ${status.output.sample_format}.`
+        : "No output device.",
     ],
     [
-      "Input",
+      "This is the input.",
       status.input
-        ? `${status.input.device_name} · ${status.input.channels} ch · ${status.input.sample_format}`
-        : "none (tuner and recording are silent)",
+        ? `${status.input.device_name}. ${status.input.channels} channels. ${status.input.sample_format}.`
+        : "No input device. Tuner and recording are silent.",
     ],
     [
-      "Clock",
-      `${status.sample_rate} Hz · driver buffer ${status.output?.buffer_frames ?? "default"} frames · rendered in blocks of at most 1024 frames`,
+      "This is the clock.",
+      `${status.sample_rate} Hz. The driver buffer is ${status.output?.buffer_frames ?? "default"} frames. Rendered in blocks of at most 1024 frames.`,
     ],
-    ["Stream errors", String(status.stream_errors)],
-    ["Input gaps", String(status.input_gaps)],
+    [
+      "These are the stream errors.",
+      `The stream has ${status.stream_errors} errors.`,
+    ],
+    [
+      "These are the input gaps.",
+      `The input has ${status.input_gaps} gaps.`,
+    ],
   ];
   return (
     <div className="flex flex-col gap-3">
@@ -78,19 +93,19 @@ const EngineStatusView: React.FC<{
           }
           label={
             healthy
-              ? "Running"
+              ? "The engine is running."
               : status.mode === "Hardware"
-                ? "Running with warnings"
-                : "No audio"
+                ? "The engine is running with warnings."
+                : "There is no audio."
           }
         />
         <Button size="sm" onClick={onRestart} disabled={busy}>
-          Restart audio
+          Restart this audio.
         </Button>
       </div>
       {status.last_error && (
-        <p className="text-xs font-mono text-[var(--record)] bg-[rgba(224,83,78,0.08)] border border-[var(--record)] rounded p-2">
-          {status.last_error}
+        <p className="text-xs font-mono text-[var(--record)] bg-[var(--record-soft)] border border-[var(--record)] rounded-[var(--radius-m)] p-2">
+          {withNextStep(status.last_error)}
         </p>
       )}
       <dl className="grid grid-cols-[120px_1fr] gap-y-1 text-xs font-mono">
@@ -116,6 +131,16 @@ export const Settings: React.FC = () => {
     applyAudioConfig,
     refreshEngineStatus,
     restartEngine,
+    latencySamples,
+    latencyEstimated,
+    calibrating,
+    isRecording,
+    calibrateLatency,
+    ensureAssets,
+    exportLogs,
+    xruns,
+    kitMessage,
+    bassMessage,
   } = useEngineStore(
     useShallow((s) => ({
       devices: s.devices,
@@ -127,8 +152,43 @@ export const Settings: React.FC = () => {
       applyAudioConfig: s.applyAudioConfig,
       refreshEngineStatus: s.refreshEngineStatus,
       restartEngine: s.restartEngine,
+      latencySamples: s.latencySamples,
+      latencyEstimated: s.latencyEstimated,
+      calibrating: s.calibrating,
+      isRecording: s.isRecording,
+      calibrateLatency: s.calibrateLatency,
+      ensureAssets: s.ensureAssets,
+      exportLogs: s.exportLogs,
+      xruns: s.telemetry.xruns,
+      kitMessage: s.telemetry.band.kit_message,
+      bassMessage: s.telemetry.band.bass_message,
     })),
   );
+  const [appVersion, setAppVersion] = useState("…");
+  const [logPath, setLogPath] = useState<string | null>(null);
+  const [meterFps, setMeterFps] = useState(0);
+  const [playheadFps, setPlayheadFps] = useState(0);
+  const [idleCpu, setIdleCpu] = useState<IdleCpuSample | null>(null);
+  const [idleBusy, setIdleBusy] = useState(false);
+
+  useEffect(() => {
+    void ipc
+      .invoke<string>("app_version")
+      .then(setAppVersion)
+      .catch((e) => {
+        const text = `Version unavailable. ${String(e)}`;
+        setAppVersion(text);
+        useEngineStore.getState().notify("error", text);
+      });
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setMeterFps(lastMeterFps());
+      setPlayheadFps(lastPlayheadFps());
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const { view } = useSettingsView();
   const setView = (view: string) => useSettingsView.setState({ view });
@@ -180,12 +240,111 @@ export const Settings: React.FC = () => {
         description="Set up your interface, choose your AI, and see what your connections use."
       />
       <WorkspaceViews
-        labels={["Audio devices", "AI & models", "Usage"]}
+        labels={["First run", "Audio devices", "AI & models", "Usage"]}
         value={view}
         onChange={setView}
       />
+      <div hidden={view !== "First run"} className="workspace-stack">
+        <Panel title="This is the first-run checklist.">
+          <p className="text-xs font-mono text-[var(--fg-2)] mb-3">
+            Walk these steps once, then re-open this page any time. Guitar tone
+            stays on the hardware. The WebView never plays audio.
+          </p>
+          <ol className="text-sm space-y-2 list-decimal pl-5">
+            <li>
+              Choose the same interface for input and output under Audio
+              devices, then the guitar channel.
+            </li>
+            <li>
+              Measure loopback with a cable, or enter the guitar offset. Owner
+              gate 2 stays V2.
+            </li>
+            <li>
+              Store provider keys in AI & models. Keys live in the OS keychain.
+              Test this key stays not configured. Check this key status looks only in the keychain.
+            </li>
+            <li>
+              Open Rig, create a loopMIDI or IAC port, then Check this virtual MIDI.
+              HeadRush and Black Spirit are not claimed here.
+            </li>
+            <li>
+              Check these sample packs After unpack, the band plays kit.json/WAVs and
+              FreePats bass.sf2/comp.sf2 from JosefinesJamstudio/assets. A
+              missing pack stays synthetic or sine and says so. Download needs
+              JAM_LIVE=1. See docs/guide/setup.md.
+            </li>
+            <li>
+              These are the diagnostics. Reduced motion is saved as
+              ui.reducedMotion. Meter
+              and playhead fps are rAF reports, not a 60 fps pass. The tuner
+              starts off so Stage shows tempo and bar.
+            </li>
+            <li>
+              In Songs, import a track, mark the guitar, Check this guitar residual, then Load this minus-guitar mix. In Sessions, record a take, read
+              Progress from the take files, export, and open README.txt. Opening
+              Logic and real-song residual at or below -6 dB stay V2 / not
+              claimed.
+            </li>
+            <li>
+              Signing and notarisation are not configured. Installers stay
+              unsigned until an Apple Developer account and Windows signing are
+              set up. On Mac use right-click Open or{" "}
+              <code className="font-mono text-xs">
+                xattr -dr com.apple.quarantine
+              </code>
+              .
+            </li>
+          </ol>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Button size="sm" onClick={() => setView("Audio devices")}>
+              Audio devices
+            </Button>
+            <Button size="sm" onClick={() => setView("AI & models")}>
+              Open these API keys.
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => useEngineStore.getState().setScreen("rig")}
+            >
+              Open these Rig ports.
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => useEngineStore.getState().setScreen("songs")}
+            >
+              Songs
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => useEngineStore.getState().setScreen("sessions")}
+            >
+              Sessions
+            </Button>
+            <Button size="sm" onClick={() => void ensureAssets()}>
+              Check these sample packs.
+            </Button>
+          </div>
+        </Panel>
+        <Panel title="These are the sample packs.">
+          <p className="text-xs font-mono text-[var(--fg-2)] mb-3">
+            GitHub Release assets-v1 records standard-rock-kit.zip and
+            freepats-bass-comp.zip. Download needs JAM_LIVE=1. After unpack the
+            band plays those files; a missing pack stays synthetic or sine and
+            says so.
+          </p>
+          <p className="text-xs font-mono text-[var(--fg-0)] mb-3">
+            {kitMessage}
+          </p>
+          <p className="text-xs font-mono text-[var(--fg-2)] mb-3">
+            {bassMessage}
+          </p>
+          <Button size="sm" onClick={() => void ensureAssets()}>
+            Check these sample packs.
+          </Button>
+        </Panel>
+      </div>
       <div hidden={view !== "Audio devices"} className="workspace-stack">
-        <Panel title="Audio Engine">
+        <Panel title="This is the audio engine.">
           <EngineStatusView
             status={engineStatus}
             isPreview={isPreview}
@@ -193,8 +352,143 @@ export const Settings: React.FC = () => {
             busy={applying}
           />
         </Panel>
+        <Panel title="These are the diagnostics.">
+          <dl className="grid grid-cols-[120px_1fr] gap-y-1 text-xs font-mono mb-3">
+            <div className="contents">
+              <dt className="text-[var(--fg-2)] uppercase tracking-wider">
+                Version
+              </dt>
+              <dd className="text-[var(--fg-0)]">{appVersion}</dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--fg-2)] uppercase tracking-wider">
+                Xruns
+              </dt>
+              <dd className="text-[var(--fg-0)]">{xruns}</dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--fg-2)] uppercase tracking-wider">
+                Control map
+              </dt>
+              <dd className="text-[var(--fg-0)]">
+                Default Stage map (controls/default.json). Bindings are Jo tools
+                plus push-to-talk.
+              </dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--fg-2)] uppercase tracking-wider">
+                Logs
+              </dt>
+              <dd className="text-[var(--fg-0)]">
+                {logPath ?? "~/JosefinesJamstudio/logs"}
+              </dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--fg-2)] uppercase tracking-wider">
+                Meter fps
+              </dt>
+              <dd className="text-[var(--fg-0)]">
+                {meterFps > 0
+                  ? `${meterFps.toFixed(0)} rAF frames/s. DESIGN 60 fps is not proven on a fixture run.`
+                  : "Not measured. Open Stage so a canvas meter paints."}
+              </dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--fg-2)] uppercase tracking-wider">
+                Playhead fps
+              </dt>
+              <dd className="text-[var(--fg-0)]">
+                {playheadFps > 0
+                  ? `${playheadFps.toFixed(0)} rAF frames/s. DESIGN 60 fps is not proven on a fixture run.`
+                  : "Not measured. Open Stage or Library so a canvas playhead paints."}
+              </dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--fg-2)] uppercase tracking-wider">
+                Reduced motion
+              </dt>
+              <dd className="text-[var(--fg-0)]">
+                <select
+                  aria-label="Choose the reduced motion."
+                  className="px-2 py-1 rounded-[var(--radius-m)] border border-[var(--line)] bg-[var(--bg-2)]"
+                  value={readReducedMotion(settings)}
+                  onChange={(e) => {
+                    const reducedMotion = e.target.value as ReducedMotion;
+                    void ipc
+                      .invoke<AppSettings>("settings_get")
+                      .then((current) =>
+                        ipc
+                          .invoke("settings_set", {
+                            settings: {
+                              ...current,
+                              ui: {
+                                theme: "dark",
+                                showAdvanced: false,
+                                reducedMotion,
+                              },
+                            },
+                          })
+                          .then(() => {
+                            applyReducedMotion(reducedMotion);
+                            useEngineStore.setState({
+                              settings: {
+                                ...current,
+                                ui: {
+                                  theme: "dark",
+                                  showAdvanced: false,
+                                  reducedMotion,
+                                },
+                              },
+                            });
+                          }),
+                      );
+                  }}
+                >
+                  <option value="system">Match the OS.</option>
+                  <option value="on">Always reduce motion.</option>
+                  <option value="off">Never reduce motion.</option>
+                </select>
+              </dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--fg-2)] uppercase tracking-wider">
+                Idle CPU
+              </dt>
+              <dd className="text-[var(--fg-0)]">
+                {idleCpu
+                  ? idleCpu.message
+                  : "Idle CPU is not proven. Sample this process; DESIGN under 3% still needs a desktop WebView+engine idle fixture."}
+              </dd>
+            </div>
+          </dl>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={idleBusy}
+              onClick={() => {
+                setIdleBusy(true);
+                void ipc
+                  .invoke<IdleCpuSample>("diagnostics_idle_cpu")
+                  .then(setIdleCpu)
+                  .finally(() => setIdleBusy(false));
+              }}
+            >
+              Sample this idle CPU.
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                void exportLogs().then((result) => {
+                  if (result.ok) setLogPath(result.value);
+                });
+              }}
+            >
+              Export these logs.
+            </Button>
+          </div>
+        </Panel>
 
-        <Panel title="Audio Devices">
+        <Panel title="These are the audio devices.">
           <p className="text-xs font-mono text-[var(--fg-2)] mb-4">
             Changes apply immediately (the engine restarts on the new device)
             and are saved. Use one interface for both input and output so the
@@ -203,16 +497,16 @@ export const Settings: React.FC = () => {
           <div className="flex flex-col gap-4">
             <div>
               <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-                Output Device
+                Choose the output device.
                 <select
                   value={settings?.output_device ?? ""}
                   disabled={applying}
                   onChange={(e) =>
                     applyAudio({ output_device: e.target.value || null })
                   }
-                  className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
+                  className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded-[var(--radius-m)] text-sm font-mono"
                 >
-                  <option value="">System default output</option>
+                  <option value="">Use the system default output.</option>
                   {devices.outputs.map((d) => (
                     <option key={d.name} value={d.name}>
                       {d.name} ({d.channels} ch{d.is_default ? ", default" : ""}
@@ -225,16 +519,16 @@ export const Settings: React.FC = () => {
 
             <div>
               <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-                Input Device (guitar DI)
+                Choose the guitar DI input.
                 <select
                   value={settings?.input_device ?? ""}
                   disabled={applying}
                   onChange={(e) =>
                     applyAudio({ input_device: e.target.value || null })
                   }
-                  className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
+                  className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded-[var(--radius-m)] text-sm font-mono"
                 >
-                  <option value="">System default input</option>
+                  <option value="">Use the system default input.</option>
                   {devices.inputs.map((d) => (
                     <option key={d.name} value={d.name}>
                       {d.name} ({d.channels} ch{d.is_default ? ", default" : ""}
@@ -248,7 +542,7 @@ export const Settings: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
               <div>
                 <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-                  Input Channel
+                  Choose the input channel.
                   <select
                     value={(settings?.input_channel ?? 2) + 1}
                     disabled={applying}
@@ -257,7 +551,7 @@ export const Settings: React.FC = () => {
                         input_channel: Number.parseInt(e.target.value, 10) - 1,
                       })
                     }
-                    className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
+                    className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded-[var(--radius-m)] text-sm font-mono"
                   >
                     {channelNumbers.map((ch) => (
                       <option key={ch} value={ch}>
@@ -270,7 +564,7 @@ export const Settings: React.FC = () => {
               </div>
               <div>
                 <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-                  Sample Rate
+                  Choose the sample rate.
                   <select
                     value={settings?.sample_rate ?? 48000}
                     disabled={applying}
@@ -280,7 +574,7 @@ export const Settings: React.FC = () => {
                           Number.parseInt(e.target.value, 10) || 48000,
                       })
                     }
-                    className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
+                    className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded-[var(--radius-m)] text-sm font-mono"
                   >
                     <option value={44100}>44.1 kHz</option>
                     <option value={48000}>48 kHz</option>
@@ -290,7 +584,7 @@ export const Settings: React.FC = () => {
               </div>
               <div>
                 <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-                  Buffer Size
+                  Choose the buffer size.
                   <select
                     value={settings?.buffer_size ?? 256}
                     disabled={applying}
@@ -299,7 +593,7 @@ export const Settings: React.FC = () => {
                         buffer_size: Number.parseInt(e.target.value, 10) || 256,
                       })
                     }
-                    className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded text-sm font-mono"
+                    className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded-[var(--radius-m)] text-sm font-mono"
                   >
                     {[64, 128, 256, 512, 1024].map((n) => (
                       <option key={n} value={n}>
@@ -316,9 +610,42 @@ export const Settings: React.FC = () => {
                 variant="ghost"
                 onClick={() => refreshDevices()}
               >
-                Rescan devices
+                Rescan these devices.
               </Button>
             </div>
+          </div>
+        </Panel>
+
+        <Panel title="This is guitar alignment.">
+          <p className="text-xs font-mono text-[var(--fg-2)] mb-3">
+            Connect a cable from an output to the guitar input (or Scarlett
+            Loopback), then Measure loopback. Three clicks play; the app stores
+            the round-trip offset for this device. Remove the cable afterwards.
+            Without a loopback you get a 2× buffer estimate. Software monitoring
+            stays off.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              size="sm"
+              disabled={applying || calibrating || isRecording || isPreview}
+              onClick={() => void calibrateLatency()}
+            >
+              {calibrating ? "Measuring the loopback." : "Measure loopback"}
+            </Button>
+            <span className="text-xs font-mono text-[var(--fg-0)]">
+              {latencySamples} samples.{" "}
+              {(
+                (latencySamples * 1000) /
+                (engineStatus?.sample_rate ?? 48000)
+              ).toFixed(1)}{" "}
+              ms.
+              {latencyEstimated ? " This is estimated." : ""}
+            </span>
+            {isPreview && (
+              <span className="text-xs font-mono text-[var(--fg-2)]">
+                Browser preview cannot measure a physical loopback.
+              </span>
+            )}
           </div>
         </Panel>
       </div>
@@ -373,7 +700,7 @@ const UsageLog: React.FC = () => {
   }, [load]);
 
   return (
-    <Panel title="Network usage log">
+    <Panel title="This is the network usage log.">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="flex flex-wrap gap-3 text-xs font-mono text-[var(--fg-1)]">
           {totals.length === 0 && (
@@ -382,34 +709,34 @@ const UsageLog: React.FC = () => {
           {totals.map((t) => (
             <span
               key={t.provider}
-              className="px-2 py-1 rounded border border-[var(--line)] bg-[var(--bg-2)]"
+              className="px-2 py-1 rounded-[var(--radius-m)] border border-[var(--line)] bg-[var(--bg-2)]"
             >
-              {t.provider}: {t.calls} call{t.calls === 1 ? "" : "s"}
-              {t.failures > 0 && ` (${t.failures} failed)`} ·{" "}
-              {formatBytes(t.bytesOut)} out / {formatBytes(t.bytesIn)} in
-              {t.sttSeconds > 0 && ` · ${t.sttSeconds.toFixed(1)} STT seconds`}
-              {t.ttsCharacters > 0 && ` · ${t.ttsCharacters} TTS characters`}
+              {t.provider} has {t.calls} call{t.calls === 1 ? "" : "s"}
+              {t.failures > 0 && ` (${t.failures} failed)`}.{" "}
+              {formatBytes(t.bytesOut)} out. {formatBytes(t.bytesIn)} in.
+              {t.sttSeconds > 0 && ` ${t.sttSeconds.toFixed(1)} STT seconds.`}
+              {t.ttsCharacters > 0 && ` ${t.ttsCharacters} TTS characters.`}
+              {t.totalTokens > 0 && ` ${t.totalTokens} LLM tokens.`}
               {t.estimatedCostUsd != null &&
-                ` · est. $${t.estimatedCostUsd.toFixed(4)}`}
+                ` Estimated cost is $${t.estimatedCostUsd.toFixed(4)}.`}
               {t.unpricedCalls > 0 &&
-                ` · ${t.unpricedCalls} calls with unknown cost`}
+                ` ${t.unpricedCalls} calls have unknown cost.`}
             </span>
           ))}
         </div>
         <Button size="sm" variant="secondary" onClick={() => load()}>
-          Refresh
+          Refresh this usage.
         </Button>
       </div>
       <p className="text-xs text-[var(--fg-1)] mb-3">
         All-time submitted usage, including failed or interrupted requests.
         Estimates use the price saved for each request, exclude unknown costs,
-        and are not invoices or spending limits. Set speech prices in Jo AI →
-        Voice setup; check your provider dashboard for actual charges.
+        and are not invoices or spending limits. LLM token counts are
+        provider-reported when present. Set speech prices in Jo AI → Voice
+        setup; check your provider dashboard for actual charges.
       </p>
       {error && (
-        <div className="text-xs font-mono text-[var(--danger,#e5534b)]">
-          {error}
-        </div>
+        <div className="text-xs font-mono text-[var(--record)]">{error}</div>
       )}
       {entries.length > 0 && (
         <ul className="font-mono text-xs divide-y divide-[var(--line)] max-h-56 overflow-y-auto">
@@ -430,7 +757,7 @@ const UsageLog: React.FC = () => {
               <span
                 className={`w-10 shrink-0 tabular-nums ${
                   e.error || e.status >= 400
-                    ? "text-[var(--danger,#e5534b)]"
+                    ? "text-[var(--record)]"
                     : "text-[var(--fg-0)]"
                 }`}
               >
@@ -447,21 +774,24 @@ const UsageLog: React.FC = () => {
               </span>
               {e.model && (
                 <span className="text-[var(--fg-1)] break-all">
-                  {e.model} ·{" "}
+                  {e.model}.{" "}
                   {e.estimatedCostUsd == null
-                    ? "cost unknown"
-                    : `est. $${e.estimatedCostUsd.toFixed(4)}`}
+                    ? "Cost is unknown."
+                    : `Estimated cost is $${e.estimatedCostUsd.toFixed(4)}.`}
                 </span>
               )}
               {e.sttSeconds != null && (
-                <span>{e.sttSeconds.toFixed(1)} STT seconds</span>
+                <span>{e.sttSeconds.toFixed(1)} STT seconds.</span>
               )}
               {e.ttsCharacters != null && (
-                <span>{e.ttsCharacters} TTS characters</span>
+                <span>{e.ttsCharacters} TTS characters.</span>
+              )}
+              {e.totalTokens != null && (
+                <span>{e.totalTokens} LLM tokens.</span>
               )}
               <span className="ml-auto text-[var(--fg-2)] tabular-nums shrink-0">
-                {e.durationMs} ms · {formatBytes(e.bytesOut)}↑{" "}
-                {formatBytes(e.bytesIn)}↓
+                {e.durationMs} ms. {formatBytes(e.bytesOut)} sent.{" "}
+                {formatBytes(e.bytesIn)} received.
               </span>
             </li>
           ))}

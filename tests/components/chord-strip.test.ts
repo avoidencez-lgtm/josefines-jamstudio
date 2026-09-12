@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { scrollBarInStrip } from "../../src/components/ChordStrip";
+import {
+  paintPlayhead,
+  scrollBarInStrip,
+} from "../../src/components/ChordStrip";
 
 const viewport = { innerWidth: 1100, innerHeight: 700 };
 
@@ -37,5 +40,30 @@ describe("scrollBarInStrip", () => {
     };
     scrollBarInStrip(strip, { offsetLeft: 500, offsetWidth: 88 }, viewport);
     expect(strip.scrollTo).not.toHaveBeenCalled();
+  });
+});
+
+describe("paintPlayhead", () => {
+  it("fills the bar by progress and clamps", () => {
+    const calls: Array<[string, number, number, number, number]> = [];
+    const ctx = {
+      fillStyle: "",
+      clearRect: vi.fn(),
+      fillRect: (x: number, y: number, w: number, h: number) => {
+        calls.push([ctx.fillStyle, x, y, w, h]);
+      },
+    };
+    paintPlayhead(ctx, 100, 2, 0.25, { bg: "bg", accent: "accent" });
+    expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 100, 2);
+    expect(calls).toEqual([
+      ["bg", 0, 0, 100, 2],
+      ["accent", 0, 0, 25, 2],
+    ]);
+    calls.length = 0;
+    paintPlayhead(ctx, 100, 2, 2, { bg: "bg", accent: "accent" });
+    expect(calls[1][3]).toBe(100);
+    calls.length = 0;
+    paintPlayhead(ctx, 100, 2, -1, { bg: "bg", accent: "accent" });
+    expect(calls[1][3]).toBe(0);
   });
 });

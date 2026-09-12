@@ -1,9 +1,17 @@
 //! sampler: Polyphonic drum sampler with velocity layers, round-robin, and choke groups.
 //! Includes built-in synthetic fallback percussion for tests and headless operation.
 
+use crate::kit::{self, KitStatus};
 use jam_core::timeline::SAMPLE_RATE;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
+
+struct VelocityLayer {
+    lo: f32,
+    hi: f32,
+    files: Vec<Arc<Vec<f32>>>,
+}
 
 #[derive(Clone)]
 struct ActiveVoice {
@@ -19,8 +27,8 @@ struct ActiveVoice {
 
 pub struct Sampler {
     sample_rate: u32,
-    /// Instrument name -> list of alternative samples (round-robin)
-    sample_bank: HashMap<String, Vec<Arc<Vec<f32>>>>,
+    /// Instrument name -> velocity layers (round-robin inside a layer)
+    sample_bank: HashMap<String, Vec<VelocityLayer>>,
     choke_mappings: HashMap<String, String>,
     /// Instrument name -> stereo position, -1.0 (left) .. 1.0 (right)
     pan: HashMap<String, f32>,
@@ -82,6 +90,83 @@ impl Sampler {
         sampler
     }
 
+    /// File kit from `~/JosefinesJamstudio/assets/<id>/` (or `JAM_KIT_DIR` / `JAM_USER_DIR`).
+    /// Missing or invalid packs stay on the synthetic kit with a loud status.
+    pub fn open(kit_id: &str, sample_rate: u32) -> (Self, KitStatus) {
+        if std::env::var("JAM_SYNTHETIC_KIT").as_deref() == Ok("1") {
+            return (
+                Self::new_with_synthetic_kit(sample_rate),
+                KitStatus::synthetic(
+                    kit_id,
+                    "Synthetic kit forced (JAM_SYNTHETIC_KIT=1).".into(),
+                ),
+            );
+        }
+        let dir = kit::pack_dir(kit_id);
+        match Self::from_dir(&dir, sample_rate) {
+            Ok(sampler) => (
+                sampler,
+                KitStatus {
+                    kit_id: kit_id.into(),
+                    source: kit::FILE,
+                    message: format!("Playing unpacked kit from {}.", dir.display()),
+                },
+            ),
+            Err(_) if !dir.join("kit.json").is_file() => {
+                (
+                    Self::new_with_synthetic_kit(sample_rate),
+                    KitStatus::missing(kit_id),
+                )
+            }
+            Err(err) => (
+                Self::new_with_synthetic_kit(sample_rate),
+                KitStatus::synthetic(
+                    kit_id,
+                    format!("{err} Playing the bundled synthetic kit."),
+                ),
+            ),
+        }
+    }
+
+    pub fn from_dir(dir: &Path, sample_rate: u32) -> Result<Self, String> {
+        let manifest = kit::read_manifest(dir)?;
+        let mut sampler = Self::new(sample_rate, 32);
+        sampler.set_pan("hihat_closed", -0.35);
+        sampler.set_pan("hihat_open", -0.35);
+        sampler.set_pan("pedal_hihat", -0.35);
+        sampler.set_pan("ride", 0.4);
+        sampler.set_pan("crash", 0.2);
+        sampler.set_pan("tom_high", -0.25);
+        sampler.set_pan("tom_mid", 0.1);
+        sampler.set_pan("tom_low", 0.35);
+        for inst in &manifest.instruments {
+            if let Some(group) = &inst.choke_group {
+                sampler.set_choke_group(&inst.name, group);
+            }
+            for layer in &inst.layers {
+                let mut files = Vec::new();
+                for rel in &layer.files {
+                    let path = kit::safe_wav(dir, rel)?;
+                    files.push(Arc::new(kit::read_wav_48k(&path)?));
+                }
+                if files.is_empty() {
+                    return Err(format!("Instrument '{}' has no WAV files.", inst.name));
+                }
+                sampler.sample_bank.entry(inst.name.clone()).or_default().push(
+                    VelocityLayer {
+                        lo: layer.velocity[0],
+                        hi: layer.velocity[1],
+                        files,
+                    },
+                );
+            }
+        }
+        if sampler.sample_bank.is_empty() {
+            return Err("kit.json loaded no samples.".into());
+        }
+        Ok(sampler)
+    }
+
     pub fn set_choke_group(&mut self, instrument: &str, group: &str) {
         self.choke_mappings.insert(instrument.into(), group.into());
     }
@@ -91,16 +176,19 @@ impl Sampler {
     }
 
     pub fn load_sample(&mut self, instrument: &str, pcm: Vec<f32>) {
-        self.sample_bank
-            .entry(instrument.into())
-            .or_default()
-            .push(Arc::new(pcm));
+        self.sample_bank.entry(instrument.into()).or_default().push(
+            VelocityLayer {
+                lo: 0.0,
+                hi: 1.0,
+                files: vec![Arc::new(pcm)],
+            },
+        );
     }
 
     pub fn has_instrument(&self, instrument: &str) -> bool {
         self.sample_bank
             .get(instrument)
-            .is_some_and(|alts| !alts.is_empty())
+            .is_some_and(|layers| layers.iter().any(|l| !l.files.is_empty()))
     }
 
     /// Silences every voice immediately (transport stop).
@@ -124,13 +212,18 @@ impl Sampler {
             }
         }
 
-        let samples = if let Some(alternatives) = self.sample_bank.get(instrument) {
-            if alternatives.is_empty() {
+        let vel = velocity.clamp(0.0, 1.0);
+        let samples = if let Some(layers) = self.sample_bank.get(instrument) {
+            let layer = layers
+                .iter()
+                .find(|l| vel >= l.lo && vel <= l.hi)
+                .or_else(|| layers.last());
+            let Some(layer) = layer.filter(|l| !l.files.is_empty()) else {
                 return;
-            }
+            };
             let idx = self.round_robin_idx.entry(instrument.into()).or_insert(0);
-            let s = Arc::clone(&alternatives[*idx % alternatives.len()]);
-            *idx = (*idx + 1) % alternatives.len();
+            let s = Arc::clone(&layer.files[*idx % layer.files.len()]);
+            *idx = (*idx + 1) % layer.files.len();
             s
         } else {
             return;
@@ -370,5 +463,130 @@ mod tests {
 
         // Open hat has finished its choke fade; one live closed-hat voice remains.
         assert_eq!(sampler.voices.iter().flatten().count(), 1);
+    }
+
+    fn write_wav(path: &Path, rate: u32, samples: &[i16]) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).unwrap();
+        for sample in samples {
+            writer.write_sample(*sample).unwrap();
+        }
+        writer.finalize().unwrap();
+    }
+
+    fn fixture_dir(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "jam-kit-{}-{}-{}",
+            name,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    fn write_kit(dir: &Path, rel: &str, rate: u32, samples: &[i16]) {
+        write_wav(&dir.join(rel), rate, samples);
+        std::fs::write(
+            dir.join("kit.json"),
+            format!(
+                r#"{{"schemaVersion":1,"id":"fixture-kit","sampleRate":48000,"instruments":[{{"name":"kick","layers":[{{"velocity":[0,1],"files":["{rel}"]}}]}}]}}"#
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn file_kit_plays_fixture_wav_not_synthetic() {
+        let dir = fixture_dir("play");
+        let mut pcm = vec![0i16; 480];
+        for sample in pcm.iter_mut().take(8) {
+            *sample = 16_383;
+        }
+        write_kit(&dir, "kick.wav", 48_000, &pcm);
+        let mut sampler = Sampler::from_dir(&dir, 48_000).expect("load fixture kit");
+        sampler.trigger("kick", 1.0);
+        let mut left = vec![0.0f32; 32];
+        let mut right = vec![0.0f32; 32];
+        sampler.render(&mut left, &mut right);
+        let expected = 16_383.0 / 32768.0 * std::f32::consts::FRAC_1_SQRT_2;
+        assert!(
+            (left[0] - expected).abs() < 0.01,
+            "left[0]={} expected≈{expected}",
+            left[0]
+        );
+        let mut synthetic = Sampler::new_with_synthetic_kit(48_000);
+        synthetic.trigger("kick", 1.0);
+        let mut syn_l = vec![0.0f32; 32];
+        let mut syn_r = vec![0.0f32; 32];
+        synthetic.render(&mut syn_l, &mut syn_r);
+        assert!((syn_l[0] - left[0]).abs() > 0.05);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn open_missing_pack_stays_synthetic_and_says_so() {
+        let _lock = crate::kit::TEST_ENV.lock().unwrap();
+        let dir = fixture_dir("missing");
+        std::env::remove_var("JAM_SYNTHETIC_KIT");
+        std::env::set_var("JAM_KIT_DIR", &dir);
+        let (mut sampler, status) = Sampler::open("standard-rock-kit", 48_000);
+        assert_eq!(status.source, crate::kit::SYNTHETIC);
+        assert!(status.message.contains("not unpacked"), "{}", status.message);
+        assert!(status.message.contains("JAM_LIVE=1"), "{}", status.message);
+        assert!(sampler.has_instrument("kick"));
+        sampler.trigger("kick", 1.0);
+        let mut left = vec![0.0f32; 64];
+        let mut right = vec![0.0f32; 64];
+        sampler.render(&mut left, &mut right);
+        assert!(left.iter().any(|s| s.abs() > 0.05));
+        std::env::remove_var("JAM_KIT_DIR");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn open_file_kit_sets_file_status() {
+        let _lock = crate::kit::TEST_ENV.lock().unwrap();
+        let dir = fixture_dir("open-file");
+        write_kit(&dir, "kick.wav", 48_000, &[16_383; 64]);
+        std::env::remove_var("JAM_SYNTHETIC_KIT");
+        std::env::set_var("JAM_KIT_DIR", &dir);
+        let (mut sampler, status) = Sampler::open("fixture-kit", 48_000);
+        assert_eq!(status.source, crate::kit::FILE);
+        assert!(status.message.contains("unpacked"), "{}", status.message);
+        sampler.trigger("kick", 1.0);
+        let mut left = vec![0.0f32; 16];
+        let mut right = vec![0.0f32; 16];
+        sampler.render(&mut left, &mut right);
+        assert!(left[0].abs() > 0.2);
+        std::env::remove_var("JAM_KIT_DIR");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn refuses_zip_slip_and_wrong_rate() {
+        let dir = fixture_dir("unsafe");
+        write_kit(&dir, "kick.wav", 44_100, &[1000; 32]);
+        assert!(Sampler::from_dir(&dir, 48_000).is_err());
+        std::fs::write(
+            dir.join("kit.json"),
+            r#"{"schemaVersion":1,"id":"x","sampleRate":48000,"instruments":[{"name":"kick","layers":[{"velocity":[0,1],"files":["../secret.wav"]}]}]}"#,
+        )
+        .unwrap();
+        let err = match Sampler::from_dir(&dir, 48_000) {
+            Ok(_) => panic!("zip-slip path must be refused"),
+            Err(e) => e,
+        };
+        assert!(err.contains("Unsafe"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

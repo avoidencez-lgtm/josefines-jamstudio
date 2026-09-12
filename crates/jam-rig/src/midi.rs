@@ -18,12 +18,14 @@ pub trait MidiSink: Send {
 #[derive(Default, Debug, Clone)]
 pub struct MemorySink {
     pub messages: Vec<Vec<u8>>,
+    pub at_samples: Vec<u64>,
 }
 
 impl MemorySink {
     pub fn new() -> Self {
         Self {
             messages: Vec::new(),
+            at_samples: Vec::new(),
         }
     }
 }
@@ -34,7 +36,7 @@ impl MidiSink for MemorySink {
         Ok(())
     }
     fn describe(&self) -> String {
-        "no MIDI port open (messages are only logged)".into()
+        "No MIDI port is open. Messages are only logged.".into()
     }
     fn is_live(&self) -> bool {
         false
@@ -50,7 +52,7 @@ pub struct MidiPortInfo {
 /// Output ports the OS exposes right now. An error here means the MIDI subsystem
 /// itself is unavailable (not merely that nothing is plugged in).
 pub fn list_output_ports() -> Result<Vec<MidiPortInfo>, String> {
-    let out = MidiOutput::new(CLIENT_NAME).map_err(|e| format!("MIDI output unavailable: {e}"))?;
+    let out = MidiOutput::new(CLIENT_NAME).map_err(|e| format!("MIDI output is unavailable. {e}"))?;
     let mut ports = Vec::new();
     for p in out.ports() {
         let name = out
@@ -73,7 +75,7 @@ impl MidirSink {
     /// boots on some systems).
     pub fn open(name: &str) -> Result<Self, String> {
         let out =
-            MidiOutput::new(CLIENT_NAME).map_err(|e| format!("MIDI output unavailable: {e}"))?;
+            MidiOutput::new(CLIENT_NAME).map_err(|e| format!("MIDI output is unavailable. {e}"))?;
         let ports = out.ports();
         let named: Vec<(String, midir::MidiOutputPort)> = ports
             .into_iter()
@@ -97,7 +99,7 @@ impl MidirSink {
         let port_name = chosen.0.clone();
         let conn = out
             .connect(&chosen.1, "jamstudio-rig")
-            .map_err(|e| format!("could not open MIDI port \"{port_name}\": {e}"))?;
+            .map_err(|e| format!("Could not open MIDI port \"{port_name}\". {e}"))?;
         Ok(Self { port_name, conn })
     }
 
@@ -110,7 +112,7 @@ impl MidiSink for MidirSink {
     fn send(&mut self, msg: &[u8]) -> Result<(), String> {
         self.conn
             .send(msg)
-            .map_err(|e| format!("MIDI send to \"{}\" failed: {e}", self.port_name))
+            .map_err(|e| format!("MIDI send to \"{}\" failed. {e}", self.port_name))
     }
     fn describe(&self) -> String {
         self.port_name.clone()
@@ -152,6 +154,10 @@ mod tests {
         sink.send(&[0xB1, 12, 100]).unwrap();
         assert_eq!(sink.messages, vec![vec![0xC0, 42], vec![0xB1, 12, 100]]);
         assert!(!sink.is_live());
+        assert_eq!(
+            sink.describe(),
+            "No MIDI port is open. Messages are only logged."
+        );
     }
 
     #[test]

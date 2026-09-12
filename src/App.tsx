@@ -18,6 +18,7 @@ import { listenToController } from "./lib/controller";
 import { handleJoQuery } from "./lib/jo/conversation";
 import { useAi } from "./lib/jo/providers";
 import { listenToVoice } from "./lib/jo/voice";
+import { applyReducedMotion, readReducedMotion } from "./lib/reducedMotion";
 import { handleShortcut } from "./lib/shortcuts";
 import { SCREENS, SCREEN_ICONS } from "./screens/registry";
 import { useEngineStore } from "./store/engine";
@@ -76,6 +77,18 @@ export const App: React.FC = () => {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
+  useEffect(() => {
+    const apply = () =>
+      applyReducedMotion(readReducedMotion(useEngineStore.getState().settings));
+    apply();
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    mq.addEventListener("change", apply);
+    const unsub = useEngineStore.subscribe(apply);
+    return () => {
+      mq.removeEventListener("change", apply);
+      unsub();
+    };
+  }, []);
   const [showClose, setShowClose] = useState(false);
   const closeDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -105,7 +118,10 @@ export const App: React.FC = () => {
         else cleanup = off;
       })
       .catch((e) =>
-        useEngineStore.getState().notify("error", `Close guard: ${String(e)}`),
+        useEngineStore.getState().notify(
+          "error",
+          `Could not watch the close request. ${String(e).replace(/^Error:\s*/, "")}`,
+        ),
       );
     return () => {
       disposed = true;
@@ -133,8 +149,29 @@ export const App: React.FC = () => {
         else off = cleanup;
       })
       .catch((e) =>
-        useEngineStore.getState().notify("error", `Quit guard: ${String(e)}`),
+        useEngineStore.getState().notify(
+          "error",
+          `Could not watch the quit request. ${String(e).replace(/^Error:\s*/, "")}`,
+        ),
       );
+    return () => {
+      disposed = true;
+      off?.();
+    };
+  }, [isPreview]);
+  useEffect(() => {
+    if (isPreview) return;
+    let disposed = false;
+    let off: (() => void) | undefined;
+    void ipc
+      .listen("app.open-stage", () => {
+        useEngineStore.getState().setScreen("stage");
+      })
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else off = cleanup;
+      })
+      .catch((e) => useEngineStore.getState().notify("error", String(e)));
     return () => {
       disposed = true;
       off?.();
@@ -177,7 +214,10 @@ export const App: React.FC = () => {
         else cleanup = c;
       })
       .catch((e) =>
-        useEngineStore.getState().notify("error", `Startup: ${String(e)}`),
+        useEngineStore.getState().notify(
+          "error",
+          `Could not start the studio. ${String(e).replace(/^Error:\s*/, "")}`,
+        ),
       );
     return () => {
       disposed = true;
@@ -244,7 +284,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen bg-[var(--bg-0)] text-[var(--fg-0)] overflow-hidden">
-      <nav className="studio-nav" aria-label="Studio rooms">
+      <nav className="studio-nav" aria-label="These are the studio rooms.">
         <div className="studio-brand">
           <span>J</span>
           <div>
@@ -265,7 +305,7 @@ export const App: React.FC = () => {
                 }}
                 aria-current={active ? "page" : undefined}
                 aria-label={s.label}
-                title={`${s.label} · ${s.description}`}
+                title={`${s.label}. ${s.description}`}
               >
                 <Icon
                   size={25}
@@ -283,7 +323,7 @@ export const App: React.FC = () => {
         <button
           type="button"
           className="studio-shortcuts"
-          aria-label="Help & guides"
+          aria-label="Open help and guides."
           aria-expanded={showHelp}
           aria-controls={showHelp ? "studio-help" : undefined}
           onClick={() => {
@@ -291,10 +331,10 @@ export const App: React.FC = () => {
             setHelpRequest((n) => n + 1);
             setShowHelp(true);
           }}
-          title="Help & guides (?)"
+          title="Open help and guides. (?)"
         >
           <BookOpen size={21} aria-hidden="true" />
-          <span>Help & guides</span>
+          <span>Open help and guides.</span>
         </button>
       </nav>
 
@@ -343,17 +383,16 @@ export const App: React.FC = () => {
           ref={closeDialog}
           aria-labelledby="close-title"
           onCancel={() => setShowClose(false)}
-          className="bg-[var(--bg-1)] text-[var(--fg-0)] border border-[var(--line)] rounded-xl p-6 max-w-md m-auto backdrop:bg-black/70"
+          className="bg-[var(--bg-1)] text-[var(--fg-0)] border border-[var(--line)] rounded-[var(--radius-l)] p-6 max-w-md m-auto backdrop:bg-black/70"
         >
           <h2 id="close-title" className="text-lg font-semibold mb-2">
             Keep your unsaved work?
           </h2>
           <p className="mb-5 text-sm">
-            Your song, chart or film has unsaved changes. Keep editing to save
-            them before closing.
+            Your song, chart or film has unsaved changes. Keep these edits before you close.
           </p>
           <div className="flex gap-3">
-            <Button onClick={() => setShowClose(false)}>Keep editing</Button>
+            <Button onClick={() => setShowClose(false)}>Keep these edits.</Button>
             <Button
               variant="danger"
               onClick={async () => {
@@ -366,7 +405,7 @@ export const App: React.FC = () => {
                 }
               }}
             >
-              Discard and close
+              Discard these edits and close.
             </Button>
           </div>
         </dialog>

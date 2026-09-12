@@ -54,7 +54,7 @@ impl ClipCache {
     /// The decoded clip for a file, reusing an entry whose size and mtime still match.
     pub fn load(&mut self, path: &Path) -> Result<DecodedClip, String> {
         let meta =
-            std::fs::metadata(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+            std::fs::metadata(path).map_err(|e| format!("Cannot read {}. {e}", path.display()))?;
         let size = meta.len();
         let modified = meta.modified().ok();
         if let Some(entry) = self.entries.get(path) {

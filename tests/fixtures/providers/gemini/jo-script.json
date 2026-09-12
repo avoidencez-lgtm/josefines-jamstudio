@@ -1,0 +1,524 @@
+{
+  "01-blues-ninety-shuffle": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_style",
+                "args": { "styleId": "blues-shuffle" }
+              }
+            },
+            { "functionCall": { "name": "set_tempo", "args": { "bpm": 90 } } },
+            {
+              "functionCall": {
+                "name": "load_chart",
+                "args": { "chartId": "blues-12-bar" }
+              }
+            },
+            { "text": "Blues shuffle in A at ninety." }
+          ]
+        }
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 180,
+      "candidatesTokenCount": 48,
+      "totalTokenCount": 228
+    }
+  },
+  "02-twelve-bar-g-100-rock": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_style",
+                "args": { "styleId": "rock-straight" }
+              }
+            },
+            { "functionCall": { "name": "set_tempo", "args": { "bpm": 100 } } },
+            {
+              "functionCall": {
+                "name": "load_chart",
+                "args": { "chartId": "blues-12-bar" }
+              }
+            },
+            {
+              "functionCall": {
+                "name": "transport_control",
+                "args": { "action": "play" }
+              }
+            },
+            { "text": "Blues in G, one hundred, rock. Counting in." }
+          ]
+        }
+      }
+    ]
+  },
+  "03-lets-jam": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "transport_control",
+                "args": { "action": "play" }
+              }
+            },
+            { "text": "Let's roll." }
+          ]
+        }
+      }
+    ]
+  },
+  "04-stop": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "transport_control",
+                "args": { "action": "stop" }
+              }
+            },
+            { "text": "Stopping." }
+          ]
+        }
+      }
+    ]
+  },
+  "05-pause": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "transport_control",
+                "args": { "action": "pause" }
+              }
+            },
+            { "text": "Holding." }
+          ]
+        }
+      }
+    ]
+  },
+  "06-tempo-135": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            { "functionCall": { "name": "set_tempo", "args": { "bpm": 135 } } },
+            { "text": "One thirty-five." }
+          ]
+        }
+      }
+    ]
+  },
+  "07-faster": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            { "functionCall": { "name": "set_tempo", "args": { "delta": 5 } } },
+            { "text": "Pushing five BPM." }
+          ]
+        }
+      }
+    ]
+  },
+  "08-slower": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": { "name": "set_tempo", "args": { "delta": -5 } }
+            },
+            { "text": "Pulling five BPM." }
+          ]
+        }
+      }
+    ]
+  },
+  "09-fill": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "trigger_cue",
+                "args": { "cue": "fill" }
+              }
+            },
+            { "text": "Fill on the next bar." }
+          ]
+        }
+      }
+    ]
+  },
+  "10-crash": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "trigger_cue",
+                "args": { "cue": "crash" }
+              }
+            },
+            { "text": "Crash coming." }
+          ]
+        }
+      }
+    ]
+  },
+  "11-ending": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "trigger_cue",
+                "args": { "cue": "ending" }
+              }
+            },
+            { "text": "Ending at the next bar." }
+          ]
+        }
+      }
+    ]
+  },
+  "12-funk": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_style",
+                "args": { "styleId": "funk-16" }
+              }
+            },
+            { "text": "Funk sixteenths." }
+          ]
+        }
+      }
+    ]
+  },
+  "13-metal": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_style",
+                "args": { "styleId": "metal-gallop" }
+              }
+            },
+            { "text": "Gallop locked in." }
+          ]
+        }
+      }
+    ]
+  },
+  "14-jazz": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_style",
+                "args": { "styleId": "jazz-swing" }
+              }
+            },
+            { "text": "Jazz swing." }
+          ]
+        }
+      }
+    ]
+  },
+  "15-ballad": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_style",
+                "args": { "styleId": "ballad-68" }
+              }
+            },
+            { "text": "Six eight ballad." }
+          ]
+        }
+      }
+    ]
+  },
+  "16-drop-bass": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_parts",
+                "args": { "muteBass": true }
+              }
+            },
+            { "text": "Bass out." }
+          ]
+        }
+      }
+    ]
+  },
+  "17-bring-bass": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_parts",
+                "args": { "muteBass": false }
+              }
+            },
+            { "text": "Bass back." }
+          ]
+        }
+      }
+    ]
+  },
+  "18-mute-drums": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_parts",
+                "args": { "muteDrums": true }
+              }
+            },
+            { "text": "Drums out." }
+          ]
+        }
+      }
+    ]
+  },
+  "19-follow-energy": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "toggle_energy_follower",
+                "args": { "enabled": true }
+              }
+            },
+            { "text": "Following your dynamics." }
+          ]
+        }
+      }
+    ]
+  },
+  "20-record": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "record_take",
+                "args": { "action": "start" }
+              }
+            },
+            { "text": "Recording." }
+          ]
+        }
+      }
+    ]
+  },
+  "21-stop-recording": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "record_take",
+                "args": { "action": "stop" }
+              }
+            },
+            { "text": "Take saved." }
+          ]
+        }
+      }
+    ]
+  },
+  "22-load-chart": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "load_chart",
+                "args": { "chartId": "blues-quick-change" }
+              }
+            },
+            { "text": "Quick change blues." }
+          ]
+        }
+      }
+    ]
+  },
+  "23-loop-1-5": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_loop",
+                "args": { "enabled": true, "startBar": 1, "endBar": 5 }
+              }
+            },
+            { "text": "Looping one to five." }
+          ]
+        }
+      }
+    ]
+  },
+  "24-intensity": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_intensity",
+                "args": { "intensity": 1 }
+              }
+            },
+            { "text": "Full intensity." }
+          ]
+        }
+      }
+    ]
+  },
+  "25-straight-rock": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "set_style",
+                "args": { "styleId": "rock-straight" }
+              }
+            },
+            { "text": "Straight eights." }
+          ]
+        }
+      }
+    ]
+  },
+  "26-cut-it": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "transport_control",
+                "args": { "action": "stop" }
+              }
+            },
+            { "text": "Cut." }
+          ]
+        }
+      }
+    ]
+  },
+  "27-load-song": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "load_song",
+                "args": { "query": "Autumn Leaves" }
+              }
+            },
+            { "text": "Looking for Autumn Leaves." }
+          ]
+        }
+      }
+    ]
+  },
+  "28-next-section": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "songwriting",
+                "args": { "action": "next" }
+              }
+            },
+            { "text": "Next section." }
+          ]
+        }
+      }
+    ]
+  },
+  "29-save-song": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "songwriting",
+                "args": { "action": "save" }
+              }
+            },
+            { "text": "Saving." }
+          ]
+        }
+      }
+    ]
+  },
+  "30-undo": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "songwriting",
+                "args": { "action": "undo" }
+              }
+            },
+            { "text": "Undoing." }
+          ]
+        }
+      }
+    ]
+  }
+}

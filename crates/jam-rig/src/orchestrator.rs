@@ -3,6 +3,8 @@
 
 use crate::midi::{describe_message, MemorySink, MidiSink, MidirSink};
 use crate::profiles::{Rendered, RigCommand, RigProfile};
+use crate::scheduler::{MidiScheduler, CLOCK, CONTINUE, START, STOP};
+use jam_core::timeline::{beats_to_samples, samples_to_beats};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -32,10 +34,18 @@ pub struct RigOrchestrator {
     pub control_values: HashMap<u8, u8>,
     /// Chart sections drive scene changes only when this is on.
     pub follow_sections: bool,
+    /// When true, transport clock bytes (start/stop/continue/ticks) are sent.
+    pub send_clock: bool,
+    /// Log to the monitor without writing the sink (MemorySink tests still see monitor).
+    pub dry_run: bool,
     monitor: VecDeque<SentMessage>,
     started: Instant,
     last_section: Option<String>,
     last_sent_scene: Option<usize>,
+    scheduler: MidiScheduler,
+    clock_running: bool,
+    clock_paused: bool,
+    next_pulse: u64,
 }
 
 impl RigOrchestrator {
@@ -48,10 +58,16 @@ impl RigOrchestrator {
             current_scene: 0,
             control_values: HashMap::new(),
             follow_sections: true,
+            send_clock: false,
+            dry_run: false,
             monitor: VecDeque::with_capacity(MONITOR_CAPACITY),
             started: Instant::now(),
             last_section: None,
             last_sent_scene: None,
+            scheduler: MidiScheduler::new(48_000),
+            clock_running: false,
+            clock_paused: false,
+            next_pulse: 0,
         };
         me.reset_controls();
         me
@@ -146,7 +162,9 @@ impl RigOrchestrator {
     }
 
     fn send_bytes(&mut self, bytes: Vec<u8>, reason: &str) -> Result<(), String> {
-        self.sink.send(&bytes)?;
+        if !self.dry_run {
+            self.sink.send(&bytes)?;
+        }
         if self.monitor.len() == MONITOR_CAPACITY {
             self.monitor.pop_front();
         }
@@ -263,6 +281,96 @@ impl RigOrchestrator {
     /// song restarts in the same section.
     pub fn reset_section_tracking(&mut self) {
         self.last_section = None;
+    }
+
+    pub fn set_clock(&mut self, on: bool) {
+        if self.send_clock && !on && (self.clock_running || self.clock_paused) {
+            let _ = self.send_bytes(vec![STOP], "clock");
+            self.clock_running = false;
+            self.clock_paused = false;
+            self.scheduler.clear();
+        }
+        self.send_clock = on;
+    }
+
+    pub fn set_dry_run(&mut self, on: bool) {
+        self.dry_run = on;
+    }
+
+    /// Transport clock byte when `send_clock` is on.
+    pub fn send_clock_byte(&mut self, status: u8) -> Result<bool, String> {
+        if !self.send_clock {
+            return Ok(false);
+        }
+        self.send_bytes(vec![status], "clock")?;
+        Ok(true)
+    }
+
+    pub fn on_transport_play(&mut self, now_sample: u64, bpm: f64) -> Result<(), String> {
+        if !self.send_clock {
+            return Ok(());
+        }
+        let status = if self.clock_paused { CONTINUE } else { START };
+        self.clock_paused = false;
+        self.clock_running = true;
+        self.send_clock_byte(status)?;
+        let beats = samples_to_beats(now_sample, bpm, 48_000);
+        self.next_pulse = (beats * f64::from(crate::PPQN)).ceil() as u64;
+        self.pump_clock(now_sample, bpm)
+    }
+
+    pub fn on_transport_pause(&mut self) -> Result<(), String> {
+        if !self.send_clock || !self.clock_running {
+            return Ok(());
+        }
+        self.clock_running = false;
+        self.clock_paused = true;
+        self.scheduler.clear();
+        self.send_clock_byte(STOP)?;
+        Ok(())
+    }
+
+    pub fn on_transport_stop(&mut self) -> Result<(), String> {
+        let was = self.clock_running || self.clock_paused;
+        self.clock_running = false;
+        self.clock_paused = false;
+        self.next_pulse = 0;
+        self.scheduler.clear();
+        if self.send_clock && was {
+            self.send_clock_byte(STOP)?;
+        }
+        Ok(())
+    }
+
+    pub fn on_transport_tick(&mut self, now_sample: u64, bpm: f64) -> Result<(), String> {
+        if !self.send_clock || !self.clock_running {
+            return Ok(());
+        }
+        self.pump_clock(now_sample, bpm)
+    }
+
+    fn pump_clock(&mut self, now_sample: u64, bpm: f64) -> Result<(), String> {
+        let horizon = now_sample + beats_to_samples(1.0, bpm, 48_000);
+        while beats_to_samples(self.next_pulse as f64 / f64::from(crate::PPQN), bpm, 48_000)
+            <= horizon
+        {
+            let at =
+                beats_to_samples(self.next_pulse as f64 / f64::from(crate::PPQN), bpm, 48_000);
+            self.scheduler.schedule_at(at, vec![CLOCK]);
+            self.next_pulse += 1;
+        }
+        for (_, bytes) in self.scheduler.due(now_sample) {
+            self.send_bytes(bytes, "clock")?;
+        }
+        Ok(())
+    }
+
+    /// All notes off and reset all controllers on the profile channel.
+    pub fn panic(&mut self) -> Result<(), String> {
+        let notes_off = self.profile.control_change(123, 0);
+        let reset = self.profile.control_change(121, 0);
+        self.send_bytes(notes_off, "panic")?;
+        self.send_bytes(reset, "panic")
     }
 }
 
@@ -387,5 +495,60 @@ mod tests {
         }));
         orch.started = Instant::now() - Duration::from_secs(1);
         assert!(!orch.is_recent_echo(&press));
+    }
+
+    #[test]
+    fn panic_sends_all_notes_off_and_reset_controllers() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.panic().unwrap();
+        let mon = orch.monitor();
+        assert_eq!(mon[0].bytes, vec![0xB0, 123, 0]);
+        assert_eq!(mon[1].bytes, vec![0xB0, 121, 0]);
+        assert!(mon.iter().all(|m| m.reason == "panic"));
+    }
+
+    #[test]
+    fn clock_is_silent_until_enabled_and_dry_run_still_logs() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        assert!(!orch.send_clock_byte(crate::START).unwrap());
+        assert!(orch.monitor().is_empty());
+        orch.set_clock(true);
+        assert!(orch.send_clock_byte(crate::START).unwrap());
+        assert!(orch.send_clock_byte(crate::CLOCK).unwrap());
+        assert!(orch.send_clock_byte(crate::STOP).unwrap());
+        assert!(orch.send_clock_byte(crate::CONTINUE).unwrap());
+        let kinds: Vec<u8> = orch.monitor().iter().map(|m| m.bytes[0]).collect();
+        assert_eq!(kinds, vec![crate::START, crate::CLOCK, crate::STOP, crate::CONTINUE]);
+        orch.clear_monitor();
+        orch.set_dry_run(true);
+        orch.send_program(3).unwrap();
+        assert_eq!(orch.monitor()[0].bytes, vec![0xC0, 3]);
+        assert_eq!(orch.monitor()[0].reason, "manual program 3");
+    }
+
+    #[test]
+    fn transport_play_pause_stop_drive_clock_bytes() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.on_transport_play(0, 120.0).unwrap();
+        assert!(orch.monitor().is_empty());
+        orch.set_clock(true);
+        orch.on_transport_play(0, 120.0).unwrap();
+        let first: Vec<u8> = orch.monitor().iter().map(|m| m.bytes[0]).collect();
+        assert_eq!(first[0], START);
+        assert!(first.iter().any(|b| *b == CLOCK));
+        orch.clear_monitor();
+        orch.on_transport_pause().unwrap();
+        assert_eq!(orch.monitor()[0].bytes, vec![STOP]);
+        orch.clear_monitor();
+        orch.on_transport_play(36_000, 120.0).unwrap();
+        assert_eq!(orch.monitor()[0].bytes, vec![CONTINUE]);
+        orch.on_transport_tick(48_000, 120.0).unwrap();
+        assert!(orch.monitor().iter().any(|m| m.bytes == [CLOCK]));
+        orch.clear_monitor();
+        orch.on_transport_stop().unwrap();
+        assert_eq!(orch.monitor()[0].bytes, vec![STOP]);
+        orch.clear_monitor();
+        orch.on_transport_play(0, 120.0).unwrap();
+        assert_eq!(orch.monitor()[0].bytes, vec![START]);
     }
 }

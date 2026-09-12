@@ -130,7 +130,7 @@ describe("chart text parser", () => {
     }
   });
 
-  it("rejects chart tempos outside the engine 40–240 range", () => {
+  it("rejects chart tempos outside the chart 40–240 range", () => {
     for (const tempo of ["30", "260", "0", "fast"]) {
       const { chart, problems } = parseChartText(`bpm: ${tempo}\n[A]\n| C |`);
       expect(

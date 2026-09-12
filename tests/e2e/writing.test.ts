@@ -255,7 +255,7 @@ it("the bar editor and the harmony palette rewrite chords bar by bar; malformed 
 
   // Harmony palette: the dominant that leads home replaces bar 4's G.
   const home = harmonyChoices(body().chart, "C", "dominant").find(
-    (choice) => choice.reason === "Resolve to Am",
+    (choice) => choice.reason === "This resolves to Am.",
   );
   expect(home).toMatchObject({ chord: "E7", degree: "V7/i", shared: 1 });
   w.edit((b) => {
@@ -367,7 +367,7 @@ it("Add section, take it out of the form, Delete section: a version is kept, its
   w.edit((b) => {
     b.chart.sections.push({
       id,
-      name: "New section",
+      name: "This is a new section.",
       bars: structuredClone(selected.bars),
     });
     b.sections[id] = defaultSection();
@@ -398,7 +398,7 @@ it("Add section, take it out of the form, Delete section: a version is kept, its
   const inForm = writing();
   w.edit((b) => deleteSection(b, id));
   expect(writing().message).toBe(
-    "Error: New section is still in the form. Remove its form entries in Edit order and repeats first.",
+    "Error: This is a new section. is still in the form. Remove its form entries in Edit order and repeats first.",
   );
   expect(writing().song).toBe(inForm.song);
 
@@ -406,7 +406,7 @@ it("Add section, take it out of the form, Delete section: a version is kept, its
     b.chart.arrangement.splice(2, 1);
   });
   const beforeDelete = structuredClone(body());
-  w.version("Before deleting New section");
+  w.version("Before deleting This is a new section.");
   w.edit((b) => deleteSection(b, id));
   const sections = song().body.chart.sections;
   if (!sections.some((s) => s.id === id)) w.select(sections[0].id);
@@ -416,7 +416,7 @@ it("Add section, take it out of the form, Delete section: a version is kept, its
   expect(body().lyrics?.[id]).toBeUndefined();
   expect(writing().selected).toBe("verse");
   expect(song().versions).toHaveLength(1);
-  expect(song().versions[0].name).toBe("Before deleting New section");
+  expect(song().versions[0].name).toBe("Before deleting This is a new section.");
   expect(song().versions[0].body).toEqual(beforeDelete);
   expect(song().versions[0].body.lyrics?.[id]).toBe("Bridge words");
 
@@ -442,7 +442,7 @@ it("Save song stores it in the engine and lists it; each save bumps the revision
   expect(writing()).toMatchObject({
     busy: false,
     dirty: false,
-    message: "Song saved.",
+    message: "This song is saved.",
   });
   expect(song().revision).toBe(1);
   expect(song().versions).toEqual([]);
@@ -633,7 +633,7 @@ it("Keep version names default in order, Restore is an ordinary Undo step, and t
   const original = structuredClone(body());
 
   w.version("   ");
-  expect(song().versions.map((v) => v.name)).toEqual(["Version 1"]);
+  expect(song().versions.map((v) => v.name)).toEqual(["This is version 1."]);
   expect(song().versions[0].id).toMatch(UUID);
   expect(song().versions[0].body).toEqual(original);
   expect(song().versions[0].body).not.toBe(body());
@@ -647,7 +647,7 @@ it("Keep version names default in order, Restore is an ordinary Undo step, and t
   });
   const third = structuredClone(body());
   expect(song().versions.map((v) => v.name)).toEqual([
-    "Version 1",
+    "This is version 1.",
     "Second title",
   ]);
   expect(song().versions[1].body.chart.name).toBe("Second");
@@ -663,7 +663,7 @@ it("Keep version names default in order, Restore is an ordinary Undo step, and t
   expect(writing().past).toBe(untouched.past);
 
   while (song().versions.length < 20) w.version();
-  expect(song().versions.at(-1)?.name).toBe("Version 20");
+  expect(song().versions.at(-1)?.name).toBe("This is version 20.");
   w.version("One too many");
   expect(song().versions).toHaveLength(20);
   expect(writing().message).toBe(
@@ -721,7 +721,7 @@ it("Library: a chart typed as text stays as a draft across rooms, saves as a use
     dirty: false,
     editingId: "river-tune",
   });
-  expect(notices()).toContain("Saved River Tune");
+  expect(notices()).toContain("This saved River Tune.");
   expect(useEngineStore.getState().libraryInfo?.userChartIds).toEqual([
     "river-tune",
   ]);
@@ -761,7 +761,7 @@ it("Library: a chart typed as text stays as a draft across rooms, saves as a use
   expect(useEngineStore.getState().libraryInfo?.userChartIds).toEqual([]);
   await e.deleteUserChart("blues-12-bar");
   expect(notices()).toContain(
-    'Delete chart: "blues-12-bar" is not a user chart',
+    'The delete chart failed. "blues-12-bar" is not a user chart. Pick a listed chart or style, or a chart you saved.',
   );
   expect(useEngineStore.getState().charts.map((c) => c.id)).toContain(
     "blues-12-bar",

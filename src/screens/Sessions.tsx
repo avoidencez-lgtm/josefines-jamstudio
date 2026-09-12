@@ -18,6 +18,7 @@ import {
   drillFor,
   formatJamTime,
   practiceStreakDays,
+  sessionProgress,
   takeDate,
   takeMeasurements,
 } from "../lib/sessions/stats";
@@ -34,6 +35,9 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
     startRecording,
     stopRecording,
     setLatencySamples,
+    calibrateLatency,
+    calibrating,
+    latencyEstimated,
     loadTakes,
     deleteTake,
     takeAnalysis,
@@ -49,6 +53,9 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
       startRecording: s.startRecording,
       stopRecording: s.stopRecording,
       setLatencySamples: s.setLatencySamples,
+      calibrateLatency: s.calibrateLatency,
+      calibrating: s.calibrating,
+      latencyEstimated: s.latencyEstimated,
       loadTakes: s.loadTakes,
       deleteTake: s.deleteTake,
       takeAnalysis: s.takeAnalysis,
@@ -74,6 +81,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
   const sampleRate = engineStatus?.sample_rate || 48_000;
   const totalSecs = takes.reduce((acc, t) => acc + t.durationSecs, 0);
   const streak = practiceStreakDays(takes);
+  const progress = sessionProgress(takes, takeAnalysis);
 
   const visibleTakes = takes.filter(
     (t) =>
@@ -89,7 +97,11 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
         ? ` (${report.missingStems.length} stem file(s) could not be found on disk)`
         : "";
       setExportMessage(
-        `Wrote ${report.copiedStems.length} stem(s) and a tempo map to ${report.dir}${missing}.${report.reaperScript ? " For REAPER, follow REAPER-START-HERE.txt in that folder." : ""}`,
+        `Wrote ${report.copiedStems.length} stem(s) and a tempo map to ${report.dir}${missing}. Open README.txt for Logic steps.${report.reaperScript ? " For REAPER, follow REAPER-START-HERE.txt." : ""}`,
+      );
+    } else {
+      setExportMessage(
+        "Export failed. If the disk is full, free space and try again.",
       );
     }
   };
@@ -114,34 +126,40 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold tracking-wide uppercase font-mono text-[var(--fg-0)]">
-              Sessions, Takes & DAW Export
+              These are sessions, takes and DAW export.
             </h2>
             <StatusPill
               status={recordingError ? "error" : isRecording ? "live" : "idle"}
               label={
                 recordingError
-                  ? "Recording stopped"
+                  ? "This recording is stopped."
                   : isRecording
-                    ? "Recording Take"
-                    : "Idle"
+                    ? "Recording a take."
+                    : "This is idle."
               }
             />
           </div>
           <div className="flex items-center gap-4 text-xs font-mono text-[var(--fg-2)] mt-1">
             <span>
-              Practice streak:{" "}
-              <strong className="text-amber-400">
-                {streak === 0
-                  ? "none yet"
-                  : `${streak} day${streak === 1 ? "" : "s"}`}
-              </strong>
+              {streak === 0 ? (
+                "Practice streak has no days yet."
+              ) : (
+                <>
+                  Practice streak is{" "}
+                  <strong className="text-[var(--accent)]">
+                    {streak} day{streak === 1 ? "" : "s"}
+                  </strong>
+                  .
+                </>
+              )}
             </span>
             <span>•</span>
             <span>
-              Recorded jam time:{" "}
+              Recorded jam time is{" "}
               <strong className="text-[var(--fg-0)]">
                 {formatJamTime(totalSecs)}
               </strong>
+              .
             </span>
           </div>
         </div>
@@ -149,11 +167,11 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
         <div className="flex flex-wrap items-center gap-3">
           <label
             className="flex items-center gap-2 text-xs font-mono text-[var(--fg-2)]"
-            title="Samples trimmed from the start of the guitar stem so it lines up with the band. Automatic loopback measurement is not built yet; measure once in your DAW and type it here."
+            title="Samples trimmed from the start of the guitar stem so it lines up with the band. Measure loopback with a cable from output to guitar input, or enter the guitar offset."
           >
-            <span>Guitar offset</span>
+            <span>Enter the guitar offset.</span>
             <input
-              className="w-20 bg-[var(--bg-2)] border border-[var(--line)] rounded px-2 py-1 text-[var(--fg-0)] text-right"
+              className="w-20 bg-[var(--bg-2)] border border-[var(--line)] rounded-[var(--radius-m)] px-2 py-1 text-[var(--fg-0)] text-right"
               inputMode="numeric"
               value={latencyDraft}
               onChange={(e) => setLatencyDraft(e.target.value)}
@@ -163,13 +181,23 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
               }}
             />
             <span className="text-[var(--accent)] font-semibold">
-              smp · {((latencySamples * 1000) / sampleRate).toFixed(1)} ms
+              {latencySamples} samples.{" "}
+              {((latencySamples * 1000) / sampleRate).toFixed(1)} ms.
+              {latencyEstimated ? " This is estimated." : ""}
             </span>
           </label>
+          <Button
+            size="sm"
+            disabled={isRecording || calibrating || isPreview}
+            onClick={() => void calibrateLatency()}
+            title="Plays three clicks and listens on the guitar input."
+          >
+            {calibrating ? "Measuring the loopback." : "Measure loopback"}
+          </Button>
 
           {isRecording ? (
             <Button size="sm" variant="danger" onClick={() => stopRecording()}>
-              {recordingError ? "Save partial take" : "Stop Recording"}
+              {recordingError ? "Save partial take" : "Stop recording."}
             </Button>
           ) : (
             <Button
@@ -177,25 +205,86 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
               variant="primary"
               onClick={() => startRecording()}
             >
-              Record New Take
+              Record a new take.
             </Button>
           )}
         </div>
       </div>
 
+      {recordingError && (
+        <p role="alert" className="workspace-note">
+          {recordingError} If the disk is full, free space and try again.
+        </p>
+      )}
       {exportMessage && (
-        <div className="p-3 bg-emerald-950/40 border border-emerald-500/50 rounded-[var(--radius-m)] text-xs font-mono text-emerald-300">
+        <div className="p-3 bg-[var(--ok-soft)] border border-[var(--ok)] rounded-[var(--radius-m)] text-xs font-mono text-[var(--ok)]">
           {exportMessage}
         </div>
       )}
 
+      <Panel title="This is the progress.">
+        {takes.length === 0 ? (
+          <div className="py-8 flex flex-col items-center justify-center text-center text-[var(--fg-2)] space-y-2 font-mono text-xs">
+            <p>Your first take will appear here.</p>
+            <p className="text-[var(--fg-1)]">
+              Progress uses recorded take files. Hit Record a new take, then
+              Analyze this take for timing and pitch trends.
+            </p>
+          </div>
+        ) : (
+          <div className="workspace-stack text-xs font-mono text-[var(--fg-1)]">
+            <p>
+              This week has{" "}
+              <strong className="text-[var(--fg-0)]">
+                {progress.sessionsThisWeek} session
+                {progress.sessionsThisWeek === 1 ? "" : "s"}
+              </strong>
+              . {formatJamTime(progress.minutesThisWeek * 60)} recorded. All
+              files add up to {formatJamTime(progress.minutesAll * 60)}.
+              Activity counts, not a quality score.
+            </p>
+            {progress.tempoRecords.length ? (
+              <p>
+                Highest tempos are{" "}
+                {progress.tempoRecords
+                  .slice(0, 8)
+                  .map((r) => `${r.chartId} ${r.tempo.toFixed(0)} BPM`)
+                  .join(" · ")}
+                .
+              </p>
+            ) : (
+              <p>No chart tempos in the take files yet.</p>
+            )}
+            {progress.trendTakes ? (
+              <p>
+                Last 20 takes show{" "}
+                {progress.meanTimingMs != null
+                  ? `a mean grid distance of ${progress.meanTimingMs.toFixed(1)} ms`
+                  : "timing does not have enough evidence"}
+                .{" "}
+                {progress.meanCents != null
+                  ? `a mean pitch distance of ${progress.meanCents.toFixed(1)} cents`
+                  : "pitch does not have enough evidence"}
+                . {progress.trendTakes} analyzed. Local heuristics; not a
+                producer listen.
+              </p>
+            ) : (
+              <p>
+                Timing and pitch trends need Analyze take on a recent recording.
+                These numbers stay empty until that file exists.
+              </p>
+            )}
+          </div>
+        )}
+      </Panel>
+
       <div className="workspace-search">
         <label>
-          Find a take
+          Find a take.
           <input
             type="search"
-            aria-label="Search takes"
-            placeholder="Song, style, tempo or notes"
+            aria-label="Find a take."
+            placeholder="Search song, style, tempo or notes."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -209,24 +298,37 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
             weight={favourites ? "fill" : "regular"}
             aria-hidden="true"
           />
-          {favourites ? "Favourites only" : "All takes"}
+          {favourites ? "Show favourites only." : "Show all takes."}
         </Button>
       </div>
       {/* Takes List */}
       <Panel
-        title={`Recorded takes (${visibleTakes.length} of ${takes.length})`}
+        title={`These are ${visibleTakes.length} of ${takes.length} recorded takes.`}
       >
         {takes.length > 0 && !visibleTakes.length && (
-          <p className="workspace-note py-8">
-            No takes match this search. Clear the search or show all takes.
-          </p>
+          <div className="workspace-stack py-8">
+            <p className="workspace-note">
+              No takes match this search. Clear the search or show all takes.
+            </p>
+            <div className="workspace-actions">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setQuery("");
+                  setFavourites(false);
+                }}
+              >
+                Clear search
+              </Button>
+            </div>
+          </div>
         )}
         {takes.length === 0 ? (
           <div className="py-12 flex flex-col items-center justify-center text-center text-[var(--fg-2)] space-y-3 font-mono text-xs">
             <CassetteTape size={40} aria-hidden="true" />
-            <p>No recordings yet.</p>
+            <p>Your first take will appear here.</p>
             <p className="text-[var(--fg-1)]">
-              Hit <strong>Record New Take</strong> to record multi-track stems.
+              Hit <strong>Record a new take</strong> to record multi-track stems.
             </p>
           </div>
         ) : (
@@ -283,6 +385,10 @@ const TakeRow: React.FC<TakeRowProps> = ({
     }
   };
   const [showJoReview, setShowJoReview] = useState(false);
+  const [llmReview, setLlmReview] = useState<{
+    summary?: string;
+    drills?: string[];
+  } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -328,7 +434,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
                 timeStyle: "short",
               }) ?? take.id}
             </span>
-            <span className="text-[10px] font-mono text-[var(--fg-2)] px-1.5 py-0.5 bg-[var(--bg-2)] rounded">
+            <span className="text-[10px] font-mono text-[var(--fg-2)] px-1.5 py-0.5 bg-[var(--bg-2)] rounded-[var(--radius-m)]">
               {formatDuration(take.durationSecs)}
             </span>
           </div>
@@ -342,7 +448,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
         </div>
 
         {/* Waveform Thumbnail Canvas */}
-        <div className="flex-1 w-full max-w-sm h-10 bg-[var(--bg-2)] rounded border border-[var(--line)] p-1 flex items-center">
+        <div className="flex-1 w-full max-w-sm h-10 bg-[var(--bg-2)] rounded-[var(--radius-m)] border border-[var(--line)] p-1 flex items-center">
           <canvas
             ref={canvasRef}
             width={280}
@@ -351,8 +457,8 @@ const TakeRow: React.FC<TakeRowProps> = ({
             role="img"
             aria-label={
               take.waveformPeaks?.length
-                ? "Recorded waveform"
-                : "No waveform available"
+                ? "This is the recorded waveform."
+                : "No waveform is available."
             }
           />
         </div>
@@ -367,7 +473,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
                 ipc.invoke("clip_audition", {
                   spec: {
                     takeId: take.id,
-                    label: "Preview",
+                    label: "This is a preview.",
                     trimStart: 0,
                     trimEnd: take.durationSecs,
                     startBar: 1,
@@ -379,7 +485,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
               )
             }
           >
-            <Play size={16} aria-hidden="true" /> Listen to guitar
+            <Play size={16} aria-hidden="true" /> Listen to the guitar.
           </Button>
           <Button
             size="sm"
@@ -400,7 +506,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
               weight={take.favourite ? "fill" : "regular"}
               aria-hidden="true"
             />
-            {take.favourite ? "Favourite" : "Keep"}
+            {take.favourite ? "This is a favourite." : "Keep this take."}
           </Button>
           <Button
             size="sm"
@@ -409,8 +515,8 @@ const TakeRow: React.FC<TakeRowProps> = ({
             }
             title={
               song
-                ? "Attach to the song open in Write"
-                : "Open an original song in Write first"
+                ? "Attach to the song open in Write."
+                : "Open an original song in Write first."
             }
             onClick={() => {
               useWriting.getState().attach(take);
@@ -418,13 +524,13 @@ const TakeRow: React.FC<TakeRowProps> = ({
               useEngineStore.getState().setScreen("originals");
             }}
           >
-            Layer in Write
+            Layer this in Write.
           </Button>
           {!analysis || analysis.meanGridDistanceMs === undefined ? (
             <Button size="sm" variant="secondary" onClick={onAnalyze}>
               {analysis || take.analysis !== undefined
-                ? "Analyze again"
-                : "Analyze Take"}
+                ? "Analyze again."
+                : "Analyze this take."}
             </Button>
           ) : (
             <Button
@@ -433,15 +539,34 @@ const TakeRow: React.FC<TakeRowProps> = ({
               aria-expanded={showJoReview}
               onClick={() => setShowJoReview(!showJoReview)}
             >
-              Evidence & exercise
+              Evidence and exercise.
             </Button>
           )}
 
           <Button size="sm" variant="ghost" onClick={onHelp}>
-            <Question size={16} aria-hidden="true" /> Analysis help
+            <Question size={16} aria-hidden="true" /> Open analysis help.
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy || isPreview || !analysis}
+            onClick={() =>
+              void run(async () => {
+                const review = await useEngineStore
+                  .getState()
+                  .reviewTake(take.id);
+                setLlmReview(
+                  review && typeof review === "object"
+                    ? (review as { summary?: string; drills?: string[] })
+                    : null,
+                );
+              })
+            }
+          >
+            Review the numbers.
           </Button>
           <Button size="sm" variant="secondary" onClick={onExport}>
-            <Export size={16} aria-hidden="true" /> Export stems
+            <Export size={16} aria-hidden="true" /> Export the stems.
           </Button>
 
           {confirmDelete ? (
@@ -455,7 +580,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
                 disabled={recording || busy}
                 onClick={onDelete}
               >
-                Delete take
+                Delete this take.
               </Button>
               <Button size="sm" onClick={() => setConfirmDelete(false)}>
                 Cancel
@@ -468,7 +593,7 @@ const TakeRow: React.FC<TakeRowProps> = ({
               disabled={recording || busy}
               onClick={() => setConfirmDelete(true)}
             >
-              Delete…
+              Delete this take…
             </Button>
           )}
         </div>
@@ -482,8 +607,8 @@ const TakeRow: React.FC<TakeRowProps> = ({
       )}
       {analysis && (
         <dl
-          aria-label="Take measurements"
-          className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 p-3 bg-[var(--bg-2)] rounded border border-[var(--line)] text-xs"
+          aria-label="These are the take measurements."
+          className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 p-3 bg-[var(--bg-2)] rounded-[var(--radius-m)] border border-[var(--line)] text-xs"
         >
           {takeMeasurements(analysis).map(([label, value]) => (
             <div key={label} className="flex flex-wrap justify-between gap-2">
@@ -498,11 +623,10 @@ const TakeRow: React.FC<TakeRowProps> = ({
       {showJoReview && analysis && (
         <div className="p-3 bg-[var(--bg-1)] border border-[var(--line)] rounded-[var(--radius-m)] text-xs font-mono space-y-2">
           <div className="flex items-center gap-2 font-bold text-[var(--accent)]">
-            <span>Local take analysis</span>
+            <span>This is the local take analysis.</span>
           </div>
           <p className="text-[var(--fg-1)]">{analysis.summary}</p>
-          <div className="text-[11px] text-[var(--fg-2)] bg-[var(--bg-2)] p-2 rounded">
-            <strong>Suggested drill:</strong>{" "}
+          <div className="text-[11px] text-[var(--fg-2)] bg-[var(--bg-2)] p-2 rounded-[var(--radius-m)]">
             {drillFor(analysis, Math.round(take.tempo))}
           </div>
           <p className="text-[10px] text-[var(--fg-2)]">
@@ -511,8 +635,18 @@ const TakeRow: React.FC<TakeRowProps> = ({
             rough estimate.
           </p>
           <Button size="sm" onClick={onAnalyze}>
-            Analyze again
+            Analyze again.
           </Button>
+        </div>
+      )}
+      {llmReview && (
+        <div className="p-3 bg-[var(--bg-1)] border border-[var(--line)] rounded-[var(--radius-m)] text-xs font-mono space-y-2">
+          <p className="text-[var(--fg-1)]">{llmReview.summary}</p>
+          {llmReview.drills?.map((drill) => (
+            <p key={drill} className="text-[11px] text-[var(--fg-2)]">
+              {drill}
+            </p>
+          ))}
         </div>
       )}
     </div>

@@ -6,10 +6,10 @@ export const StatusPill: React.FC<{
 }> = ({ status, label }) => {
   const colors = {
     live: "bg-[var(--accent-soft)] text-[var(--accent-strong)] border-[var(--accent)]",
-    ok: "bg-[rgba(88,181,133,0.16)] text-[var(--ok)] border-[var(--ok)]",
+    ok: "bg-[var(--ok-soft)] text-[var(--ok)] border-[var(--ok)]",
     idle: "bg-[var(--bg-2)] text-[var(--fg-2)] border-[var(--line)]",
     error:
-      "bg-[rgba(224,83,78,0.16)] text-[var(--record)] border-[var(--record)]",
+      "bg-[var(--record-soft)] text-[var(--record)] border-[var(--record)]",
   };
 
   return (

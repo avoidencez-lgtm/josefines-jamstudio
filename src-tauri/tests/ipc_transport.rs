@@ -526,11 +526,11 @@ fn stop_cue_breaks_the_band_at_the_next_bar_and_a_fill_brings_it_back() {
     arm(&studio, 240.0);
     assert_eq!(
         studio.err("band_cue", json!({"cue": "bogus"})),
-        "Unknown cue: bogus"
+        "The cue bogus is unknown."
     );
     assert_eq!(
         studio.err("band_cue", json!({"cue": "Stop"})),
-        "Unknown cue: Stop",
+        "The cue Stop is unknown.",
         "cue names are lower-case"
     );
     studio.ok("transport_play", json!({}));

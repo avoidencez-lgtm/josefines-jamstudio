@@ -33,7 +33,7 @@ const PREVIEW_KEY = "__jamPreviewEngine";
 type PreviewHolder = { [PREVIEW_KEY]?: Promise<PreviewEngine> };
 
 const PREVIEW_LAST_ERROR =
-  "Browser preview: simulated engine, no audio is produced";
+  "This browser preview is a simulated engine. No audio is produced.";
 
 const BASELINE_CONFIG: AudioConfig = {
   input_device: null,
@@ -95,6 +95,7 @@ describe("desktop startup against the preview engine", () => {
     for (const cleanup of cleanups) cleanup();
     // The engine is a singleton across tests: put it back where a fresh launch starts.
     await engine.invoke("transport_stop", {});
+    await engine.invoke("tuner_set", { on: false });
     await engine.invoke("transport_set_loop", {
       startBar: 1,
       endBar: 5,
@@ -238,6 +239,7 @@ describe("desktop startup against the preview engine", () => {
       "band_list_charts",
       "band_list_styles",
       "band_load_chart",
+      "diagnostics_sample_stage",
       "engine_status",
       "library_reload",
       "settings_get",
@@ -251,6 +253,7 @@ describe("desktop startup against the preview engine", () => {
       "band.state",
       "engine.status",
       "input.meters",
+      "lyria.state",
       "meters",
       "recorder.error",
       "reference.state",
@@ -289,8 +292,7 @@ describe("desktop startup against the preview engine", () => {
     expect(store().telemetry.tuner).toBeNull();
 
     engine.tick(0);
-    const { transport, band, output_level, input_level, tuner } =
-      store().telemetry;
+    const { transport, band, output_level, input_level } = store().telemetry;
     expect(transport.state).toBe("stopped");
     expect(transport.bpm).toBe(110);
     expect(transport.time_signature).toEqual([4, 4]);
@@ -305,11 +307,16 @@ describe("desktop startup against the preview engine", () => {
     expect(band.intensity).toBe(0.5);
     expect(output_level).toEqual({ peak_db: -180, rms_db: -186 });
     expect(input_level).toEqual({ peak_db: -180, rms_db: -180 });
+    expect(store().telemetry.tuner).toBeNull();
+    expect(store().engineStatus?.last_error).toBe(PREVIEW_LAST_ERROR);
+
+    await store().setTuner(true);
+    engine.tick(0);
+    const tuner = store().telemetry.tuner;
     expect(tuner?.note).toBe("A4");
     expect(tuner?.confidence).toBe(0.9);
     expect(Math.abs((tuner?.hz ?? 0) - 440)).toBeLessThan(2);
     expect(Math.abs(tuner?.cents ?? 99)).toBeLessThanOrEqual(6);
-    expect(store().engineStatus?.last_error).toBe(PREVIEW_LAST_ERROR);
   });
 
   it("pressing play counts in, then the band walks the chart bar by bar until stop", async () => {
@@ -414,9 +421,21 @@ describe("desktop startup against the preview engine", () => {
     });
     engine.tick(0);
     unsubscribe();
-    // meters, input.meters, transport.state, band.state, tuner.state, engine.status
-    expect(updates).toBe(6);
+    // tuner starts off, so no tuner.state: meters, input.meters,
+    // transport.state, band.state, engine.status
+    expect(updates).toBe(5);
     expect(store().telemetry.transport.bpm).toBe(110);
+    expect(store().telemetry.tuner).toBeNull();
+
+    await store().setTuner(true);
+    updates = 0;
+    const offTuner = useEngineStore.subscribe(() => {
+      updates++;
+    });
+    engine.tick(0);
+    offTuner();
+    expect(updates).toBe(6);
+    expect(store().telemetry.tuner?.note).toBe("A4");
   });
 
   it("round-trips a settings change through the engine", async () => {
@@ -460,7 +479,7 @@ describe("desktop startup against the preview engine", () => {
     expect(store().devices).toEqual({
       inputs: [
         {
-          name: "Preview Input (simulated)",
+          name: "Preview Input is simulated.",
           is_default: true,
           channels: 2,
           supported_sample_rates: [48_000],
@@ -468,7 +487,7 @@ describe("desktop startup against the preview engine", () => {
       ],
       outputs: [
         {
-          name: "Preview Output (simulated)",
+          name: "Preview Output is simulated.",
           is_default: true,
           channels: 2,
           supported_sample_rates: [48_000],
@@ -477,8 +496,8 @@ describe("desktop startup against the preview engine", () => {
     });
 
     const config: AudioConfig = {
-      input_device: "Preview Input (simulated)",
-      output_device: "Preview Output (simulated)",
+      input_device: "Preview Input is simulated.",
+      output_device: "Preview Output is simulated.",
       input_channel: 1,
       sample_rate: 44_100,
       buffer_size: 128,
@@ -506,19 +525,19 @@ describe("desktop startup against the preview engine", () => {
     expect(store().currentChart?.id).toBe("blues-12-bar");
     expect(store().notices.at(-1)).toMatchObject({
       kind: "error",
-      text: 'Load chart: unknown chart "no-such-chart"',
+      text: 'The load chart failed. unknown chart "no-such-chart". Pick a listed chart or style, or a chart you saved.',
     });
 
     await store().bandSetStyle("no-such-style");
     expect(store().notices.at(-1)).toMatchObject({
       kind: "error",
-      text: 'Style: unknown style "no-such-style"',
+      text: 'The style failed. unknown style "no-such-style". Pick a listed chart or style, or a chart you saved.',
     });
 
     await store().bandSet({ styleId: "no-such-style", intensity: 0.9 });
     expect(store().notices.at(-1)).toMatchObject({
       kind: "error",
-      text: 'Band: unknown style "no-such-style"',
+      text: 'The band failed. unknown style "no-such-style". Pick a listed chart or style, or a chart you saved.',
     });
     engine.tick(0);
     expect(store().telemetry.band.style_id).toBe("blues-shuffle");

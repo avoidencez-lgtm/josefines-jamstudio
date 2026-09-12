@@ -80,7 +80,7 @@ reaper.Undo_EndBlock("Import Jamstudio song", -1)
 reaper.TrackList_AdjustWindows(false)
 reaper.UpdateArrange()
 if not ok then
-  reaper.ShowMessageBox("Import stopped: " .. tostring(error_text) .. "\nUse Undo to remove the partial import. Original files are unchanged.", "Jamstudio", 0)
+  reaper.ShowMessageBox("Import stopped. " .. tostring(error_text) .. "\nUse Undo to remove the partial import. Original files are unchanged.", "Jamstudio", 0)
 else
   reaper.ShowMessageBox("Ready. Save this project in the export folder.\n\nMIDI tracks are muted: add instruments, then mute their matching audio stems before enabling them. Audio items retain their recorded speed when you change tempo.", "Jamstudio", 0)
 end

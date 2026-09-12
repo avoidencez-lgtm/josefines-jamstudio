@@ -23,6 +23,63 @@ struct Converter {
     delay: usize,
 }
 
+fn fft_resampler(from: u32, to: u32) -> Result<Fft<f32>, String> {
+    let mut r = Fft::new(from as usize, to as usize, 1024, 2, FixedSync::Both)
+        .map_err(|e| e.to_string())?;
+    // Even FFT lengths keep the filter delay on whole input/output frames.
+    // Odd rational blocks otherwise retain a fractional-frame phase shift.
+    if r.fft_size_in() % 2 != 0 || r.fft_size_out() % 2 != 0 {
+        r = Fft::new(
+            from as usize,
+            to as usize,
+            r.fft_size_in() * 2,
+            2,
+            FixedSync::Both,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(r)
+}
+
+/// Stereo interleaved. Used for the 48k→44.1k leg; Converter covers 44.1k→48k.
+#[cfg(test)]
+fn resample_stereo(input: &[f32], from: u32, to: u32) -> Result<Vec<f32>, String> {
+    if !input.len().is_multiple_of(2) || from == 0 || to == 0 {
+        return Err("Resample needs stereo frames and non-zero rates.".into());
+    }
+    if from == to {
+        return Ok(input.to_vec());
+    }
+    let frames = input.len() / 2;
+    let mut r = fft_resampler(from, to)?;
+    let delay = Resampler::output_delay(&r);
+    let count = (frames as u64 * u64::from(to)).div_ceil(u64::from(from)) as usize;
+    let mut pending = Vec::new();
+    let mut output = Vec::new();
+    let mut i = 0usize;
+    while output.len() < (count + delay) * 2 {
+        let need = r.input_frames_next();
+        pending.clear();
+        for _ in 0..need {
+            if i < frames {
+                pending.extend_from_slice(&input[i * 2..i * 2 + 2]);
+                i += 1;
+            } else {
+                pending.extend_from_slice(&[0.0, 0.0]);
+            }
+        }
+        let slice = InterleavedSlice::new(&pending, 2, need).map_err(|e| e.to_string())?;
+        output.extend(
+            r.process(&slice, None)
+                .map_err(|e| e.to_string())?
+                .take_data(),
+        );
+    }
+    output.drain(..delay * 2);
+    output.truncate(count * 2);
+    Ok(output)
+}
+
 impl Converter {
     fn new(rate: u32, max_frames: usize) -> Result<Self, String> {
         if !(8000..=192000).contains(&rate) {
@@ -31,21 +88,7 @@ impl Converter {
         let resampler = if rate == 48000 {
             None
         } else {
-            let mut r = Fft::new(rate as usize, 48000, 1024, 2, FixedSync::Both)
-                .map_err(|e| e.to_string())?;
-            // Even FFT lengths keep the filter delay on whole input/output frames.
-            // Odd rational blocks otherwise retain a fractional-frame phase shift.
-            if r.fft_size_in() % 2 != 0 || r.fft_size_out() % 2 != 0 {
-                r = Fft::new(
-                    rate as usize,
-                    48000,
-                    r.fft_size_in() * 2,
-                    2,
-                    FixedSync::Both,
-                )
-                .map_err(|e| e.to_string())?;
-            }
-            Some(r)
+            Some(fft_resampler(rate, 48000)?)
         };
         let delay = resampler.as_ref().map_or(0, Resampler::output_delay);
         Ok(Self {
@@ -143,7 +186,7 @@ pub fn decode(input: &Path, max_frames: usize, cancel: &AtomicBool) -> Result<Ve
     if let Some(ext) = input.extension().and_then(|s| s.to_str()) {
         hint.with_extension(ext);
     }
-    let mut format = symphonia::default::get_probe().probe(&hint, MediaSourceStream::new(Box::new(file), Default::default()), Default::default(), Default::default()).map_err(|e| format!("Unsupported or damaged audio: {e}. Export WAV, FLAC, MP3, AAC/ALAC M4A, AIFF or Ogg Vorbis."))?;
+    let mut format = symphonia::default::get_probe().probe(&hint, MediaSourceStream::new(Box::new(file), Default::default()), Default::default(), Default::default()).map_err(|e| format!("Unsupported or damaged audio. {e}. Export WAV, FLAC, MP3, AAC/ALAC M4A, AIFF or Ogg Vorbis."))?;
     let track = format
         .default_track(TrackType::Audio)
         .ok_or("No audio track in this file")?;
@@ -168,7 +211,7 @@ pub fn decode(input: &Path, max_frames: usize, cancel: &AtomicBool) -> Result<Ve
         };
     let mut decoder = symphonia::default::get_codecs()
         .make_audio_decoder(params, &AudioDecoderOptions::default())
-        .map_err(|e| format!("Unsupported audio codec: {e}"))?;
+        .map_err(|e| format!("The audio codec is unsupported. {e}"))?;
     let mut converter: Option<Converter> = None;
     let mut samples = Vec::<f32>::new();
     let mut channels = 0;
@@ -176,7 +219,7 @@ pub fn decode(input: &Path, max_frames: usize, cancel: &AtomicBool) -> Result<Ve
     let mut last_packet = 0;
     while let Some(packet) = format
         .next_packet()
-        .map_err(|e| format!("Damaged audio: {e}"))?
+        .map_err(|e| format!("The audio is damaged. {e}"))?
     {
         if cancel.load(Ordering::Relaxed) {
             return Err("Audio import canceled.".into());
@@ -186,7 +229,7 @@ pub fn decode(input: &Path, max_frames: usize, cancel: &AtomicBool) -> Result<Ve
         }
         let audio = decoder
             .decode(&packet)
-            .map_err(|e| format!("Cannot decode audio: {e}"))?;
+            .map_err(|e| format!("Cannot decode this audio. {e}"))?;
         let rate = audio.spec().rate();
         if window.is_some() && declared_rate != Some(rate) {
             return Err("M4A codec and container sample rates disagree.".into());
@@ -378,6 +421,76 @@ mod tests {
             .sqrt();
         assert!(rms < 1e-4, "30 kHz alias RMS {rms}");
     }
+
+    #[test]
+    fn sine_48k_through_441_round_trip_pearson_and_noise_floor() {
+        // ARCHITECTURE §9.1: 1 kHz 48k → 44.1k → 48k; r ≥ 0.999; floor ≤ -80 dBFS.
+        let orig: Vec<f32> = (0..48_000)
+            .flat_map(|i| {
+                let v = (std::f64::consts::TAU * 1000.0 * i as f64 / 48_000.0).sin() as f32;
+                [v, v]
+            })
+            .collect();
+        let mid = resample_stereo(&orig, 48_000, 44_100).unwrap();
+        let mut converter = Converter::new(44_100, 48_000).unwrap();
+        converter
+            .push(&mid, 2, &AtomicBool::new(false))
+            .unwrap();
+        let back = converter.finish(&AtomicBool::new(false)).unwrap();
+        let a: Vec<f64> = orig.chunks_exact(2).map(|c| c[0] as f64).collect();
+        let b: Vec<f64> = back.chunks_exact(2).map(|c| c[0] as f64).collect();
+        let mut best = (0isize, f64::NEG_INFINITY);
+        for lag in -256isize..=256 {
+            let (x, y) = overlap(&a, &b, lag);
+            let r = pearson(&x[2000..x.len() - 2000], &y[2000..y.len() - 2000]);
+            if r > best.1 {
+                best = (lag, r);
+            }
+        }
+        assert!(best.1 >= 0.999, "Pearson r {} at lag {}", best.1, best.0);
+        let (x, y) = overlap(&a, &b, best.0);
+        let x = &x[2000..x.len() - 2000];
+        let y = &y[2000..y.len() - 2000];
+        let xx: f64 = x.iter().map(|v| v * v).sum();
+        let gain = x.iter().zip(y).map(|(x, y)| x * y).sum::<f64>() / xx;
+        let err = x
+            .iter()
+            .zip(y)
+            .map(|(x, y)| y - gain * x)
+            .map(|e| e * e)
+            .sum::<f64>()
+            / x.len() as f64;
+        let floor = 20.0 * err.sqrt().log10();
+        assert!(floor <= -80.0, "noise floor {floor} dBFS");
+    }
+
+    fn overlap(a: &[f64], b: &[f64], lag: isize) -> (Vec<f64>, Vec<f64>) {
+        let (a, b) = if lag >= 0 {
+            (&a[lag as usize..], b.as_ref())
+        } else {
+            (a, &b[(-lag) as usize..])
+        };
+        let n = a.len().min(b.len());
+        (a[..n].to_vec(), b[..n].to_vec())
+    }
+
+    fn pearson(x: &[f64], y: &[f64]) -> f64 {
+        let n = x.len() as f64;
+        let mx = x.iter().sum::<f64>() / n;
+        let my = y.iter().sum::<f64>() / n;
+        let mut xx = 0.0;
+        let mut yy = 0.0;
+        let mut xy = 0.0;
+        for (x, y) in x.iter().zip(y) {
+            let dx = x - mx;
+            let dy = y - my;
+            xx += dx * dx;
+            yy += dy * dy;
+            xy += dx * dy;
+        }
+        xy / (xx * yy).sqrt()
+    }
+
     #[test]
     fn native_wav_import_is_bounded_cancelable_and_never_overwrites() {
         let dir = std::env::temp_dir().join(format!("jam-native-import-{}", std::process::id()));

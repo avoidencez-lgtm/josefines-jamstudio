@@ -11,14 +11,24 @@ No audio is committed to this repository. Sample packs (the drum kit, the SoundF
   "schemaVersion": 1,
   "packs": [
     {
-      "id": "drums-basic-kit",
+      "id": "standard-rock-kit",
       "version": "1.0.0",
-      "url": "https://github.com/avoidencez-lgtm/josefines-jamstudio/releases/download/assets-v1/drums-basic-kit-1.0.0.zip",
-      "sha256": "<hex>",
-      "bytes": 0,
+      "url": "https://github.com/avoidencez-lgtm/josefines-jamstudio/releases/download/assets-v1/standard-rock-kit.zip",
+      "sha256": "afb6b9c5239d65f0630e5bab7770750db72aa146d4ea7c32a156ad0d5085cf75",
+      "bytes": 334392,
       "licence": "CC0-1.0",
-      "attribution": "<pack name> by <author>, <source URL>",
+      "attribution": "Original synthetic percussion from jam-band sampler formulas",
       "contents": "kit.json + wav"
+    },
+    {
+      "id": "freepats-bass-comp",
+      "version": "1.0.0",
+      "url": "https://github.com/avoidencez-lgtm/josefines-jamstudio/releases/download/assets-v1/freepats-bass-comp.zip",
+      "sha256": "73cd2192f8f6422602e77c150e127c556214677a31e9c1440e28c9b96892465f",
+      "bytes": 11286874,
+      "licence": "CC0-1.0",
+      "attribution": "FreePats Finger Bass YR and FM Piano 2",
+      "contents": "bass.sf2 + comp.sf2"
     }
   ]
 }
@@ -30,5 +40,5 @@ No audio is committed to this repository. Sample packs (the drum kit, the SoundF
 
 1. Only CC0, CC-BY (with attribution shown in Settings → About), or a permissive licence explicitly allowing redistribution. No CC-BY-NC, no CC-BY-SA, no "free for personal use", no GPL-with-exception until a human has read the exception.
 2. Audit every pack individually. Aggregator lists are hints, not licences. Keep a copy of the licence file inside the zip.
-3. The kit format (`kit.json`) and the SoundFont program mapping are documented in `docs/ARCHITECTURE.md` §7 when M1b lands.
+3. The kit format is `kit.json`. SoundFonts unpack as `bass.sf2` and `comp.sf2` under `assets/freepats-bass-comp/`.
 4. Test fixtures under `tests/fixtures/audio/` are small (seconds), synthesised or self-recorded, and carry a README with their origin.

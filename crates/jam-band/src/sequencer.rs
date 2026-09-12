@@ -10,6 +10,7 @@
 //! bar boundaries via the timeline's `Bar` events.
 
 use crate::instruments::Sf2Synth;
+use crate::kit::KitStatus;
 use crate::sampler::Sampler;
 use crate::voicing::{bass_note_for_chord, parse_chord, slash_bass, voice_chord};
 use jam_core::chart::ResolvedChart;
@@ -104,6 +105,7 @@ pub struct BandSequencer {
     pub follow_energy: bool,
     pub current_energy: f32,
     pub sampler: Sampler,
+    pub kit_status: KitStatus,
     pub synth: Sf2Synth,
     rng: Pcg32,
     current_pattern: PatternEntry,
@@ -123,8 +125,8 @@ pub struct BandSequencer {
 
 impl BandSequencer {
     pub fn new(style: Style, sample_rate: u32, seed: u64) -> Self {
-        let sampler = Sampler::new_with_synthetic_kit(sample_rate);
-        let synth = Sf2Synth::new(sample_rate);
+        let (sampler, kit_status) = Sampler::open(&style.kit_id, sample_rate);
+        let synth = Sf2Synth::open(sample_rate);
         let default_pattern = style.patterns.first().cloned().unwrap_or(PatternEntry {
             intensity: (0.0, 1.0),
             drums: DrumPattern::default(),
@@ -150,6 +152,7 @@ impl BandSequencer {
             follow_energy: false,
             current_energy: 0.0,
             sampler,
+            kit_status,
             synth,
             rng: Pcg32::new(seed, 1),
             current_pattern: default_pattern,
@@ -179,7 +182,11 @@ impl BandSequencer {
     }
 
     pub fn set_style(&mut self, style: Style) {
+        let kit_changed = style.kit_id != self.style.kit_id;
         self.style = style;
+        if kit_changed {
+            self.reload_kit();
+        }
         self.update_pattern_for_intensity();
     }
 
@@ -194,10 +201,45 @@ impl BandSequencer {
             return;
         }
         self.sample_rate = sample_rate;
-        self.sampler = Sampler::new_with_synthetic_kit(sample_rate);
-        self.synth = Sf2Synth::new(sample_rate);
+        self.reload_kit();
+        self.synth = Sf2Synth::open(sample_rate);
         self.pending_note_offs.clear();
         self.cursor_beats = None;
+    }
+
+    fn reload_kit(&mut self) {
+        let (sampler, status) = Sampler::open(&self.style.kit_id, self.sample_rate);
+        self.sampler = sampler;
+        self.kit_status = status;
+    }
+
+    /// After unpack (or a vanished pack) pick up kit.json without a style change.
+    pub fn refresh_kit_if_needed(&mut self) {
+        let have_file = crate::kit::pack_dir(&self.style.kit_id)
+            .join("kit.json")
+            .is_file();
+        let on_file = self.kit_status.source == crate::kit::FILE;
+        if have_file == on_file {
+            return;
+        }
+        self.reload_kit();
+    }
+
+    pub fn refresh_sf2_if_needed(&mut self) {
+        let have = crate::kit::sf2_ready(&crate::kit::sf2_dir());
+        let on = self.synth.source == crate::kit::SF2;
+        if have == on {
+            return;
+        }
+        self.reload_sf2();
+    }
+
+    fn reload_sf2(&mut self) {
+        self.synth = Sf2Synth::open(self.sample_rate);
+    }
+
+    pub fn bass_source(&self) -> (&'static str, String) {
+        (self.synth.source, self.synth.message.clone())
     }
 
     pub fn queue_style_at_next_bar(&mut self, style: Style) {
@@ -1274,5 +1316,80 @@ mod tests {
         let (a, _) = render(style.clone(), 2, None);
         let (b, _) = render(style, 2, None);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn sequencer_plays_unpacked_kit_and_names_sine_bass() {
+        let _lock = crate::kit::TEST_ENV.lock().unwrap();
+        let dir = std::env::temp_dir().join(format!("jam-seq-kit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 48_000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let wav = dir.join("kick.wav");
+        let mut writer = hound::WavWriter::create(&wav, spec).unwrap();
+        for _ in 0..64 {
+            writer.write_sample(16_383i16).unwrap();
+        }
+        writer.finalize().unwrap();
+        std::fs::write(
+            dir.join("kit.json"),
+            r#"{"schemaVersion":1,"id":"fixture-kit","sampleRate":48000,"instruments":[{"name":"kick","layers":[{"velocity":[0,1],"files":["kick.wav"]}]}]}"#,
+        )
+        .unwrap();
+        std::env::remove_var("JAM_SYNTHETIC_KIT");
+        std::env::set_var("JAM_KIT_DIR", &dir);
+        std::env::set_var("JAM_SF2_DIR", dir.join("no-sf2"));
+        let mut style = style_with(0.0, vec![kick(0.0)], vec![], vec![]);
+        style.kit_id = "fixture-kit".into();
+        let mut seq = BandSequencer::new(style, 48_000, 1);
+        assert_eq!(seq.kit_status.source, crate::kit::FILE);
+        assert_eq!(seq.bass_source().0, crate::kit::SINE);
+        assert!(seq.bass_source().1.contains("JAM_LIVE=1"));
+        seq.sampler.trigger("kick", 1.0);
+        let mut left = vec![0.0f32; 16];
+        let mut right = vec![0.0f32; 16];
+        seq.sampler.render(&mut left, &mut right);
+        assert!(left[0].abs() > 0.2);
+        std::env::remove_var("JAM_KIT_DIR");
+        std::env::remove_var("JAM_SF2_DIR");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn play_picks_up_a_kit_unpacked_after_start() {
+        let _lock = crate::kit::TEST_ENV.lock().unwrap();
+        let dir = std::env::temp_dir().join(format!("jam-seq-late-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::env::remove_var("JAM_SYNTHETIC_KIT");
+        std::env::set_var("JAM_KIT_DIR", &dir);
+        let mut style = style_with(0.0, vec![kick(0.0)], vec![], vec![]);
+        style.kit_id = "late-kit".into();
+        let mut seq = BandSequencer::new(style, 48_000, 1);
+        assert_eq!(seq.kit_status.source, crate::kit::SYNTHETIC);
+        seq.refresh_kit_if_needed();
+        assert_eq!(seq.kit_status.source, crate::kit::SYNTHETIC);
+        std::fs::create_dir_all(&dir).unwrap();
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 48_000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(dir.join("kick.wav"), spec).unwrap();
+        writer.write_sample(16_383i16).unwrap();
+        writer.finalize().unwrap();
+        std::fs::write(
+            dir.join("kit.json"),
+            r#"{"schemaVersion":1,"id":"late-kit","sampleRate":48000,"instruments":[{"name":"kick","layers":[{"velocity":[0,1],"files":["kick.wav"]}]}]}"#,
+        )
+        .unwrap();
+        seq.refresh_kit_if_needed();
+        assert_eq!(seq.kit_status.source, crate::kit::FILE);
+        std::env::remove_var("JAM_KIT_DIR");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

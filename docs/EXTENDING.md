@@ -77,6 +77,82 @@ New algorithms must retain null for insufficient evidence, bound all computation
 bump the analyzer identifier and add measured fixtures. This is the local fallback;
 provider orchestration and player beat-grid consumption remain M3 work.
 
+## Music.ai recorded analysis
+
+Add documented module JSON under `tests/fixtures/providers/musicai/` and
+extend `src-tauri/src/net/musicai.rs`. The provider row lives in
+`PROVIDERS` (`id: musicai`, `https://api.music.ai`, `Authorization` header).
+`analysis_start` / `analysis_cancel` are registered next to `media_analyze`.
+Parse fixtures in unit tests; persist them with `JAM_MUSICAI_FIXTURE=1`
+into `providerAnalysis` only. Do not treat public-doc shapes as a live job.
+Live upload stays not configured without `JAM_LIVE=1` and a recorded
+SUCCEEDED response. Never write these estimates into `referenceGrid` or
+claim downbeats. Local `estimate_grid` may write `estimatedGrid`.
+Secrets stay in SecretStore; request bodies are not logged.
+
+## Lyria RealTime
+
+Add documented protocol JSON under `tests/fixtures/providers/lyria/` and
+extend `src-tauri/src/net/lyria.rs`. Commands `lyria_start`, `lyria_set`,
+`lyria_stop` and `lyria_status` live in `src-tauri/src/lyria.rs` next to
+voice. Decode only explicit `audio/pcm;rate=48000` stereo little-endian i16.
+The jitter buffer is a pure structure; do not push fixture PCM onto the
+output bus. Band and song start stop Lyria; a successful Lyria start stops
+the band and unloads the reference. BPM is a request and never the
+transport clock. Live WebSocket stays not configured without a Gemini key,
+`JAM_LIVE=1` and a recorded provider session. `JAM_LYRIA_FIXTURE=1` runs
+the synthetic protocol state machine only. Secrets stay in SecretStore;
+request bodies are not logged. The WebView never plays audio.
+
+`tests/fixtures/seams/lyria.json` is the contract. Prove it with
+`tests/invariants/lyria.test.ts` and `cargo test -p src-tauri --lib -- lyria`
+plus `cargo test -p src-tauri --test ipc_lyria`.
+
+## Virtual MIDI monitor
+
+`rig_virtual_check` sends program changes 3 and 12 through the current
+profile channel. `JAM_MIDI_FIXTURE=1` uses MemorySink and records the
+monitor. A live loopMIDI/IAC port needs `JAM_MIDI_VIRTUAL` and
+`JAM_LIVE=1`. Missing ports are explicitly not configured. This is not
+owner gate 5. Fixture: `tests/fixtures/seams/virtual-midi.json`. Test:
+`tests/invariants/virtual-midi.test.ts` and
+`cargo test -p src-tauri --test ipc_rig_virtual`.
+
+## Sample packs
+
+`assets/manifest.json` lists packs with `id`, `url`, `sha256`, `bytes` and a
+licence line. Commands `assets_status` and `assets_ensure` live in
+`src-tauri/src/assets.rs`. `assets-v1` / `standard-rock-kit.zip` is a CC0
+synthetic kit (not acoustic). Headless download needs `JAM_LIVE=1`; resume
+writes a `.part` file and checks SHA-256 before unpack. `JAM_ASSETS_FIXTURE=1`
+reports the bundled synthetic kit only and never writes files. After unpack,
+`Sampler::open` loads `kit.json` and WAVs from
+`~/JosefinesJamstudio/assets/<id>/` (or `JAM_KIT_DIR` / `JAM_USER_DIR`).
+`Sf2Synth::open` loads `freepats-bass-comp` (`bass.sf2`, `comp.sf2`) with
+MIT `rustysynth` (`oxisynth` is LGPL and is not used). A missing or invalid
+pack stays on the synthetic kit or sine voices and says so on
+`band.state.kit_message` / `bass_message`. Goldens set `JAM_SYNTHETIC_KIT=1`.
+Settings → First run names the next step. Fixture:
+`tests/fixtures/seams/assets.json`. Tests: `tests/invariants/assets.test.ts`
+and `cargo test -p src-tauri --test ipc_assets`.
+
+## Take review
+
+`takes_review` writes `take.extra.review` and `sessions/<sessionId>/session.json.review`
+from analysis numbers, never audio. `JAM_REVIEW_FIXTURE=1` copies
+`tests/fixtures/providers/review/take-review.json`. Live provider calls
+stay not configured. Jo `coach_tip` reads that review. Logic SMF
+five-minute marker drift is a paper check in `jam-audio` export tests;
+opening the file in Logic Pro stays V2.
+
+## Extensibility proofs
+
+`tests/fixtures/seams/extending-*.json` hold one synthetic style, chart,
+rig, control map, Jo tool and provider. `tests/invariants/extending.test.ts` executes the style/chart/control/tool/provider
+recipes against those fixtures (golden render lives in `jam-band` golden tests;
+MemorySink PC lives in `jam-rig`). Ids stay absent from bundled registries.
+Do not copy them into `styles/`, `charts/`, `rigs/` or `controls/`.
+
 The extension rule is **every capability is a seam** (a definition, one registry, consumers), and adding to an existing seam must not require edits to core consumers. Review the PR diff for that requirement. The current `tests/invariants/seams.test.ts` checks bundled manifest fields, and `crates/jam-core/tests/seams.rs` checks bundled style, chart and control registries. Neither checks changed-file scope or automatically discovers every fixture under `tests/fixtures/seams/`. Per-extension fixture and registry coverage remains required; do not treat these two tests alone as proof that an extension recipe works.
 
 Each recipe below names the exact files to add and the test that proves it worked. When a milestone adds a seam, it adds the recipe here and a fixture there, in the same PR. Recipes are executed once by the builder as a test before they are considered true.
@@ -167,9 +243,9 @@ Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, 
 
 ## Add an analysis kind
 
-1. Extend `AnalysisKind` in `src/ipc/contract.ts` and the Rust mirror (additive; bump nothing).
-2. Add a step in `src-tauri/src/analysis/steps.rs` that picks a provider by kind and writes its result into `song.json` under a new field with `schemaVersion` unchanged (new optional field).
-3. Add the local fallback in `jam-dsp::offline` or mark the step `cloud_only`.
+1. Local estimates go through `media_analyze` in `src-tauri/src/media.rs` and `src-tauri/src/media/analysis.rs`. Provider jobs go through `analysis_start` / `src-tauri/src/net/musicai.rs` and stay loud not-configured without a key, `JAM_LIVE=1` and a recorded SUCCEEDED job.
+2. Write new optional fields into `song.json` with `schemaVersion` unchanged.
+3. Add the local fallback in `jam-dsp::offline` or keep the command not configured.
 4. Fixture test plus a synthetic ground-truth test if a fallback exists.
 
 ## Add a screen
@@ -180,9 +256,9 @@ Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, 
 
 ## Add an IPC domain
 
-1. Create `src-tauri/src/ipc/<domain>.rs` with the commands and one `<domain>.state` event, and `src/ipc/<domain>.ts` with the typed wrappers and the store slice.
-2. Add the types to `contract.ts` and the Rust mirror; add a round-trip serialization test.
-3. Register the domain in `src-tauri/src/ipc/mod.rs` and `src/ipc/index.ts`. Changes to existing domains are additive; removing or renaming a field bumps `IPC_VERSION` and needs an ADR.
+1. Add commands in `src-tauri/src/lib.rs` (or a sibling module that `lib.rs` registers). Types live in `src/ipc/contract.ts`. The store listens in `src/store/engine.ts`.
+2. Keep `IPC_VERSION` in `src/ipc/contract.ts`. Changes to existing domains are additive; removing or renaming a field bumps `IPC_VERSION` and needs an ADR.
+3. Add a preview handler in `src/ipc/preview.ts` and an IPC scenario under `src-tauri/tests/ipc_*.rs`.
 
 ## Add a data-file schema version
 

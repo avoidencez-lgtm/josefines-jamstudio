@@ -25,8 +25,28 @@ locally from synthetic tones and is never committed or bundled.
 
 ## standard-rock-kit
 - **License**: CC0-1.0 (Creative Commons Zero v1.0 Universal)
-- **Attribution**: Public Domain multisampled acoustic drum kit
-- **Included**: kick, snare, closed hi-hat, open hi-hat, crash, ride, toms
+- **Source**: original synthetic percussion generated from
+  `crates/jam-band/src/sampler.rs` (same formulas as the bundled fallback kit).
+  Published as GitHub Release `assets-v1` / `standard-rock-kit.zip`.
+  SHA-256 `afb6b9c5239d65f0630e5bab7770750db72aa146d4ea7c32a156ad0d5085cf75`.
+- **Attribution**: Josefines Jamstudio. This is not an acoustic multisample
+  library. A third-party CC0 acoustic kit (for example VCSL) was not shipped
+  because no small redistributable rock-kit zip with hi-hats was available.
+- **Included**: kick, snare, closed/open/pedal hi-hat, crash, ride, toms,
+  sidestick, `kit.json`, `LICENSE.txt`
+
+## freepats-bass-comp
+- **License**: CC0-1.0
+- **Source**: FreePats, redistributed on GitHub Release `assets-v1` /
+  `freepats-bass-comp.zip`.
+  SHA-256 `73cd2192f8f6422602e77c150e127c556214677a31e9c1440e28c9b96892465f`.
+- **Attribution**:
+  - `bass.sf2` — Finger Bass YR 2019-09-30, samples by Andrea Biasior
+    (`reusenoise@gmail.com`) from a Yamaha RBX, FreePats edits by Roberto
+    (`roberto@zenvoid.org`). https://freepats.zenvoid.org/ElectricGuitar/clean-electric-bass.html
+  - `comp.sf2` — FM Synthesized Piano #2 2016-11-12 by Roberto / FreePats,
+    recorded from Hexter (DX7-style). https://freepats.zenvoid.org/ElectricPiano/synthesized-piano.html
+- **Included**: `bass.sf2`, `comp.sf2`, `LICENSE.txt` (CC0), `README.txt`
 
 ## Runtime music-video media (not bundled)
 

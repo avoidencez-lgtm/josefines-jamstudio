@@ -42,11 +42,12 @@ export function TransportBar() {
   const reference = telemetry.reference;
   const isPlaying =
     transport.state === "playing" || transport.state === "counting_in";
+  const playLabel = isPlaying ? "Pause" : "Play";
   const recordLabel = recordingError
     ? "Save partial take"
     : isRecording
-      ? "Stop recording"
-      : "Record a take";
+      ? "Stop recording."
+      : "Record a new take.";
 
   return (
     <header className="min-h-[56px] bg-[var(--bg-1)] border-b border-[var(--line)] flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 shrink-0">
@@ -55,12 +56,13 @@ export function TransportBar() {
           <button
             type="button"
             onClick={() => (isPlaying ? transportPause() : transportPlay())}
-            className={`w-9 h-9 rounded flex items-center justify-center cursor-pointer transition-colors ${
+            className={`w-9 h-9 rounded-[var(--radius-m)] flex items-center justify-center cursor-pointer ${
               isPlaying
                 ? "bg-[var(--accent)] text-[var(--bg-0)]"
                 : "bg-[var(--bg-2)] text-[var(--fg-0)] hover:bg-[var(--bg-3)]"
             }`}
-            title={isPlaying ? "Pause (Space)" : "Play (Space)"}
+            title={`${playLabel} (Space)`}
+            aria-label={playLabel}
           >
             {isPlaying ? (
               <Pause size={18} weight="fill" />
@@ -71,15 +73,16 @@ export function TransportBar() {
           <button
             type="button"
             onClick={() => transportStop()}
-            className="w-9 h-9 rounded flex items-center justify-center bg-[var(--bg-2)] text-[var(--fg-0)] hover:bg-[var(--bg-3)] cursor-pointer"
+            className="w-9 h-9 rounded-[var(--radius-m)] flex items-center justify-center bg-[var(--bg-2)] text-[var(--fg-0)] hover:bg-[var(--bg-3)] cursor-pointer"
             title="Stop (Enter)"
+            aria-label="Stop"
           >
             <Stop size={18} />
           </button>
           <button
             type="button"
             onClick={() => (isRecording ? stopRecording() : startRecording())}
-            className={`w-9 h-9 rounded flex items-center justify-center cursor-pointer transition-colors ${
+            className={`w-9 h-9 rounded-[var(--radius-m)] flex items-center justify-center cursor-pointer ${
               recordingError
                 ? "bg-[var(--bg-2)] text-[var(--record)] border border-[var(--record)]"
                 : isRecording
@@ -104,10 +107,10 @@ export function TransportBar() {
             type="button"
             onClick={() => setScreen("songs")}
             className="font-mono tabular-nums text-sm"
-            title="Open reference player"
+            title="Open the reference player."
           >
-            Reference · {reference.position.toFixed(1)} /{" "}
-            {reference.seconds.toFixed(1)} s
+            The reference is at {reference.position.toFixed(1)} of{" "}
+            {reference.seconds.toFixed(1)} s.
           </button>
         ) : (
           <>
@@ -122,7 +125,7 @@ export function TransportBar() {
                     : "text-[var(--fg-0)]"
                 }`}
               >
-                {transport.bar} : {transport.beat}
+                {transport.bar} · {transport.beat}
               </span>
             </div>
 
@@ -142,7 +145,7 @@ export function TransportBar() {
 
             <div
               className="flex items-baseline gap-2 font-mono tabular-nums"
-              title="Meter follows the loaded chart"
+              title="Meter follows the loaded chart."
             >
               <span className="text-xs uppercase text-[var(--fg-2)] tracking-wider">
                 Meter
@@ -167,16 +170,17 @@ export function TransportBar() {
                   !transport.loop_enabled,
                 )
               }
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono border cursor-pointer transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-m)] text-xs font-mono border cursor-pointer ${
                 transport.loop_enabled
                   ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--accent)]"
                   : "bg-[var(--bg-2)] border-[var(--line)] text-[var(--fg-2)] hover:text-[var(--fg-0)]"
               }`}
-              title="Toggle Loop (L)"
+              title="Toggle the loop (L)."
             >
               <Repeat size={14} />
               <span>
-                Loop {transport.loop_start_bar}-{transport.loop_end_bar - 1}
+                Loop bars {transport.loop_start_bar} to{" "}
+                {transport.loop_end_bar - 1}.
               </span>
             </button>
 
@@ -185,12 +189,12 @@ export function TransportBar() {
               onClick={() =>
                 transportSetCountIn((transport.count_in_bars + 1) % 3)
               }
-              className="px-2.5 py-1 rounded text-xs font-mono border cursor-pointer transition-colors bg-[var(--bg-2)] border-[var(--line)] text-[var(--fg-0)]"
-              title="Count-in (C)"
+              className="px-2.5 py-1 rounded-[var(--radius-m)] text-xs font-mono border cursor-pointer bg-[var(--bg-2)] border-[var(--line)] text-[var(--fg-0)]"
+              title="Set the count-in (C)."
             >
               {transport.count_in_bars > 0
-                ? `Count-in ${transport.count_in_bars} bar${transport.count_in_bars > 1 ? "s" : ""}`
-                : "Count-in off"}
+                ? `Count-in is ${transport.count_in_bars} bar${transport.count_in_bars > 1 ? "s" : ""}.`
+                : "The count-in is off."}
             </button>
           </>
         )}

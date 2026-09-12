@@ -208,7 +208,9 @@ it("writes an arrangement brief locally, including lyrics only on request and en
   body.lyrics = { verse: "These are my words" };
   const prompt = generationBrief(body, "Quiet verse, wide chorus", false);
   expect(prompt).toContain("100 BPM");
-  expect(prompt).toContain("Verse: 4 bars");
+  expect(prompt).toContain("The original song is");
+  expect(prompt).toContain("The direction is Quiet verse, wide chorus");
+  expect(prompt).toContain("Verse has 4 bars");
   expect(prompt).toContain("These are my words");
   expect(generationBrief(body, "Backing", true)).not.toContain(
     "These are my words",

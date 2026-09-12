@@ -23,11 +23,16 @@ pub struct PitchTracker {
 impl PitchTracker {
     pub fn new(window_size: usize, sample_rate: u32) -> Self {
         Self {
-            detector: McLeodDetector::new(window_size, window_size / 2)
-                .expect("supported pitch window")
-                // The previous gate was total energy 5; this API uses mean square.
-                .with_power_threshold(5.0 / window_size as f32)
-                .with_clarity_threshold(0.7),
+            // Cover 55 Hz (lag sr/55) plus an eighth-window to close the NSDF
+            // lobe, without reaching 2× the E2 period (octave-down on guitar).
+            detector: McLeodDetector::new(
+                window_size,
+                (sample_rate as usize / 55 + window_size / 8).clamp(1, window_size),
+            )
+            .expect("supported pitch window")
+            // The previous gate was total energy 5; this API uses mean square.
+            .with_power_threshold(5.0 / window_size as f32)
+            .with_clarity_threshold(0.7),
             window_size,
             sample_rate,
         }
@@ -130,6 +135,59 @@ mod tests {
             }
         }
         eprintln!("worst synthetic guitar-range error: {worst:.4} cents");
+    }
+
+    #[test]
+    fn sweep_55_to_1319_with_noise_stays_within_cents() {
+        // ARCHITECTURE §9.1: 55–1319 Hz sine +40 dB SNR, 2048-frame window.
+        const RATE: u32 = 48_000;
+        const WIN: usize = 2048;
+        const F0: f64 = 55.0;
+        const F1: f64 = 1319.0;
+        // Slow log sweep so a 2048-frame window is nearly stationary (~8 cents at 55 Hz).
+        let n = RATE as usize * 16;
+        let amp = 0.5f32;
+        let noise_rms = (amp / std::f32::consts::SQRT_2) / 100.0; // +40 dB SNR
+        let mut phase = 0.0f64;
+        let mut rng = 0xC0FFEE_u64;
+        let samples: Vec<f32> = (0..n)
+            .map(|i| {
+                let t = i as f64 / (n - 1) as f64;
+                let hz = F0 * (F1 / F0).powf(t);
+                phase += std::f64::consts::TAU * hz / f64::from(RATE);
+                rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let u = (rng >> 33) as f32 / (1u32 << 31) as f32;
+                let noise = (u * 2.0 - 1.0) * noise_rms * 3.0f32.sqrt();
+                amp * phase.sin() as f32 + noise
+            })
+            .collect();
+
+        let mut tracker = PitchTracker::new(WIN, RATE);
+        let mut errors = Vec::new();
+        for start in (0..n - WIN).step_by(WIN / 2) {
+            let mid = start + WIN / 2;
+            let t = mid as f64 / (n - 1) as f64;
+            let target = F0 * (F1 / F0).powf(t);
+            let pitch = tracker
+                .detect(&samples[start..start + WIN])
+                .unwrap_or_else(|| panic!("no pitch at {target:.1} Hz"));
+            let octaves = (f64::from(pitch.hz) / target).log2();
+            assert!(
+                octaves.abs() < 0.5,
+                "octave error at {target:.1} Hz: got {} Hz",
+                pitch.hz
+            );
+            let cents = 1200.0 * octaves.abs();
+            assert!(
+                cents <= 25.0,
+                "max {cents:.1} cents at {target:.1} Hz, got {} Hz",
+                pitch.hz
+            );
+            errors.push(cents);
+        }
+        errors.sort_by(|a, b| a.total_cmp(b));
+        let median = errors[errors.len() / 2];
+        assert!(median <= 10.0, "median {median:.1} cents");
     }
 
     #[test]

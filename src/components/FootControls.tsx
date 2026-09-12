@@ -12,24 +12,26 @@ export function FootControls() {
   const c = useController();
   return (
     <details className="song-foot-controls">
-      <summary>Hands-free controls · {c.enabled ? "enabled" : "off"}</summary>
+      <summary>
+        Hands-free controls are {c.enabled ? "enabled" : "off"}.
+      </summary>
       <p className="song-help">
         Keep playing while a pedal saves the idea, starts a take or loops a
         section. Select a MIDI input, click Learn, then press the pedal. Each
-        press has one action. Talk / send to Jo uses one press to start
-        listening and another to send; a press while waiting cancels. Voice
-        setup is in Jo AI and provider charges apply. The microphone stops after
-        20 seconds.
+        press has one action. This uses one press to start listening and another to send.
+        A press while waiting cancels.
+        Open the voice setup in Jo AI. Provider charges apply. The
+        microphone stops after 20 seconds.
       </p>
       <div className="song-controls">
         <label>
-          MIDI input
+          Choose the MIDI input.
           <select
             value={c.port}
             disabled={c.busy || isPreview}
             onChange={(e) => void c.connect(e.target.value)}
           >
-            <option value="">Disconnected</option>
+            <option value="">This input is disconnected.</option>
             {[...new Set([...c.ports, ...(c.port ? [c.port] : [])])].map(
               (p) => (
                 <option key={p}>{p}</option>
@@ -38,7 +40,7 @@ export function FootControls() {
           </select>
         </label>
         <Button disabled={c.busy || isPreview} onClick={() => void c.refresh()}>
-          Rescan inputs
+          Rescan these inputs.
         </Button>
         <label className="song-check">
           <input
@@ -53,7 +55,7 @@ export function FootControls() {
               });
             }}
           />
-          Enable pedal actions
+          Enable pedal actions.
         </label>
       </div>
       <div className="song-pedal-grid">
@@ -64,7 +66,7 @@ export function FootControls() {
             <div className="song-pedal-row" key={key}>
               <strong>{label}</strong>
               <span>
-                {binding ? describePress(binding.press) : "Unassigned"}
+                {binding ? describePress(binding.press) : "This pedal is unassigned."}
               </span>
               <Button
                 disabled={!c.port || c.busy}

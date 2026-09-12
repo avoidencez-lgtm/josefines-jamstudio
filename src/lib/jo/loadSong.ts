@@ -30,7 +30,7 @@ export const loadSong: JoAction = {
       throw new Error("Open the desktop app to load songs.");
     if (engine.isRecording || useMedia.getState().busy)
       throw new Error("Finish the recording or media operation first.");
-    useMedia.setState({ busy: "Loading reference", message: "" });
+    useMedia.setState({ busy: "Loading this reference.", message: "" });
     try {
       // Read native files on every call; the Songs room may never have opened.
       const library = await ipc.invoke<{
@@ -54,15 +54,17 @@ export const loadSong: JoAction = {
         throw new Error(
           "No matching audio song. Check its title or import it in Songs first.",
         );
-      if (matches.length !== 1)
+      if (matches.length !== 1) {
+        const listed = matches
+          .slice(0, 5)
+          .map((a) => `${a.label} [${a.id}]`)
+          .join("; ");
         throw new Error(
-          `Several songs match. Use a full title or exact ID: ${matches
-            .slice(0, 5)
-            .map((a) => `${a.label} [${a.id}]`)
-            .join(
-              "; ",
-            )}${matches.length > 5 ? "; more matches in Songs" : ""}.`,
+          `Several songs match. Use a full title or exact ID. ${listed}${
+            matches.length > 5 ? "; more matches in Songs" : ""
+          }.`,
         );
+      }
       const song = matches[0];
       await loadReference(song.id);
       useEngineStore.getState().setScreen("stage");

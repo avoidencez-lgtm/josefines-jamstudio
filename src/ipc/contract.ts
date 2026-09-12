@@ -1,6 +1,28 @@
 /** 2 since ADR 0010 removed the never-wired M3/M4 placeholder commands. */
 export const IPC_VERSION = 2;
 
+export interface IdleCpuSample {
+  percent: number | null;
+  seconds: number;
+  headless: boolean;
+  proven: boolean;
+  message: string;
+}
+
+export interface PackStatus {
+  id: string;
+  name: string;
+  state: string;
+  live: boolean;
+  message: string;
+}
+
+export interface LatencyCalibration {
+  roundTripFrames: number;
+  confidence: number;
+  estimated: boolean;
+}
+
 export interface DeviceDescriptor {
   name: string;
   is_default: boolean;
@@ -89,6 +111,11 @@ export interface BandTelemetry {
   pending_style_id?: string | null;
   pending_intensity?: number | null;
   is_stopped: boolean;
+  kit_id?: string;
+  kit_source?: "file" | "synthetic";
+  kit_message?: string;
+  bass_source?: "sine" | "sf2";
+  bass_message?: string;
 }
 
 // --- Library: styles and charts (data seams, see docs/plan) ---
@@ -194,7 +221,7 @@ export interface ReferenceState {
   semitones?: number;
   processing_error?: string | null;
   grid?: {
-    origin: "confirmed-local";
+    origin: "confirmed-local" | "estimated-local";
     beats_per_bar: number;
     bars: number;
     sections: ReferenceSection[];
@@ -326,6 +353,8 @@ export interface RigState {
   sectionMappings: Record<string, number>;
   controlValues: Record<string, number>;
   followSections: boolean;
+  sendClock: boolean;
+  dryRun: boolean;
   port: string | null;
   portDescription: string;
   live: boolean;
@@ -371,6 +400,9 @@ export interface CostEntry {
   estimatedCostUsd?: number | null;
   sttSeconds?: number | null;
   ttsCharacters?: number | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
 }
 
 export interface CostTotal {
@@ -381,6 +413,9 @@ export interface CostTotal {
   bytesOut: number;
   sttSeconds: number;
   ttsCharacters: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
   estimatedCostUsd: number | null;
   unpricedCalls: number;
 }
@@ -397,6 +432,17 @@ export interface TakeAnalysis {
   intonationAccuracyPct: number;
   detectedTransients: number;
   summary: string;
+}
+
+/** Lyria RealTime status. `live` stays false until a recorded provider session exists. */
+export interface LyriaStatus {
+  phase: string;
+  requestedBpm: number;
+  scale: string;
+  buffering: boolean;
+  live: boolean;
+  drivesClock: boolean;
+  outbound: number;
 }
 
 /** What `takes_export_daw` actually wrote. */

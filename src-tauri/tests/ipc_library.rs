@@ -737,7 +737,7 @@ fn importing_a_chart_file_copies_it_into_the_user_charts_folder() {
         json!({"path": missing.to_string_lossy()}),
     );
     assert!(
-        err.starts_with(&format!("{}: ", missing.display())),
+        err.starts_with(&format!("Cannot read {}.", missing.display())),
         "{err}"
     );
 
@@ -749,7 +749,8 @@ fn importing_a_chart_file_copies_it_into_the_user_charts_folder() {
         json!({"path": garbage.to_string_lossy()}),
     );
     assert!(
-        err.starts_with(&format!("{}: ", garbage.display())) && err.contains("line 1"),
+        err.starts_with(&format!("Cannot read {}.", garbage.display()))
+            && err.contains("line 1"),
         "{err}"
     );
 
@@ -806,7 +807,7 @@ fn library_reload_reports_broken_user_chart_files_without_registering_them() {
     );
     assert!(
         errors.contains(&format!(
-            "chart {invalid_id}: Chart tempo must be within 40–240 BPM."
+            "Chart {invalid_id} is invalid. Chart tempo must be within 40–240 BPM."
         )),
         "{errors:?}"
     );
@@ -1045,7 +1046,7 @@ fn band_cue_queues_the_named_cue_and_names_an_unknown_one() {
     for bad in ["Fill", "solo", ""] {
         assert_eq!(
             studio.err("band_cue", json!({"cue": bad})),
-            format!("Unknown cue: {bad}")
+            format!("The cue {bad} is unknown.")
         );
     }
     let err = studio.err("band_cue", json!({"cue": 3}));

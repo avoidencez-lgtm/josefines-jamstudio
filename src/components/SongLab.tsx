@@ -59,7 +59,7 @@ export function SongLab() {
   };
   return (
     <details className="song-foot-controls">
-      <summary>Song Lab · explore another direction</summary>
+      <summary>Song Lab. Explore another direction.</summary>
       <p className="song-help">
         Try different chords, find a bridge, start a lyric or get arrangement
         feedback. Only song text and selected rig information are sent.
@@ -67,7 +67,7 @@ export function SongLab() {
       </p>
       <div className="song-controls">
         <label>
-          Explore
+          Choose what to explore.
           <select
             value={kind}
             disabled={busy}
@@ -80,10 +80,10 @@ export function SongLab() {
             ))}
           </select>
         </label>
-        <Button onClick={() => setScreen("settings")}>AI settings</Button>
+        <Button onClick={() => setScreen("settings")}>Open these AI settings.</Button>
       </div>
       <label className="song-chords">
-        Your direction
+        Write your direction.
         <textarea
           maxLength={2000}
           rows={2}
@@ -93,11 +93,11 @@ export function SongLab() {
         />
       </label>
       <p className="song-help">
-        {BRAINS[preferences.selected].name} · {model.model} ·{" "}
+        {BRAINS[preferences.selected].name}. {model.model}.{" "}
         {BRAINS[preferences.selected].local
           ? "Uses the installed agent's account and limits."
           : estimate === null
-            ? "Cost unknown: enter model prices in Settings for an estimate."
+            ? "Cost is unknown. Enter model prices in Settings for an estimate."
             : `Approx. USD ${estimate.toFixed(4)} at the output limit; actual billing can differ.`}
       </p>
       {!ready && (
@@ -111,7 +111,7 @@ export function SongLab() {
         disabled={!ready || !song || busy || isRecording}
         onClick={() => void generate()}
       >
-        {busy ? "Thinking…" : "Generate an idea"}
+        {busy ? "Thinking…" : "Generate this idea."}
       </Button>
       {error && (
         <output className="song-message" aria-live="polite">
@@ -125,7 +125,7 @@ export function SongLab() {
           <p>{proposal.idea.summary}</p>
           {(proposal.kind === "chords" || proposal.kind === "bridge") && (
             <label className="song-chords">
-              Tweak the chords before applying
+              Tweak the chords before applying.
               <textarea
                 rows={2}
                 maxLength={2000}
@@ -140,7 +140,7 @@ export function SongLab() {
             </label>
           )}
           <label className="song-chords">
-            Tweak the notes or lyrics
+            Tweak the notes or lyrics.
             <textarea
               rows={4}
               maxLength={6000}
@@ -172,15 +172,15 @@ export function SongLab() {
               }}
             >
               {proposal.kind === "bridge"
-                ? "Add bridge & keep original version"
+                ? "Add this bridge and keep the original version."
                 : proposal.kind === "chords"
-                  ? "Apply chords & keep original version"
+                  ? "Apply these chords and keep the original version."
                   : proposal.kind === "lyrics"
-                    ? "Add to section lyrics"
-                    : "Keep in song notes"}
+                    ? "Add this to the section lyrics."
+                    : "Keep this in the song notes."}
             </Button>
             <Button disabled={busy} onClick={() => setProposal(null)}>
-              Dismiss
+              Dismiss this proposal.
             </Button>
           </div>
           {song && JSON.stringify(song.body) !== proposal.originalBody && (

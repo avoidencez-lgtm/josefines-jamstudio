@@ -308,7 +308,7 @@ export const useWriting = create<WritingState>((set, get) => ({
           ...song.versions,
           {
             id: crypto.randomUUID(),
-            name: name?.trim() || `Version ${song.versions.length + 1}`,
+            name: name?.trim() || `This is version ${song.versions.length + 1}.`,
             body: structuredClone(song.body),
           },
         ],
@@ -348,7 +348,7 @@ export const useWriting = create<WritingState>((set, get) => ({
         dirty: changed,
         message: changed
           ? "Earlier changes saved. Newer edits still need saving."
-          : "Song saved.",
+          : "This song is saved.",
       };
     });
     await get().refresh();
@@ -455,15 +455,15 @@ export const useWriting = create<WritingState>((set, get) => ({
       sessionId: song?.id ?? "ideas",
     });
     await useEngineStore.getState().loadTakes();
-    set({ message: "Idea saved. Add it below, then trim the part you want." });
-    useEngineStore.getState().notify("info", "Idea saved.");
+    set({ message: "This idea is saved. Add it below, then trim the part you want." });
+    useEngineStore.getState().notify("info", "This idea is saved.");
     useEngineStore.getState().setScreen("originals");
   },
   attach: (take) =>
     get().edit((b) =>
       b.clips.push({
         takeId: take.id,
-        label: `Guitar ${b.clips.length + 1}`,
+        label: `This is guitar ${b.clips.length + 1}.`,
         trimStart: 0,
         trimEnd: take.durationSecs,
         startBar: 1,

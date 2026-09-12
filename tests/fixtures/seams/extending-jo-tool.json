@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture_tip",
+  "name": "Fixture tip",
+  "kind": "jo-tool",
+  "declaration": {
+    "name": "fixture_tip",
+    "description": "Synthetic Jo tool used only by the extensibility proof.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "say": "Fixture tip ready."
+}

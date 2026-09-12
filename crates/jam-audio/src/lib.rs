@@ -1,6 +1,7 @@
 //! jam-audio: lock-free audio engine, ring buffers, cpal I/O, file input, and null output.
 
 pub mod analysis;
+pub mod calibration;
 pub mod devices;
 pub mod engine;
 pub mod export;
@@ -12,6 +13,7 @@ pub mod song;
 pub mod voice;
 
 pub use analysis::*;
+pub use calibration::{estimate_round_trip, measure_round_trip, LatencyCalibration};
 pub use devices::*;
 pub use engine::*;
 pub use export::*;

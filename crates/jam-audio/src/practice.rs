@@ -34,6 +34,49 @@ pub fn read_stereo(
     Ok((samples, spec))
 }
 
+pub fn write_stereo(output: &Path, samples: &[f32], cancel: &AtomicBool) -> Result<(), String> {
+    if samples.len() < 9600 || !samples.len().is_multiple_of(2) {
+        return Err(
+            "Decoded audio must be 48 kHz stereo float WAV within the allowed duration.".into(),
+        );
+    }
+    let spec = hound::WavSpec {
+        channels: 2,
+        sample_rate: 48_000,
+        bits_per_sample: 32,
+        sample_format: hound::SampleFormat::Float,
+    };
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(output)
+        .map_err(|e| e.to_string())?;
+    let result = (|| {
+        let mut writer =
+            hound::WavWriter::new(BufWriter::new(file), spec).map_err(|e| e.to_string())?;
+        for chunk in samples.chunks(8192) {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("Audio preparation canceled.".to_string());
+            }
+            for sample in chunk {
+                writer.write_sample(*sample).map_err(|e| e.to_string())?;
+            }
+        }
+        writer.finalize().map_err(|e| e.to_string())?;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(output)
+            .and_then(|f| f.sync_all())
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(output);
+    }
+    result
+}
+
 pub fn render(
     input: &Path,
     output: &Path,

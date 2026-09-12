@@ -42,28 +42,29 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
     }
   };
   return (
-    <section className="workspace-stack" aria-label="Reference player">
+    <section className="workspace-stack" aria-label="This is the reference player.">
       <div>
         <h2>{song.label}</h2>
-        <p className="workspace-note">Reference in Jamstudio · {song.state}</p>
+        <p className="workspace-note">
+          {song.state === "playing" ? "This reference is playing." : song.state === "paused" ? "This reference is paused." : "This reference is stopped."}
+        </p>
         <p className="font-mono tabular-nums">
-          {song.position.toFixed(1)} / {song.seconds.toFixed(1)} source seconds
+          This is {song.position.toFixed(1)} / {song.seconds.toFixed(1)} seconds of the source.
         </p>
       </div>
       {song.grid ? (
         <section
           className="workspace-stack"
-          aria-label="Confirmed reference sections"
+          aria-label="These are the bars and sections."
         >
-          <h3 className="font-semibold">Bars & sections</h3>
+          <h3 className="font-semibold">These are the bars and sections.</h3>
           <p className="workspace-note">
-            Confirmed from local estimates · {song.grid.beats_per_bar} beats per
-            bar · {song.grid.bars} complete bars
+            Confirmed from local estimates. This has {song.grid.beats_per_bar} beats per bar. {song.grid.bars} bars are complete.
           </p>
           <p className="font-mono tabular-nums">
             {song.grid.position
-              ? `Bar ${song.grid.position.bar} · beat ${song.grid.position.beat.toFixed(1)} · ${song.grid.position.bpm.toFixed(1)} BPM · ${song.grid.position.section_label ?? "Outside named sections"}`
-              : "Outside the confirmed bars, or waiting for output"}
+              ? `Bar ${song.grid.position.bar} · beat ${song.grid.position.beat.toFixed(1)} · ${song.grid.position.bpm.toFixed(1)} BPM · ${song.grid.position.section_label ?? "This is outside named sections."}`
+              : "Outside the confirmed bars, or waiting for output."}
           </p>
           <div className="workspace-actions">
             {song.grid.sections.map((section) => (
@@ -77,8 +78,8 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
                   })
                 }
               >
-                Loop {section.label} · bars {section.startBar}–
-                {section.endBar - 1}
+                Loop {section.label}. Bars {section.startBar}–
+                {section.endBar - 1}.
               </Button>
             ))}
           </div>
@@ -88,10 +89,13 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
             </p>
           )}
           <p className="workspace-note">
-            Section loops start at their confirmed downbeat. Press Play if the
-            reference is paused. The readout follows audio consumed by the
-            output; queued audio finishes before a new loop is heard. Names and
-            beat grouping were entered by you, not detected automatically.
+            {song.grid.origin === "estimated-local" ? "Section loops start at the estimated downbeat." : "Section loops start at the confirmed downbeat."}{" "}
+            Press Play if the reference is paused. The readout follows
+            audio consumed by the output; queued audio finishes before a new
+            loop is heard.
+            {song.grid.origin === "estimated-local"
+              ? " This map is a local 4/4 guess from the first beat. Confirm bars in Songs before a practice ramp. Music.ai estimates never write this grid."
+              : " Names and beat grouping were entered by you, not detected automatically."}
           </p>
         </section>
       ) : song.grid_error ? (
@@ -99,26 +103,26 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
       ) : null}
       {song.analysis ? (
         <section
-          aria-label="Current chord estimate"
+          aria-label="This is the current chord estimate."
           className="workspace-stack"
         >
           <p className="workspace-note">
-            Local estimates · low confidence ·{" "}
-            {song.analysis.key ?? "Key unknown"}
+            Local estimates. Low confidence.{" "}
+            {song.analysis.key ? `${song.analysis.key}.` : "This key is unknown."}
             {song.analysis.bpm !== null &&
-              ` · ${song.analysis.bpm.toFixed(1)} BPM`}
+              ` ${song.analysis.bpm.toFixed(1)} BPM.`}
           </p>
           <p className="text-2xl font-semibold">
-            Now: {song.analysis.chord ?? "Unknown"}
+            {song.analysis.chord ? `This chord is ${song.analysis.chord}.` : "This chord is unknown."}
             <span className="ml-6 text-base font-normal">
-              Next: {song.analysis.next_chord ?? "Unknown"}
+              {song.analysis.next_chord ? `Next is ${song.analysis.next_chord}.` : "Next is unknown."}
             </span>
           </p>
           <p className="workspace-note">
             {song.analysis.beat === null
-              ? "No analysed beat at this position"
-              : `Beat ${song.analysis.beat} of ${song.analysis.beat_count}`}
-            . Follows audio sent to the output; local analysis does not detect
+              ? "No analysed beat at this position."
+              : `Beat ${song.analysis.beat} of ${song.analysis.beat_count}.`}
+            Follows audio sent to the output; local analysis does not detect
             downbeats or sections.
           </p>
         </section>
@@ -137,22 +141,22 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
               [song.state === "playing" ? "transportPause" : "transportPlay"]()
           }
         >
-          {song.state === "playing" ? "Pause reference" : "Play reference"}
+          {song.state === "playing" ? "Pause the reference." : "Play the reference."}
         </Button>
         <Button
           disabled={locked}
           onClick={() => void useEngineStore.getState().transportStop()}
         >
-          Stop reference
+          Stop the reference.
         </Button>
         <Button
           disabled={locked}
           onClick={() => void command("media_reference_unload")}
         >
-          Return to band
+          Return to the band.
         </Button>
         <label className="room-tool-field">
-          Reference volume
+          This is the reference volume.
           <input
             type="range"
             className="accent-[var(--accent)]"
@@ -173,22 +177,22 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
       )}
       <form
         className="workspace-stack"
-        aria-label="Live reference practice"
+        aria-label="Practice the speed and key."
         onSubmit={(e) => {
           e.preventDefault();
           void practice(speed / 100, semitones);
         }}
       >
-        <h3 className="font-semibold">Practice speed & key</h3>
+        <h3 className="font-semibold">Practice the speed and key.</h3>
         <p className="workspace-note">
-          Applied: {Math.round((song.speed ?? 1) * 100)}% ·{" "}
+          Playing at {Math.round((song.speed ?? 1) * 100)}% and{" "}
           {(song.semitones ?? 0) > 0 ? "+" : ""}
           {song.semitones ?? 0} semitones. Changes process each track locally
           during playback; guitar DI stays unchanged.
         </p>
         <div className="workspace-actions">
           <label className="room-tool-field">
-            Reference speed · {Math.round(speed)}%
+            Reference speed is {Math.round(speed)}%.
             <input
               type="range"
               min={50}
@@ -200,7 +204,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
             />
           </label>
           <label className="room-tool-field">
-            Reference transpose
+            Reference transpose is in semitones.
             <select
               value={semitones}
               disabled={locked}
@@ -215,18 +219,18 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
             </select>
           </label>
           <Button type="submit" disabled={locked}>
-            {processing ? "Applying…" : "Apply & save speed/key"}
+            {processing ? "Applying…" : "Apply and save the speed and key."}
           </Button>
           <Button
             type="button"
             disabled={locked}
             onClick={() => void practice(1, 0)}
           >
-            100% · original key
+            Reset to 100% and the original key.
           </Button>
         </div>
         <p className="workspace-note">
-          Position and loop bounds remain in original source seconds. Chord/key
+          Position and loop bounds remain in original source time. Chord/key
           estimates transpose with the audio; tempo estimates follow its speed.
           Save a take before changing these settings. Files, Film and offline
           practice copies are unchanged.
@@ -239,7 +243,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
       </form>
       <form
         className="workspace-stack"
-        aria-label="Reference practice ramp"
+        aria-label="Build up the speed."
         onSubmit={(e) => {
           e.preventDefault();
           void applyReferenceRamp(song.asset_id, rampDraft.config).catch(
@@ -247,7 +251,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
           );
         }}
       >
-        <h3 className="font-semibold">Build up speed</h3>
+        <h3 className="font-semibold">Build up the speed.</h3>
         <p className="workspace-note">
           Increase after complete confirmed bars, including repeated sections.
           Choose a section loop first. This changes every reference track
@@ -256,10 +260,10 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
         <div className="workspace-actions">
           {(
             [
-              ["startPercent", "Start speed (%)", 50, 149],
-              ["stepPercent", "Increase (percentage points)", 1, 50],
-              ["targetPercent", "Target speed (%)", 51, 150],
-              ["barsPerStep", "Complete bars per step", 1, 64],
+              ["startPercent", "Start speed is in percent.", 50, 149],
+              ["stepPercent", "Increase is in percentage points.", 1, 50],
+              ["targetPercent", "Target speed is in percent.", 51, 150],
+              ["barsPerStep", "Use this many complete bars per step.", 1, 64],
             ] as const
           ).map(([field, label, min, max]) => (
             <label key={field} className="room-tool-field">
@@ -284,7 +288,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
             </label>
           ))}
           <Button type="submit" disabled={locked || !song.grid}>
-            Start ramp
+            Start the ramp.
           </Button>
           <Button
             type="button"
@@ -295,13 +299,13 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
               )
             }
           >
-            Stop ramp · hold speed
+            Stop ramp. Hold speed.
           </Button>
         </div>
         <output className="workspace-note">
           {song.ramp
-            ? `${song.ramp.speed_percent}% ${song.state === "playing" ? "heard" : "set"} · ${song.ramp.completed_bars} complete bars · ${song.ramp.active ? "ramp armed" : "target reached"}`
-            : "Ramp off, or waiting for updated output."}
+            ? `${song.ramp.speed_percent}% is ${song.state === "playing" ? "heard" : "set"}. ${song.ramp.completed_bars} bars are complete. ${song.ramp.active ? "This ramp is armed." : "This target is reached."}`
+            : "This ramp is off, or waiting for updated output."}
         </output>
         <p className="workspace-note">
           {!song.grid && "Confirm bars in Songs, then reload this reference. "}
@@ -320,7 +324,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
         }}
       >
         <label className="room-tool-field">
-          Seek to (seconds)
+          Seek to a time in seconds.
           <input
             type="number"
             min={0}
@@ -348,7 +352,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
         }}
       >
         <label className="room-tool-field">
-          Loop start (seconds)
+          Loop start is in seconds.
           <input
             type="number"
             min={0}
@@ -361,7 +365,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
           />
         </label>
         <label className="room-tool-field">
-          Loop end (seconds)
+          Loop end is in seconds.
           <input
             type="number"
             min={0.1}
@@ -374,7 +378,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
           />
         </label>
         <Button type="submit" disabled={locked}>
-          Loop this range
+          Loop this range.
         </Button>
         <Button
           type="button"
@@ -387,7 +391,7 @@ export function ReferencePlayer({ song }: { song: ReferenceState }) {
             })
           }
         >
-          Loop off
+          Loop off.
         </Button>
       </form>
       <p className="workspace-note">

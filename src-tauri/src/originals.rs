@@ -115,7 +115,8 @@ fn body(doc: &Value) -> Result<SongBody, String> {
         return Err("Song version list must be an array.".into());
     }
     let b: SongBody =
-        serde_json::from_value(doc["body"].clone()).map_err(|e| format!("Song: {e}"))?;
+        serde_json::from_value(doc["body"].clone())
+            .map_err(|e| format!("The song is invalid. {e}"))?;
     // Bound before resolving a chart, so a hand-edited repeat count cannot allocate forever.
     if b.chart.sections.len() > 64
         || b.chart.arrangement.len() > 128
@@ -265,7 +266,7 @@ fn scan_originals(root: &Path) -> Result<(Vec<Value>, Vec<String>), String> {
             match read() {
                 Ok(v) => docs.push(v),
                 Err(e) => warnings.push(format!(
-                    "Cannot read {}: {e}. Other songs remain available; this file was left intact.",
+                    "Cannot read {}. {e}. Other songs remain available; this file was left intact.",
                     p.display()
                 )),
             }
@@ -324,7 +325,7 @@ fn scan_takes(root: &Path) -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
             {
                 Ok(take) => takes.push(take),
                 Err(e) => warnings.push(format!(
-                    "Cannot read {}: {e}. Other takes remain available; this file was left intact.",
+                    "Cannot read {}. {e}. Other takes remain available; this file was left intact.",
                     p.display()
                 )),
             }
@@ -338,7 +339,7 @@ pub fn read_clip(spec: ClipSpec, state: &AppState, takes: &[TakeMetadata]) -> Re
     let p = Path::new(&take.path_input);
     // ponytail: decode each guitar clip in memory, max 10 min; stream if longer songs are needed.
     if fs::metadata(p)
-        .map_err(|e| format!("Cannot read take {} at {}: {e}", take.id, p.display()))?
+        .map_err(|e| format!("Cannot read take {} at {}. {e}", take.id, p.display()))?
         .len()
         > 100_000_000
     {
@@ -349,7 +350,7 @@ pub fn read_clip(spec: ClipSpec, state: &AppState, takes: &[TakeMetadata]) -> Re
         .clips
         .lock()
         .load(p)
-        .map_err(|e| format!("Cannot read take {} at {}: {e}", take.id, p.display()))?;
+        .map_err(|e| format!("Cannot read take {} at {}. {e}", take.id, p.display()))?;
     Clip::new(spec, decoded.samples, decoded.sample_rate)
 }
 
@@ -470,7 +471,12 @@ pub fn originals_record(session_id: String, state: State<'_, AppState>) -> Resul
 
 #[tauri::command]
 pub fn capture_arm(seconds: u32, state: State<'_, AppState>) -> Result<(), String> {
-    state.engine.lock().capture.lock().arm(seconds)
+    let engine = state.engine.lock();
+    engine.capture.lock().arm(seconds)?;
+    if seconds > 0 {
+        engine.wake_render();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -486,6 +492,7 @@ pub fn clip_audition(spec: ClipSpec, state: State<'_, AppState>) -> Result<(), S
     }
     eng.transport_stop();
     *eng.audition.lock() = Some(jam_audio::workstation::Audition::new(clip));
+    eng.wake_render();
     Ok(())
 }
 #[tauri::command]
