@@ -1295,7 +1295,8 @@ impl AudioEngine {
 
     pub fn get_telemetry(&self) -> EngineTelemetry {
         let mut tel = self.latest_telemetry.lock().clone();
-        tel.status = self.status.lock().clone();
+        tel.status = self.status();
+        tel.xruns = tel.status.xruns;
         if !self.tuner_active.load(Ordering::Relaxed) {
             tel.tuner = None;
         }
