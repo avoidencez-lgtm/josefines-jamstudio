@@ -23,11 +23,13 @@ pub struct PitchTracker {
 impl PitchTracker {
     pub fn new(window_size: usize, sample_rate: u32) -> Self {
         Self {
-            // Cover 55 Hz (lag sr/55) plus an eighth-window to close the NSDF
-            // lobe, without reaching 2× the E2 period (octave-down on guitar).
+            // Cover ~30 Hz (bass / 8-string / drop tunings). McLeod k=0.9
+            // rejects octave-down doubling instead of clipping the lag search.
             detector: McLeodDetector::new(
                 window_size,
-                (sample_rate as usize / 55 + window_size / 8).clamp(1, window_size),
+                (sample_rate as usize / 30)
+                    .min(window_size.saturating_sub(1))
+                    .clamp(1, window_size),
             )
             .expect("supported pitch window")
             // The previous gate was total energy 5; this API uses mean square.
@@ -228,5 +230,33 @@ mod tests {
         assert!((res.hz - 82.41).abs() < 1.0);
         assert_eq!(res.note, "E2");
         assert!(res.cents.abs() < 5.0);
+    }
+
+    #[test]
+    fn drop_tuning_and_bass_fundamentals_are_detected_within_ten_cents() {
+        // tau_max of sr/55 truncated NSDF lobes below ~53 Hz. Search down to
+        // 30 Hz (window 2048 @ 48 kHz) and keep McLeod k=0.9. Tolerance: 10 cents.
+        let sample_rate = 48_000;
+        let window_size = 2048;
+        for freq in [41.2034f32, 46.2493, 48.9994, 51.9131] {
+            let mut tracker = PitchTracker::new(window_size, sample_rate);
+            let samples: Vec<f32> = (0..window_size)
+                .map(|i| (2.0 * std::f32::consts::PI * freq * i as f32 / sample_rate as f32).sin())
+                .collect();
+            let res = tracker
+                .detect(&samples)
+                .unwrap_or_else(|| panic!("expected pitch at {freq} Hz"));
+            let cents = 1200.0 * (res.hz / freq).log2().abs();
+            assert!(
+                cents <= 10.0,
+                "{freq} Hz: got {} Hz ({cents} cents)",
+                res.hz
+            );
+            assert!(
+                (res.hz / freq).log2().abs() < 0.5,
+                "{freq} Hz octave error: got {} Hz",
+                res.hz
+            );
+        }
     }
 }
