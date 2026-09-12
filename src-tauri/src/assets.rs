@@ -728,7 +728,7 @@ mod tests {
         zip.start_file("kick/hit.wav", opts).unwrap();
         zip.write_all(b"RIFF").unwrap();
         for i in 0..63 {
-            zip.add_directory(&format!("layer{i}/"), opts).unwrap();
+            zip.add_directory(format!("layer{i}/"), opts).unwrap();
         }
         zip.finish().unwrap();
         let archive = zip::ZipArchive::new(File::open(&zip_path).unwrap()).unwrap();

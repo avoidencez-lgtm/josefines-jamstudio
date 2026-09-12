@@ -223,7 +223,7 @@ pub async fn fetch(
 
 fn record_media_usage(log: &CostLog, entry: CostEntry) -> Result<(), String> {
     log.append(&entry).map_err(|_| {
-        "Could not save media usage. Check the data folder; do not retry automatically."
+        "Could not save media usage. Check the data folder; do not retry automatically.".into()
     })
 }
 async fn read_bounded(mut response: reqwest::Response, limit: usize) -> Result<Vec<u8>, String> {

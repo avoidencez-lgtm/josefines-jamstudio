@@ -417,7 +417,7 @@ fn transport_seek_bar(bar: u32, state: State<'_, AppState>) -> Result<(), String
     eng.ensure_band_grid()?;
     eng.transport_seek_bar(bar);
     drop(eng);
-    notify_rig_playhead(&*state)
+    notify_rig_playhead(&state)
 }
 
 #[tauri::command]
@@ -450,7 +450,7 @@ fn transport_set_tempo(bpm: f64, state: State<'_, AppState>) -> Result<(), Strin
     eng.ensure_band_grid()?;
     eng.transport_set_tempo(bpm);
     drop(eng);
-    notify_rig_playhead(&*state)
+    notify_rig_playhead(&state)
 }
 
 #[tauri::command]

@@ -410,7 +410,9 @@ mod tests {
         let frames = output.len() / 2;
         let rms = |start: usize, count: usize| {
             let sum: f32 = output
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .skip(start)
                 .take(count)
                 .map(|c| c[0] * c[0])

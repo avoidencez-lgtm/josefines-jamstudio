@@ -15,6 +15,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
+use tauri::Listener;
 
 fn settings_path() -> PathBuf {
     user_dir().join("settings.json")

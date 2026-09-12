@@ -349,8 +349,10 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         let path = root.join("settings.json");
         fs::write(&path, "{ not json").unwrap();
-        let mut settings = AppSettings::default();
-        settings.buffer_size = 1024;
+        let settings = AppSettings {
+            buffer_size: 1024,
+            ..AppSettings::default()
+        };
         save_to(&path, &settings).unwrap();
         assert_eq!(load_from(&path).unwrap().buffer_size, 1024);
         let preserved: Vec<_> = fs::read_dir(&root)

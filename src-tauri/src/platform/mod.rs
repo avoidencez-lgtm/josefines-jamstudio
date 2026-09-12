@@ -69,7 +69,7 @@ pub async fn open_media(path: &std::path::Path) -> Result<(), String> {
                 "The system could not open this item. Check the default application.".into(),
             );
         }
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(any(target_os = "macos", windows)))]
     {
@@ -82,9 +82,9 @@ async fn open_with_os(target: &str) -> Result<(), String> {
     #[cfg(windows)]
     {
         let target = target.to_string();
-        return tokio::task::spawn_blocking(move || windows_shell_open(&target))
+        tokio::task::spawn_blocking(move || windows_shell_open(&target))
             .await
-            .unwrap_or_else(|e| Err(e.to_string()));
+            .unwrap_or_else(|e| Err(e.to_string()))
     }
     #[cfg(target_os = "macos")]
     let mut opener = command(std::path::Path::new("/usr/bin/open"));
@@ -212,8 +212,6 @@ impl Drop for KillTree {
 
 #[cfg(windows)]
 mod win_job {
-    use std::os::windows::io::AsRawHandle;
-
     #[link(name = "kernel32")]
     extern "system" {
         fn CreateJobObjectW(
@@ -300,7 +298,8 @@ mod win_job {
                 CloseHandle(job);
                 return None;
             }
-            if AssignProcessToJobObject(job, child.as_raw_handle()) == 0 {
+            let handle = child.raw_handle()?;
+            if AssignProcessToJobObject(job, handle) == 0 {
                 CloseHandle(job);
                 return None;
             }

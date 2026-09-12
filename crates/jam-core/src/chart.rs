@@ -378,18 +378,21 @@ mod tests {
             time_sig: (4, 4),
             default_bpm: 120.0,
             default_style_id: Some("blues-shuffle".into()),
+            extra: HashMap::new(),
             sections: vec![
                 ChartSection {
                     id: "verse".into(),
                     name: "Verse".into(),
                     bars: vec![bar("Am"), bar("G")],
                     style_override_id: None,
+                    extra: HashMap::new(),
                 },
                 ChartSection {
                     id: "chorus".into(),
                     name: "Chorus".into(),
                     bars: vec![bar("C"), bar("F")],
                     style_override_id: Some("rock-straight".into()),
+                    extra: HashMap::new(),
                 },
             ],
             arrangement: vec![

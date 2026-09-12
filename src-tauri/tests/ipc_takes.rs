@@ -1163,7 +1163,8 @@ fn takes_list_rebuilds_an_empty_sqlite_cache_from_disk() {
     let _scenario = common::scenario();
     let studio = Studio::boot();
     let take = synthetic_take(0.2, "1700000000.000");
-    let store = studio.app().state::<app_lib::AppState>().store.lock();
+    let state = studio.app().state::<app_lib::AppState>();
+    let store = state.store.lock();
     let (before, _) = store.list_takes().unwrap();
     assert!(before.iter().all(|t| t.id != take.id));
     drop(store);

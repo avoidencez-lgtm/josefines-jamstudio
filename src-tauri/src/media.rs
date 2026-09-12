@@ -1804,7 +1804,10 @@ mod tests {
             .unwrap()
             .join("song.json");
         let before = fs::read(&manifest).unwrap();
-        let err = analyze_source(&base, &imported.id).await.unwrap_err();
+        let err = match analyze_source(&base, &imported.id).await {
+            Ok(asset) => panic!("expected analysis to fail, got {}", asset.id),
+            Err(e) => e,
+        };
         assert!(
             err.contains("estimatedGrid") || err.contains("Unsupported"),
             "{err}"

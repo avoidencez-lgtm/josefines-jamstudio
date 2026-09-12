@@ -1570,6 +1570,7 @@ mod tests {
                     chord: "C".into(),
                     beats: 4.0,
                 }],
+                style_override_id: None,
             }],
         });
         let mut l = vec![0.0f32; 256];

@@ -2236,8 +2236,10 @@ mod tests {
 
     #[test]
     fn idle_band_emit_zeros_energy() {
-        let mut playing = BandTelemetry::default();
-        playing.current_energy = 0.8;
+        let playing = BandTelemetry {
+            current_energy: 0.8,
+            ..Default::default()
+        };
         assert_eq!(playing.clone().for_emit(true).current_energy, 0.8);
         let idle = playing.for_emit(false);
         assert_eq!(idle.current_energy, 0.0);
