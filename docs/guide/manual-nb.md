@@ -158,7 +158,7 @@ Hvis søket ikke treffer, viser Library No charts match. Try another search or c
 
 ### Syntaks for akkordskjema
 
-En tittel starter med #. Metadata bruker key: A minor, bpm: 100, time: 4/4 og eventuelt style: rock-straight. En seksjonsoverskrift som [Verse x2] gjentar seksjonen. Taktlinjer kan være | Am | F | C G | Am:3 G:1 |. Tegnet % gjentar forrige takt. Akkorder uten et slagtall deler slagene som gjenstår: C:2 F G A gir C to slag og fordeler de andre to likt. Varighetene bevares når du åpner eller transponerer skjemaet; blandede fordelinger kan vises med flere desimaler. Hver takt må inneholde taktartens antall slag. Feilmeldinger peker på ugyldig innhold; rett det før lagring/avspilling. Ctrl/Cmd+Enter spiller av fra redigeringsfeltet, og Ctrl/Cmd+S lagrer.
+En tittel starter med #. Metadata bruker key: A minor, bpm: 100, time: 4/4 og eventuelt style: rock-straight. En seksjonsoverskrift som [Verse x2] gjentar seksjonen. Redigeringsfeltet skriver en section id:-linje under hver overskrift; behold denne linjen når du gir seksjonen nytt navn, slik at arrangement og lagrede metadata fortsatt finner den. Taktlinjer kan være | Am | F | C G | Am:3 G:1 |. Tegnet % gjentar forrige takt. Akkorder uten et slagtall deler slagene som gjenstår: C:2 F G A gir C to slag og fordeler de andre to likt. Varighetene bevares når du åpner eller transponerer skjemaet; blandede fordelinger kan vises med flere desimaler. Hver takt må inneholde taktartens antall slag. Feilmeldinger peker på ugyldig innhold; rett det før lagring/avspilling. Ctrl/Cmd+Enter spiller av fra redigeringsfeltet, og Ctrl/Cmd+S lagrer.
 
 ### Lagret innhold
 

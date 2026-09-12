@@ -139,6 +139,7 @@ export interface StyleSummary {
 export interface BarChord {
   chord: string;
   beats: number;
+  [key: string]: unknown;
 }
 
 export interface ChartSection {
@@ -146,11 +147,13 @@ export interface ChartSection {
   name: string;
   bars: BarChord[][];
   styleOverrideId?: string | null;
+  [key: string]: unknown;
 }
 
 export interface ArrangementItem {
   sectionId: string;
   repeats: number;
+  [key: string]: unknown;
 }
 
 export interface Chart {
@@ -165,6 +168,7 @@ export interface Chart {
   defaultStyleId?: string | null;
   sections: ChartSection[];
   arrangement: ArrangementItem[];
+  [key: string]: unknown;
 }
 
 export interface LibraryInfo {

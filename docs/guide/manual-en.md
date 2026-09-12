@@ -158,7 +158,7 @@ If nothing matches the search, Library says No charts match. Try another search 
 
 ### Chart syntax
 
-A title starts with #. Metadata lines use key: A minor, bpm: 100, time: 4/4 and optionally style: rock-straight. A section heading such as [Verse x2] repeats that section. Bar lines look like | Am | F | C G | Am:3 G:1 |. The % symbol repeats the previous bar. Chords without a count share the remaining beats: C:2 F G A gives C two beats and splits the other two equally. Reopening or transposing a chart preserves those durations; mixed splits may show longer decimal counts. Each bar must contain the meter’s beat count. Problems identify invalid content; fix them before save/play. Ctrl/Cmd+Enter plays the editor and Ctrl/Cmd+S saves it.
+A title starts with #. Metadata lines use key: A minor, bpm: 100, time: 4/4 and optionally style: rock-straight. A section heading such as [Verse x2] repeats that section. The editor writes a section id: line below every heading; keep that line when renaming a section so arrangements and saved metadata still identify it. Bar lines look like | Am | F | C G | Am:3 G:1 |. The % symbol repeats the previous bar. Chords without a count share the remaining beats: C:2 F G A gives C two beats and splits the other two equally. Reopening or transposing a chart preserves those durations; mixed splits may show longer decimal counts. Each bar must contain the meter’s beat count. Problems identify invalid content; fix them before save/play. Ctrl/Cmd+Enter plays the editor and Ctrl/Cmd+S saves it.
 
 ### Stored content
 

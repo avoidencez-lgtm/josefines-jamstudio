@@ -330,15 +330,97 @@ arrangement: mix 2, chorus x2, verse 2
     };
     const text = chartToText(chart);
     expect(text).toContain("arrangement: Chorus, Verse x2, Chorus");
-    expect(text).not.toContain(verseId);
-    expect(text).not.toContain(chorusId);
+    expect(text).toContain(`section id: ${verseId}`);
+    expect(text).toContain(`section id: ${chorusId}`);
     const { chart: parsed, problems } = parseChartText(text);
     expect(problems).toEqual([]);
     expect(parsed?.arrangement).toEqual([
-      { sectionId: "chorus", repeats: 1 },
-      { sectionId: "verse", repeats: 2 },
-      { sectionId: "chorus", repeats: 1 },
+      { sectionId: chorusId, repeats: 1 },
+      { sectionId: verseId, repeats: 2 },
+      { sectionId: chorusId, repeats: 1 },
     ]);
+  });
+
+  it("preserves source metadata through an unambiguous editor rewrite", () => {
+    const source = {
+      schemaVersion: 1,
+      id: "metadata-chart",
+      name: "Before",
+      keyTonic: 0,
+      mode: "major" as const,
+      timeSig: [4, 4] as [number, number],
+      defaultBpm: 120,
+      annotation: { keep: "chart" },
+      sections: [
+        {
+          id: "section-stable-id",
+          name: "Verse",
+          annotation: { keep: "section" },
+          bars: [
+            [
+              {
+                chord: "C",
+                beats: 4,
+                annotation: { keep: "chord" },
+              },
+            ],
+          ],
+        },
+      ],
+      arrangement: [
+        {
+          sectionId: "section-stable-id",
+          repeats: 1,
+          annotation: { keep: "arrangement" },
+        },
+      ],
+    } satisfies Chart;
+    const edited = chartToText(source)
+      .replace("# Before", "# After")
+      .replace("bpm: 120", "bpm: 126");
+    const { chart, problems } = parseChartText(edited, { source });
+    expect(problems).toEqual([]);
+    expect(chart).toMatchObject({
+      name: "After",
+      defaultBpm: 126,
+      annotation: { keep: "chart" },
+      sections: [
+        {
+          id: "section-stable-id",
+          annotation: { keep: "section" },
+          bars: [
+            [
+              {
+                chord: "C",
+                annotation: { keep: "chord" },
+              },
+            ],
+          ],
+        },
+      ],
+      arrangement: [
+        {
+          sectionId: "section-stable-id",
+          annotation: { keep: "arrangement" },
+        },
+      ],
+    });
+
+    const restructured = parseChartText(
+      chartToText(source).replace("| C |", "| D |"),
+      { source },
+    ).chart;
+    expect(restructured?.sections[0].annotation).toEqual({ keep: "section" });
+    expect(restructured?.sections[0].bars[0][0]).toEqual({
+      chord: "D",
+      beats: 4,
+    });
+
+    const transposed = transposeChart(source, 2);
+    expect(
+      parseChartText(chartToText(transposed), { source: transposed }).chart
+        ?.sections[0].bars[0][0].annotation,
+    ).toEqual({ keep: "chord" });
   });
 
   it("round-trips every bundled chart through text", () => {

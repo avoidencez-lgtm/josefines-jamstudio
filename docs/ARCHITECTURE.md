@@ -765,8 +765,12 @@ arrangement entries through loading, IPC and saving. Style JSON retains them on
 feel, humanization, patterns, drum hits, bass notes and comp strums, including
 fills and endings. These use the existing flattened extension maps; recognized
 fields keep their typed validation and newer schema versions are still refused.
-Preserving those fields through the chart editor's plain-text conversion remains
-separate unfinished work.
+The chart editor keeps its loaded source document beside the text draft. Its
+generated `section id:` lines retain section identity through renames. A rewrite
+retains chart and matched-section extension fields. Chord fields are retained only
+while that section's chord sequence is unchanged (the Transpose action advances
+the source first), and arrangement fields only while the section sequence is
+unchanged, so structural edits cannot move metadata onto a different object.
 
 Originals, charts, settings, media/song metadata and session reviews share
 `persistence::write`. Commits are serialized within the process; caller revision
