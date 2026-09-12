@@ -1247,11 +1247,19 @@ fn persist_session_review(session_id: &str, review: &serde_json::Value) -> Resul
         return Err("session.json must be an object.".into());
     }
     doc["review"] = review.clone();
-    std::fs::write(
-        &path,
-        serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| format!("Cannot write session.json. {e}"))?;
+    let bytes = serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?;
+    let temp = path.with_extension("json.tmp");
+    std::fs::write(&temp, &bytes).map_err(|e| format!("Cannot write {}. {e}", temp.display()))?;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&temp)
+        .and_then(|f| f.sync_all())
+        .map_err(|e| format!("Cannot write {}. {e}", temp.display()))?;
+    if path.exists() {
+        std::fs::copy(&path, path.with_extension("json.bak"))
+            .map_err(|e| format!("Cannot write session.json. {e}"))?;
+    }
+    std::fs::rename(&temp, &path).map_err(|e| format!("Cannot write session.json. {e}"))?;
     Ok(())
 }
 
