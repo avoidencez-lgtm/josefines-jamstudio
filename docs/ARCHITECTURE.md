@@ -760,6 +760,14 @@ are added); master/monitor click and test tone are excluded.
 
 Original and Film save completions preserve newer in-memory edits while advancing the disk revision. Film Undo retains that revision. Original listing isolates malformed documents; chart loading validates user overrides before registration and chart saves keep a previous-file backup. Structural chart limits are checked before arrangement expansion.
 
+Native chart JSON retains unknown fields on the chart, sections, chords and
+arrangement entries through loading, IPC and saving. Style JSON retains them on
+feel, humanization, patterns, drum hits, bass notes and comp strums, including
+fills and endings. These use the existing flattened extension maps; recognized
+fields keep their typed validation and newer schema versions are still refused.
+Preserving those fields through the chart editor's plain-text conversion remains
+separate unfinished work.
+
 Originals, charts, settings, media/song metadata and session reviews share
 `persistence::write`. Commits are serialized within the process; caller revision
 checks still apply. Each write uses exclusively created, uniquely named temporary

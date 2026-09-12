@@ -562,6 +562,10 @@ fn saving_a_chart_writes_a_user_file_that_is_listed_and_survives_a_reload() {
     let id = unique("saved");
     let mut chart = four_four(&id);
     chart["name"] = json!("Saved Chart");
+    chart["annotation"] = json!({"keep": "chart"});
+    chart["sections"][0]["annotation"] = json!({"keep": "section"});
+    chart["sections"][0]["bars"][0][0]["annotation"] = json!({"keep": "chord"});
+    chart["arrangement"][0]["annotation"] = json!({"keep": "arrangement"});
     let before = charts(&studio);
     assert!(before.iter().all(|c| c["id"] != id));
 
@@ -612,17 +616,35 @@ fn saving_a_chart_writes_a_user_file_that_is_listed_and_survives_a_reload() {
     assert_eq!(find_chart(&charts(&studio), &id)["name"], "Saved Chart");
     let loaded = studio.ok("band_load_chart", json!({"chartId": &id}));
     assert_eq!(loaded["name"], "Saved Chart");
+    let metadata_paths = [
+        "/annotation",
+        "/sections/0/annotation",
+        "/sections/0/bars/0/0/annotation",
+        "/arrangement/0/annotation",
+    ];
+    for pointer in metadata_paths {
+        assert_eq!(loaded.pointer(pointer), chart.pointer(pointer), "{pointer}");
+    }
     band_where(&studio, "saved chart", |b| b["current_chord"] == "Gm7");
 
     // Saving again keeps a backup of the previous file and updates the listing.
+    chart = loaded;
     chart["name"] = json!("Saved Chart v2");
     studio.ok("charts_save", json!({"chart": chart}));
     assert_eq!(find_chart(&charts(&studio), &id)["name"], "Saved Chart v2");
-    assert_eq!(read_json(&path)["name"], "Saved Chart v2");
-    assert_eq!(
-        read_json(&path.with_extension("json.bak"))["name"],
-        "Saved Chart"
-    );
+    let saved = read_json(&path);
+    let backup = read_json(&path.with_extension("json.bak"));
+    assert_eq!(saved["name"], "Saved Chart v2");
+    assert_eq!(backup["name"], "Saved Chart");
+    for document in [&saved, &backup] {
+        for pointer in metadata_paths {
+            assert_eq!(
+                document.pointer(pointer),
+                chart.pointer(pointer),
+                "{pointer}"
+            );
+        }
+    }
     assert_eq!(charts(&studio).iter().filter(|c| c["id"] == id).count(), 1);
 
     // Ids that would sanitize onto one filename are refused, so the first chart stays.

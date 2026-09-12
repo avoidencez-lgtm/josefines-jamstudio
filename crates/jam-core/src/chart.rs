@@ -8,6 +8,8 @@ use std::collections::HashMap;
 pub struct BarChord {
     pub chord: String,
     pub beats: f64,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -28,6 +30,8 @@ pub struct ArrangementItem {
     pub section_id: String,
     #[serde(default = "default_repeats")]
     pub repeats: u32,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 fn default_repeats() -> u32 {
@@ -190,50 +194,62 @@ mod tests {
     fn test_12_bar_blues_expansion() {
         let verse_bars: Vec<Vec<BarChord>> = vec![
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "D7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "D7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "D7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "E7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "D7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "A7".into(),
                 beats: 4.0,
             }],
             vec![BarChord {
+                extra: Default::default(),
                 chord: "E7".into(),
                 beats: 4.0,
             }],
@@ -256,6 +272,7 @@ mod tests {
                 extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
+                extra: Default::default(),
                 section_id: "verse".into(),
                 repeats: 2, // 2 chorus = 24 bars
             }],
@@ -294,15 +311,18 @@ mod tests {
                 bars: vec![
                     vec![
                         BarChord {
+                            extra: Default::default(),
                             chord: "A7".into(),
                             beats: 2.0,
                         },
                         BarChord {
+                            extra: Default::default(),
                             chord: "D7".into(),
                             beats: 2.0,
                         },
                     ],
                     vec![BarChord {
+                        extra: Default::default(),
                         chord: "E7".into(),
                         beats: 4.0,
                     }],
@@ -311,6 +331,7 @@ mod tests {
                 extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
+                extra: Default::default(),
                 section_id: "a".into(),
                 repeats: 1,
             }],
@@ -344,6 +365,7 @@ mod tests {
                 id: "a".into(),
                 name: "A".into(),
                 bars: vec![vec![BarChord {
+                    extra: Default::default(),
                     chord: "C".into(),
                     beats: 4.0,
                 }]],
@@ -351,6 +373,7 @@ mod tests {
                 extra: HashMap::new(),
             }],
             arrangement: vec![ArrangementItem {
+                extra: Default::default(),
                 section_id: "a".into(),
                 repeats: 0,
             }],
@@ -365,6 +388,7 @@ mod tests {
     fn resolve_copies_section_style_override() {
         let bar = |chord: &str| {
             vec![BarChord {
+                extra: Default::default(),
                 chord: chord.into(),
                 beats: 4.0,
             }]
@@ -397,10 +421,12 @@ mod tests {
             ],
             arrangement: vec![
                 ArrangementItem {
+                    extra: Default::default(),
                     section_id: "verse".into(),
                     repeats: 1,
                 },
                 ArrangementItem {
+                    extra: Default::default(),
                     section_id: "chorus".into(),
                     repeats: 1,
                 },
@@ -447,9 +473,9 @@ mod tests {
                 "id": "a",
                 "name": "A",
                 "intensity": 0.4,
-                "bars": [[{"chord": "G", "beats": 3.0}]]
+                "bars": [[{"chord": "G", "beats": 3.0, "voicingHint": {"keep": [true, 7, "minor"]}}]]
             }],
-            "arrangement": [{"sectionId": "a", "repeats": 1}]
+            "arrangement": [{"sectionId": "a", "repeats": 1, "marker": {"keep": "a"}}]
         }"#;
         let chart: Chart = serde_json::from_str(json).unwrap();
         assert_eq!(chart.extra.get("rigSceneId").unwrap(), "verse-clean");
@@ -457,6 +483,14 @@ mod tests {
         let round = serde_json::to_value(&chart).unwrap();
         assert_eq!(round["rigSceneId"], "verse-clean");
         assert_eq!(round["sections"][0]["intensity"], 0.4);
+        assert_eq!(
+            round["sections"][0]["bars"][0][0]["voicingHint"],
+            serde_json::json!({"keep": [true, 7, "minor"]})
+        );
+        assert_eq!(
+            round["arrangement"][0]["marker"],
+            serde_json::json!({"keep": "a"})
+        );
         assert_eq!(round["id"], "waltz-scratch");
     }
 }

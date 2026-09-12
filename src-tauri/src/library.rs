@@ -268,6 +268,7 @@ fn metronome_fallback(time_sig: (u8, u8)) -> Style {
     let beats = f64::from(time_sig.0);
     let hits = (0..time_sig.0)
         .map(|beat| DrumHit {
+            extra: Default::default(),
             instrument: if beat == 0 {
                 "kick".into()
             } else {
@@ -284,6 +285,7 @@ fn metronome_fallback(time_sig: (u8, u8)) -> Style {
         name: format!("{}/{} Metronome", time_sig.0, time_sig.1),
         genre: "Metronome".into(),
         feel: StyleFeel {
+            extra: Default::default(),
             swing: 0.0,
             time_sig,
             bpm_range: (40.0, 240.0),
@@ -292,16 +294,20 @@ fn metronome_fallback(time_sig: (u8, u8)) -> Style {
         bass_program: "finger-bass".into(),
         comp_program: "clean-guitar".into(),
         patterns: vec![PatternEntry {
+            extra: Default::default(),
             intensity: (0.0, 1.0),
             drums: DrumPattern {
+                extra: Default::default(),
                 length_beats: beats,
                 hits,
             },
             bass: BassPattern {
+                extra: Default::default(),
                 length_beats: beats,
                 notes: vec![],
             },
             comp: CompPattern {
+                extra: Default::default(),
                 length_beats: beats,
                 voicing: "shell".into(),
                 strums: vec![],
@@ -310,6 +316,7 @@ fn metronome_fallback(time_sig: (u8, u8)) -> Style {
         fills: vec![],
         endings: vec![],
         humanize: StyleHumanize {
+            extra: Default::default(),
             timing_ms: 0.0,
             velocity: 0.0,
         },
@@ -541,6 +548,7 @@ mod tests {
         waltz.default_style_id = None;
         waltz.time_sig = (3, 4);
         waltz.sections[0].bars = vec![vec![jam_core::chart::BarChord {
+            extra: Default::default(),
             chord: "G".into(),
             beats: 3.0,
         }]];
@@ -551,6 +559,7 @@ mod tests {
         let mut five = waltz.clone();
         five.time_sig = (5, 4);
         five.sections[0].bars = vec![vec![jam_core::chart::BarChord {
+            extra: Default::default(),
             chord: "Em".into(),
             beats: 5.0,
         }]];
@@ -561,6 +570,7 @@ mod tests {
         let mut odd = five.clone();
         odd.time_sig = (7, 8);
         odd.sections[0].bars = vec![vec![jam_core::chart::BarChord {
+            extra: Default::default(),
             chord: "Am".into(),
             beats: 7.0,
         }]];

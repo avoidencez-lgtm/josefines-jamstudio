@@ -381,6 +381,7 @@ fn default_style() -> Style {
             name: "Blues Shuffle".into(),
             genre: "Blues".into(),
             feel: jam_core::style::StyleFeel {
+                extra: Default::default(),
                 swing: 0.67,
                 time_sig: (4, 4),
                 bpm_range: (60.0, 180.0),
@@ -392,6 +393,7 @@ fn default_style() -> Style {
             fills: vec![],
             endings: vec![],
             humanize: jam_core::style::StyleHumanize {
+                extra: Default::default(),
                 timing_ms: 2.0,
                 velocity: 0.05,
             },

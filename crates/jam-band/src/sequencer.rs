@@ -14,7 +14,7 @@ use crate::kit::KitStatus;
 use crate::sampler::Sampler;
 use crate::voicing::{bass_note_for_chord, parse_chord, slash_bass, voice_chord};
 use jam_core::chart::ResolvedChart;
-use jam_core::style::{DrumPattern, PatternEntry, Style};
+use jam_core::style::{PatternEntry, Style};
 use jam_core::timeline::{Span, TimelineEvent};
 use rand::Rng;
 use rand_pcg::Pcg32;
@@ -142,9 +142,7 @@ impl BandSequencer {
         let synth = Sf2Synth::open(sample_rate);
         let default_pattern = style.patterns.first().cloned().unwrap_or(PatternEntry {
             intensity: (0.0, 1.0),
-            drums: DrumPattern::default(),
-            bass: Default::default(),
-            comp: Default::default(),
+            ..Default::default()
         });
 
         let mut seq = Self {
@@ -647,6 +645,7 @@ impl BandSequencer {
                 })
                 .collect();
             self.current_pattern = PatternEntry {
+                extra: Default::default(),
                 intensity: (0.0, 1.0),
                 drums: selected[0].drums.clone(),
                 bass: selected[1].bass.clone(),
@@ -953,7 +952,8 @@ impl BandSequencer {
 mod tests {
     use super::*;
     use jam_core::style::{
-        BassNote, BassPattern, CompPattern, CompStrum, DrumHit, StyleFeel, StyleHumanize,
+        BassNote, BassPattern, CompPattern, CompStrum, DrumHit, DrumPattern, StyleFeel,
+        StyleHumanize,
     };
     use jam_core::timeline::Timeline;
 
@@ -969,6 +969,7 @@ mod tests {
             name: "Test".into(),
             genre: "Test".into(),
             feel: StyleFeel {
+                extra: Default::default(),
                 swing,
                 time_sig: (4, 4),
                 bpm_range: (60.0, 180.0),
@@ -977,16 +978,20 @@ mod tests {
             bass_program: "finger-bass".into(),
             comp_program: "clean-guitar".into(),
             patterns: vec![PatternEntry {
+                extra: Default::default(),
                 intensity: (0.0, 1.0),
                 drums: DrumPattern {
+                    extra: Default::default(),
                     length_beats: 4.0,
                     hits,
                 },
                 bass: BassPattern {
+                    extra: Default::default(),
                     length_beats: 4.0,
                     notes: bass,
                 },
                 comp: CompPattern {
+                    extra: Default::default(),
                     length_beats: 4.0,
                     voicing: "shell".into(),
                     strums,
@@ -995,6 +1000,7 @@ mod tests {
             fills: vec![],
             endings: vec![],
             humanize: StyleHumanize {
+                extra: Default::default(),
                 timing_ms: 0.0,
                 velocity: 0.0,
             },
@@ -1004,6 +1010,7 @@ mod tests {
 
     fn kick(at: f64) -> DrumHit {
         DrumHit {
+            extra: Default::default(),
             instrument: "kick".into(),
             at_beats: at,
             velocity: 0.9,
@@ -1151,6 +1158,7 @@ mod tests {
             0.5,
             vec![],
             vec![BassNote {
+                extra: Default::default(),
                 degree: 1,
                 octave: 0,
                 at_beats: 0.0,
@@ -1190,6 +1198,7 @@ mod tests {
             0.5,
             vec![],
             vec![BassNote {
+                extra: Default::default(),
                 degree: 1,
                 octave: 0,
                 at_beats: 0.0,
@@ -1225,6 +1234,7 @@ mod tests {
             vec![],
             vec![],
             vec![CompStrum {
+                extra: Default::default(),
                 at_beats: 0.0,
                 dur_beats: 2.0,
                 velocity: 0.8,
@@ -1295,6 +1305,7 @@ mod tests {
             vec![],
             vec![
                 BassNote {
+                    extra: Default::default(),
                     degree: 1,
                     octave: 0,
                     at_beats: 0.0,
@@ -1302,6 +1313,7 @@ mod tests {
                     velocity: 0.9,
                 },
                 BassNote {
+                    extra: Default::default(),
                     degree: 1,
                     octave: 0,
                     at_beats: 2.0,
@@ -1324,10 +1336,12 @@ mod tests {
                 section_name: "A".into(),
                 chords: vec![
                     BarChord {
+                        extra: Default::default(),
                         chord: "C".into(),
                         beats: 2.0,
                     },
                     BarChord {
+                        extra: Default::default(),
                         chord: "G".into(),
                         beats: 2.0,
                     },
@@ -1360,6 +1374,7 @@ mod tests {
             0.0,
             vec![],
             vec![BassNote {
+                extra: Default::default(),
                 degree: 1,
                 octave: 0,
                 at_beats: 0.0,
@@ -1373,6 +1388,7 @@ mod tests {
             section_id: "a".into(),
             section_name: "A".into(),
             chords: vec![BarChord {
+                extra: Default::default(),
                 chord: chord.into(),
                 beats: 4.0,
             }],
@@ -1409,6 +1425,7 @@ mod tests {
             0.0,
             vec![kick(0.0)],
             vec![BassNote {
+                extra: Default::default(),
                 degree: 1,
                 octave: 0,
                 at_beats: 0.0,
@@ -1416,6 +1433,7 @@ mod tests {
                 velocity: 0.9,
             }],
             vec![CompStrum {
+                extra: Default::default(),
                 at_beats: 0.0,
                 dur_beats: 1.0,
                 velocity: 0.8,
@@ -1428,6 +1446,7 @@ mod tests {
             section_id: "a".into(),
             section_name: "A".into(),
             chords: vec![BarChord {
+                extra: Default::default(),
                 chord: chord.into(),
                 beats: 4.0,
             }],
@@ -1486,6 +1505,7 @@ mod tests {
         let _lock = crate::kit::lock_test_env();
         let mut style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
         style.endings.push(DrumPattern {
+            extra: Default::default(),
             length_beats: 4.0,
             hits: vec![kick(0.0)],
         });
@@ -1509,10 +1529,12 @@ mod tests {
     fn cues_do_not_leave_a_previous_fill_or_ending_active() {
         let mut style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
         style.fills.push(DrumPattern {
+            extra: Default::default(),
             length_beats: 4.0,
             hits: vec![kick(0.0)],
         });
         style.endings.push(DrumPattern {
+            extra: Default::default(),
             length_beats: 4.0,
             hits: vec![kick(0.0)],
         });
@@ -1560,6 +1582,7 @@ mod tests {
         use jam_core::chart::{BarChord, ResolvedBar, ResolvedChart};
         let mut style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
         style.fills.push(DrumPattern {
+            extra: Default::default(),
             length_beats: 4.0,
             hits: vec![{
                 let mut h = kick(0.0);
@@ -1571,6 +1594,7 @@ mod tests {
             0.5,
             vec![],
             vec![BassNote {
+                extra: Default::default(),
                 degree: 1,
                 octave: 0,
                 at_beats: 0.0,
@@ -1584,6 +1608,7 @@ mod tests {
             vec![],
             vec![],
             vec![CompStrum {
+                extra: Default::default(),
                 at_beats: 0.0,
                 dur_beats: 2.0,
                 velocity: 0.8,
@@ -1613,6 +1638,7 @@ mod tests {
                     section_id: "verse".into(),
                     section_name: "Verse".into(),
                     chords: vec![BarChord {
+                        extra: Default::default(),
                         chord: "C".into(),
                         beats: 4.0,
                     }],
@@ -1678,8 +1704,10 @@ mod tests {
         loud.instrument = "snare".into();
         style.patterns = vec![
             PatternEntry {
+                extra: Default::default(),
                 intensity: (0.0, 0.67),
                 drums: DrumPattern {
+                    extra: Default::default(),
                     length_beats: 4.0,
                     hits: vec![kick(0.0)],
                 },
@@ -1687,8 +1715,10 @@ mod tests {
                 comp: Default::default(),
             },
             PatternEntry {
+                extra: Default::default(),
                 intensity: (0.67, 1.0),
                 drums: DrumPattern {
+                    extra: Default::default(),
                     length_beats: 4.0,
                     hits: vec![loud],
                 },
@@ -1770,6 +1800,7 @@ mod tests {
             0.5,
             vec![],
             vec![BassNote {
+                extra: Default::default(),
                 degree: 1,
                 octave: 0,
                 at_beats: 0.0,
@@ -1837,6 +1868,7 @@ mod tests {
             0.5,
             vec![kick(0.0), kick(1.0)],
             vec![BassNote {
+                extra: Default::default(),
                 degree: 1,
                 octave: 0,
                 at_beats: 0.0,
@@ -1844,6 +1876,7 @@ mod tests {
                 velocity: 0.9,
             }],
             vec![CompStrum {
+                extra: Default::default(),
                 at_beats: 0.0,
                 dur_beats: 2.0,
                 velocity: 0.7,
