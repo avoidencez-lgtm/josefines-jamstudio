@@ -411,6 +411,8 @@ export interface CostEntry {
 
 export interface CostTotal {
   provider: string;
+  /** Hide numeric amounts when true; estimatedCostUsd is null. */
+  invalidValues?: boolean;
   calls: number;
   failures: number;
   bytesIn: number;

@@ -358,17 +358,40 @@ impl CostLog {
                 ..CostTotal::default()
             });
             t.calls += 1;
-            t.bytes_in += e.bytes_in;
-            t.bytes_out += e.bytes_out;
-            t.stt_seconds += e.stt_seconds.unwrap_or(0.0);
-            t.tts_characters += e.tts_characters.unwrap_or(0);
-            t.prompt_tokens += e.prompt_tokens.unwrap_or(0);
-            t.completion_tokens += e.completion_tokens.unwrap_or(0);
-            t.total_tokens += e.total_tokens.unwrap_or(0);
+            for (sum, value) in [
+                (&mut t.bytes_in, e.bytes_in),
+                (&mut t.bytes_out, e.bytes_out),
+                (&mut t.tts_characters, e.tts_characters.unwrap_or(0)),
+                (&mut t.prompt_tokens, e.prompt_tokens.unwrap_or(0)),
+                (&mut t.completion_tokens, e.completion_tokens.unwrap_or(0)),
+                (&mut t.total_tokens, e.total_tokens.unwrap_or(0)),
+            ] {
+                if let Some(next) = sum.checked_add(value) {
+                    *sum = next;
+                } else {
+                    t.invalid_values = true;
+                }
+            }
+            let seconds = e.stt_seconds.unwrap_or(0.0);
+            let total_seconds = t.stt_seconds + seconds;
+            if seconds >= 0.0 && total_seconds.is_finite() {
+                t.stt_seconds = total_seconds;
+            } else {
+                t.invalid_values = true;
+            }
             if let Some(cost) = e.estimated_cost_usd.filter(|v| v.is_finite() && *v >= 0.0) {
-                *t.estimated_cost_usd.get_or_insert(0.0) += cost;
+                let total_cost = t.estimated_cost_usd.unwrap_or(0.0) + cost;
+                if total_cost.is_finite() {
+                    t.estimated_cost_usd = Some(total_cost);
+                } else {
+                    t.invalid_values = true;
+                }
             } else {
                 t.unpriced_calls += 1;
+                t.invalid_values |= e.estimated_cost_usd.is_some();
+            }
+            if t.invalid_values {
+                t.estimated_cost_usd = None;
             }
             if !(200..300).contains(&e.status) || e.error.is_some() {
                 t.failures += 1;
@@ -384,6 +407,9 @@ impl CostLog {
 #[serde(rename_all = "camelCase")]
 pub struct CostTotal {
     pub provider: String,
+    /// Numeric amounts are incomplete when true; consumers must hide them.
+    #[serde(default)]
+    pub invalid_values: bool,
     pub calls: u64,
     pub failures: u64,
     pub bytes_in: u64,
@@ -668,6 +694,105 @@ mod tests {
     }
 
     #[test]
+    fn invalid_usage_totals_are_reported_without_losing_other_providers() {
+        let dir = std::env::temp_dir().join(format!("jam-invalid-cost-{}", std::process::id()));
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        for (provider, entry) in [
+            (
+                "integers",
+                CostEntry {
+                    bytes_in: u64::MAX,
+                    bytes_out: u64::MAX,
+                    tts_characters: Some(u64::MAX),
+                    prompt_tokens: Some(u64::MAX),
+                    completion_tokens: Some(u64::MAX),
+                    total_tokens: Some(u64::MAX),
+                    ..CostEntry::default()
+                },
+            ),
+            (
+                "seconds",
+                CostEntry {
+                    stt_seconds: Some(f64::MAX),
+                    ..CostEntry::default()
+                },
+            ),
+            (
+                "cost",
+                CostEntry {
+                    estimated_cost_usd: Some(f64::MAX),
+                    ..CostEntry::default()
+                },
+            ),
+            (
+                "negative-seconds",
+                CostEntry {
+                    stt_seconds: Some(-1.0),
+                    ..CostEntry::default()
+                },
+            ),
+            (
+                "negative-cost",
+                CostEntry {
+                    estimated_cost_usd: Some(-1.0),
+                    ..CostEntry::default()
+                },
+            ),
+            (
+                "valid",
+                CostEntry {
+                    bytes_in: 12,
+                    stt_seconds: Some(1.5),
+                    total_tokens: Some(30),
+                    estimated_cost_usd: Some(0.25),
+                    ..CostEntry::default()
+                },
+            ),
+        ] {
+            let entry = CostEntry {
+                provider: provider.into(),
+                status: 200,
+                ..entry
+            };
+            log.append(&entry).unwrap();
+            log.append(&entry).unwrap();
+        }
+        log.append(&CostEntry {
+            provider: "integers".into(),
+            status: 200,
+            estimated_cost_usd: Some(0.25),
+            ..CostEntry::default()
+        })
+        .unwrap();
+        let before = std::fs::read(log.path()).unwrap();
+        let totals = serde_json::to_value(log.totals()).unwrap();
+        for total in totals.as_array().unwrap() {
+            assert!(total["sttSeconds"].as_f64().unwrap().is_finite());
+            assert_eq!(
+                total["calls"],
+                if total["provider"] == "integers" {
+                    3
+                } else {
+                    2
+                }
+            );
+            if total["provider"] == "valid" {
+                assert_eq!(total["invalidValues"], false);
+                assert_eq!(total["bytesIn"], 24);
+                assert_eq!(total["sttSeconds"], 3.0);
+                assert_eq!(total["totalTokens"], 60);
+                assert_eq!(total["estimatedCostUsd"], 0.5);
+            } else {
+                assert_eq!(total["invalidValues"], true, "{total}");
+                assert!(total["estimatedCostUsd"].is_null(), "{total}");
+            }
+        }
+        assert_eq!(totals.as_array().unwrap().len(), 6);
+        assert_eq!(std::fs::read(log.path()).unwrap(), before);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn speech_units_include_uncertain_requests_and_old_logs_stay_readable() {
         let dir = std::env::temp_dir().join(format!("jam-speech-cost-{}", std::process::id()));
         let log = CostLog::new(dir.join("usage.jsonl"));
@@ -702,6 +827,10 @@ mod tests {
         assert_eq!(totals[0].calls, 3);
         assert_eq!(totals[0].failures, 1);
         assert_eq!(totals[0].unpriced_calls, 1);
+        assert!(
+            !totals[0].invalid_values,
+            "missing estimates are allowed in old logs"
+        );
         assert_eq!(totals[0].stt_seconds, 3.5);
         assert_eq!(totals[0].tts_characters, 12);
         assert!((totals[0].estimated_cost_usd.unwrap() - 0.013).abs() < 1e-12);

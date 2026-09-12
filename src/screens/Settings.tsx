@@ -694,14 +694,21 @@ const UsageLog: React.FC = () => {
             >
               {t.provider} has {t.calls} call{t.calls === 1 ? "" : "s"}
               {t.failures > 0 && ` (${t.failures} failed)`}.{" "}
-              {formatBytes(t.bytesOut)} out. {formatBytes(t.bytesIn)} in.
-              {t.sttSeconds > 0 && ` ${t.sttSeconds.toFixed(1)} STT seconds.`}
-              {t.ttsCharacters > 0 && ` ${t.ttsCharacters} TTS characters.`}
-              {t.totalTokens > 0 && ` ${t.totalTokens} LLM tokens.`}
-              {t.estimatedCostUsd != null &&
-                ` Estimated cost is $${t.estimatedCostUsd.toFixed(4)}.`}
-              {t.unpricedCalls > 0 &&
-                ` ${t.unpricedCalls} calls have unknown cost.`}
+              {t.invalidValues ? (
+                "Usage amounts are unavailable. Check this provider's local usage log for invalid values."
+              ) : (
+                <>
+                  {formatBytes(t.bytesOut)} out. {formatBytes(t.bytesIn)} in.
+                  {t.sttSeconds > 0 &&
+                    ` ${t.sttSeconds.toFixed(1)} STT seconds.`}
+                  {t.ttsCharacters > 0 && ` ${t.ttsCharacters} TTS characters.`}
+                  {t.totalTokens > 0 && ` ${t.totalTokens} LLM tokens.`}
+                  {t.estimatedCostUsd != null &&
+                    ` Estimated cost is $${t.estimatedCostUsd.toFixed(4)}.`}
+                  {t.unpricedCalls > 0 &&
+                    ` ${t.unpricedCalls} calls have unknown cost.`}
+                </>
+              )}
             </span>
           ))}
         </div>

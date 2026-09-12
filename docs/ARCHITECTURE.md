@@ -880,6 +880,10 @@ separately from the known estimate subtotal. No account budget or invoice is imp
 Settings names this window explicitly. Older entries remain in `usage-log.jsonl`.
 Reads scan backwards and stop after enough valid rows. Malformed rows and rows
 over 64 KiB are skipped; request bodies do not belong in this metadata-only log.
+Negative numeric usage or overflowing sums set `CostTotal.invalidValues` for
+that provider. Call/failure counts remain available, but numeric amounts are
+incomplete and the cost estimate is null. Settings hides those amounts and names
+the invalid-log problem. Other providers and stored entries remain intact.
 
 Provider `generateContent` / Responses / Messages replies may include token counts.
 `provider_fetch` copies `promptTokens`, `completionTokens` and `totalTokens` from
