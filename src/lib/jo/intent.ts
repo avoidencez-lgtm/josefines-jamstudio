@@ -1,5 +1,17 @@
 import type { JoToolCall } from "./persona";
 
+/** Strip wrap-quotes, a trailing play request, then trailing punctuation. */
+export function cleanSongQuery(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^["“]([\s\S]*)["”]$/, "$1")
+    .trim()
+    .replace(/(?:^|\s+)(?:and play|og spill)\s*$/i, "")
+    .trim()
+    .replace(/[.!?]+$/u, "")
+    .trim();
+}
+
 export function parseNaturalIntent(
   text: string,
   reference?: {
@@ -18,7 +30,13 @@ export function parseNaturalIntent(
     text.trim(),
   );
   if (load) {
-    const query = load[1].replace(/^["“](.*)["”]$/, "$1").trim();
+    const query = cleanSongQuery(load[1]);
+    if (!query)
+      return {
+        reply:
+          "Use load song followed by its title, or last inn sangen followed by its title.",
+        toolCalls: [],
+      };
     return {
       reply: "Looking for the song in your local library.",
       toolCalls: [{ name: "load_song", arguments: { query } }],
