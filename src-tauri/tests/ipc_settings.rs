@@ -13,6 +13,7 @@ use common::{unique, user_dir, Studio};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 fn settings_path() -> PathBuf {
@@ -716,6 +717,48 @@ fn tone_and_tuner_show_up_in_the_telemetry_and_switch_off_again() {
 
     studio.ok("tuner_set", json!({ "on": true }));
     wait_until("tuner back", || telemetry(&studio)["tuner"]["note"] == "A4");
+}
+
+#[test]
+fn tuner_state_emits_null_when_the_tuner_turns_off() {
+    let _scenario = common::scenario();
+    let mut studio = Studio::boot();
+    studio.start_events();
+    let (tx, rx) = mpsc::channel::<Value>();
+    let _listener = studio.app().listen_any("tuner:state", move |event| {
+        let payload: Value =
+            serde_json::from_str(event.payload()).expect("tuner:state payload is json");
+        let _ = tx.send(payload);
+    });
+
+    studio.ok("tuner_set", json!({ "on": true }));
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut saw_pitch = false;
+    while Instant::now() < deadline {
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(v) if v.is_object() => {
+                saw_pitch = true;
+                break;
+            }
+            Ok(_) | Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => panic!("listener dropped"),
+        }
+    }
+    assert!(saw_pitch, "tuner:state should publish a reading while on");
+
+    studio.ok("tuner_set", json!({ "on": false }));
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(v) if v.is_null() => return,
+            Ok(_) | Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => panic!("listener dropped"),
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no tuner:state null after tuner_set(false)"
+        );
+    }
 }
 
 #[test]

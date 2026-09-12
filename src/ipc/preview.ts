@@ -468,7 +468,7 @@ export function createPreviewEngine(
     emit("input.meters", inMeter);
     emit("transport.state", { ...transport });
     emit("band.state", { ...band });
-    if (tuner) emit("tuner.state", tuner);
+    emit("tuner.state", tuner);
     emit("engine.status", { ...status });
   }
 

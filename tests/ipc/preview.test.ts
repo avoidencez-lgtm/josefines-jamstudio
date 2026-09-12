@@ -8,6 +8,7 @@ import type {
   RigState,
   StyleSummary,
   TransportTelemetry,
+  TunerTelemetry,
 } from "../../src/ipc/contract";
 import {
   type PreviewEngine,
@@ -376,5 +377,18 @@ describe("browser preview engine", () => {
     expect(s.controlValues["43"]).toBe(7);
     expect(s.monitor.at(-1)?.bytes).toEqual([0xb0, 43, 7]);
     expect(s.live).toBe(false);
+  });
+
+  it("emits tuner.state null when the tuner turns off", async () => {
+    const seen: Array<TunerTelemetry | null> = [];
+    await engine.listen<TunerTelemetry | null>("tuner.state", (t) => {
+      seen.push(t);
+    });
+    await engine.invoke("tuner_set", { on: true });
+    engine.tick(0);
+    expect(seen.at(-1)?.note).toBe("A4");
+    await engine.invoke("tuner_set", { on: false });
+    engine.tick(0);
+    expect(seen.at(-1)).toBeNull();
   });
 });

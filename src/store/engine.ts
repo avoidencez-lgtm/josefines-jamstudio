@@ -922,7 +922,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
         ipc.listen<MeterTelemetry>("input.meters", (input_level) => {
           set((state) => ({ telemetry: { ...state.telemetry, input_level } }));
         }),
-        ipc.listen<TunerTelemetry>("tuner.state", (tuner) => {
+        ipc.listen<TunerTelemetry | null>("tuner.state", (tuner) => {
           set((state) => ({ telemetry: { ...state.telemetry, tuner } }));
         }),
         ipc.listen<TransportTelemetry>("transport.state", (transport) => {

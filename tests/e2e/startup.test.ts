@@ -361,6 +361,10 @@ describe("desktop startup against the preview engine", () => {
     expect(tuner?.confidence).toBe(0.9);
     expect(Math.abs((tuner?.hz ?? 0) - 440)).toBeLessThan(2);
     expect(Math.abs(tuner?.cents ?? 99)).toBeLessThanOrEqual(6);
+
+    await store().setTuner(false);
+    engine.tick(0);
+    expect(store().telemetry.tuner).toBeNull();
   });
 
   it("pressing play counts in, then the band walks the chart bar by bar until stop", async () => {
