@@ -376,6 +376,7 @@ impl BandSequencer {
                 match cue_to_apply {
                     Cue::Fill => {
                         self.is_stopped = false;
+                        self.is_playing_ending = false;
                         if let Some(fill) = self.style.fills.first() {
                             self.current_pattern.drums = fill.clone();
                             self.is_playing_fill = true;
@@ -383,6 +384,7 @@ impl BandSequencer {
                     }
                     Cue::Crash => {
                         self.is_stopped = false;
+                        self.is_playing_ending = false;
                         if !self.mute_drums {
                             self.sampler.trigger("crash", 0.9);
                         }
@@ -397,6 +399,7 @@ impl BandSequencer {
                         }
                         self.is_stopped = true;
                         self.is_playing_fill = false;
+                        self.is_playing_ending = false;
                         self.synth.all_notes_off();
                         self.pending_note_offs.clear();
                     }
@@ -1291,6 +1294,40 @@ mod tests {
         assert!(seq.take_ending_complete());
         assert!(seq.is_stopped);
         assert!(!seq.take_ending_complete(), "flag is consumed once");
+    }
+
+    #[test]
+    fn non_ending_cues_cancel_a_playing_ending() {
+        let mut style = style_with(0.5, vec![kick(0.0)], vec![], vec![]);
+        style.fills.push(DrumPattern {
+            length_beats: 4.0,
+            hits: vec![kick(0.0)],
+        });
+        style.endings.push(DrumPattern {
+            length_beats: 4.0,
+            hits: vec![kick(0.0)],
+        });
+        let bar = |n: u32| TimelineEvent::Bar {
+            bar: n,
+            is_count_in: false,
+        };
+        for cue in [Cue::Fill, Cue::Crash, Cue::Stop] {
+            let mut seq = BandSequencer::new(style.clone(), 48_000, 1);
+            seq.cue(Cue::Ending);
+            seq.handle_timeline_event(&bar(2));
+            assert!(seq.is_playing_ending);
+            seq.cue(cue);
+            seq.handle_timeline_event(&bar(3));
+            assert!(
+                !seq.is_playing_ending,
+                "{cue:?} must clear is_playing_ending"
+            );
+            seq.handle_timeline_event(&bar(4));
+            assert!(
+                !seq.take_ending_complete(),
+                "{cue:?} then Cue::None must not auto-stop"
+            );
+        }
     }
 
     #[test]
