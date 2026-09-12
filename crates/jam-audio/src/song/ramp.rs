@@ -251,4 +251,38 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn stop_on_a_later_section_loop_rearms_the_ramp_from_the_loop_downbeat() {
+        let config: Config = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/seams/reference-ramp.json"
+        ))
+        .unwrap();
+        let grid: Grid = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/seams/reference-grid.json"
+        ))
+        .unwrap();
+        let mut song =
+            ReferenceSong::new("ramp".into(), "Fixture".into(), vec![0.1; 480_000]).unwrap();
+        song.set_grid(grid).unwrap();
+        song.loop_section("chorus").unwrap();
+        song.configure_ramp(Some(config)).unwrap();
+        song.stop();
+        assert!(
+            (song.info.position - 2.2).abs() < 1e-9,
+            "stop must re-arm from the loop downbeat, got {}",
+            song.info.position
+        );
+        assert_eq!(song.info.ramp.unwrap().completed_bars, 0);
+        assert_eq!(song.info.speed, 0.5);
+        song.play();
+        let frames = (2.3 / 0.5 * 48_000.0) as usize;
+        song.render(48_000, &mut vec![0.0; frames], &mut vec![0.0; frames]);
+        assert_eq!(
+            song.info.ramp.unwrap().completed_bars,
+            0,
+            "the verse before the loop must not count"
+        );
+        assert_eq!(song.info.speed, 0.5);
+    }
 }

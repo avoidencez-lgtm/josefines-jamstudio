@@ -461,9 +461,14 @@ impl ReferenceSong {
         self.invalidate_streams();
         self.last_frame = [0.0; 2];
         self.transition_from = None;
-        self.position = 0.0;
+        let frames = if self.info.loop_enabled {
+            self.info.loop_start * 48_000.0
+        } else {
+            0.0
+        };
+        self.position = frames;
         self.fade_in = 96.0;
-        self.info.position = 0.0;
+        self.info.position = frames / 48_000.0;
         self.info.state = "stopped".into();
         if let Err(error) = self.configure_ramp(self.info.ramp.map(|r| r.config)) {
             self.info.processing_error = Some(error);
