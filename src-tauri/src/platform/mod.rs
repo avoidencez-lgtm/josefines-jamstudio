@@ -43,9 +43,39 @@ pub async fn open_https(url: &str) -> Result<(), String> {
     open_with_os(url).await
 }
 
+#[cfg(windows)]
+fn windows_media_open_command(path: &std::path::Path) -> Result<tokio::process::Command, String> {
+    let file = path
+        .to_str()
+        .ok_or_else(|| "Media path is not valid Unicode.".to_string())?;
+    let mut opener = command(std::path::Path::new("cmd.exe"));
+    opener.args(["/C", "start", "", file]);
+    Ok(opener)
+}
+
 pub async fn open_media(path: &std::path::Path) -> Result<(), String> {
-    // The user's explicit Play action opens their default media player.
-    open_with_os(&path.to_string_lossy()).await
+    #[cfg(target_os = "macos")]
+    {
+        let mut opener = command(std::path::Path::new("/usr/bin/open"));
+        return launch_opener(opener.arg(path)).await;
+    }
+    #[cfg(windows)]
+    {
+        // explorer.exe <file> selects the file; `cmd /c start "" <file>` opens the player.
+        let mut opener = windows_media_open_command(path)?;
+        let status = opener.status().await.map_err(|e| e.to_string())?;
+        if !status.success() {
+            return Err(
+                "The system could not open this item. Check the default application.".into(),
+            );
+        }
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let mut opener = command(std::path::Path::new("xdg-open"));
+        launch_opener(opener.arg(path)).await
+    }
 }
 
 async fn open_with_os(target: &str) -> Result<(), String> {
@@ -398,6 +428,27 @@ mod url_tests {
 
 #[cfg(all(test, windows))]
 mod tests {
+    #[test]
+    fn windows_play_uses_cmd_start_not_explorer() {
+        let path = std::path::Path::new(r"C:\Users\Public\song.wav");
+        let cmd = super::windows_media_open_command(path).unwrap();
+        let debug = format!("{cmd:?}");
+        assert!(debug.to_ascii_lowercase().contains("cmd.exe"), "{debug}");
+        assert!(debug.contains("start"), "{debug}");
+        assert!(
+            !debug.to_ascii_lowercase().contains("explorer.exe"),
+            "{debug}"
+        );
+    }
+
+    #[tokio::test]
+    async fn windows_play_errors_when_the_os_cannot_open_the_file() {
+        let missing =
+            std::env::temp_dir().join(format!("jam-missing-media-{}.wav", std::process::id()));
+        let _ = std::fs::remove_file(&missing);
+        assert!(super::open_media(&missing).await.is_err());
+    }
+
     #[test]
     fn windows_accepts_native_exe_and_npm_cmd_shim_only() {
         let dir = std::env::temp_dir().join(format!("jam-agent-shim-{}", std::process::id()));

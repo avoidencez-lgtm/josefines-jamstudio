@@ -11,6 +11,14 @@ export const MEDIA_MODELS = catalog;
 /** Same allow-list as `src-tauri/src/net/media.rs` for `runway-veo`. */
 export const VEO_SECONDS = [4, 6, 8] as const;
 
+/** Latest clip offset that still leaves `shotSeconds` of footage. */
+export function maxClipTrimStart(
+  clipSeconds: number | undefined,
+  shotSeconds: number,
+): number {
+  return Math.max(0, (clipSeconds ?? 0) - shotSeconds);
+}
+
 export function clampGenerationSeconds(
   catalogId: string,
   seconds: number,

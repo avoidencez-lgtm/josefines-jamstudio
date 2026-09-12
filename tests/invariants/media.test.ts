@@ -8,6 +8,7 @@ import {
   cancelFilmWork,
   clampGenerationSeconds,
   fitShots,
+  maxClipTrimStart,
   newVideo,
   shotsFromChart,
   useMedia,
@@ -15,6 +16,15 @@ import {
 } from "../../src/lib/media";
 
 describe("music video seam", () => {
+  it("clamps clip start so a shot still fits in the assigned clip", () => {
+    expect(maxClipTrimStart(10, 8)).toBe(2);
+    expect(maxClipTrimStart(10, 12)).toBe(0);
+    expect(maxClipTrimStart(undefined, 8)).toBe(0);
+    expect(
+      Math.min(9, maxClipTrimStart(10, 8)),
+    ).toBe(2);
+  });
+
   it("agent shot edits validate IDs, preserve attached clips and support undo", async () => {
     const project = newVideo();
     project.shots[0].assetId = "existing";

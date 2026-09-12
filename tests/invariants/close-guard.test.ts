@@ -38,6 +38,10 @@ it("refuses to close during blocking work, asks about unsaved drafts, otherwise 
   useLibraryDraft.setState({ dirty: false });
   useMedia.setState({ busy: "Rendering" });
   expect(closeDecision()).toBe("refuse");
+  useMedia.setState({ busy: "Generating video. This can take several minutes." });
+  expect(closeDecision()).toBe("refuse");
+  useMedia.setState({ busy: "" });
+  expect(closeDecision()).toBe("close");
 });
 
 it("routes Cmd+Q through the same closeDecision as the window close button (#35)", () => {

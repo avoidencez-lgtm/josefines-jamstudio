@@ -131,6 +131,30 @@ fn band_render_offline_writes_wav_under_user_dir() {
 }
 
 #[test]
+fn band_render_offline_refuses_path_outside_user_dir_without_creating_it() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let root = std::path::PathBuf::from(std::env::var("JAM_USER_DIR").expect("scenario"));
+    let outside = root
+        .parent()
+        .unwrap()
+        .join(format!("outside-jamstudio-{}", std::process::id()));
+    let out = outside.join("offline.wav");
+    let err = studio.err(
+        "band_render_offline",
+        json!({
+            "styleId": "rock-straight",
+            "bars": 1,
+            "tempoBpm": 120.0,
+            "seed": 1,
+            "outPath": out.to_string_lossy(),
+        }),
+    );
+    assert!(err.contains("JosefinesJamstudio"), "{err}");
+    assert!(!outside.exists(), "must not create {}", outside.display());
+}
+
+#[test]
 fn band_render_offline_onsets_within_one_sample() {
     let _scenario = common::scenario();
     std::env::set_var("JAM_SYNTHETIC_KIT", "1");

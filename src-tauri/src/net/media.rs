@@ -264,13 +264,15 @@ pub async fn separate_stems(
             .is_some_and(|v| !v.is_finite() || !(0.0..=10000.0).contains(&v))
         || file.is_empty()
         || file.len() > 512 * 1024 * 1024
-        || !["wav", "mp3", "flac", "m4a", "aac", "ogg"].contains(&extension)
     {
         return Err(
             "Choose 2 seconds to 10 minutes of audio up to 512 MB and a valid optional price."
                 .into(),
         );
     }
+    let mime = audio_mime(extension).ok_or(
+        "Choose 2 seconds to 10 minutes of audio up to 512 MB and a valid optional price.",
+    )?;
     if cancel.load(Ordering::Relaxed) {
         return Err("Stem separation canceled before upload.".into());
     }
@@ -278,12 +280,13 @@ pub async fn separate_stems(
     let key = store.require(provider.id)?;
     super::live_guard("stem separation")?;
     let size = file.len() as u64;
+    let part = reqwest::multipart::Part::bytes(file)
+        .file_name(format!("source.{extension}"))
+        .mime_str(mime)
+        .map_err(|_| "Invalid audio type.")?;
     let form = reqwest::multipart::Form::new()
         .text("stem_variation_id", model.model.clone())
-        .part(
-            "file",
-            reqwest::multipart::Part::bytes(file).file_name(format!("source.{extension}")),
-        );
+        .part("file", part);
     let path = "/v1/music/stem-separation";
     let req = provider_client()
         .timeout(Duration::from_secs(900))
@@ -434,6 +437,18 @@ pub fn response(m: &Model, bytes: Vec<u8>) -> Result<Output, String> {
         ext.into(),
     ))
 }
+fn audio_mime(extension: &str) -> Option<&'static str> {
+    Some(match extension {
+        "wav" => "audio/wav",
+        "mp3" => "audio/mpeg",
+        "flac" => "audio/flac",
+        "m4a" => "audio/mp4",
+        "aac" => "audio/aac",
+        "ogg" => "audio/ogg",
+        _ => return None,
+    })
+}
+
 pub fn valid_task(id: &str) -> Result<(), String> {
     if id.is_empty()
         || id.len() > 160
@@ -475,8 +490,38 @@ pub fn download_url(m: &Model, uri: &str) -> Result<reqwest::Url, String> {
     }
     Ok(url)
 }
-pub async fn download(m: &Model, uri: &str, store: &dyn SecretStore) -> Result<Vec<u8>, String> {
+fn download_entry(
+    m: &Model,
+    path: &str,
+    status: u16,
+    duration_ms: u64,
+    bytes_in: u64,
+    error: Option<String>,
+) -> CostEntry {
+    CostEntry {
+        at_ms: super::now_ms(),
+        provider: m.provider.clone(),
+        method: "GET".into(),
+        path: super::strip_query(path),
+        status,
+        duration_ms,
+        bytes_out: 0,
+        bytes_in,
+        error,
+        model: Some(m.model.clone()),
+        estimated_cost_usd: None,
+        ..CostEntry::default()
+    }
+}
+
+pub async fn download(
+    m: &Model,
+    uri: &str,
+    store: &dyn SecretStore,
+    log: &CostLog,
+) -> Result<Vec<u8>, String> {
     let url = download_url(m, uri)?;
+    let path = super::strip_query(url.path());
     super::live_guard("a media download")?;
     let mut req = provider_client()
         .no_proxy()
@@ -491,17 +536,31 @@ pub async fn download(m: &Model, uri: &str, store: &dyn SecretStore) -> Result<V
         );
     }
     // Runway's signed CDN URL needs no API key. Never forward credentials or follow redirects.
-    let resp = req
-        .send()
-        .await
-        .map_err(|_| "Media download failed; refresh the job to retry.")?;
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Download HTTP {}. Refresh the job or import the dashboard download.",
-            resp.status().as_u16()
-        ));
+    let started = Instant::now();
+    let mut status = 0;
+    let result = async {
+        let resp = req
+            .send()
+            .await
+            .map_err(|_| "Media download failed; refresh the job to retry.".to_string())?;
+        status = resp.status().as_u16();
+        if !resp.status().is_success() {
+            return Err(format!(
+                "Download HTTP {status}. Refresh the job or import the dashboard download."
+            ));
+        }
+        read_bounded(resp, 128 * 1024 * 1024).await
     }
-    read_bounded(resp, 128 * 1024 * 1024).await
+    .await;
+    let _ = log.append(&download_entry(
+        m,
+        &path,
+        status,
+        started.elapsed().as_millis() as u64,
+        result.as_ref().map_or(0, |v| v.len() as u64),
+        result.as_ref().err().cloned(),
+    ));
+    result
 }
 
 pub async fn poll(
@@ -722,5 +781,47 @@ mod tests {
             serde_json::to_vec(&json!({"base_resp":{"status_code":1000}})).unwrap()
         )
         .is_err());
+    }
+
+    #[test]
+    fn stem_multipart_maps_extension_to_audio_mime() {
+        assert_eq!(audio_mime("wav"), Some("audio/wav"));
+        assert_eq!(audio_mime("mp3"), Some("audio/mpeg"));
+        assert_eq!(audio_mime("flac"), Some("audio/flac"));
+        assert_eq!(audio_mime("m4a"), Some("audio/mp4"));
+        assert_eq!(audio_mime("aac"), Some("audio/aac"));
+        assert_eq!(audio_mime("ogg"), Some("audio/ogg"));
+        assert_eq!(audio_mime("txt"), None);
+        let part = reqwest::multipart::Part::bytes(vec![1])
+            .file_name("source.wav")
+            .mime_str(audio_mime("wav").unwrap())
+            .unwrap();
+        drop(part);
+    }
+
+    #[test]
+    fn media_download_cost_entry_is_a_get_with_bytes() {
+        let m = catalog().into_iter().find(|m| m.id == "omni").unwrap();
+        let dir = std::env::temp_dir().join(format!("jam-download-cost-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = CostLog::new(dir.join("usage.jsonl"));
+        log.append(&download_entry(
+            &m,
+            "/v1beta/files/abc?alt=media",
+            200,
+            12,
+            50_000,
+            None,
+        ))
+        .unwrap();
+        let listed = log.list(1);
+        assert_eq!(listed[0].method, "GET");
+        assert_eq!(listed[0].bytes_in, 50_000);
+        assert_eq!(listed[0].path, "/v1beta/files/abc");
+        assert_eq!(listed[0].provider, m.provider);
+        assert_eq!(listed[0].model.as_deref(), Some(m.model.as_str()));
+        assert_eq!(listed[0].status, 200);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

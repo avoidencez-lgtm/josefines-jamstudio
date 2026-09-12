@@ -462,6 +462,37 @@ fn band_set_style(style_id: String, state: State<'_, AppState>) -> Result<(), St
     Ok(())
 }
 
+fn contained_dir(root: &std::path::Path, parent: &std::path::Path) -> Result<PathBuf, String> {
+    let mut probe = parent.to_path_buf();
+    let mut missing = Vec::new();
+    while !probe.exists() {
+        let name = probe.file_name().map(|s| s.to_os_string());
+        let next = probe.parent().map(PathBuf::from);
+        match (name, next) {
+            (Some(name), Some(next)) if next.as_os_str() != probe.as_os_str() => {
+                missing.push(name);
+                probe = next;
+            }
+            _ => return Err("Offline render path has no folder.".into()),
+        }
+    }
+    let mut resolved = probe.canonicalize().map_err(|e| e.to_string())?;
+    for name in missing.into_iter().rev() {
+        if name == "." {
+            continue;
+        }
+        if name == ".." {
+            resolved.pop();
+            continue;
+        }
+        resolved.push(name);
+    }
+    if !resolved.starts_with(root) {
+        return Err("Offline render must stay under JosefinesJamstudio.".into());
+    }
+    Ok(resolved)
+}
+
 fn render_out_path(
     user_root: &std::path::Path,
     out_path: Option<String>,
@@ -478,11 +509,8 @@ fn render_out_path(
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
             .ok_or("Offline render path has no folder.")?;
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        let parent = parent.canonicalize().map_err(|e| e.to_string())?;
-        if !parent.starts_with(&root) {
-            return Err("Offline render must stay under JosefinesJamstudio.".into());
-        }
+        let parent = contained_dir(&root, parent)?;
+        std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
         return Ok(parent.join(
             path.file_name()
                 .ok_or("Offline render path has no file name.")?,

@@ -25,6 +25,70 @@ static GATE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 static SAVE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 static CANCEL: AtomicBool = AtomicBool::new(false);
 static SERIAL: AtomicU64 = AtomicU64::new(0);
+
+struct DirGuard {
+    path: PathBuf,
+    persist: bool,
+}
+
+impl DirGuard {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            persist: false,
+        }
+    }
+
+    fn persist(&mut self) {
+        self.persist = true;
+    }
+}
+
+impl Drop for DirGuard {
+    fn drop(&mut self) {
+        if !self.persist {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
+fn nested_version_ok(extra: &BTreeMap<String, Value>, key: &str) -> Result<(), String> {
+    if extra.get(key).is_some_and(|old| old["schemaVersion"] != 1) {
+        return Err(format!(
+            "Unsupported saved {key} version. Song left intact."
+        ));
+    }
+    Ok(())
+}
+
+fn merge_unknown_v1(old: Option<&Value>, mut next: Value) -> Value {
+    if let Some(old) = old.filter(|value| value["schemaVersion"] == 1) {
+        if let (Some(fields), Some(obj)) = (old.as_object(), next.as_object_mut()) {
+            for (key, kept) in fields {
+                obj.entry(key.clone()).or_insert(kept.clone());
+            }
+        }
+    }
+    next
+}
+
+async fn until_canceled() {
+    loop {
+        if CANCEL.load(Ordering::Relaxed) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+async fn cancellable<T>(
+    work: impl std::future::Future<Output = Result<T, String>>,
+) -> Result<T, String> {
+    tokio::select! {
+        result = work => result,
+        _ = until_canceled() => Err("Media operation canceled".into()),
+    }
+}
 pub fn root() -> PathBuf {
     Library::default_user_root().join("music-videos")
 }
@@ -827,24 +891,17 @@ async fn analyze_source(base: &Path, source_id: &str) -> Result<Asset, String> {
             return Err("Audio asset changed during analysis. Analyze it again.".into());
         }
         source = current;
+        nested_version_ok(&source.extra, "songAnalysis")?;
+        nested_version_ok(&source.extra, "estimatedGrid")?;
+        let previous_analysis = source.extra.get("songAnalysis").cloned();
+        let previous_grid = source.extra.remove("estimatedGrid");
+        let analysis = merge_unknown_v1(previous_analysis.as_ref(), analysis);
         source.extra.insert("songAnalysis".into(), analysis.clone());
         if let Ok(parsed) = serde_json::from_value::<jam_audio::offline::SongAnalysis>(analysis) {
             if let Ok(grid) = jam_audio::offline::estimate_grid(&parsed) {
                 let mut value = serde_json::to_value(grid).map_err(|e| e.to_string())?;
                 value["sourceHash"] = json!(analysis_hash);
-                if let Some(old) = source.extra.get("estimatedGrid") {
-                    if old["schemaVersion"] == 1 {
-                        if let Some(fields) = old.as_object() {
-                            for (key, kept) in fields {
-                                value
-                                    .as_object_mut()
-                                    .unwrap()
-                                    .entry(key.clone())
-                                    .or_insert(kept.clone());
-                            }
-                        }
-                    }
-                }
+                let value = merge_unknown_v1(previous_grid.as_ref(), value);
                 source.extra.insert("estimatedGrid".into(), value);
             }
         }
@@ -1162,7 +1219,7 @@ async fn finish_job(
                 job,
             )?;
             (
-                api::download(m, &uri, state.secret_store.as_ref()).await?,
+                api::download(m, &uri, state.secret_store.as_ref(), &state.cost_log).await?,
                 e,
                 String::new(),
             )
@@ -1264,7 +1321,7 @@ pub async fn media_generate(
     let file = base.join("jobs").join(format!("{id}.json"));
     let mut job = json!({"schemaVersion":1,"id":id,"request":request,"status":"unknown","message":"Request started. If interrupted, check provider history before generating again."});
     write(&file, &job)?;
-    let result = async {
+    let result = cancellable(async {
         let bytes = api::fetch(
             &m,
             &path,
@@ -1274,7 +1331,7 @@ pub async fn media_generate(
         )
         .await?;
         finish_job(&base, &mut job, api::response(&m, bytes)?, &m, &state).await
-    }
+    })
     .await;
     job["message"] = json!(result.err().unwrap_or_default());
     write(&file, &job)?;
@@ -1307,7 +1364,7 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
     if job["status"] == "ready" {
         return Ok(public_job(job));
     }
-    let result=async {
+    let result = cancellable(async {
         if job.get("rawPath").is_some() || job.get("assetId").is_some() || job.get("targetAssetId").is_some() {
             return finish_import(&base, &mut job, &m).await;
         }
@@ -1318,7 +1375,7 @@ pub async fn media_refresh(job_id: String, state: State<'_, AppState>) -> Result
             api::Output::Download(uri.into(),ext.into())
         } else {return Err("No recoverable task ID. Check provider history and import the result; this button never starts another paid generation.".into());};
         finish_job(&base,&mut job,output,&m,&state).await
-    }.await;
+    }).await;
     job["message"] = json!(result.err().unwrap_or_default());
     write(&file, &job)?;
     Ok(public_job(job))
@@ -1339,10 +1396,27 @@ async fn render(base: &Path, document: &Value) -> Result<String, String> {
             "Fit the storyboard to the soundtrack before exporting (within 0.1 seconds).".into(),
         );
     }
+    let mut clips = Vec::with_capacity(p.shots.len());
+    for (i, shot) in p.shots.iter().enumerate() {
+        let clip = asset(
+            base,
+            shot.asset_id
+                .as_deref()
+                .ok_or_else(|| format!("Shot {} needs a clip", i + 1))?,
+        )?;
+        if clip.kind != "video"
+            || shot.trim_start < 0.0
+            || shot.trim_start + shot.seconds > clip.seconds + 1e-3
+        {
+            return Err(format!("Check video and trim offset for shot {}", i + 1));
+        }
+        clips.push(clip);
+    }
     let exe = platform::find_agent("ffmpeg", "")
         .map_err(|_| "Install FFmpeg and restart Jamstudio to render videos.")?;
     let output = base.join("exports").join(id());
     fs::create_dir_all(&output).map_err(|e| e.to_string())?;
+    let mut guard = DirGuard::new(output.clone());
     write(&output.join("project.json"), document)?;
     let (w, h) = if p.ratio == "9:16" {
         (720, 1280)
@@ -1352,15 +1426,7 @@ async fn render(base: &Path, document: &Value) -> Result<String, String> {
     let mut concat = String::new();
     // Render each shot separately: bounded memory independent of the number of clips.
     for (i, shot) in p.shots.iter().enumerate() {
-        let clip = asset(
-            base,
-            shot.asset_id
-                .as_deref()
-                .ok_or_else(|| format!("Shot {} needs a clip", i + 1))?,
-        )?;
-        if clip.kind != "video" || shot.trim_start >= clip.seconds {
-            return Err(format!("Check video and trim offset for shot {}", i + 1));
-        }
+        let clip = &clips[i];
         let frames = ((p.shots[..=i].iter().map(|s| s.seconds).sum::<f64>() * 30.0).round()
             - (p.shots[..i].iter().map(|s| s.seconds).sum::<f64>() * 30.0).round())
             as u64;
@@ -1377,7 +1443,7 @@ async fn render(base: &Path, document: &Value) -> Result<String, String> {
             "-ss".into(),
             shot.trim_start.to_string(),
             "-i".into(),
-            clip.path,
+            clip.path.clone(),
             "-an".into(),
             "-vf".into(),
             filter,
@@ -1433,6 +1499,7 @@ async fn render(base: &Path, document: &Value) -> Result<String, String> {
         target.to_string_lossy().into_owned(),
     ];
     run(&exe, &args, 300).await?;
+    guard.persist();
     Ok(target.to_string_lossy().into_owned())
 }
 #[tauri::command]
@@ -1628,6 +1695,159 @@ mod tests {
     }
 
     use super::*;
+
+    #[tokio::test]
+    async fn media_network_cancel_does_not_wait_for_provider_timeout() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(true, Ordering::Relaxed);
+        let started = std::time::Instant::now();
+        let err = cancellable(async {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            Ok::<_, String>(())
+        })
+        .await
+        .unwrap_err();
+        CANCEL.store(false, Ordering::Relaxed);
+        assert!(err.contains("canceled"), "{err}");
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn dir_guard_removes_folder_unless_persisted() {
+        let base = std::env::temp_dir().join(format!("jam-dir-guard-{}", id()));
+        let removed = base.join("removed");
+        let kept = base.join("kept");
+        fs::create_dir_all(&removed).unwrap();
+        fs::create_dir_all(&kept).unwrap();
+        {
+            let _guard = DirGuard::new(removed.clone());
+        }
+        assert!(!removed.exists());
+        {
+            let mut guard = DirGuard::new(kept.clone());
+            guard.persist();
+        }
+        assert!(kept.exists());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[tokio::test]
+    async fn render_validates_shots_before_creating_export_dir() {
+        let home = std::env::temp_dir().join(format!("jam-render-validate-{}", id()));
+        let base = home.join("music-videos");
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let audio_path = base.join("assets/song.wav");
+        let video_path = base.join("assets/clip.mp4");
+        fs::write(&audio_path, b"x").unwrap();
+        fs::write(&video_path, b"x").unwrap();
+        let audio = Asset {
+            schema_version: 1,
+            id: "song".into(),
+            kind: "audio".into(),
+            path: audio_path.to_string_lossy().into_owned(),
+            seconds: 8.0,
+            label: "song".into(),
+            extra: BTreeMap::new(),
+        };
+        let video = Asset {
+            schema_version: 1,
+            id: "clip".into(),
+            kind: "video".into(),
+            path: video_path.to_string_lossy().into_owned(),
+            seconds: 10.0,
+            label: "clip".into(),
+            extra: BTreeMap::new(),
+        };
+        write(
+            &base.join("assets/song.json"),
+            &serde_json::to_value(&audio).unwrap(),
+        )
+        .unwrap();
+        write(
+            &base.join("assets/clip.json"),
+            &serde_json::to_value(&video).unwrap(),
+        )
+        .unwrap();
+        let doc = json!({
+            "schemaVersion": 1,
+            "id": "film",
+            "revision": 0,
+            "title": "Film",
+            "audioId": "song",
+            "ratio": "16:9",
+            "shots": [{"id": "a", "seconds": 8.0, "assetId": "clip", "trimStart": 9.0}]
+        });
+        let err = render(&base, &doc).await.unwrap_err();
+        assert!(err.contains("Check video and trim offset"), "{err}");
+        assert!(!base.join("exports").exists());
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn reanalysis_refuses_nested_future_grid_without_rewriting() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        let home = std::env::temp_dir().join(format!("jam-nested-grid-{}", id()));
+        let base = home.join("music-videos");
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let raw = base.join("assets/generated-source.wav");
+        synthetic_audio(&raw, 3);
+        let mut imported = import(&base, &raw, "audio", "Synthetic import")
+            .await
+            .unwrap();
+        imported.extra.insert(
+            "estimatedGrid".into(),
+            json!({"schemaVersion":2,"beats":[0.0,0.5],"future":"keep"}),
+        );
+        save_asset(&base, &imported).unwrap();
+        let manifest = songs::folder(&base, &imported.id)
+            .unwrap()
+            .join("song.json");
+        let before = fs::read(&manifest).unwrap();
+        let err = analyze_source(&base, &imported.id).await.unwrap_err();
+        assert!(
+            err.contains("estimatedGrid") || err.contains("Unsupported"),
+            "{err}"
+        );
+        assert_eq!(fs::read(&manifest).unwrap(), before);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn reanalysis_drops_stale_estimated_grid_when_estimation_fails() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        let home = std::env::temp_dir().join(format!("jam-stale-grid-{}", id()));
+        let base = home.join("music-videos");
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let raw = base.join("assets/generated-source.wav");
+        synthetic_audio(&raw, 3);
+        let mut imported = import(&base, &raw, "audio", "Synthetic import")
+            .await
+            .unwrap();
+        imported.extra.insert(
+            "estimatedGrid".into(),
+            json!({
+                "schemaVersion": 1,
+                "origin": "stale",
+                "sourceHash": "0".repeat(64),
+                "beats": [0.0, 0.5],
+                "future": "keep"
+            }),
+        );
+        save_asset(&base, &imported).unwrap();
+        let analyzed = analyze_source(&base, &imported.id).await.unwrap();
+        assert!(
+            !analyzed.extra.contains_key("estimatedGrid"),
+            "{:?}",
+            analyzed.extra.get("estimatedGrid")
+        );
+        let saved = asset(&base, &imported.id).unwrap();
+        assert!(!saved.extra.contains_key("estimatedGrid"));
+        assert!(saved.extra.contains_key("songAnalysis"));
+        fs::remove_dir_all(home).unwrap();
+    }
+
     #[tokio::test]
     async fn analysis_refuses_unknown_asset_versions_without_rewriting_metadata() {
         let base = std::env::temp_dir().join(format!("jam-analysis-version-{}", id()));

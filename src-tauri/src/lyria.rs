@@ -56,7 +56,7 @@ impl Session {
 }
 
 fn emit<R: Runtime>(app: &AppHandle<R>, status: &Status) {
-    let _ = app.emit("lyria.state", status);
+    let _ = app.emit("lyria:state", status);
 }
 
 #[tauri::command]

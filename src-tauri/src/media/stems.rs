@@ -138,6 +138,7 @@ async fn install(
     let folder = parent.join(format!("{set_id}-stems"));
     fs::create_dir_all(folder.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::create_dir(&folder).map_err(|e| e.to_string())?;
+    let mut guard = DirGuard::new(folder.clone());
     let input = raw.to_path_buf();
     let target = folder.clone();
     let files = tauri::async_runtime::spawn_blocking(move || {
@@ -189,6 +190,7 @@ async fn install(
         return Err("Stem import canceled.".into());
     }
     save_asset(base, &current)?;
+    guard.persist();
     Ok(current)
 }
 
@@ -608,6 +610,51 @@ mod tests {
         }
         fs::remove_dir_all(base).unwrap();
     }
+
+    #[tokio::test]
+    async fn install_removes_stem_folder_when_unpack_fails() {
+        let _gate = GATE.lock().await;
+        CANCEL.store(false, Ordering::Relaxed);
+        let base = std::env::temp_dir().join(format!("stem-cleanup-{}", id()));
+        fs::create_dir_all(base.join("assets")).unwrap();
+        let wav = base.join("assets/source.wav");
+        fs::write(&wav, b"synthetic-source").unwrap();
+        let a = Asset {
+            schema_version: 1,
+            id: "source".into(),
+            kind: "audio".into(),
+            path: wav.to_string_lossy().into_owned(),
+            seconds: 2.0,
+            label: "Synthetic stems".into(),
+            extra: BTreeMap::new(),
+        };
+        write(
+            &base.join("assets/source.json"),
+            &serde_json::to_value(&a).unwrap(),
+        )
+        .unwrap();
+        let raw = base.join("bad-stems.zip");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&raw).unwrap());
+        zip.start_file("readme.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(b"not audio").unwrap();
+        zip.finish().unwrap();
+        assert!(install(&base, &a, "hash", &raw, "test", "test")
+            .await
+            .is_err());
+        let leftover: Vec<_> = fs::read_dir(base.join("assets"))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().ends_with("-stems"))
+            .collect();
+        assert!(
+            leftover.is_empty(),
+            "leaked {:?}",
+            leftover.iter().map(|e| e.path()).collect::<Vec<_>>()
+        );
+        fs::remove_dir_all(base).unwrap();
+    }
+
     fn archive(names: &[&str]) -> Vec<u8> {
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
         for name in names {
