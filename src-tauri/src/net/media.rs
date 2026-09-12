@@ -264,13 +264,15 @@ pub async fn separate_stems(
             .is_some_and(|v| !v.is_finite() || !(0.0..=10000.0).contains(&v))
         || file.is_empty()
         || file.len() > 512 * 1024 * 1024
-        || !["wav", "mp3", "flac", "m4a", "aac", "ogg"].contains(&extension)
     {
         return Err(
             "Choose 2 seconds to 10 minutes of audio up to 512 MB and a valid optional price."
                 .into(),
         );
     }
+    let mime = audio_mime(extension).ok_or(
+        "Choose 2 seconds to 10 minutes of audio up to 512 MB and a valid optional price.",
+    )?;
     if cancel.load(Ordering::Relaxed) {
         return Err("Stem separation canceled before upload.".into());
     }
@@ -278,12 +280,13 @@ pub async fn separate_stems(
     let key = store.require(provider.id)?;
     super::live_guard("stem separation")?;
     let size = file.len() as u64;
+    let part = reqwest::multipart::Part::bytes(file)
+        .file_name(format!("source.{extension}"))
+        .mime_str(mime)
+        .map_err(|_| "Invalid audio type.")?;
     let form = reqwest::multipart::Form::new()
         .text("stem_variation_id", model.model.clone())
-        .part(
-            "file",
-            reqwest::multipart::Part::bytes(file).file_name(format!("source.{extension}")),
-        );
+        .part("file", part);
     let path = "/v1/music/stem-separation";
     let req = provider_client()
         .timeout(Duration::from_secs(900))
@@ -434,6 +437,18 @@ pub fn response(m: &Model, bytes: Vec<u8>) -> Result<Output, String> {
         ext.into(),
     ))
 }
+fn audio_mime(extension: &str) -> Option<&'static str> {
+    Some(match extension {
+        "wav" => "audio/wav",
+        "mp3" => "audio/mpeg",
+        "flac" => "audio/flac",
+        "m4a" => "audio/mp4",
+        "aac" => "audio/aac",
+        "ogg" => "audio/ogg",
+        _ => return None,
+    })
+}
+
 pub fn valid_task(id: &str) -> Result<(), String> {
     if id.is_empty()
         || id.len() > 160
@@ -722,5 +737,21 @@ mod tests {
             serde_json::to_vec(&json!({"base_resp":{"status_code":1000}})).unwrap()
         )
         .is_err());
+    }
+
+    #[test]
+    fn stem_multipart_maps_extension_to_audio_mime() {
+        assert_eq!(audio_mime("wav"), Some("audio/wav"));
+        assert_eq!(audio_mime("mp3"), Some("audio/mpeg"));
+        assert_eq!(audio_mime("flac"), Some("audio/flac"));
+        assert_eq!(audio_mime("m4a"), Some("audio/mp4"));
+        assert_eq!(audio_mime("aac"), Some("audio/aac"));
+        assert_eq!(audio_mime("ogg"), Some("audio/ogg"));
+        assert_eq!(audio_mime("txt"), None);
+        let part = reqwest::multipart::Part::bytes(vec![1])
+            .file_name("source.wav")
+            .mime_str(audio_mime("wav").unwrap())
+            .unwrap();
+        drop(part);
     }
 }
