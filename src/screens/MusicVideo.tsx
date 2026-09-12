@@ -12,6 +12,7 @@ import {
   type MediaJob,
   type MediaShot,
   applyShotIdeas,
+  cancelFilmWork,
   clampGenerationSeconds,
   completeGeneratedAudio,
   fitShots,
@@ -436,7 +437,7 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
             "Importing",
             "Refreshing this existing job.",
           ].some((label) => m.busy.startsWith(label)) && (
-            <Button onClick={() => void ipc.invoke("media_cancel")}>
+            <Button onClick={() => void cancelFilmWork()}>
               Cancel this local work.
             </Button>
           )}
