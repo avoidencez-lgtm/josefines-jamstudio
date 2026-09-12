@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Chart } from "../../src/ipc/contract";
-import { transposeChord } from "../../src/lib/chart/notes";
+import { parseKey, transposeChord } from "../../src/lib/chart/notes";
 import {
   chartToText,
   isRestSymbol,
@@ -22,6 +22,16 @@ style: blues-shuffle
 | D7 | D7 | A7 | A7 |
 | E7 | D7 | A7 | E7 |
 `;
+
+describe("parseKey", () => {
+  it("treats uppercase M as major and lowercase m as minor", () => {
+    expect(parseKey("CM")).toEqual({ keyTonic: 0, mode: "major" });
+    expect(parseKey("Gm")).toEqual({ keyTonic: 7, mode: "minor" });
+    expect(parseKey("BbM")).toEqual({ keyTonic: 10, mode: "major" });
+    expect(parseKey("F# minor")).toEqual({ keyTonic: 6, mode: "minor" });
+    expect(parseKey("A maj")).toEqual({ keyTonic: 9, mode: "major" });
+  });
+});
 
 describe("chart text parser", () => {
   it("parses a plain blues", () => {
