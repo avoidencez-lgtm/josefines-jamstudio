@@ -2265,34 +2265,3 @@ mod jam_log {
         assert_eq!(jam_log_level_from(Some("error")), LevelFilter::Error);
     }
 }
-
-#[cfg(test)]
-mod home_logs {
-    #[test]
-    fn export_names_the_real_home_logs_folder_when_present() {
-        std::env::remove_var("JAM_USER_DIR");
-        let dir = super::logs_dir();
-        assert!(
-            dir.ends_with("JosefinesJamstudio") || dir.ends_with("logs"),
-            "{}",
-            dir.display()
-        );
-        if dir.is_dir() {
-            assert_eq!(super::logs_export().unwrap(), dir.display().to_string());
-        }
-    }
-
-    #[test]
-    fn append_user_log_writes_a_line() {
-        let root = std::env::temp_dir().join(format!("jam-home-log-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
-        std::env::set_var("JAM_USER_DIR", &root);
-        let path = super::append_user_log("canary-log-line").unwrap();
-        assert_eq!(path, root.join("logs").join("jamstudio.log"));
-        let text = std::fs::read_to_string(&path).unwrap();
-        assert!(text.contains("canary-log-line"), "{text}");
-        std::env::remove_var("JAM_USER_DIR");
-        let _ = std::fs::remove_dir_all(&root);
-    }
-}

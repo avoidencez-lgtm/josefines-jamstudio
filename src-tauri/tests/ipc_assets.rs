@@ -175,11 +175,21 @@ fn diagnostics_report_fps_appends_the_user_log() {
     let line = text.as_str().unwrap();
     assert!(line.contains("meter=59.6"), "{line}");
     assert!(line.contains("playhead=60.2"), "{line}");
-    let log = user_dir().join("logs").join("jamstudio.log");
+    let dir = user_dir().join("logs");
+    assert_eq!(app_lib::logs_dir(), dir);
+    let log = dir.join("jamstudio.log");
+    // Use the existing isolated IPC scenario; per-test environment changes in
+    // library unit tests raced with the asset installer's temporary user root.
+    assert_eq!(app_lib::append_user_log("canary-log-line").unwrap(), log);
     let body = std::fs::read_to_string(&log).unwrap();
     assert!(
         body.contains("canvas fps meter=59.6 playhead=60.2"),
         "{body}"
+    );
+    assert!(body.contains("canary-log-line"), "{body}");
+    assert_eq!(
+        studio.ok("logs_export", json!({})),
+        dir.display().to_string()
     );
 }
 
