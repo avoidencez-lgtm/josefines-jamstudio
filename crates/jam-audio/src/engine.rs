@@ -972,7 +972,21 @@ impl AudioEngine {
     }
 
     fn ensure_recordable_input(&self) -> Result<(), String> {
-        self.input_rate_error.clone().map_or(Ok(()), Err)
+        if let Some(msg) = &self.input_rate_error {
+            return Err(msg.clone());
+        }
+        let input_running = self
+            .input_driver
+            .as_ref()
+            .is_some_and(|input| input.is_running())
+            || self.status().input.is_some();
+        if !input_running {
+            return Err(
+                "Cannot record. The guitar input is not running. Open Settings, pick a working input, then start audio again."
+                    .into(),
+            );
+        }
+        Ok(())
     }
 
     pub fn configure_song(
@@ -3014,5 +3028,46 @@ mod tests {
         assert!(msg.contains("Cannot record"), "{msg}");
         assert!(super::input_rate_mismatch(48_000, 48_000).is_none());
         assert!(super::input_rate_mismatch(0, 48_000).is_none());
+    }
+
+    #[test]
+    fn record_refuses_when_the_input_stream_never_started() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-no-input-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("JAM_HEADLESS", "1");
+        std::env::set_var("JAM_DATA_DIR", &dir);
+        let mut engine = AudioEngine::new(AudioConfig::default());
+        engine.start().unwrap();
+        if let Some(mut inp) = engine.input_driver.take() {
+            let _ = inp.stop();
+        }
+        engine.input_driver = Some(Box::new(crate::io::FileInput::silent(256, 48_000)));
+        engine.input_rate_error = None;
+        engine.status.lock().input = None;
+        assert!(engine.status().running);
+        let err = engine.recorder_start("jam".into()).unwrap_err();
+        assert!(err.contains("Cannot record"), "{err}");
+        assert!(err.contains("not running"), "{err}");
+        assert!(engine
+            .record_song("song".into())
+            .unwrap_err()
+            .contains("Cannot record"));
+        assert!(engine
+            .keep_capture("idea".into())
+            .unwrap_err()
+            .contains("Cannot record"));
+        assert!(
+            !dir.join("takes").exists(),
+            "rejected takes must create no files"
+        );
+        engine.stop().unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
