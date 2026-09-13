@@ -44,9 +44,10 @@ describe("repo hygiene", () => {
     expect(envExample).toMatch(/keychain/i);
 
     const toolchain = readFileSync(files.toolchain, "utf8");
-    expect(toolchain).toContain("1.88");
+    expect(toolchain).toContain('channel = "stable"');
     expect(toolchain).toContain("rustfmt");
     expect(toolchain).toContain("clippy");
+    expect(readFileSync("Cargo.toml", "utf8")).toContain('rust-version = "1.88"');
   });
 
   it("ships GitHub issue templates", () => {
