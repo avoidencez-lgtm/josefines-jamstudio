@@ -525,6 +525,42 @@ pub fn next_bar_boundary(samples: u64, bpm: f64, time_sig: (u8, u8), sample_rate
     beats_to_samples(next_bar_beats, bpm, sample_rate)
 }
 
+/// Sample of the bar downbeat at or after `samples`. Identity when already on a downbeat.
+pub fn bar_downbeat_at_or_after(
+    samples: u64,
+    bpm: f64,
+    time_sig: (u8, u8),
+    sample_rate: u32,
+) -> u64 {
+    let beats = samples_to_beats(samples, bpm, sample_rate);
+    let beats_per_bar = f64::from(time_sig.0.max(1));
+    let bar = (beats / beats_per_bar).ceil();
+    let snapped = beats_to_samples(bar * beats_per_bar, bpm, sample_rate);
+    if snapped < samples {
+        beats_to_samples((bar + 1.0) * beats_per_bar, bpm, sample_rate)
+    } else {
+        snapped
+    }
+}
+
+/// Start of a capture buffer that ends at `current_sample`, snapped forward onto a bar downbeat.
+/// Falls back to the unaligned start when the next downbeat is at or past "now".
+pub fn capture_keep_start_sample(
+    buffer_frames: u64,
+    current_sample: u64,
+    bpm: f64,
+    time_sig: (u8, u8),
+    sample_rate: u32,
+) -> u64 {
+    let raw_start = current_sample.saturating_sub(buffer_frames);
+    let snapped = bar_downbeat_at_or_after(raw_start, bpm, time_sig, sample_rate);
+    if snapped >= current_sample {
+        raw_start
+    } else {
+        snapped
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -538,6 +574,24 @@ mod tests {
         assert_eq!(samples, 96_000); // 4 beats @ 120 bpm = 2.0s = 96,000 samples
         let calc_beats = samples_to_beats(samples, bpm, rate);
         assert!((calc_beats - beats).abs() < 1e-6);
+    }
+
+    #[test]
+    fn capture_keep_start_snaps_forward_to_a_bar_downbeat() {
+        let rate = 48_000;
+        let bpm = 120.0;
+        let meter = (4, 4);
+        assert_eq!(bar_downbeat_at_or_after(0, bpm, meter, rate), 0);
+        let bar = beats_to_samples(4.0, bpm, rate);
+        assert_eq!(bar, 96_000);
+        assert_eq!(bar_downbeat_at_or_after(bar, bpm, meter, rate), bar);
+        assert_eq!(bar_downbeat_at_or_after(1, bpm, meter, rate), bar);
+        let now = beats_to_samples(5.0, bpm, rate);
+        assert_eq!(
+            capture_keep_start_sample(100_000, now, bpm, meter, rate),
+            bar
+        );
+        assert_eq!(capture_keep_start_sample(1_000, 0, bpm, meter, rate), 0);
     }
 
     #[test]

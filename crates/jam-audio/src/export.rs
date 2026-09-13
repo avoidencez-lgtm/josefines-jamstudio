@@ -17,6 +17,8 @@ pub struct ExportJob<'a> {
     pub recorded_tempo_map: Option<&'a crate::reference_timing::TempoMap>,
     /// `(section name, 1-indexed first bar)` in playing order.
     pub sections: &'a [(&'a str, u32)],
+    /// `(chord name, 1-indexed bar)` from [`jam_core::chart::ResolvedChart::chord_at`] per bar.
+    pub chords: &'a [(&'a str, u32)],
     /// `(stem name, path to the recorded WAV)`. Missing files are reported, not fatal.
     pub stems: &'a [(&'a str, &'a Path)],
     /// Directory that recorded WAVs must canonicalize inside, when known.
@@ -53,6 +55,32 @@ impl DawExporter {
         time_sig: (u8, u8),
         sections: &[(&str, u32)],
     ) -> std::io::Result<Vec<u8>> {
+        Self::build_tempo_map_midi_with_markers(tempo, time_sig, sections, &[])
+    }
+
+    /// SMF tempo map from a resolved chart: section markers plus per-bar chord names.
+    pub fn build_tempo_map_midi_from_chart(
+        chart: &jam_core::chart::ResolvedChart,
+    ) -> std::io::Result<Vec<u8>> {
+        let sections = chart.section_markers();
+        let chords = chart.chord_markers();
+        let section_refs: Vec<(&str, u32)> =
+            sections.iter().map(|(n, b)| (n.as_str(), *b)).collect();
+        let chord_refs: Vec<(&str, u32)> = chords.iter().map(|(n, b)| (n.as_str(), *b)).collect();
+        Self::build_tempo_map_midi_with_markers(
+            chart.default_bpm,
+            chart.time_sig,
+            &section_refs,
+            &chord_refs,
+        )
+    }
+
+    pub fn build_tempo_map_midi_with_markers(
+        tempo: f64,
+        time_sig: (u8, u8),
+        sections: &[(&str, u32)],
+        chords: &[(&str, u32)],
+    ) -> std::io::Result<Vec<u8>> {
         let micros = midi_tempo(tempo, time_sig)?;
         let mut midi = Vec::new();
 
@@ -81,15 +109,37 @@ impl DawExporter {
         let t_bytes = micros.to_be_bytes();
         track_data.extend_from_slice(&[0x00, 0xFF, 0x51, 0x03, t_bytes[1], t_bytes[2], t_bytes[3]]);
 
-        // 3. Section Markers. A bar is `num` beats of `4/den` quarter notes each.
+        // 3. Section and chord markers. A bar is `num` beats of `4/den` quarter notes each.
         let ticks_per_bar = (u64::from(num) * 480 * 4) / u64::from(den);
-        let mut prev_tick = 0u64;
-        for &(name, bar) in sections {
-            let target_tick = u64::from(bar.checked_sub(1).ok_or_else(|| {
+        let marker_tick = |bar: u32| -> std::io::Result<u64> {
+            Ok(u64::from(bar.checked_sub(1).ok_or_else(|| {
                 invalid_midi(
                     "Section bars must start at 1. Repair the take snapshot before exporting.",
                 )
-            })?) * ticks_per_bar;
+            })?) * ticks_per_bar)
+        };
+        let mut prev_section = 0u64;
+        let mut events: Vec<(u64, &str)> = Vec::with_capacity(sections.len() + chords.len());
+        for &(name, bar) in sections {
+            let tick = marker_tick(bar)?;
+            if tick < prev_section {
+                return Err(invalid_midi(
+                    "Section markers are out of order. Repair the snapshot before exporting.",
+                ));
+            }
+            prev_section = tick;
+            events.push((tick, name));
+        }
+        for &(name, bar) in chords {
+            if name.is_empty() {
+                continue;
+            }
+            events.push((marker_tick(bar)?, name));
+        }
+        events.sort_by_key(|(tick, _)| *tick);
+
+        let mut prev_tick = 0u64;
+        for (target_tick, name) in events {
             let delta = target_tick.checked_sub(prev_tick).ok_or_else(|| {
                 invalid_midi(
                     "Section markers are out of order. Repair the snapshot before exporting.",
@@ -107,8 +157,13 @@ impl DawExporter {
 
         // End of Track: extend through the last marked bar so a one-section
         // map is not zero-length (SMF duration is the last event's tick).
-        let end_tick = match sections.last() {
-            Some(&(_, bar)) => u64::from(bar) * ticks_per_bar,
+        let last_bar = sections
+            .iter()
+            .chain(chords.iter())
+            .map(|(_, bar)| *bar)
+            .max();
+        let end_tick = match last_bar {
+            Some(bar) => u64::from(bar) * ticks_per_bar,
             None => ticks_per_bar,
         };
         write_var_len(&mut track_data, end_tick.saturating_sub(prev_tick))?;
@@ -139,7 +194,12 @@ impl DawExporter {
         }
         let midi_bytes = match job.recorded_tempo_map {
             Some(map) => map.midi()?,
-            None => Self::build_tempo_map_midi_with_meter(job.tempo, job.time_sig, job.sections)?,
+            None => Self::build_tempo_map_midi_with_markers(
+                job.tempo,
+                job.time_sig,
+                job.sections,
+                job.chords,
+            )?,
         };
         std::fs::create_dir_all(output_dir)?;
         let midi_path = output_dir.join(format!("{}-tempo-map.mid", job.take_id));
@@ -204,6 +264,7 @@ impl DawExporter {
             "timeSignature": format!("{}/{}", job.time_sig.0, job.time_sig.1),
             "sampleRate": job.sample_rate,
             "sections": job.sections.iter().map(|(n, b)| serde_json::json!({"name": n, "bar": b})).collect::<Vec<_>>(),
+            "chords": job.chords.iter().map(|(n, b)| serde_json::json!({"name": n, "bar": b})).collect::<Vec<_>>(),
             "stems": copied_stems,
             "tempoMap": midi_path.to_string_lossy(),
             "format": "WAV stems + SMF MIDI",
@@ -317,7 +378,14 @@ pub fn write_reaper_import(
             ));
         }
     } else {
-        for (name, bar) in job.sections {
+        let mut markers: Vec<(&str, u32)> = job
+            .sections
+            .iter()
+            .chain(job.chords.iter())
+            .copied()
+            .collect();
+        markers.sort_by_key(|(_, bar)| *bar);
+        for (name, bar) in markers {
             let seconds = bar.saturating_sub(1) as f64 * job.time_sig.0 as f64 * 60.0 / job.tempo;
             if seconds < length {
                 data.push_str(&format!(
@@ -529,6 +597,71 @@ pub fn write_clip_stem(
 mod tests {
     use super::*;
 
+    fn smf_text_and_marker_events(midi: &[u8]) -> Vec<(u64, u8, String)> {
+        let start = midi.windows(4).position(|w| w == b"MTrk").expect("MTrk");
+        let mut i = start + 8;
+        let mut tick = 0u64;
+        let mut out = Vec::new();
+        while i < midi.len() {
+            let mut val = 0u64;
+            loop {
+                let byte = midi[i];
+                i += 1;
+                val = (val << 7) | u64::from(byte & 0x7f);
+                if byte & 0x80 == 0 {
+                    break;
+                }
+            }
+            tick += val;
+            if midi[i] != 0xff {
+                panic!("unexpected SMF event {:02x}", midi[i]);
+            }
+            let meta = midi[i + 1];
+            i += 2;
+            let mut len = 0u64;
+            loop {
+                let byte = midi[i];
+                i += 1;
+                len = (len << 7) | u64::from(byte & 0x7f);
+                if byte & 0x80 == 0 {
+                    break;
+                }
+            }
+            let data = &midi[i..i + len as usize];
+            i += len as usize;
+            if meta == 0x01 || meta == 0x06 {
+                out.push((tick, meta, String::from_utf8_lossy(data).into_owned()));
+            }
+            if meta == 0x2f {
+                break;
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn twelve_bar_blues_export_marks_a7_at_bar_1() {
+        let chart: jam_core::chart::Chart =
+            serde_json::from_str(include_str!("../../../charts/blues-12-bar.json")).unwrap();
+        let resolved = chart.resolve();
+        assert_eq!(resolved.chord_at(1, 1).0, "A7");
+        let midi = DawExporter::build_tempo_map_midi_from_chart(&resolved).unwrap();
+        let events = smf_text_and_marker_events(&midi);
+        assert!(
+            events.iter().any(|(tick, meta, name)| {
+                *tick == 0 && (*meta == 0x01 || *meta == 0x06) && name == "A7"
+            }),
+            "bar 1 must carry a marker/text event with the chart chord, got {events:?}"
+        );
+        let ticks_per_bar = 1920u64;
+        assert!(
+            events
+                .iter()
+                .any(|(tick, _, name)| *tick == 4 * ticks_per_bar && name == "D7"),
+            "bar 5 D7 must sit next to the section grid, got {events:?}"
+        );
+    }
+
     #[test]
     fn tempo_map_uses_format_0_and_extends_end_of_track_through_the_last_bar() {
         let midi =
@@ -609,6 +742,7 @@ mod tests {
             time_sig: (3, 4),
             sample_rate: 48000,
             sections: &sections,
+            chords: &[],
             stems: &[],
             take_dir: None,
         };
@@ -809,6 +943,7 @@ mod tests {
             time_sig: (4, 4),
             sample_rate: 44_100,
             sections: &[("Intro", 1), ("Verse", 5)],
+            chords: &[],
             stems: &[("input", input.as_path()), ("band", missing.as_path())],
             take_dir: Some(src.as_path()),
         };
