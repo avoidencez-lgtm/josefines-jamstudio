@@ -52,7 +52,7 @@ pub struct TakeRecorder {
     pub frames_written: u64,
     pub(crate) reference_timing: Option<crate::reference_timing::ReferenceTiming>,
     /// Take-relative sample where each loop pass began. Pass 1 is always 0.
-    pass_starts: Vec<u64>,
+    pub(crate) pass_starts: Vec<u64>,
 }
 impl TakeRecorder {
     pub fn new(sample_rate: u32, base_dir: PathBuf) -> Self {
@@ -249,10 +249,6 @@ impl TakeRecorder {
         if self.is_recording() {
             record_loop_pass(&mut self.pass_starts, at_sample);
         }
-    }
-
-    pub(crate) fn pass_starts(&self) -> &[u64] {
-        &self.pass_starts
     }
     pub(crate) fn push_frames(
         &mut self,

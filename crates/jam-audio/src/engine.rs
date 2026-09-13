@@ -3434,7 +3434,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(15);
         loop {
             thread::sleep(Duration::from_millis(20));
-            let n = engine.recorder.lock().pass_starts().len();
+            let n = engine.recorder.lock().pass_starts.len();
             if n >= 3 {
                 break;
             }
