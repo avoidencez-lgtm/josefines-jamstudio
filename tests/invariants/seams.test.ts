@@ -20,6 +20,7 @@ describe("Seam Manifest Invariants", () => {
       expect(parsed).toHaveProperty("id");
       expect(typeof parsed.id).toBe("string");
       expect(parsed.id.length).toBeGreaterThan(0);
+      expect(parsed.id, file).toBe(file.replace(/\.json$/i, ""));
 
       expect(parsed).toHaveProperty("name");
       expect(typeof parsed.name).toBe("string");

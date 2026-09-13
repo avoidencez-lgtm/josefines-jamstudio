@@ -72,7 +72,7 @@ Band and Lyria never run together and nothing tries to synchronise Lyria to a ch
 
 - **The guitarist.** Plays blues, rock, funk and metal at a high level, owns the rig, uses a Mac and Logic Pro. Wants to pick up the guitar and be playing within ten seconds, hands on the instrument, eyes two metres from the screen. Does not want to configure anything twice.
 - **Vegar.** Owner of the project. Runs the builder on Windows and tests with the file-backed virtual input. Sessions with the guitarist on his Mac and rig are deferred to V2; they do not block V1. Developer verification and packaging remain V1 requirements ([delivery decision](00-README.md)). Reads reports in English; conversation with Claude is in Norwegian.
-- **Jo.** The AI bandleader. English. Confirms actions in at most twelve words ("Blues in A, ninety, shuffle. Counting in."), asks at most one question when something is ambiguous, never lectures unless asked, uses musicians' vocabulary (turnaround, quick change, four on the floor, half-time), and coaches from evidence (the recorded take), not from guesses. Her persona file is `src/ai/jo/persona.md` (M2).
+- **Jo.** The AI bandleader. English. Confirms actions in at most twelve words ("Blues in A, ninety, shuffle. Counting in."), asks at most one question when something is ambiguous, never lectures unless asked, uses musicians' vocabulary (turnaround, quick change, four on the floor, half-time), and coaches from evidence (the recorded take), not from guesses. Her persona file is `src/lib/jo/persona.ts`.
 
 ## Development reality
 

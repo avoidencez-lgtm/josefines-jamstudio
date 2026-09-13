@@ -1,6 +1,6 @@
 # Hughes & Kettner Black Spirit 200 (head)
 
-Facts verified 2026-09-02 from the manual (via ManualsLib), the H&K product pages and retailer specs. The CC map below **must be re-checked against the official H&K manual PDF before it is encoded** in `rigs/black-spirit-200.json` (M5 task) and again at owner gate 5. Legend: ✅ vendor source, ⚠️ secondary source.
+Facts verified 2026-09-02 from the manual (via ManualsLib), the H&K product pages and retailer specs. `rigs/black-spirit-200.json` already encodes a CC map and notes it is **to be confirmed on the real amp**. **Human-only:** re-check this table against the official H&K manual PDF and owner gate 5 before treating the numbers as proven. Legend: ✅ vendor source, ⚠️ secondary source.
 
 ## Identity and I/O
 

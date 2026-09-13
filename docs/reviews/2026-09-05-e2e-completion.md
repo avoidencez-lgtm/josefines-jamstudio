@@ -1,5 +1,7 @@
 # E2E completion and known gaps — 2026-09-05
 
+**Historical (2026-09-05).** This note records the harness completion in PR #77. Later PRs #104–#115 addressed several of the skipped candidates listed below; do not treat the table as current defect status. The text of the original exclusions is kept as written.
+
 PR #77 resumes Claude's saved testing work. Native commands run on Tauri's mock
 runtime; frontend store scenarios use the preview engine. Built desktop smoke
 checks startup on Windows and macOS. These complement each other; they do not

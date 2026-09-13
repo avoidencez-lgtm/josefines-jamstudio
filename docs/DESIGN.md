@@ -53,7 +53,7 @@ This document is binding for every UI commit. M7 runs the pre-flight list at the
 }
 ```
 
-Fonts are self-hosted from `src/design/fonts/` (Geist and Geist Mono, SIL OFL 1.1, licence file kept alongside). No web-font links. If Geist is not available, the system stack applies; the layout must not depend on exact metrics.
+**Target:** self-host Geist and Geist Mono from `src/design/fonts/` (SIL OFL 1.1, licence file kept alongside). That directory is not in the tree. **As built:** `--font-ui` / `--font-mono` name Geist then the system stack (`Segoe UI`, `Cascadia Mono`, `system-ui`); no web-font links and no shipped font files. The layout must not depend on exact metrics.
 
 The theme is dark only in v1 (`ui.theme: 'dark'`); tokens make a light theme a token swap later, not a redesign. Contrast: `--fg-0` on `--bg-0` is above 15:1; `--fg-1` on `--bg-1` is above 7:1; accent text on `--bg-1` is above 4.5:1. Every new colour pair is checked.
 

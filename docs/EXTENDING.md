@@ -176,8 +176,8 @@ Each recipe below names the exact files to add and the test that proves it worke
 
 1. Copy `styles/blues-shuffle.json` to `styles/<id>.json` (or `~/JosefinesJamstudio/styles/<id>.json` for a personal style; same schema).
 2. Set `id`, `name`, `genre`, `feel.swing`, `feel.bpmRange`, `kitId`, `bassProgram`, `compProgram`.
-3. Write at least one entry in `patterns` per intensity band (`[0, 0.34]`, `[0.34, 0.67]`, `[0.67, 1]`), one `fills` pattern and one `endings` pattern. Beats are floats from the start of the pattern; instrument names come from the kit (`kick`, `snare`, `hat_closed`, `hat_open`, `ride`, `crash`, `tom_hi`, `tom_lo`); bass `degree` is relative to the chord root (0 = root, 4 = fifth, 7 = octave); comp `voicing` is one of `shell`, `triad`, `drop2`, `power`.
-4. Run `pnpm test -- styles` (schema validation) and `cargo test -p jam-band golden -- <id>` to create the golden render (first run writes `tests/fixtures/golden/<id>.json`, second run asserts).
+3. Write at least one entry in `patterns` per intensity band (`[0, 0.34]`, `[0.34, 0.67]`, `[0.67, 1]`), one `fills` pattern and one `endings` pattern. Beats are floats from the start of the pattern; instrument names come from the kit (`kick`, `snare`, `hihat_closed`, `hihat_open`, `ride`, `crash`, `tom_high`, `tom_low`, `sidestick`); bass `degree` is scale degree relative to the chord root (`1` = root, `5` = fifth, `1..=7`); comp `voicing` is one of `shell`, `triad`, `drop2`, `power`.
+4. Run `pnpm vitest run tests/invariants/seams.test.ts tests/lib/styles.test.ts` and `cargo test -p jam-band --test golden`. Goldens assert audible parts, intensity coverage, frame count and determinism in `crates/jam-band/tests/golden.rs`; they do not write `tests/fixtures/golden/<id>.json`.
 5. Play it on the Stage. No code change is needed; the registry picks it up at startup.
 
 Ask Jo to author one: the `create_style` tool (backlog) writes the same JSON.
@@ -186,7 +186,7 @@ intensity ranges match the previous style. This also applies to queued style cha
 
 ## Add a chart preset
 
-1. Write `charts/<id>.json` (schema in ARCHITECTURE §7) or a text chart in `charts/<id>.chart`:
+1. Write `charts/<id>.json` (schema in ARCHITECTURE §7). Bundled presets are JSON only; there is no `charts/<id>.chart` loader. The Library editor's text syntax lives in `src/lib/chart/text.ts`:
    ```
    title: Slow blues in G
    key: G major
@@ -195,13 +195,13 @@ intensity ranges match the previous style. This also applies to queued style cha
    style: blues-shuffle
    [A] | G7 | C7 | G7 | G7 | C7 | C7 | G7 | G7 | D7 | C7 | G7 | D7 |
    ```
-2. `pnpm test -- charts` parses every preset and transposes it through all twelve keys.
+2. `pnpm vitest run tests/invariants/seams.test.ts tests/chart/text.test.ts` validates bundled JSON and the text round-trip. `tests/invariants/extending.test.ts` transposes the fixture chart through twelve keys.
 3. It appears in the Stage chart picker and Jo's `load_chart` accepts its id and its title.
 
 ## Add a rig profile (any amp, pedalboard or modeller)
 
-1. Copy `rigs/black-spirit-200.json` to `rigs/<id>.json`. Set `midiChannel` (never omni), `supports`, the `programs` list (number and name), and `controls` (cc, name, min, max, default, unit). Clamps come from `min` and `max`; the scheduler never sends outside them.
-2. `cargo test -p jam-core rigs` validates it; `cargo test -p jam-rig profile_<id>` (add a two-line test that sends a program change through `MemorySink` and asserts the bytes).
+1. Copy `rigs/black-spirit-200.json` to `rigs/<id>.json`. Set `id` to the filename stem (the seams test asserts `id == basename`). `midiChannel` is 0-based (0 = panel channel 1, never omni, 0..=15). Set `supports`, the `programs` list (number and name), and `controls` (cc, name, min, max, default, unit). Clamps come from `min` and `max`; the scheduler never sends outside them.
+2. `cargo test -p jam-rig bundled_rigs_load_and_validate` loads every bundled profile; `cargo test -p src-tauri --test ipc_rig_media bundled_rig_profiles` lists them over IPC. Add a MemorySink assertion in `crates/jam-rig` if the device needs byte-level coverage.
 3. Open the Rig screen, assign a port, press "send now". Document the device in `docs/hardware/<id>.md` if it is a real device.
 
 ## Add a control map (pedal, keyboard, MIDI controller)
@@ -241,22 +241,27 @@ Rules: one tool does one thing; the return string is what Jo may say (twelve wor
 
 ## Add a provider (STT, TTS, music stream, generator, stems, analysis, or an LLM target)
 
-1. Add a row to `src-tauri/src/net/registry.rs`: id, base URL, auth scheme, kinds.
-2. Create `src-tauri/src/net/<id>.rs` implementing the trait(s) from ARCHITECTURE §6.1. The key is fetched from `SecretStore` inside the call; never stored in the struct; never logged.
-3. Record fixtures: run the live call once with `JAM_RECORD_FIXTURES=1` and a key in the keychain; the recorder writes scrubbed request and response files under `tests/fixtures/providers/<id>/`. Commit them with a README (what was scrubbed, date, docs URL).
-4. Write the unit test against the fixtures and an `#[ignore]` live test.
-5. Add `providers.<id>` to the settings defaults and the price table; the Settings screen shows a toggle and a "test key" button automatically from the registry.
-6. For an LLM target: also add the AI SDK provider package in `src/ai/llm/providers.ts` (one line) with the `provider_fetch` shim.
+**As built.** There is no `src-tauri/src/net/registry.rs` and no `src/ai/llm/providers.ts`.
+
+1. Add a `ProviderEntry` row to `PROVIDERS` in `src-tauri/src/net.rs`: id, `https://` base URL, auth scheme, description.
+2. For a text brain, add a `BRAINS` entry in `src/lib/jo/providers.ts` (see Current text-provider extension recipe below). For a native protocol, add `src-tauri/src/net/<id>.rs` and `pub mod <id>` in `net.rs`. The key is fetched from `SecretStore` inside the call; never stored in the struct; never logged.
+3. Record fixtures under `tests/fixtures/providers/<id>/` (or `tests/fixtures/providers/brains.json` for text). Do not label synthetic fixtures as recorded calls.
+4. Extend `tests/invariants/providers.test.ts` and `net::tests`; live calls stay `#[ignore]` behind `JAM_LIVE=1`.
+5. Settings reads the allow-list through `providers_list`; there is no automatic toggle generated from a kinds table.
+
+**Target:** per-kind traits in ARCHITECTURE §6.1 and an AI SDK `providers.ts` package line.
 
 ## Add an instrument
 
-1. Implement `Instrument` in `crates/jam-band/src/instruments/<name>.rs` (`note_on(note, velocity)`, `note_off(note)`, `render(out: &mut [f32])`, `set_sample_rate` is fixed at 48 kHz). No allocation in `render`.
-2. Register it in `instruments::factory` by a string id usable from `Style.bassProgram` or `compProgram`.
-3. Add a render test: a single note for one second has the expected RMS and no NaN; a golden render for one style that uses it.
+**As built.** Bass and comp live in `crates/jam-band/src/instruments.rs` (`Sf2Synth`); drums live in `crates/jam-band/src/sampler.rs`. There is no `instruments/<name>.rs` folder and no `instruments::factory`.
+
+1. Extend `Sf2Synth` or `Sampler` in those files (`note_on` / `note_off` / `render`). Sample rate is fixed at 48 kHz. No allocation in `render`.
+2. Wire it from `Style.bassProgram`, `compProgram` or `kitId`.
+3. Add a render test: a single note for one second has the expected RMS and no NaN; a golden render for one style that uses it (`cargo test -p jam-band --test golden`).
 
 ## Add an audio source or sink
 
-Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, add it to `io::select`, and add a test that drives it with `NullOutput` for one second and checks the frame counter. The engine does not care where samples come from.
+**As built.** `AudioInput` and `AudioOutput` live in `crates/jam-audio/src/io.rs` (no `io/<name>.rs` folder). Implement the trait there, select it from `JAM_HEADLESS` / `JAM_FAKE_INPUT` in `crates/jam-audio/src/engine.rs`, and add a test that drives it with `NullOutput` for one second and checks the frame counter. The engine does not care where samples come from.
 
 ## Add an analysis kind
 
@@ -267,7 +272,7 @@ Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, 
 
 ## Add a screen
 
-1. Create `src/screens/<name>/<Name>Screen.tsx` using the design primitives (no new colours, no new radii; see DESIGN.md).
+1. Create a flat file `src/screens/<Name>.tsx` using the design primitives (no new colours, no new radii; see DESIGN.md). There is no `src/screens/<name>/<Name>Screen.tsx` folder convention.
 2. Add the screen ID to `ScreenId` in `src/store/engine.ts`, its component route in `src/App.tsx`, and one `SCREENS` entry in `src/screens/registry.ts` with `id`, `label`, `description` and a distinct `iconName` from `SCREEN_ICONS`. That mapping supplies both the sidebar and `WorkspaceHeader`; there is no second icon switch.
 3. Empty, loading and error states are part of the screen from the first commit.
 
@@ -279,13 +284,15 @@ Implement `AudioInput` or `AudioOutput` in `crates/jam-audio/src/io/<name>.rs`, 
 
 ## Add a data-file schema version
 
-1. Bump `schemaVersion` in the type, add `migrate_v<n>_to_v<n+1>` in `crates/jam-core/src/schema/<file>.rs`, keep unknown fields.
-2. Add a fixture of the old version under `tests/fixtures/schema/` and a test that migrates it and re-validates.
+**As built.** `jam-core::registry::SUPPORTED_SCHEMA_VERSION` is 1; newer files are refused. Unknown fields survive on `#[serde(flatten)] extra`. There is no `crates/jam-core/src/schema/` directory and no `tests/fixtures/schema/`.
+
+1. Bump `schemaVersion` in the type and `SUPPORTED_SCHEMA_VERSION` together, keep unknown fields.
+2. **Target:** `migrate_v<n>_to_v<n+1>` in `crates/jam-core/src/schema/<file>.rs` plus an old-version fixture under `tests/fixtures/schema/`.
 
 ## Future directions (backlog, not promises)
 
 User-installable style and rig packs from a folder, a community styles repository, WASM instruments and tools behind the same traits, more voice sessions (ElevenLabs Agents, Gemini Live), local models. Each will be a seam added by this document's rules, not a rewrite.
-# Tweak the implemented songwriting workflow
+## Tweak the implemented songwriting workflow
 
 Start in **Write**: sections, chords, tempo, key, repeats, instrument grooves,
 intensity, gain, mute, swing, guitar trims and versions are ordinary controls.
@@ -316,8 +323,7 @@ The step-by-step guide is [songwriting.md](guide/songwriting.md).
 - `tests/fixtures/seams/original.json` demonstrates the document. Run
   `pnpm test -- originals` and `cargo test -p src-tauri originals` for its round trip.
 
-The older recipes below describe the broader architecture plan; use the actual
-module paths above for the implemented songwriting slice.
+Songwriting uses the module paths in this section. Broader seam recipes are earlier in this document.
 
 ## Extend the REAPER handoff
 
@@ -426,9 +432,9 @@ playback must pass `media::playable_file` and its canonical-library boundary.
 Edit `docs/guide/manual.json` in both `en` and `nb`, retain stable chapter IDs and set `room` to an existing screen ID for contextual opening. Run `node scripts/export-manual.mjs`; the invariant test verifies translation coverage and export freshness. Shortcut English text is checked against the live command registry; update the Bokmål description with any shortcut change. Main UI labels remain English.
 
 Finishing helpers live in `src/lib/finishing.ts`, with examples in `tests/invariants/finishing.test.ts`. Keep transformations pure and timing-preserving, respect part locks, and route audio through the existing native clip/transport commands. A managed comp uses `compSlot` for its absolute bar interval; do not interpret it as automatic arrangement-following audio. New ideas must remain reversible through the existing Versions/Undo flow.
-# Current room capability extension (2026-09-05)
+## Current room capability extension (2026-09-05)
 
-The recipe below describes implemented paths; older planning recipes later in this document may name target architecture.
+The recipe below describes implemented paths. Recipes marked **target** earlier in this document are not a claim that those modules exist.
 
 1. `src/components/RoomTools.tsx` has one `ROOM_TOOLS` registry keyed by the existing `ScreenId`. Each entry supplies a title, description and a lazily imported component from `src/components/tools/<Name>Tool.tsx` (shared fields, selects and the `useTool` runner live in `tools/shared.tsx`). A tool's chunk loads the first time its room is shown; afterwards it stays mounted (hidden) so scratch drafts survive navigation. Tools perform no native work on mount. Subscribe only to needed store fields with selectors or `useShallow`, never to whole stores or high-frequency telemetry.
 2. Put pure musical/timeline calculations and bounded input schemas in `src/lib/roomTools.ts`, reusing `originals`, `writingTools`, Tonal and `media`. Preserve unknown document fields and locked parts. Keep source recordings untouched.
