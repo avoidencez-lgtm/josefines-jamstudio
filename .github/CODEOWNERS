@@ -1,0 +1,4 @@
+# Reviewers for decisions, licence policy, and automation.
+docs/adr/ @avoidencez-lgtm
+deny.toml @avoidencez-lgtm
+.github/ @avoidencez-lgtm

@@ -1,0 +1,16 @@
+name: Feature
+description: A change with an acceptance criterion from the plan
+labels: [enhancement]
+body:
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criterion (quoted from the plan)
+      description: Quote the acceptance criterion from docs/plan/ that this feature must meet.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Context, files, or milestone. Optional.
