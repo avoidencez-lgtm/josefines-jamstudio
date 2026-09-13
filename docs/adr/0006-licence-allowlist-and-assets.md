@@ -9,7 +9,7 @@ The repository is public. Vegar chose Apache-2.0 (as for his other projects). So
 ## Decision
 
 - Repository licence: Apache-2.0.
-- Dependency allowlist enforced by `cargo deny` and `scripts/check-js-licences.mjs`: Apache-2.0, MIT, BSD-2/3-Clause, ISC, 0BSD, Zlib, Unicode, CC0. MPL-2.0 only for a crate with no alternative (currently `symphonia`), recorded with a comment in `deny.toml`. GPL, LGPL and AGPL never enter the tree.
+- Dependency allowlist enforced by `cargo deny` and `scripts/check-js-licences.mjs`: Apache-2.0, MIT, BSD-2/3-Clause, ISC, 0BSD, Zlib, Unicode, CC0. MPL-2.0 only for a crate with no alternative, recorded with a comment in `deny.toml`. **As built (2026-09-13):** MPL exceptions are `symphonia` and its format/codec crates (native song decode) plus Tauri CSS/selectors crates (`cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`, `selectors`). GPL, LGPL and AGPL never enter the tree.
 - Consequences for library choice: `pitch-detection` instead of aubio, Signalsmith Stretch (MIT) instead of Rubber Band, own chroma and onset code.
 - Audio assets are never committed. They are published as GitHub Release assets with SHA-256 checksums, fetched on first run, and every pack has a licence section in `assets/LICENSES.md`. Only CC0, CC-BY (with attribution shown in the app) or an explicitly redistributable permissive licence.
 

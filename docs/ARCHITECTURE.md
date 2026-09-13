@@ -1,6 +1,6 @@
 # Architecture
 
-This document is the contract between the milestones. Names here (crates, modules, commands, events, types) are the names the code uses. A change to a contract is a change to this file in the same PR.
+This document is the contract between the milestones. Names marked **as built** are the names the code uses. Blocks marked **target** are still the planned contract; they are not a claim that those modules exist. A change to a built contract is a change to this file in the same PR.
 
 The music-video extension is governed by [ADR 0008](adr/0008-music-video-workspace.md).
 `media_list`, `media_save`, `media_import`, `media_from_take`, `media_generate`,
@@ -60,45 +60,117 @@ One Tauri process. Threads on the Rust side:
 | Disk writer | Receives recorder chunks over bounded channels and writes WAV files with `hound` | Never blocks the render worker (drops with an error event if the channel is full for more than 2 seconds) |
 | MIDI thread (`jam-rig`) | Sends scheduled MIDI bytes at their timestamps, receives MIDI input | Timing from the transport timeline; 50 ms lookahead for scene commands |
 | Tokio runtime | All network clients (`net/`), analysis jobs, asset downloads, the `provider_fetch` proxy | Never touches audio buffers directly; hands PCM to the render worker through ring buffers |
-| Tauri main thread | IPC commands and the 30 Hz state emitter | Commands are cheap: they enqueue to the render worker or read a snapshot (`arc-swap`) |
+| Tauri main thread | IPC commands and the 30 Hz state emitter | Commands are cheap: they enqueue to the render worker or lock `parking_lot::Mutex<AudioEngine>` for a telemetry snapshot |
 
-State snapshots for the UI are published by the render worker into `arc-swap` cells; the emitter thread reads them at 30 Hz and emits `<domain>.state` events only when the snapshot changed.
+**As built.** There is no `arc-swap` crate. The setup hook in `src-tauri/src/lib.rs` polls the engine on a dedicated thread (33 ms while the clock is moving, 250 ms when idle) and emits colon-wire events (`transport:state`, `band:state`, `meters`, …). Idle repeats are skipped so a stopped desktop is not a 30 Hz IPC pump; `engine:status` is emit-on-change. **Target:** publish snapshots into `arc-swap` cells and emit `<domain>.state` only when the snapshot changed.
 
 ## 3. Repository layout
 
+**As built.** Every path in this tree exists. WAV files under `tests/fixtures/audio/` are gitignored (see that folder's README); a missing `JAM_FAKE_INPUT` path falls back to a 440 Hz sine.
+
 ```
-josefines-jamstudio/
-  AGENTS.md  README.md  LICENSE  deny.toml  Cargo.toml (workspace)  package.json  biome.json  tsconfig.json  vite.config.ts
-  crates/
-    jam-core/    types, timeline, chart, style, rig profile, control map, schema versions, registries (pure, serde)
-    jam-dsp/     pure DSP: level, pitch, energy
-    jam-audio/   cpal devices and streams, io traits, engine (ring buffers, callback, render worker), transport, mixer, click, recorder, song player (offline + live stretch in jam-dsp)
-    jam-band/    sequencer, instruments (Sampler, Sf2Synth), voicing, bass, comp, cues, offline render
-    jam-rig/     MidiSink/MidirSink/MemorySink, profiles, scenes, scheduler, clock, input
-  src-tauri/
-    src/main.rs, lib.rs (command table; IPC_VERSION lives in src/ipc/contract.ts)
-    src/assets.rs, keys.rs, settings.rs, store.rs, library.rs, voice.rs, lyria.rs, aliases.rs
-    src/media.rs + media/{songs,stems,analysis,grid}.rs
-    src/net.rs + net/{lyria,musicai,review,voice,media}.rs
-    src/platform/ OS-specific (paths, CPU sample, voice shortcut)
-    tauri.conf.json, capabilities/
-  src/
-    app/          App shell, router, theme, global shortcuts
-    screens/      registry.ts + one folder per screen (stage, library, sessions, rig, settings)
-    components/   design primitives (Button, Dial, BigReadout, Meter, Panel, ...)
-    design/       tokens.css, motion.ts
-    ipc/          contract.ts + one file per domain wrapping invoke/listen; engine store (zustand)
-    ai/           llm/ (AI SDK + fetch shim), tools/*.tool.ts + index.ts, jo/ (persona.md, session.ts, transcript.ts)
-    lib/          chart/ (parse, transpose, resolve), controls/ (control-map dispatcher), format/
-  styles/  charts/  rigs/  controls/     bundled data files (seams)
-  assets/  manifest.json, LICENSES.md, README.md
-  tests/
-    fixtures/     audio/, providers/<provider>/, seams/, jo/
-    invariants/   seams.test.ts
-  scripts/        check-js-licences.mjs, gen-fixtures.mjs, spikes/
-  docs/           plan/, adr/, hardware/, spikes/, ARCHITECTURE.md, EXTENDING.md, DESIGN.md, guide/
-  .github/workflows/ ci.yml, release.yml
+AGENTS.md
+README.md
+LICENSE
+deny.toml
+Cargo.toml
+package.json
+biome.json
+tsconfig.json
+vite.config.ts
+rust-toolchain.toml
+.env.example
+crates/jam-core/
+crates/jam-dsp/
+crates/jam-dsp/cxx/vendor/signalsmith-stretch.h
+crates/jam-audio/
+crates/jam-audio/src/io.rs
+crates/jam-audio/src/engine.rs
+crates/jam-band/
+crates/jam-band/src/instruments.rs
+crates/jam-band/src/sampler.rs
+crates/jam-rig/
+crates/jam-rig/src/profiles.rs
+src-tauri/src/main.rs
+src-tauri/src/lib.rs
+src-tauri/src/assets.rs
+src-tauri/src/keys.rs
+src-tauri/src/settings.rs
+src-tauri/src/store.rs
+src-tauri/src/library.rs
+src-tauri/src/voice.rs
+src-tauri/src/lyria.rs
+src-tauri/src/aliases.rs
+src-tauri/src/clips.rs
+src-tauri/src/controller.rs
+src-tauri/src/originals.rs
+src-tauri/src/persistence.rs
+src-tauri/src/media.rs
+src-tauri/src/media/songs.rs
+src-tauri/src/media/stems.rs
+src-tauri/src/media/analysis.rs
+src-tauri/src/media/grid.rs
+src-tauri/src/net.rs
+src-tauri/src/net/lyria.rs
+src-tauri/src/net/musicai.rs
+src-tauri/src/net/review.rs
+src-tauri/src/net/voice.rs
+src-tauri/src/net/media.rs
+src-tauri/src/platform/mod.rs
+src-tauri/tauri.conf.json
+src-tauri/capabilities/default.json
+src/App.tsx
+src/main.tsx
+src/screens/registry.ts
+src/screens/Stage.tsx
+src/screens/Library.tsx
+src/screens/Sessions.tsx
+src/screens/Rig.tsx
+src/screens/Settings.tsx
+src/screens/Jo.tsx
+src/screens/Songs.tsx
+src/screens/AiMusic.tsx
+src/screens/MusicVideo.tsx
+src/screens/Originals.tsx
+src/components/
+src/design/tokens.css
+src/ipc/contract.ts
+src/ipc/client.ts
+src/ipc/preview.ts
+src/lib/jo/
+src/lib/controls.ts
+src/lib/chart/
+src/lib/controller.ts
+src/store/engine.ts
+styles/
+charts/
+rigs/
+controls/
+assets/manifest.json
+assets/LICENSES.md
+assets/README.md
+tests/fixtures/audio/README.md
+tests/fixtures/jo/
+tests/fixtures/seams/
+tests/fixtures/providers/
+tests/invariants/
+tests/e2e/
+scripts/check-js-licences.mjs
+scripts/export-manual.mjs
+scripts/spikes/
+docs/plan/
+docs/adr/
+docs/hardware/
+docs/spikes/
+docs/ARCHITECTURE.md
+docs/EXTENDING.md
+docs/DESIGN.md
+docs/guide/
+.github/workflows/ci.yml
+.github/workflows/release.yml
 ```
+
+**Target** (not in the tree): `src/app/`, `src/ai/`, `src/design/motion.ts`, `src/lib/format/`, `src-tauri/src/ipc/`, `scripts/gen-fixtures.mjs`, committed WAVs under `tests/fixtures/audio/`. Screens are flat files in `src/screens/`, not one folder per screen. Jo lives in `src/lib/jo/`. IPC types are `src/ipc/contract.ts`; Rust commands are registered in `src-tauri/src/lib.rs`.
 
 ## 4. Audio engine
 
@@ -121,7 +193,7 @@ pub trait AudioOutput: Send {
 }
 ```
 
-Implementations: `CpalInput`, `CpalOutput` (real devices, resampled to and from 48 kHz with `rubato` when needed), `FileInput` (looping WAV decoded by `symphonia`, deterministic), `NullOutput` (a timer thread that advances exactly `bufferFrames` per tick). Selection: `AudioConfig.fakeInputWavPath` or env `JAM_FAKE_INPUT` for the guitar input; env `JAM_HEADLESS=1` for `NullOutput`. Every automated test runs with these two.
+Implementations: `CpalInput`, `CpalOutput` (real devices, resampled to and from 48 kHz with `rubato` when needed), `FileInput` (looping WAV decoded by `symphonia`, deterministic), `NullOutput` (a timer thread that advances exactly `bufferFrames` per tick). **As built.** Guitar-input selection is env `JAM_FAKE_INPUT` (a local WAV path; gitignored, not downloaded by `assets_ensure`). A missing or unreadable path falls back to a 440 Hz sine. `JAM_HEADLESS=1` selects `NullOutput`. There is no `AudioConfig.fakeInputWavPath` field; as-built `AudioConfig` is `{ input_device, output_device, input_channel, sample_rate, buffer_size }`. Every automated test runs headless.
 
 ### 4.3 Clock, timeline, render-ahead
 
@@ -151,14 +223,58 @@ WASAPI shared mode; the HeadRush most likely exposes stereo only, so channel 3 (
 
 ### 5.1 Conventions
 
-1. Commands set **absolute state**, never deltas. `when: 'now' | 'next_bar'` where musically relevant.
-2. Every domain has exactly one `<domain>.state` event carrying its whole (small) state, emitted on any change from any source (UI or Jo). No diffs, no desync.
-3. High-rate telemetry (`meters`, `transport.state`, `tuner.state`) is emitted at a fixed rate (30 Hz, 30 Hz, 20 Hz).
-4. No PCM crosses IPC on the happy path. `Channel<InvokeResponseBody::Raw>` and raw request bodies exist only for waveform peaks, exports and the Lyria Fallback A.
-5. `IPC_VERSION` in `src/ipc/contract.ts`; changes are additive; a removed field is a version bump and an ADR.
-6. Every command returns the domain state after the change or an `AppError { code, message, detail?, fatal }`. Errors are also emitted as `app.error`.
+1. Commands set **absolute state**, never deltas. **As built**, musical timing is `atNextBar: boolean` on `BandPatch` (and similar flags), not a `when: 'now' | 'next_bar'` union.
+2. Logical UI event names use `domain.state`; `src/ipc/client.ts` translates dots to colons for Tauri (`transport:state`, `input:meters`, …).
+3. **As built.** High-rate telemetry is emitted at 30 Hz while the clock is moving and at 250 ms when idle; unchanged idle snapshots are skipped. There is no separate 20 Hz tuner clock.
+4. No PCM crosses IPC on the happy path.
+5. `IPC_VERSION` in `src/ipc/contract.ts` (mirrored in `src-tauri/src/lib.rs`); changes are additive; a removed field is a version bump and an ADR. **As built:** `IPC_VERSION` is 2 (ADR 0010).
+6. **As built.** Commands return `Result<T, String>`. Failures also emit `app:error` as a string. There is no `AppError` type and no `ipc/errors.rs` code table. **Target:** `AppError { code, message, detail?, fatal }`.
 
-### 5.2 Contract (TypeScript is the source of truth; Rust mirrors with serde and a round-trip test)
+### 5.2 Contract (TypeScript is the source of truth; Rust mirrors with serde)
+
+**As built** (`src/ipc/contract.ts`): snake_case audio and telemetry, `IPC_VERSION = 2`.
+
+```ts
+export const IPC_VERSION = 2;
+export interface AudioConfig {
+  input_device: string | null;
+  output_device: string | null;
+  input_channel: number;
+  sample_rate: number;
+  buffer_size: number;
+}
+export interface TransportTelemetry {
+  state: "stopped" | "counting_in" | "playing" | "paused";
+  bar: number; beat: number; position_beats: number; bar_progress: number;
+  bpm: number; time_signature: [number, number];
+  loop_enabled: boolean; loop_start_bar: number; loop_end_bar: number;
+  count_in_bars: number;
+}
+export interface BandPatch {
+  styleId?: string; intensity?: number; followEnergy?: boolean;
+  muteDrums?: boolean; muteBass?: boolean; muteComp?: boolean;
+  atNextBar?: boolean;
+}
+export interface BarChord { chord: string; beats: number; }
+export interface ChartSection {
+  id: string; name: string; bars: BarChord[][];
+  styleOverrideId?: string | null;
+}
+export interface Chart {
+  schemaVersion: number; id: string; name: string;
+  keyTonic: number; mode: "major" | "minor"; timeSig: [number, number];
+  defaultBpm: number; defaultStyleId?: string | null;
+  sections: ChartSection[]; arrangement: ArrangementItem[];
+}
+export interface RigProfile {
+  schemaVersion: number; id: string; name: string;
+  midiChannel: number;  // 0-based; 0 = channel 1 on the panel
+  sceneCc: number | null;
+}
+// takes_list / takes_delete / takes_export_daw; export_logic is an alias of takes_export_daw
+```
+
+**Target** (camelCase names below are not the compiled contract; `IPC_VERSION` in this block is not 2):
 
 ```ts
 export const IPC_VERSION = 1;
@@ -272,25 +388,29 @@ the failure in conversation history. Unchanged song/film edits are reported as
 unchanged and do not create extra undo/version entries. This does not implement
 the voice pipeline described below.
 
-### 6.1 Providers (Rust, `src-tauri/src/net/`)
+### 6.1 Providers (Rust, `src-tauri/src/net.rs`)
+
+**As built.** The allow-list is `PROVIDERS: &[ProviderEntry]` in `src-tauri/src/net.rs`. There is no `net/registry.rs` and no `ProviderKind` / per-kind traits. Protocol modules live beside the allow-list (`net/lyria.rs`, `net/voice.rs`, `net/musicai.rs`, `net/media.rs`, `net/review.rs`).
 
 ```rust
-pub struct ProviderEntry { pub id: &'static str, pub base_url: &'static str, pub auth: AuthScheme, pub kinds: &'static [ProviderKind] }
-pub enum AuthScheme { HeaderKey(&'static str), Bearer, QueryKey(&'static str) }
-pub enum ProviderKind { LlmTarget, Stt, Tts, MusicStream, TrackGenerator, Stems, Analysis }
-pub trait Stt { async fn transcribe(&self, pcm16k_mono: &[i16]) -> Result<Transcript> }
-pub trait Tts { async fn synthesize(&self, text: &str, voice: &str) -> Result<Pcm48kStereo> }
-pub trait MusicStream { async fn start(&self, cfg: MusicConfig, sink: PcmSink) -> Result<SessionHandle>; async fn update(&self, h: &SessionHandle, patch: MusicPatch) -> Result<()>; async fn stop(&self, h: SessionHandle) -> Result<()> }
-pub trait TrackGenerator { async fn generate(&self, req: GenerateRequest, progress: ProgressSink) -> Result<PathBuf> }
-pub trait Stems { async fn separate(&self, wav: &Path, progress: ProgressSink) -> Result<Vec<StemFile>> }
-pub trait Analysis { async fn analyse(&self, wav: &Path, kinds: &[AnalysisKind], progress: ProgressSink) -> Result<AnalysisResult> }
+pub enum AuthScheme { HeaderKey(&'static str), Bearer }
+pub struct ProviderEntry {
+    pub id: &'static str,
+    pub base_url: &'static str,
+    pub auth: AuthScheme,
+    pub description: &'static str,
+}
 ```
 
-`registry.rs` holds the table; the settings hold `providers.<id>.enabled`. Keys come from `SecretStore` by provider id at call time and are never stored in the struct. Every call logs `provider, kind, model, ms, bytes_in, bytes_out, est_usd` to `cost.state`.
+Keys come from `SecretStore` by provider id at call time and are never stored in the struct. Each call writes provider, path, status, bytes and duration to the local usage log (never a body, never a key).
+
+**Target:** `ProviderKind` plus `Stt` / `Tts` / `MusicStream` / `TrackGenerator` / `Stems` / `Analysis` traits and a `registry.rs` table with `kinds`.
 
 ### 6.2 LLM (TypeScript, `src/lib/jo/providers.ts`)
 
-Vercel AI SDK `generateText` with `@ai-sdk/google` (`gemini-3.8-flash` by default), `maxSteps` from settings, tools from the registry, and a `fetch` shim that turns a request into `provider_fetch` and rebuilds a `Response`. Streaming is not used in v1 (tool loops with `generateText` are simpler and debuggable). Adding a provider is one `provider_fetch` target and one AI SDK provider package ([EXTENDING.md](EXTENDING.md)).
+**As built.** `BRAINS` in `src/lib/jo/providers.ts` is the shared registry (Gemini, OpenAI, Claude, OpenRouter, installed agents). HTTP goes through `provider_fetch`. There is no Vercel AI SDK package in `package.json`. See Implemented text providers below.
+
+**Target:** Vercel AI SDK `generateText` with `@ai-sdk/google` (`gemini-3.8-flash` by default), `maxSteps` from settings, tools from the registry, and a `fetch` shim that turns a request into `provider_fetch` and rebuilds a `Response`.
 
 ### 6.3 Voice pipeline (`VoiceSession` interface, v1 = push-to-talk)
 
@@ -441,7 +561,7 @@ uses real FFmpeg and checks PCM within `1e-7`, source/metadata preservation,
 relative stems, reload, idempotency and library relocation. Existing real-tool
 practice, stem and Film timing tests cover the migrated persistence route.
 
-Files are truth; SQLite is a cache ([ADR 0005](adr/0005-files-are-truth-sqlite-is-cache.md)). Every manifest has `schemaVersion`; unknown fields are preserved on rewrite; each bump has one migration function in `jam-core::schema`.
+Files are truth; SQLite is a cache ([ADR 0005](adr/0005-files-are-truth-sqlite-is-cache.md)). Every manifest has `schemaVersion`; unknown fields are preserved on rewrite (`#[serde(flatten)] extra`). **As built.** `jam-core` refuses `schemaVersion` newer than `SUPPORTED_SCHEMA_VERSION` (1). There is no `crates/jam-core/src/schema/` module. **Target:** each bump has one `migrate_vN_to_vN+1` function in `jam-core::schema`.
 
 ```
 ~/JosefinesJamstudio/
@@ -457,8 +577,10 @@ Files are truth; SQLite is a cache ([ADR 0005](adr/0005-files-are-truth-sqlite-i
 type TempoPoint = { atBeats: Beats; bpm: number; timeSig: [number, number] };
 
 type Chart = { schemaVersion: 1; id: Uuid; name: string; keyTonic: number; mode: 'major'|'minor'; timeSig: [number, number]; defaultBpm: number;
-  defaultStyleId?: string; sections: Section[]; arrangement: { sectionId: Uuid; repeats: number }[] };   // resolve() -> ResolvedChart
-type Section = { id: Uuid; name: string; bars: { chords: { chord: ChordSym; beats: number }[] }[]; styleOverrideId?: string; intensity?: number; rigSceneId?: Uuid };
+  defaultStyleId?: string; sections: Section[]; arrangement: { sectionId: Uuid; repeats: number }[] };
+type Section = { id: Uuid; name: string; bars: { chord: string; beats: number }[][]; styleOverrideId?: string };
+// As built: BarChord.chord is a string (crates/jam-core/src/chart.rs, src/ipc/contract.ts), not ChordSym.
+// Target: intensity? and rigSceneId? on Chart Section. Originals store section intensity/rigScene on the song body, not on Chart.
 
 type Style = { schemaVersion: 1; id: string; name: string; genre: string;
   feel: { swing: number; timeSig: [number, number]; bpmRange: [number, number] };
@@ -480,7 +602,7 @@ type Take = TakeSummary & { schemaVersion: 1; tempoMap: TempoPoint[]; markers: {
   analysis?: { pitchCentsMean: number; pitchCentsStd: number; timingMsMean: number; timingMsStd: number; chordAgreement: number; dynamics: number[] } };
 type SessionReview = { model: string; at: string; summary: string; strengths: string[]; drills: string[]; focusBars: number[]; takeIds: Uuid[] };
 
-type RigProfile = { schemaVersion: 1; id: string; name: string; midiChannel: number;   // 1..16, never omni
+type RigProfile = { schemaVersion: 1; id: string; name: string; midiChannel: number;   // as built: 0-based (0 = panel channel 1), 0..=15, never omni
   supports: { programChange: boolean; controlChange: boolean; midiClock: boolean };
   programs?: { number: number; name: string }[];
   controls: { cc: number; name: string; min: number; max: number; default: number; unit?: string }[] };
@@ -513,9 +635,9 @@ A seam is a definition (trait or schema), one registry, and consumers. There is 
 | Rig profiles | `RigProfile` schema | `jam-core::registry::rigs` | `jam-rig`, Rig screen |
 | Control maps | `ControlMap` schema | `jam-core::registry::controls` (bundled `controls/` + `~/JosefinesJamstudio/controls/`) | `src/lib/controls.ts` (`matchControlMidi`), `src/lib/controller.ts`, `Library` |
 | Jo tools | `JoAction { declaration, run }`, `StudioTool { declaration, edit }`; shared argument validation | `JO_ACTIONS` / `JO_TOOLS` in `src/lib/jo/tools.ts`, document edits in `STUDIO_TOOLS`; legacy actions remain in `dispatcher.ts` | provider declarations, conversation/voice dispatch; planned control-map export remains separate |
-| Providers | traits in §6.1 | `src-tauri/src/net/registry.rs` | analysis pipeline, voice, music, `provider_fetch` |
-| Instruments | `Instrument` trait (`note_on`, `note_off`, `render(&mut [f32])`) | `jam-band::instruments::factory` | sequencer |
-| Audio I/O | `AudioInput` / `AudioOutput` | `jam-audio::io::select(config, env)` | engine |
+| Providers | `ProviderEntry` in §6.1 | `src-tauri/src/net.rs` `PROVIDERS` | `provider_fetch`, voice, Lyria, media, Music.ai |
+| Instruments | `Sf2Synth` / `Sampler` in `crates/jam-band/src/instruments.rs` and `sampler.rs` | kit id / `bassProgram` / `compProgram` on `Style` | sequencer |
+| Audio I/O | `AudioInput` / `AudioOutput` in `crates/jam-audio/src/io.rs` | `JAM_HEADLESS` / `JAM_FAKE_INPUT` in the engine | engine |
 | MIDI sinks | `MidiSink` | `jam-rig::sink::select` | scheduler |
 | Analysis kinds | local `media_analyze` + `analysis_start` (Music.ai, loud not-configured without live job) | `src-tauri/src/media/analysis.rs`, `src-tauri/src/net/musicai.rs` | Songs |
 | Screens | React component + nav entry | `src/screens/registry.ts` | router, nav |
@@ -585,7 +707,7 @@ Two platform facts the harness encodes: `run()` is split so tests build the same
 - Keys only in the OS keychain via `SecretStore`; the WebView never sees one; `provider_fetch` is the only TS path to a provider; logs never contain request bodies; a bundle-scan test guards `dist/`; gitleaks guards the repository.
 - No telemetry, no analytics, no accounts. Every outbound call is listed in Settings → Diagnostics with provider, model, time and estimated cost.
 - Audio leaves the machine only when the guitarist starts an analysis, a generation, or holds push-to-talk.
-- Tauri capabilities are minimal: `fs` scoped to `~/JosefinesJamstudio`, `dialog`, `global-shortcut`, `log`, `http` (only from Rust).
+- **As built.** The local `main` capability (`src-tauri/capabilities/default.json`) grants event listen/unlisten only. Files, audio and networking stay in Rust. `tauri-plugin-log` writes `~/JosefinesJamstudio/logs/`; `tauri-plugin-dialog` is the native song/chart picker; `tauri-plugin-global-shortcut` is the opt-in voice PTT. There is no `plugin-http` or `plugin-updater`. **Target:** a broader capability set (`fs` scoped to `~/JosefinesJamstudio`, `dialog`, `global-shortcut`, `log`, `http`).
 
 ## 11. Performance budgets
 
@@ -605,8 +727,9 @@ Explorer is a handoff: successful process creation does not confirm the target
 application opened, and the UI does not announce success. OS launch behavior is
 separate from the mocked IPC and shell-exit regression checks.
 
-Commands return `Result<T, String>`. Failures also emit `app.error` as a string; the store shows it in the notice rail with a next step. There is no `AppError` code table. Logs via `tauri-plugin-log` to `~/JosefinesJamstudio/logs/` with rotation; levels info by default, debug with `JAM_LOG=debug`; never bodies, never keys, never raw audio.
-# Implemented songwriting workflow
+**As built.** Commands return `Result<T, String>`. Failures also emit `app:error` as a string; the store shows it in the notice rail with a next step. There is no `AppError` code table. Logs via `tauri-plugin-log` to `~/JosefinesJamstudio/logs/` (`jamstudio.log`, 1 MiB rotation, keep-all); default level info, `JAM_LOG=debug` (also `trace`/`warn`/`error`/`off`); never bodies, never keys, never raw audio.
+
+## Implemented songwriting workflow
 
 The Write screen adds a file-backed original-song document (`schemaVersion: 1`),
 reusing `Chart` for chords/arrangement and the existing style registry for each
@@ -729,11 +852,12 @@ See [ADR 0007](adr/0007-installed-studio-agents.md) and [setup guide](guide/api-
 
 ## Preview build boundary (2026-09-05)
 
-The sections above retain the target design, including unbuilt voice, analysis,
-resampling and extension-proof work. `IPC_VERSION` is 2: [ADR 0010](adr/0010-remove-unbuilt-m3-m4-code.md)
+§3, the **as built** blocks in §5.2, §6.1, §7, §10 and §12 match the tree.
+**Target** blocks (the camelCase IPC sketch in §5.2, provider traits in §6.1, and
+unbuilt voice/analysis/resampling work) describe what gets built, not what exists.
+`IPC_VERSION` is 2: [ADR 0010](adr/0010-remove-unbuilt-m3-m4-code.md)
 removed the placeholder `song_*` and `ai_music_*` commands and the compiled-but-unreferenced
-stems, calibration, stretch, chord-detection and generative-music modules; the M3 and M4
-contracts in §5.2 and §6 describe what gets built, not what exists. Current support is recorded in
+stems, calibration, stretch, chord-detection and generative-music modules. Current support is recorded in
 [build closeout](reviews/build-closeout.md), the README and the milestone board.
 
 Logical UI event names use `domain.state`; `src/ipc/client.ts` translates dots to
@@ -795,7 +919,7 @@ to remove only temporary files owned by that attempt; older temporary files are
 left intact. This covers reported I/O failures. Crash leftovers are retained for
 manual recovery; automatic restoration of those files is not claimed.
 
-# Implemented room capability layer (2026-09-05)
+## Implemented room capability layer (2026-09-05)
 
 `RoomTools` supplies one registered expandable tool for each of the ten existing rooms. It composes existing writing/media/engine stores; it does not introduce a second document database or a provider framework. Pure operations live in `roomTools.ts`; foreground actions and the close-guard flags live in `roomActions.ts` (`busy` serialises tools; `blocking` marks work the window must not close during, so a pending coach answer never traps the window). Each tool is its own chunk, loaded the first time its room is shown; from then on hidden room drafts remain mounted and subscribe to selected stable fields rather than whole stores or transport telemetry. Screens and the manual reader are lazily imported by `App` for the same reason, and screen modules export only components; shared helpers and stores live under `src/lib/`.
 

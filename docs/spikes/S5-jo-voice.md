@@ -1,7 +1,6 @@
 # S5: native Jo voice, implementation evidence
 
-Updated 2026-09-05. This replaces the obsolete description of Web Speech and
-TypeScript-owned audio. No live provider or headset acceptance is claimed.
+Updated 2026-09-05. **Historical:** the original draft proposed Web Speech synthesis (forbidden by invariant 1) and a `jam-intent` crate that was never added. This file now records the native implementation. It does not follow the spike template. No live provider or headset acceptance is claimed.
 
 ## Decision and primary evidence
 

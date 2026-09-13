@@ -71,7 +71,7 @@ Sources: https://ai.google.dev/gemini-api/docs/pricing ✅ · https://developers
 - CI: `tauri-apps/tauri-action` builds on `windows-latest` and `macos-latest` (Apple Silicon runner; pass `--target aarch64-apple-darwin`). https://v2.tauri.app/distribute/pipelines/github/
 - macOS: notarization is effectively mandatory for signed distribution; Apple Developer Program $99/year. Unsigned builds open after `xattr -dr com.apple.quarantine` or right-click → Open. Windows: SmartScreen warnings are expected for an unsigned private app; EV certificates no longer bypass reputation (2024). https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation
 
-### Rust crates (pin exact versions in `[workspace.dependencies]` at M0; check `cargo deny` output)
+### Rust crates (historical M0 plan: pin exact versions in `[workspace.dependencies]`; as built, the workspace uses caret ranges except `pitch-estimate = "=0.1.0"`. Check `cargo deny` output)
 | Crate | Use | Licence | Note |
 |---|---|---|---|
 | `cpal` 0.15.x | audio I/O (WASAPI, CoreAudio) | Apache-2.0 | ASIO feature not used (SDK licensing, CI hassle) |
