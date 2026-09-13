@@ -23,3 +23,21 @@ export function readHelpLanguage(
   const parsed = helpLanguageSchema.safeParse(settings?.helpLanguage);
   return parsed.success ? parsed.data : "en";
 }
+
+export type StudioKeyRoute = "close-help" | "ignore" | "shortcuts";
+
+/**
+ * Escape closes help from anywhere while it is open. Musical shortcuts stay
+ * suspended until help is dismissed. The close dialog still owns its own keys.
+ */
+export function routeStudioKey(
+  e: { key: string; defaultPrevented: boolean },
+  opts: { helpOpen: boolean; closeOpen: boolean },
+): StudioKeyRoute {
+  if (opts.closeOpen) return "ignore";
+  if (opts.helpOpen) {
+    if (e.key === "Escape" && !e.defaultPrevented) return "close-help";
+    return "ignore";
+  }
+  return "shortcuts";
+}

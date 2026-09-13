@@ -183,7 +183,7 @@ export function Songs() {
               aria-label="Enter the audio file path."
               value={path}
               onChange={(e) => setPath(e.target.value)}
-              placeholder="Paste the full path to a WAV, MP3, FLAC, M4A, AIFF or OGG file."
+              placeholder="Paste the full path to a WAV, MP3, FLAC, M4A, AAC, AIFF or OGG file."
             />
           </label>
           <Button
