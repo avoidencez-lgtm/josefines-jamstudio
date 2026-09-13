@@ -1866,6 +1866,7 @@ pub fn configure<R: tauri::Runtime>(
             media::media_save,
             media::media_import,
             platform::song_dialog::song_pick_file,
+            platform::song_dialog::chart_pick_file,
             media::songs::media_store_song,
             media::media_stretch,
             media::media_reference_load,
@@ -1890,6 +1891,7 @@ pub fn configure<R: tauri::Runtime>(
             media::media_render,
             media::media_cancel,
             media::media_open,
+            media::media_delete,
             agent_status,
             agent_request,
             agent_cancel,
@@ -2133,12 +2135,45 @@ pub fn jam_log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
         .build()
 }
 
+/// Prefer the main studio window when a second launch tries to focus one.
+fn existing_studio_window<'a>(labels: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    labels.into_iter().find(|&label| label == "main")
+}
+
+fn focus_existing_studio<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    use tauri::Manager;
+    if existing_studio_window(app.webview_windows().keys().map(|label| label.as_str())).is_none() {
+        return;
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[cfg(test)]
+mod single_instance_tests {
+    #[test]
+    fn existing_studio_window_selects_main() {
+        assert_eq!(super::existing_studio_window(["main"]), Some("main"));
+        assert_eq!(
+            super::existing_studio_window(["splash", "main"]),
+            Some("main")
+        );
+        assert_eq!(super::existing_studio_window(["other"]), None);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let built = configure(
         tauri::Builder::default()
             .plugin(jam_log_plugin())
             .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+                focus_existing_studio(app);
+            }))
             .plugin(platform::voice_shortcut::plugin()),
         build_state(),
     )

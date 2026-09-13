@@ -1290,6 +1290,94 @@ fn pedal_bindings_round_trip_through_controller_json_and_invalid_documents_are_r
 }
 
 #[test]
+fn media_delete_removes_jailed_files_and_refuses_traversal() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let assets = media_root().join("assets");
+    std::fs::create_dir_all(&assets).unwrap();
+    let id = unique("delete-asset");
+    let source = assets.join(format!("{id}.wav"));
+    std::fs::write(&source, b"RIFF").unwrap();
+    let receipt = assets.join(format!("{id}.json"));
+    std::fs::write(
+        &receipt,
+        serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "id": id,
+            "kind": "video",
+            "path": source,
+            "seconds": 1.0,
+            "label": "Fixture clip"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    studio.ok("media_delete", json!({"id": id, "kind": "asset"}));
+    assert!(!source.exists(), "source file must be removed");
+    assert!(!receipt.exists(), "asset receipt must be removed");
+
+    let job_id = unique("delete-job");
+    let raw = assets.join(format!("{job_id}-source.wav"));
+    std::fs::write(&raw, b"RIFF").unwrap();
+    let job = media_root().join("jobs").join(format!("{job_id}.json"));
+    std::fs::create_dir_all(job.parent().unwrap()).unwrap();
+    std::fs::write(
+        &job,
+        serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "id": job_id,
+            "status": "download",
+            "rawPath": raw,
+            "request": {}
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let leftover = media_root().join("exports").join(&job_id);
+    std::fs::create_dir_all(&leftover).unwrap();
+    std::fs::write(leftover.join("partial.mp4"), b"x").unwrap();
+    studio.ok("media_delete", json!({"id": job_id, "kind": "job"}));
+    assert!(!raw.exists(), "job source must be removed");
+    assert!(!job.exists(), "job receipt must be removed");
+    assert!(!leftover.exists(), "export leftovers must be removed");
+
+    let outside = std::env::temp_dir().join(format!("{}.wav", unique("outside")));
+    std::fs::write(&outside, b"keep").unwrap();
+    let escape_id = unique("escape");
+    let escape = assets.join(format!("{escape_id}.json"));
+    std::fs::write(
+        &escape,
+        serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "id": escape_id,
+            "kind": "video",
+            "path": outside,
+            "seconds": 1.0,
+            "label": "Outside"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let err = studio.err("media_delete", json!({"id": escape_id, "kind": "asset"}));
+    assert!(
+        err.contains("outside"),
+        "forged path must be refused: {err}"
+    );
+    assert!(outside.exists(), "files outside the jail must stay");
+    assert!(
+        escape.exists(),
+        "poison receipt stays when the source is outside"
+    );
+    std::fs::remove_file(&outside).unwrap();
+
+    let traversal = studio.err("media_delete", json!({"id": "../secret", "kind": "asset"}));
+    assert!(
+        traversal.contains("Invalid media ID") || traversal.contains("outside"),
+        "{traversal}"
+    );
+}
+
+#[test]
 fn media_list_shows_saved_projects_flags_broken_files_and_hides_download_receipts() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

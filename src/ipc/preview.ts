@@ -671,6 +671,11 @@ export function createPreviewEngine(
       "canvas fps is not written in the browser preview.",
     app_version: () => "preview",
     analysis_cancel: () => undefined,
+    media_delete: () => {
+      throw new Error(
+        "Open the desktop app to delete imported or generated media.",
+      );
+    },
     media_guitar_residual: () => {
       throw new Error(
         "Guitar-removal acceptance is not configured. Import or separate stems in the desktop app, mark the guitar track, then run this check. Real-song residual at or below -6 dB is not claimed without those stems.",
@@ -892,6 +897,11 @@ export function createPreviewEngine(
       charts.set(c.id, c);
       userCharts.add(c.id);
       return `(preview) ~/JosefinesJamstudio/charts/${c.id}.json`;
+    },
+    chart_pick_file: () => {
+      throw new Error(
+        "The file picker is unavailable in this browser preview. Open the desktop app.",
+      );
     },
     charts_import_file: () => {
       throw new Error("file import is only available in the desktop app");

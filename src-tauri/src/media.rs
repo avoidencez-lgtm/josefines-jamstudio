@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::Stdio,
     sync::atomic::{AtomicBool, AtomicU64, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -1535,6 +1535,146 @@ pub async fn media_open(path: String) -> Result<(), String> {
     platform::open_media(&playable_file(&root(), Path::new(&path))?).await
 }
 
+fn user_library_root() -> Result<PathBuf, String> {
+    Library::default_user_root()
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve the media library. {e}"))
+}
+
+fn confined(root: &Path, path: &Path) -> Result<PathBuf, String> {
+    if path.as_os_str().is_empty() || path.components().any(|c| matches!(c, Component::ParentDir)) {
+        return Err("Media path is outside the media library.".into());
+    }
+    let meta = fs::symlink_metadata(path).map_err(|_| "Media file moved or missing")?;
+    if meta.file_type().is_symlink() {
+        return Err("Media path is outside the media library.".into());
+    }
+    let resolved = path
+        .canonicalize()
+        .map_err(|_| "Media file moved or missing")?;
+    if !resolved.starts_with(root) {
+        return Err("Media path is outside the media library.".into());
+    }
+    Ok(resolved)
+}
+
+fn present(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok()
+}
+
+fn remove_files(files: &[PathBuf]) -> Result<(), String> {
+    for file in files {
+        if file.is_file() {
+            fs::remove_file(file).map_err(|e| format!("Cannot delete {}. {e}", file.display()))?;
+        }
+    }
+    Ok(())
+}
+
+fn remove_dirs(dirs: &[PathBuf]) -> Result<(), String> {
+    for dir in dirs {
+        if dir.is_dir() {
+            fs::remove_dir_all(dir).map_err(|e| format!("Cannot delete {}. {e}", dir.display()))?;
+        }
+    }
+    Ok(())
+}
+
+fn delete_asset(base: &Path, id: &str) -> Result<(), String> {
+    valid_id(id)?;
+    let root = user_library_root()?;
+    let mut files = Vec::new();
+    let mut dirs = Vec::new();
+    let song = songs::folder(base, id)?;
+    if present(&song) {
+        dirs.push(confined(&root, &song)?);
+    }
+    let receipt = base.join("assets").join(format!("{id}.json"));
+    if present(&receipt) {
+        if let Ok(asset) = serde_json::from_value::<Asset>(read(&receipt)?) {
+            let source = Path::new(&asset.path);
+            if present(source) {
+                files.push(confined(&root, source)?);
+            }
+        }
+        files.push(confined(&root, &receipt)?);
+        let backup = receipt.with_extension("bak");
+        if present(&backup) {
+            files.push(confined(&root, &backup)?);
+        }
+    }
+    if files.is_empty() && dirs.is_empty() {
+        return Err("This media asset is missing. Nothing was deleted.".into());
+    }
+    remove_files(&files)?;
+    remove_dirs(&dirs)
+}
+
+fn delete_job(base: &Path, id: &str) -> Result<(), String> {
+    valid_id(id)?;
+    let root = user_library_root()?;
+    let mut files = Vec::new();
+    let mut dirs = Vec::new();
+    let receipt = base.join("jobs").join(format!("{id}.json"));
+    if present(&receipt) {
+        if let Ok(job) = read(&receipt) {
+            if let Some(raw) = job["rawPath"].as_str() {
+                let raw = Path::new(raw);
+                if present(raw) {
+                    files.push(confined(&root, raw)?);
+                }
+            }
+        }
+        for ext in MEDIA_EXTENSIONS {
+            let leftover = base.join("assets").join(format!("{id}-source.{ext}"));
+            if present(&leftover) {
+                files.push(confined(&root, &leftover)?);
+            }
+        }
+        files.push(confined(&root, &receipt)?);
+        let backup = receipt.with_extension("bak");
+        if present(&backup) {
+            files.push(confined(&root, &backup)?);
+        }
+    }
+    let export = base.join("exports").join(id);
+    if present(&export) {
+        dirs.push(confined(&root, &export)?);
+    }
+    if files.is_empty() && dirs.is_empty() {
+        return Err("This media job is missing. Nothing was deleted.".into());
+    }
+    remove_files(&files)?;
+    remove_dirs(&dirs)
+}
+
+fn delete_export(base: &Path, id: &str) -> Result<(), String> {
+    valid_id(id)?;
+    let root = user_library_root()?;
+    let dir = base.join("exports").join(id);
+    if !present(&dir) {
+        return Err("This export folder is missing. Nothing was deleted.".into());
+    }
+    remove_dirs(&[confined(&root, &dir)?])
+}
+
+fn delete_media(base: &Path, id: &str, kind: &str) -> Result<(), String> {
+    match kind {
+        "asset" => delete_asset(base, id),
+        "job" => delete_job(base, id),
+        "export" => delete_export(base, id),
+        _ => Err("Choose asset, job, or export.".into()),
+    }
+}
+
+#[tauri::command]
+pub fn media_delete(id: String, kind: String) -> Result<(), String> {
+    let _gate = GATE
+        .try_lock()
+        .map_err(|_| "Another media operation is running")?;
+    delete_media(&root(), &id, &kind)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -1707,6 +1847,23 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn confined_paths_stay_inside_the_user_library() {
+        let root = std::env::temp_dir().join(format!("jam-media-jail-{}", id()));
+        fs::create_dir_all(&root).unwrap();
+        let inside = root.join("clip.wav");
+        fs::write(&inside, b"x").unwrap();
+        let root = root.canonicalize().unwrap();
+        assert!(confined(&root, &inside).is_ok());
+        assert!(confined(&root, Path::new("../secret"))
+            .unwrap_err()
+            .contains("outside"));
+        assert!(delete_media(&root, "../escape", "asset")
+            .unwrap_err()
+            .contains("Invalid media ID"));
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     #[tokio::test]
     async fn media_network_cancel_does_not_wait_for_provider_timeout() {

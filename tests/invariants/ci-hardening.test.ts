@@ -31,6 +31,38 @@ describe("CI hardening", () => {
     expect(workflow.match(/timeout-minutes:/g)?.length).toBe(5);
   });
 
+  it("ships CSP form-action none and only the two event capabilities", () => {
+    const conf = JSON.parse(
+      fs.readFileSync("src-tauri/tauri.conf.json", "utf8"),
+    ) as {
+      app: { security: { csp: string; devCsp: string } };
+    };
+    expect(conf.app.security.csp).toMatch(/form-action 'none'/);
+    expect(conf.app.security.devCsp).toMatch(/form-action 'none'/);
+
+    const files = fs
+      .readdirSync("src-tauri/capabilities")
+      .filter((name) => name.endsWith(".json"))
+      .sort();
+    expect(files).toEqual(["default.json"]);
+    const caps = JSON.parse(
+      fs.readFileSync("src-tauri/capabilities/default.json", "utf8"),
+    ) as { permissions: string[] };
+    expect(caps.permissions).toEqual([
+      "core:event:allow-listen",
+      "core:event:allow-unlisten",
+    ]);
+  });
+
+  it("registers the single-instance plugin without widening capabilities", () => {
+    expect(fs.readFileSync("src-tauri/Cargo.toml", "utf8")).toContain(
+      "tauri-plugin-single-instance",
+    );
+    expect(fs.readFileSync("src-tauri/src/lib.rs", "utf8")).toContain(
+      "single_instance",
+    );
+  });
+
   it("schedules dependency audits and configures all package ecosystems", () => {
     const audit = fs.readFileSync(
       ".github/workflows/dependency-audit.yml",
