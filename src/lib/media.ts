@@ -69,6 +69,19 @@ export async function loadReference(
   }));
 }
 
+/** Delete a jailed library asset, job receipt or leftover export. Fail loud. */
+export async function deleteLibraryMedia(
+  id: string,
+  kind: "asset" | "job" | "export",
+) {
+  const engine = useEngineStore.getState();
+  if (kind === "asset" && engine.telemetry.reference?.asset_id === id) {
+    await ipc.invoke("media_reference_unload");
+  }
+  await ipc.invoke("media_delete", { id, kind });
+  await useMedia.getState().refresh();
+}
+
 /** Catch a refused cancel so Film is not stuck busy without a next step. */
 export async function cancelFilmWork() {
   try {

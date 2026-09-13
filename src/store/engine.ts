@@ -149,6 +149,7 @@ export interface EngineState {
   loadLibrary: () => Promise<void>;
   reloadLibrary: () => Promise<void>;
   saveChart: (chart: Chart) => Promise<string | null>;
+  importChartFile: () => Promise<Chart | null>;
   deleteUserChart: (chartId: string) => Promise<void>;
   /** Load a chart object straight into the band without saving (editor preview). */
   playChartInline: (chart: Chart) => Promise<boolean>;
@@ -551,6 +552,20 @@ export const useEngineStore = create<EngineState>((set, get) => {
         await get().reloadLibrary();
       }
       return path;
+    },
+    importChartFile: async () => {
+      const path = await run("The chart picker", () =>
+        ipc.invoke<string | null>("chart_pick_file"),
+      );
+      if (!path) return null;
+      const chart = await run("The import chart", () =>
+        ipc.invoke<Chart>("charts_import_file", { path }),
+      );
+      if (chart !== null) {
+        get().notify("info", `This imported ${chart.name}.`);
+        await get().reloadLibrary();
+      }
+      return chart;
     },
     deleteUserChart: async (chartId) => {
       if (

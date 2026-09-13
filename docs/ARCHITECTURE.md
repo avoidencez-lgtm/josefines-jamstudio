@@ -4,8 +4,8 @@ This document is the contract between the milestones. Names here (crates, module
 
 The music-video extension is governed by [ADR 0008](adr/0008-music-video-workspace.md).
 `media_list`, `media_save`, `media_import`, `media_from_take`, `media_generate`,
-`media_refresh`, `media_tools`, `media_render`, `media_cancel` and `media_open` are
-additive IPC commands. They exchange JSON project/job/asset metadata and paths,
+`media_refresh`, `media_tools`, `media_render`, `media_cancel`, `media_open` and
+`media_delete` are additive IPC commands. They exchange JSON project/job/asset metadata and paths,
 never binary audio/video. Projects use schemaVersion 1 and revision conflict checks.
 The shared media catalog defines cloud and fixed-loopback ComfyUI protocols;
 all HTTP remains under `net/media.rs`. Tauri asset access is limited to media

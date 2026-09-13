@@ -584,9 +584,11 @@ Extend the synthetic codec fixture generator in `scripts/check-native-import.ps1
 and its native regression together, with a stated timing/signal tolerance.
 Never mask an unsupported M4A edit list by discarding its priming metadata.
 
-The native picker returns one local path or null via `song_pick_file`; it opens
-no window in headless mode. Native file-drop events and pasted paths use the
-same Songs import callback and `media_import` validation. Do not add JS file
+The native picker returns one local path or null via `song_pick_file` or
+`chart_pick_file`; it opens no window in headless mode. Native file-drop events
+and pasted paths use the same Songs import callback and `media_import`
+validation. Chart JSON files go through `charts_import_file`. Do not add JS file
 reads, audio playback or dialog/filesystem permissions to implement an import
-button. The existing `tests/invariants/practice-copy.test.tsx` fixture covers the
+button. `media_delete` removes a jailed asset, job receipt or leftover
+`exports/<id>/` folder. The existing `tests/invariants/practice-copy.test.tsx` fixture covers the
 Songs controls; `src-tauri/tests/ipc_rig_media.rs` covers persistence and reload.
