@@ -1,6 +1,6 @@
 //! Lyria RealTime session and audio-engine bridge.
 use crate::net::lyria::{self, Config, LiveSocket, Machine, Status};
-use crate::AppState;
+use crate::{keys::SecretStore, net::CostLog, AppState};
 use parking_lot::Mutex;
 use serde_json::Value;
 use std::{sync::Arc, time::Instant};
@@ -10,6 +10,14 @@ use tokio::sync::mpsc;
 enum Control {
     Send(Vec<Value>),
     Stop,
+}
+
+struct StreamState<R: Runtime> {
+    app: AppHandle<R>,
+    session: Arc<Mutex<Session>>,
+    engine: Arc<Mutex<jam_audio::engine::AudioEngine>>,
+    secret_store: Arc<dyn SecretStore>,
+    cost_log: Arc<CostLog>,
 }
 
 #[derive(Default)]
@@ -110,49 +118,104 @@ impl Session {
     pub fn config(&self) -> Option<Config> {
         self.machine.as_ref().map(|m| m.config.clone())
     }
+
+    fn reconnect_config(&self, generation: u64) -> Option<Config> {
+        (generation == self.generation)
+            .then(|| self.config())
+            .flatten()
+    }
 }
 
 fn emit<R: Runtime>(app: &AppHandle<R>, status: &Status) {
     let _ = app.emit("lyria:state", status);
 }
 
+async fn connect<R: Runtime>(
+    config: Config,
+    key: &str,
+    app: &AppHandle<R>,
+    cost_log: &CostLog,
+) -> Result<(LiveSocket, Machine), String> {
+    let started = Instant::now();
+    let connected = LiveSocket::connect(config, key).await;
+    let entry = crate::net::CostEntry {
+        at_ms: crate::net::now_ms(),
+        provider: "gemini".into(),
+        method: "WEBSOCKET".into(),
+        path: lyria::USAGE_PATH.into(),
+        status: if connected.is_ok() { 101 } else { 0 },
+        duration_ms: started.elapsed().as_millis() as u64,
+        model: Some(lyria::MODEL.into()),
+        error: connected.as_ref().err().cloned(),
+        ..crate::net::CostEntry::default()
+    };
+    if let Err(error) = cost_log.append(&entry) {
+        let _ = app.emit(
+            "app:error",
+            format!("Could not save the usage log. {error}"),
+        );
+    }
+    crate::emit_cost_state(app, cost_log);
+    connected
+}
+
 async fn stream<R: Runtime>(
     mut socket: LiveSocket,
     mut controls: mpsc::UnboundedReceiver<Control>,
     generation: u64,
-    app: AppHandle<R>,
-    session: Arc<Mutex<Session>>,
-    engine: Arc<Mutex<jam_audio::engine::AudioEngine>>,
+    state: StreamState<R>,
 ) {
-    let result = loop {
-        tokio::select! {
+    let mut reconnect = true;
+    let result = 'stream: loop {
+        let failure = tokio::select! {
             control = controls.recv() => match control {
                 Some(Control::Send(messages)) => {
                     if let Err(error) = socket.send_all(&messages).await {
-                        break Err(error);
+                        error
+                    } else {
+                        continue;
                     }
                 }
                 Some(Control::Stop) | None => {
                     socket.stop().await;
-                    break Ok(());
+                    break 'stream Ok(());
                 }
             },
             audio = socket.next_audio() => match audio {
                 Ok(samples) => {
-                    if let Err(error) = engine.lock().lyria_push_pcm16(&samples) {
-                        break Err(error);
+                    if let Err(error) = state.engine.lock().lyria_push_pcm16(&samples) {
+                        break 'stream Err(error);
                     }
+                    continue;
                 }
-                Err(error) => break Err(error),
+                Err(error) => error,
             }
+        };
+        if !reconnect || !lyria::should_reconnect(&failure) {
+            break Err(failure);
+        }
+        reconnect = false;
+        tracing::warn!("Lyria connection ended; reconnecting once: {failure}");
+        let Some(config) = state.session.lock().reconnect_config(generation) else {
+            break Ok(());
+        };
+        let key = match state.secret_store.require("gemini") {
+            Ok(key) => key,
+            Err(error) => break Err(error),
+        };
+        match connect(config, &key, &state.app, &state.cost_log).await {
+            Ok((next, _)) => socket = next,
+            Err(error) => break Err(error),
         }
     };
-    if session.lock().finish(generation) {
-        engine.lock().lyria_stop();
-        emit(&app, &idle());
+    if state.session.lock().finish(generation) {
+        state.engine.lock().lyria_stop();
+        emit(&state.app, &idle());
         if let Err(error) = result {
             tracing::warn!("Lyria session ended: {error}");
-            let _ = app.emit("app:error", format!("Lyria stopped. {error}"));
+            let _ = state
+                .app
+                .emit("app:error", format!("Lyria stopped. {error}"));
         }
     }
 }
@@ -178,27 +241,7 @@ pub async fn lyria_start<R: Runtime>(
     let generation = state.lyria.lock().reserve();
 
     let (machine, audio, live) = if let Some(key) = key {
-        let started = Instant::now();
-        let connected = LiveSocket::connect(config, &key).await;
-        let entry = crate::net::CostEntry {
-            at_ms: crate::net::now_ms(),
-            provider: "gemini".into(),
-            method: "WEBSOCKET".into(),
-            path: lyria::USAGE_PATH.into(),
-            status: if connected.is_ok() { 101 } else { 0 },
-            duration_ms: started.elapsed().as_millis() as u64,
-            model: Some(lyria::MODEL.into()),
-            error: connected.as_ref().err().cloned(),
-            ..crate::net::CostEntry::default()
-        };
-        if let Err(error) = state.cost_log.append(&entry) {
-            let _ = app.emit(
-                "app:error",
-                format!("Could not save the usage log. {error}"),
-            );
-        }
-        crate::emit_cost_state(&app, &state.cost_log);
-        let (socket, machine) = connected?;
+        let (socket, machine) = connect(config, &key, &app, &state.cost_log).await?;
         (machine, None, Some(socket))
     } else {
         let (machine, audio) = Session::fixture(config)?;
@@ -233,9 +276,13 @@ pub async fn lyria_start<R: Runtime>(
             socket,
             receiver,
             generation,
-            app,
-            Arc::clone(&state.lyria),
-            Arc::clone(&state.engine),
+            StreamState {
+                app,
+                session: Arc::clone(&state.lyria),
+                engine: Arc::clone(&state.engine),
+                secret_store: Arc::clone(&state.secret_store),
+                cost_log: Arc::clone(&state.cost_log),
+            },
         ));
     }
     Ok(status)
@@ -291,5 +338,20 @@ mod tests {
         assert!(session
             .commit(second, Machine::from_fixture().unwrap(), None)
             .is_err());
+    }
+
+    #[test]
+    fn reconnect_uses_only_the_active_generation_config() {
+        let mut session = Session::default();
+        let generation = session.reserve();
+        let mut machine = Machine::from_fixture().unwrap();
+        machine.config.bpm = 110.0;
+        session.commit(generation, machine, None).unwrap();
+        assert_eq!(session.reconnect_config(generation).unwrap().bpm, 110.0);
+        assert!(session
+            .reconnect_config(generation.wrapping_add(1))
+            .is_none());
+        session.stop();
+        assert!(session.reconnect_config(generation).is_none());
     }
 }

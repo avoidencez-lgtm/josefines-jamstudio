@@ -205,6 +205,17 @@ fn socket_error(error: tokio_tungstenite::tungstenite::Error) -> String {
     }
 }
 
+pub fn should_reconnect(error: &str) -> bool {
+    matches!(
+        error,
+        "WebSocket closed"
+            | "WebSocket receive failed"
+            | "Pong failed"
+            | "WebSocket send timed out"
+            | "WebSocket send failed"
+    )
+}
+
 async fn send(socket: &mut Socket, value: &Value) -> Result<(), String> {
     timeout(
         Duration::from_secs(5),
@@ -502,6 +513,10 @@ mod tests {
             "WebSocket handshake rejected with HTTP 403"
         );
         assert!(!USAGE_PATH.contains('?'));
+        assert!(should_reconnect("WebSocket closed"));
+        assert!(!should_reconnect(
+            "Provider filtered the Lyria prompt; raw text is not logged"
+        ));
     }
 
     #[test]
