@@ -997,17 +997,27 @@ mod tests {
         output_active.store(true, Ordering::Release);
         let mut heard = vec![0.0; 441 * 2];
         let mut nonzero = 0;
-        for _ in 0..100 {
+        // The worker fills a bounded ring; a loaded scheduler can starve the
+        // first device pulls with zeros. Wait on rendered/nonzero instead of a
+        // fixed 100-pull wall clock (Windows rust job flake).
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline
+            && (rendered.load(Ordering::Relaxed) < 48_000 || nonzero <= 80_000)
+        {
             output(&mut heard);
             nonzero += heard.iter().filter(|sample| sample.abs() > 0.2).count();
             thread::sleep(Duration::from_millis(1));
         }
         running.store(false, Ordering::SeqCst);
         output_thread.join().unwrap();
-        assert!(rendered.load(Ordering::Relaxed) >= 48_000);
+        let rendered_frames = rendered.load(Ordering::Relaxed);
+        assert!(
+            rendered_frames >= 48_000,
+            "resampled output should render a second of source, got {rendered_frames}"
+        );
         assert!(
             nonzero > 80_000,
-            "resampled output should contain the source"
+            "resampled output should contain the source, nonzero={nonzero}"
         );
 
         let running = Arc::new(AtomicBool::new(true));
