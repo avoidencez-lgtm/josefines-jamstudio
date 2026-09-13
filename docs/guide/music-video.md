@@ -25,7 +25,7 @@
 6. Run **Refresh this job.** in the generation library until a queued result is ready.
    Refresh never submits a second generation. Pick **Use this for this shot.** Task IDs
    survive restarts. Unknown interrupted requests need a provider-history check.
-7. **Save video**, then **Render music video** when every shot has footage and the
+7. **Save this project**, then **Render this music video** when every shot has footage and the
    timeline matches the soundtrack. Watch a silent preview inside Jamstudio;
    **Play film with sound** opens the native player. The exported MP4 and project
    snapshot live under `~/JosefinesJamstudio/music-videos/exports/`.
