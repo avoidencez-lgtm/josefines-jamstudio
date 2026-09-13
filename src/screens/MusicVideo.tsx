@@ -15,6 +15,7 @@ import {
   cancelFilmWork,
   clampGenerationSeconds,
   completeGeneratedAudio,
+  deleteLibraryMedia,
   fitShots,
   maxClipTrimStart,
   newShot,
@@ -1306,6 +1307,23 @@ export function MusicVideo({ audioOnly = false }: { audioOnly?: boolean }) {
                         Listen to this.
                       </Button>
                     )}
+                  <Button
+                    variant="danger"
+                    disabled={locked || isPreview}
+                    onClick={() =>
+                      work("Deleting this asset.", async () => {
+                        if (
+                          j.assetId &&
+                          m.assets.some((asset) => asset.id === j.assetId)
+                        ) {
+                          await deleteLibraryMedia(j.assetId, "asset");
+                        }
+                        await deleteLibraryMedia(j.id, "job");
+                      })
+                    }
+                  >
+                    Delete this asset.
+                  </Button>
                 </div>
                 {j.lyrics && (
                   <details>

@@ -15,7 +15,12 @@ import { SongAnalysis } from "../components/SongAnalysis";
 import { StemPreparation } from "../components/Stems";
 import { WorkspaceHeader } from "../components/Workspace";
 import { ipc, isPreview } from "../ipc/client";
-import { type MediaAsset, loadReference, useMedia } from "../lib/media";
+import {
+  type MediaAsset,
+  deleteLibraryMedia,
+  loadReference,
+  useMedia,
+} from "../lib/media";
 import { readAnalysisStatus } from "../lib/songAnalysis";
 import { useEngineStore } from "../store/engine";
 
@@ -373,6 +378,19 @@ export function Songs() {
                   }}
                 >
                   <FilmSlate size={18} aria-hidden="true" /> Use this in Film.
+                </Button>
+                <Button
+                  variant="danger"
+                  disabled={locked || isPreview}
+                  onClick={() =>
+                    void m.work("Deleting this asset.", async () => {
+                      const id = song.id;
+                      await deleteLibraryMedia(id, "asset");
+                      setSelected((current) => (current === id ? "" : current));
+                    })
+                  }
+                >
+                  Delete this asset.
                 </Button>
               </div>
               <SongAnalysis

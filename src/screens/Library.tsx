@@ -56,6 +56,7 @@ export const Library: React.FC = () => {
     bandSetStyle,
     playChartInline,
     saveChart,
+    importChartFile,
     deleteUserChart,
     reloadLibrary,
     transportSeekBar,
@@ -80,6 +81,7 @@ export const Library: React.FC = () => {
       bandSetStyle: s.bandSetStyle,
       playChartInline: s.playChartInline,
       saveChart: s.saveChart,
+      importChartFile: s.importChartFile,
       deleteUserChart: s.deleteUserChart,
       reloadLibrary: s.reloadLibrary,
       transportSeekBar: s.transportSeekBar,
@@ -322,6 +324,18 @@ export const Library: React.FC = () => {
               </Button>
               <Button size="sm" variant="ghost" onClick={() => reloadLibrary()}>
                 Reload this folder.
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isPreview}
+                onClick={() => {
+                  void importChartFile().then((chart) => {
+                    if (chart) openChart(chart);
+                  });
+                }}
+              >
+                Import a chart file.
               </Button>
             </div>
             {libraryInfo && (
