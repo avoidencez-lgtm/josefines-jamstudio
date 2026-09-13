@@ -28,7 +28,8 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm lint; corepack pnpm typecheck; corepack pnpm test; corepack pnpm licenses:check
 cargo fmt --all -- --check; cargo clippy --workspace --all-targets -- -D warnings
 $env:JAM_HEADLESS = "1"; cargo test --workspace; cargo deny check
-$env:JAM_HEADLESS = "1"; $env:JAM_FAKE_INPUT = "tests/fixtures/audio/guitar-e-blues-120.wav"; corepack pnpm tauri dev
+$env:JAM_HEADLESS = "1"; corepack pnpm tauri dev
+# Optional guitar input: point JAM_FAKE_INPUT at a local WAV. tests/fixtures/audio/*.wav is gitignored and is not downloaded by assets_ensure; a missing path falls back to a 440 Hz sine.
 corepack pnpm tauri build --debug --no-bundle; $env:JAM_HEADLESS = "1"; $env:JAM_SMOKE_SECONDS = "25"; .\target\debug\src-tauri.exe   # smoke: exit 0 = frontend handshake completed
 ```
 
