@@ -318,8 +318,11 @@ stereo queue on the render worker. Credential-bearing URLs and provider bodies
 never enter errors or logs; each connection attempt records its model, status
 and duration against a query-free path. `JAM_LYRIA_FIXTURE=1` exercises the same
 protocol and queue without network access. The queue pre-fills for one second, targets
-500 ms and fades over 250 ms around starvation. Reconnect, a session cap,
-count-in click, spend meter and the live 10-minute acceptance remain unfinished.
+500 ms and fades over 250 ms around starvation. A closed or failed socket reconnects
+once with the latest config and a freshly read key; protocol and filtered-prompt
+errors stop without retrying. Each connection attempt has its own usage-log row.
+A provider-tested session cap, count-in click, spend meter and the live 10-minute
+acceptance remain unfinished.
 
 ### 6.5 Track generation and analysis
 
