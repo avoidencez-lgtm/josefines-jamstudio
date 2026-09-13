@@ -22,7 +22,7 @@ it("shares real command outcomes across rooms without erasing another draft", as
     inputValue: "Set tempo to 100",
   });
   const reply = await handleJoQuery("Set tempo to 100");
-  expect(reply).toContain("100");
+  expect(reply).toContain("Tempo now 100");
   expect(ipc.invoke).toHaveBeenCalledWith("transport_set_tempo", { bpm: 100 });
   expect(useJoConversation.getState().inputValue).toBe("");
   useJoConversation.setState({ inputValue: "An unfinished song idea" });
@@ -160,6 +160,26 @@ it("collapses a discarded proposal so Anthropic never sees two assistant turns",
   expect(roles).toEqual(["user", "assistant", "user"]);
   for (let i = 1; i < roles.length; i++)
     expect(roles[i]).not.toBe(roles[i - 1]);
+});
+
+it("shows the engine error inline in the Jo transcript", async () => {
+  vi.spyOn(ipc, "invoke").mockRejectedValue(
+    "Save the take before changing the band.",
+  );
+  useEngineStore.setState({ isPreview: true });
+  useJoConversation.setState({
+    busy: false,
+    messages: [],
+    pending: null,
+    inputValue: "Set tempo to 100",
+  });
+  await handleJoQuery("Set tempo to 100");
+  const last = useJoConversation.getState().messages.at(-1);
+  expect(last?.sender).toBe("jo");
+  expect(last?.text).toMatch(/Save the take before changing the band/);
+  expect(last?.toolResults?.join(" ")).toMatch(
+    /Save the take before changing the band/,
+  );
 });
 
 it("keeps song edits behind review and ignores a cancelled request before dispatch", async () => {

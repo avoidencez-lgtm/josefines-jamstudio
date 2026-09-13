@@ -24,7 +24,11 @@ import {
   sectionBars,
   useWriting,
 } from "../../src/lib/originals";
-import { cueSetlistItem, saveRoomPreference } from "../../src/lib/roomActions";
+import {
+  cueNextSetlistItem,
+  cueSetlistItem,
+  saveRoomPreference,
+} from "../../src/lib/roomActions";
 import { setlistCue, setlistSchema } from "../../src/lib/roomTools";
 import {
   arrangedBars,
@@ -885,6 +889,35 @@ it("a setlist entry with its own groove is saved with the settings and Cue sets 
     current_section: "Intro",
   });
   await e.transportStop();
+});
+
+it("Cue next prepares the following setlist entry without starting playback", async () => {
+  await saveRoomPreference("rehearsalSetlist", [
+    { id: "opener", chartId: "blues-12-bar", bpm: 110, countIn: 0 },
+    {
+      id: "closer",
+      chartId: "rock-song-form",
+      styleId: "funk-16",
+      bpm: 132,
+      countIn: 1,
+    },
+  ]);
+  await cueSetlistItem({
+    id: "opener",
+    chartId: "blues-12-bar",
+    bpm: 110,
+    countIn: 0,
+  });
+  expect(useEngineStore.getState().currentChart?.id).toBe("blues-12-bar");
+  await cueNextSetlistItem();
+  engine.tick(FRAME);
+  expect(useEngineStore.getState().currentChart?.id).toBe("rock-song-form");
+  expect(telemetry().transport).toMatchObject({
+    state: "stopped",
+    bpm: 132,
+    count_in_bars: 1,
+    loop_enabled: false,
+  });
 });
 
 it("Cue refuses a missing chart, a groove in another meter, an invalid entry and a cue during recording, leaving the band as it plays", async () => {

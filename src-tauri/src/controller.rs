@@ -31,7 +31,16 @@ fn validate(doc: &Value) -> Result<(), String> {
         let p: jam_rig::controller::PedalPress =
             serde_json::from_value(b["press"].clone()).map_err(|e| e.to_string())?;
         if ![
-            "keep", "record", "play", "loop", "next", "version", "voice", "ramp",
+            "keep",
+            "record",
+            "play",
+            "loop",
+            "next",
+            "version",
+            "voice",
+            "ramp",
+            "cueNext",
+            "exitLoop",
         ]
         .contains(&action)
             || !["program", "cc", "note"].contains(&p.kind.as_str())
@@ -93,6 +102,8 @@ mod tests {
         }
         assert!(validate(&json!({"schemaVersion":1,"bindings":[],"ccToggle":"false"})).is_err());
         assert!(validate(&json!({"schemaVersion":1,"bindings":[{"action":"ramp","press":{"kind":"note","channel":1,"number":60}}]})).is_ok());
+        assert!(validate(&json!({"schemaVersion":1,"bindings":[{"action":"cueNext","press":{"kind":"cc","channel":1,"number":20}}]})).is_ok());
+        assert!(validate(&json!({"schemaVersion":1,"bindings":[{"action":"exitLoop","press":{"kind":"note","channel":1,"number":48}}]})).is_ok());
         let b = json!({"action":"keep","press":{"kind":"program","channel":1,"number":12}});
         assert!(validate(&json!({"schemaVersion":1,"bindings":[b.clone()]})).is_ok());
         assert!(validate(&json!({"schemaVersion":1,"bindings":[b.clone(),b]})).is_err());

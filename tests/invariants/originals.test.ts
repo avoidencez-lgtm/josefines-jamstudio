@@ -52,6 +52,37 @@ describe("songwriting workflow", () => {
       useController.setState({ enabled: false, learning: null });
     }
   });
+  it("an enabled Exit loop pedal turns the transport loop off", async () => {
+    const previous = { ...ipc };
+    const calls: Array<{ command: string; args?: Record<string, unknown> }> =
+      [];
+    __setIpcForTests({
+      invoke: async <T>(command: string, args?: Record<string, unknown>) => {
+        calls.push({ command, args });
+        return null as T;
+      },
+    });
+    try {
+      const press = { kind: "cc" as const, channel: 1, number: 21 };
+      useController.setState({
+        config: {
+          schemaVersion: 1,
+          bindings: [{ action: "exitLoop", press }],
+        },
+        enabled: true,
+        learning: null,
+        busy: false,
+      });
+      await useController.getState().receive(press);
+      expect(calls).toContainEqual({
+        command: "transport_set_loop",
+        args: { startBar: 1, endBar: 5, enabled: false },
+      });
+    } finally {
+      __setIpcForTests(previous);
+      useController.setState({ enabled: false, learning: null });
+    }
+  });
   it("pedal learn reassigns a press instead of firing two actions; repeated form entries remain reachable", () => {
     const press = { kind: "program" as const, channel: 1, number: 12 };
     const initial = { schemaVersion: 1, bindings: [], custom: "keep" };
@@ -62,6 +93,14 @@ describe("songwriting workflow", () => {
     );
     expect(config.bindings).toEqual([{ action: "record", press }]);
     expect(config.custom).toBe("keep");
+    const stagePress = { kind: "cc" as const, channel: 1, number: 20 };
+    expect(
+      assignPedal(
+        assignPedal({ schemaVersion: 1, bindings: [] }, "cueNext", stagePress),
+        "exitLoop",
+        { kind: "note", channel: 1, number: 48 },
+      ).bindings.map((b) => b.action),
+    ).toEqual(["cueNext", "exitLoop"]);
     const chart = newOriginal().body.chart;
     chart.arrangement = [
       { sectionId: "verse", repeats: 2 },
