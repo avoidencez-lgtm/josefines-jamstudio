@@ -3,6 +3,7 @@ import { useShallow } from "zustand/shallow";
 import { Button } from "../components/Button";
 import { FinishingDesk } from "../components/FinishingDesk";
 import { FootControls } from "../components/FootControls";
+import { NumberField } from "../components/NumberField";
 import { SongLab } from "../components/SongLab";
 import {
   ArrangementDesk,
@@ -13,8 +14,8 @@ import {
 import { ipc, isPreview } from "../ipc/client";
 import { transposeChart } from "../lib/chart/transpose";
 import { WRITING_HELP } from "../lib/help";
-import { committedNumber } from "../lib/numberField";
 import { PARTS, changeGroove, fitTempo, useWriting } from "../lib/originals";
+import { stylesInMeter } from "../lib/styles";
 import { useEngineStore } from "../store/engine";
 import "./originals.css";
 
@@ -266,7 +267,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                 min={40}
                 max={240}
                 step={0.01}
-                change={(v) =>
+                onChange={(v) =>
                   w.edit((b) => {
                     b.chart.defaultBpm = v;
                   })
@@ -425,16 +426,13 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                       }}
                     >
                       <option value="">Change unlocked parts.</option>
-                      {styles
-                        .filter(
-                          (s) =>
-                            s.feel.timeSig[0] === 4 && s.feel.timeSig[1] === 4,
-                        )
-                        .map((s) => (
+                      {stylesInMeter(styles, song.body.chart.timeSig).map(
+                        (s) => (
                           <option key={s.id} value={s.id}>
                             {s.name}
                           </option>
-                        ))}
+                        ),
+                      )}
                     </select>
                   </label>
                   <NumberField
@@ -442,7 +440,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     value={Math.round(band.swing * 100)}
                     min={50}
                     max={75}
-                    change={(v) =>
+                    onChange={(v) =>
                       w.edit((b) => {
                         b.sections[section.id].swing = v / 100;
                       })
@@ -466,17 +464,15 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                               })
                             }
                           >
-                            {styles
-                              .filter(
-                                (s) =>
-                                  s.feel.timeSig[0] === 4 &&
-                                  s.feel.timeSig[1] === 4,
-                              )
-                              .map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                </option>
-                              ))}
+                            {stylesInMeter(
+                              styles,
+                              song.body.chart.timeSig,
+                              p.styleId,
+                            ).map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
                           </select>
                         </label>
                         <label>
@@ -602,7 +598,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                   value={fitBars}
                   min={1}
                   max={32}
-                  change={setFitBars}
+                  onChange={setFitBars}
                 />
               </div>
               {song.body.clips.length === 0 && (
@@ -630,7 +626,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     min={0}
                     max={c.trimEnd - 0.001}
                     step={0.001}
-                    change={(v) =>
+                    onChange={(v) =>
                       w.edit((b) => {
                         b.clips[i].trimStart = v;
                       })
@@ -645,7 +641,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                       c.trimEnd
                     }
                     step={0.001}
-                    change={(v) =>
+                    onChange={(v) =>
                       w.edit((b) => {
                         b.clips[i].trimEnd = v;
                       })
@@ -656,7 +652,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     value={c.startBar}
                     min={1}
                     max={256}
-                    change={(v) =>
+                    onChange={(v) =>
                       w.edit((b) => {
                         b.clips[i].startBar = v;
                       })
@@ -667,7 +663,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     value={c.repeats}
                     min={1}
                     max={64}
-                    change={(v) =>
+                    onChange={(v) =>
                       w.edit((b) => {
                         b.clips[i].repeats = v;
                       })
@@ -678,7 +674,7 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
                     value={Math.round(c.gain * 100)}
                     min={0}
                     max={200}
-                    change={(v) =>
+                    onChange={(v) =>
                       w.edit((b) => {
                         b.clips[i].gain = v / 100;
                       })
@@ -899,46 +895,5 @@ export function Originals({ onHelp }: { onHelp: (topic: string) => void }) {
         ))}
       </section>
     </div>
-  );
-}
-
-function NumberField({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  change,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  change: (v: number) => void;
-}) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-  const commit = () => {
-    const next = committedNumber(draft, value, min, max, step);
-    setDraft(String(next));
-    if (next !== value) change(next);
-  };
-  return (
-    <label>
-      {label}
-      <input
-        type="number"
-        value={draft}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-        }}
-      />
-    </label>
   );
 }

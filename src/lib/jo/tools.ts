@@ -336,6 +336,17 @@ export const JO_TOOLS: JoToolDeclaration[] = [
     },
   },
   {
+    name: "cue_next",
+    description:
+      "Cue the next rehearsal setlist entry without starting playback.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "exit_loop",
+    description: "Turn off the current bar loop and return to the full form.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
     name: "record_take",
     description: "Start or stop recording a take.",
     parameters: {

@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import chart from "../../charts/blues-12-bar.json";
 import type { Chart } from "../../src/ipc/contract";
-import { sectionPassages } from "../../src/lib/chart/passages";
+import { sectionCue, sectionPassages } from "../../src/lib/chart/passages";
 import {
   discardPendingProposal,
   joNeedsReview,
@@ -328,11 +328,51 @@ describe("Studio workspaces", () => {
       "utf8",
     );
     expect(stage).toContain("stylesInMeter");
+    expect(stage).toContain("sectionCue");
     expect(stage).not.toMatch(/styles\.map\(\(s\) =>/);
     const library = fs.readFileSync(
       path.join("src", "screens", "Library.tsx"),
       "utf8",
     );
     expect(library).toContain("stylesInMeter");
+    const originals = fs.readFileSync(
+      path.join("src", "screens", "Originals.tsx"),
+      "utf8",
+    );
+    expect(originals).toContain("stylesInMeter");
+    expect(originals).not.toMatch(/timeSig\[0\] === 4/);
+    const setlist = fs.readFileSync(
+      path.join("src", "components", "tools", "SetlistTool.tsx"),
+      "utf8",
+    );
+    expect(setlist).toContain("stylesInMeter");
+    expect(
+      fs.readFileSync(path.join("src", "screens", "Stage.tsx"), "utf8"),
+    ).toContain('from "../components/NumberField"');
+    expect(originals).toContain('from "../components/NumberField"');
+  });
+  it("names the next section and the bars until it from the arranged form", () => {
+    const first = chart.sections[0];
+    const form = {
+      ...chart,
+      sections: [first, { ...first, id: "bridge", name: "Bridge" }],
+      arrangement: [
+        { sectionId: first.id, repeats: 1 },
+        { sectionId: "bridge", repeats: 1 },
+      ],
+    } as Chart;
+    const firstLen = first.bars.length;
+    expect(sectionCue(form, 1)).toMatchObject({
+      current: first.name,
+      next: "Bridge",
+      barsUntil: firstLen,
+    });
+    expect(sectionCue(form, firstLen)).toMatchObject({
+      current: first.name,
+      next: "Bridge",
+      barsUntil: 1,
+    });
+    expect(sectionCue(form, firstLen + 1).current).toBe("Bridge");
+    expect(sectionCue(form, firstLen + 1).next).toBeNull();
   });
 });

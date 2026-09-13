@@ -3,6 +3,7 @@ import { useShallow } from "zustand/shallow";
 import { isPreview } from "../../ipc/client";
 import { cueSetlistItem, saveRoomPreference } from "../../lib/roomActions";
 import { type Setlist, setlistSchema } from "../../lib/roomTools";
+import { stylesInMeter } from "../../lib/styles";
 import { useEngineStore } from "../../store/engine";
 import { Button } from "../Button";
 import { Field, Status, useTool } from "./shared";
@@ -26,9 +27,9 @@ export default function SetlistTool() {
   const list = parsed.success ? parsed.data : [];
   const chart = e.charts.find((c) => c.id === chartId);
   // Only grooves in the chart's meter can play it; the engine refuses the rest anyway.
-  const grooves = e.styles.filter(
-    (s) => !chart || s.feel.timeSig.join("/") === chart.timeSig.join("/"),
-  );
+  const grooves = chart
+    ? stylesInMeter(e.styles, chart.timeSig, styleId)
+    : e.styles;
   const grooveName = (id?: string) =>
     id ? (e.styles.find((s) => s.id === id)?.name ?? "missing groove") : null;
   const save = (next: Setlist) =>

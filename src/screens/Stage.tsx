@@ -7,6 +7,7 @@ import { ChordShapes } from "../components/ChordShapes";
 import { ChordStrip } from "../components/ChordStrip";
 import { JoStage } from "../components/JoStage";
 import { Meter } from "../components/Meter";
+import { NumberField } from "../components/NumberField";
 import { Panel } from "../components/Panel";
 import { ReferencePlayer } from "../components/ReferencePlayer";
 import { SoloHelper } from "../components/SoloHelper";
@@ -16,13 +17,12 @@ import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import { ipc } from "../ipc/client";
 import type { PackStatus } from "../ipc/contract";
 import { keyName } from "../lib/chart/notes";
-import { sectionPassages } from "../lib/chart/passages";
+import { sectionCue, sectionPassages } from "../lib/chart/passages";
 import {
   lastMeterFps,
   lastPlayheadFps,
   transportClockLive,
 } from "../lib/meterFps";
-import { committedNumber } from "../lib/numberField";
 import { openSettings } from "../lib/settingsView";
 import { stylesInMeter } from "../lib/styles";
 import { useEngineStore } from "../store/engine";
@@ -145,11 +145,12 @@ export const Stage: React.FC = () => {
   const band = telemetry.band;
   const grooves = stylesInMeter(
     styles,
-    transport.time_signature,
+    currentChart?.timeSig ?? transport.time_signature,
     band.pending_style_id ?? band.style_id,
   );
   const isCountingIn = transport.state === "counting_in";
   const clockLive = transportClockLive(transport.state);
+  const form = sectionCue(currentChart, isCountingIn ? 0 : transport.bar);
 
   const currentStyle = styles.find((s) => s.id === band.style_id);
   const bpmRange = currentStyle?.feel.bpmRange;
@@ -448,6 +449,7 @@ export const Stage: React.FC = () => {
             {isCountingIn ? (
               <BigReadout
                 value={`${transport.bar} · ${transport.beat}`}
+                subValue={`Count-in is ${transport.count_in_bars} bar${transport.count_in_bars === 1 ? "" : "s"}. This is bar ${transport.bar} of ${transport.count_in_bars}.`}
                 label="This is the count-in. Get ready."
                 kind="tempo"
                 highlight
@@ -455,7 +457,12 @@ export const Stage: React.FC = () => {
             ) : (
               <BigReadout
                 value={band.current_chord || "This is a rest or no chord."}
-                subValue={band.next_chord ? `Next is ${band.next_chord}` : ""}
+                subValue={[
+                  band.next_chord ? `Next is ${band.next_chord}` : "",
+                  form.next ? `Next section is ${form.next}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(". ")}
                 label={
                   band.is_stopped
                     ? "The band is stopped. Press S to resume."
@@ -695,6 +702,11 @@ export const Stage: React.FC = () => {
               {band.current_section
                 ? `The form is ${band.current_section}.`
                 : "The form has no current section."}
+              {form.next && form.barsUntil != null
+                ? form.barsUntil === 1
+                  ? ` The next section is ${form.next} at the next bar.`
+                  : ` There are ${form.barsUntil} bars until ${form.next}.`
+                : ""}
             </div>
             <div className="text-[10px] font-mono text-[var(--fg-2)]">
               Click a bar to jump. Shift-click to set the loop. 1–9 jump to a
@@ -775,6 +787,8 @@ export const Stage: React.FC = () => {
               max={300}
               onChange={(v) => setTempoTrainer({ startBpm: v })}
               suffix="BPM"
+              className="flex items-center gap-1.5 text-xs font-mono text-[var(--fg-2)]"
+              inputClassName="w-16 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded-[var(--radius-m)] text-xs font-mono tabular-nums"
             />
             <NumberField
               label="Choose the target tempo."
@@ -783,6 +797,8 @@ export const Stage: React.FC = () => {
               max={300}
               onChange={(v) => setTempoTrainer({ targetBpm: v })}
               suffix="BPM"
+              className="flex items-center gap-1.5 text-xs font-mono text-[var(--fg-2)]"
+              inputClassName="w-16 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded-[var(--radius-m)] text-xs font-mono tabular-nums"
             />
             <NumberField
               label="Choose the tempo step."
@@ -791,6 +807,8 @@ export const Stage: React.FC = () => {
               max={20}
               onChange={(v) => setTempoTrainer({ stepBpm: v })}
               suffix="BPM"
+              className="flex items-center gap-1.5 text-xs font-mono text-[var(--fg-2)]"
+              inputClassName="w-16 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded-[var(--radius-m)] text-xs font-mono tabular-nums"
             />
             <NumberField
               label="Change every this many bars."
@@ -799,6 +817,8 @@ export const Stage: React.FC = () => {
               max={32}
               onChange={(v) => setTempoTrainer({ everyBars: v })}
               suffix="bars"
+              className="flex items-center gap-1.5 text-xs font-mono text-[var(--fg-2)]"
+              inputClassName="w-16 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded-[var(--radius-m)] text-xs font-mono tabular-nums"
             />
             <span className="text-[10px] font-mono text-[var(--fg-2)] max-w-xs">
               Press play. The band starts at the start tempo and creeps toward
@@ -872,40 +892,5 @@ const CueButton: React.FC<{
     >
       {label}
     </Button>
-  );
-};
-
-const NumberField: React.FC<{
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  suffix?: string;
-  onChange: (v: number) => void;
-}> = ({ label, value, min, max, suffix, onChange }) => {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-  const commit = () => {
-    const next = committedNumber(draft, value, min, max);
-    setDraft(String(next));
-    if (next !== value) onChange(next);
-  };
-  return (
-    <label className="flex items-center gap-1.5 text-xs font-mono text-[var(--fg-2)]">
-      {label}
-      <input
-        type="number"
-        min={min}
-        max={max}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-        }}
-        className="w-16 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded-[var(--radius-m)] text-xs font-mono tabular-nums"
-      />
-      {suffix && <span>{suffix}</span>}
-    </label>
   );
 };
