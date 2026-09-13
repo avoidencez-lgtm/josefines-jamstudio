@@ -37,7 +37,7 @@ midir = "0.10"
 
 # Systems, Async & Persistence
 keyring = { version = "3.6", features = ["windows-native", "apple-native"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 tokio = { version = "1.43", features = ["full"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-native-roots"] }
 futures-util = { version = "0.3", features = ["sink"] }
