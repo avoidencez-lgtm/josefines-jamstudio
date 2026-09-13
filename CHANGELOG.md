@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- ARCHITECTURE §9.1–9.3 now points at the shipped synthetic DSP, golden-render and TypeScript tests. §3 lists as-built paths, checked by `tests/invariants/architecture-layout.test.ts`.
+
 ## [0.1.0] - 2026-09-02
 
 Unsigned preview. Not a signed release. Code signing and notarisation are not set up.
