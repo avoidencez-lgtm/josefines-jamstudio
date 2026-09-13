@@ -496,6 +496,7 @@ export function createPreviewEngine(
     emit("input.meters", inMeter);
     emit("transport.state", { ...transport });
     emit("band.state", { ...band });
+    emit("recorder.state", recorderTelemetry());
     if (tuner) emit("tuner.state", tuner);
     else if (lastTunerActive) emit("tuner.state", null);
     lastTunerActive = tuner != null;
@@ -507,7 +508,15 @@ export function createPreviewEngine(
       ? null
       : setInterval(() => tick(1 / 30), 1000 / 30);
 
+  function recorderTelemetry() {
+    return {
+      active: Boolean(recording),
+      duration_secs: recording ? Math.max(0, clock - recording.since) : 0,
+    };
+  }
+
   function telemetry(): EngineTelemetry {
+    const recorder = recorderTelemetry();
     return {
       xruns: 0,
       input_level: { peak_db: -180, rms_db: -180 },
@@ -515,6 +524,8 @@ export function createPreviewEngine(
       tuner: null,
       transport: { ...transport },
       band: { ...band },
+      recording: recorder.active,
+      recorder,
     };
   }
 
@@ -1033,6 +1044,28 @@ export function createPreviewEngine(
     takes_delete: (a) => {
       takes = takes.filter((t) => t.id !== a.takeId);
       return null;
+    },
+    takes_update: (a) => {
+      const take = takes.find((t) => t.id === a.takeId);
+      if (!take) {
+        throw new Error(`take ${String(a.takeId)} is not in the library`);
+      }
+      if (a.notes === undefined && a.title === undefined) {
+        throw new Error("Choose notes or a title to save.");
+      }
+      if (a.notes !== undefined) {
+        if (typeof a.notes !== "string") {
+          throw new Error("notes must be a string");
+        }
+        take.notes = a.notes;
+      }
+      if (a.title !== undefined) {
+        if (typeof a.title !== "string") {
+          throw new Error("title must be a string");
+        }
+        take.label = a.title;
+      }
+      return take;
     },
     takes_analyze: (a) => {
       const take = takes.find((t) => t.id === a.takeId);

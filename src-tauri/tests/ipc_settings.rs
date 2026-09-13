@@ -607,6 +607,8 @@ fn audio_get_telemetry_has_the_documented_shape_and_meters_the_headless_input() 
             "band",
             "input_level",
             "output_level",
+            "recorder",
+            "recording",
             "reference",
             "status",
             "transport",
@@ -616,6 +618,9 @@ fn audio_get_telemetry_has_the_documented_shape_and_meters_the_headless_input() 
     );
     assert!(tel["xruns"].as_u64().is_some());
     assert!(tel["reference"].is_null());
+    assert_eq!(tel["recording"], false);
+    assert_eq!(tel["recorder"]["active"], false);
+    assert_eq!(tel["recorder"]["duration_secs"], 0.0);
     for meter in ["input_level", "output_level"] {
         assert!(tel[meter]["peak_db"].is_number(), "{meter}: {tel}");
         assert!(tel[meter]["rms_db"].is_number(), "{meter}: {tel}");

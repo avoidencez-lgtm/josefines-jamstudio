@@ -3,10 +3,12 @@ import type {
   BandTelemetry,
   Chart,
   EngineStatus,
+  EngineTelemetry,
   LatencyCalibration,
   RigProfile,
   RigState,
   StyleSummary,
+  TakeMetadata,
   TransportTelemetry,
   TunerTelemetry,
 } from "../../src/ipc/contract";
@@ -103,6 +105,46 @@ describe("browser preview engine", () => {
     await expect(engine.invoke("recorder_stop", {})).rejects.toThrow(
       "No active recording",
     );
+  });
+
+  it("marks recording on telemetry and round-trips take notes", async () => {
+    const id = await engine.invoke<string>("recorder_start", {
+      sessionId: "jam",
+    });
+    const live = await engine.invoke<EngineTelemetry>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(live.recording).toBe(true);
+    expect(live.recorder).toEqual({ active: true, duration_secs: 0 });
+    engine.tick(2);
+    const later = await engine.invoke<EngineTelemetry>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(later.recorder?.duration_secs).toBeCloseTo(2, 6);
+    const meta = await engine.invoke<TakeMetadata>("recorder_stop", {});
+    expect(meta.id).toBe(id);
+    const idle = await engine.invoke<EngineTelemetry>(
+      "audio_get_telemetry",
+      {},
+    );
+    expect(idle.recording).toBe(false);
+    const updated = await engine.invoke<TakeMetadata>("takes_update", {
+      takeId: id,
+      notes: "keeper from the bridge",
+      title: "Bridge keeper",
+    });
+    expect(updated).toMatchObject({
+      id,
+      notes: "keeper from the bridge",
+      label: "Bridge keeper",
+    });
+    const listed = await engine.invoke<TakeMetadata[]>("takes_list", {});
+    expect(listed.find((t) => t.id === id)).toMatchObject({
+      notes: "keeper from the bridge",
+      label: "Bridge keeper",
+    });
   });
 
   it("serves the bundled library", async () => {
