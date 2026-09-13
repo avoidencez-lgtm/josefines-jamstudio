@@ -2025,8 +2025,17 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/screens/Settings.tsx", "utf8")).not.toContain(
     "\n                  Sample Rate\n",
   );
-  expect(readFileSync("src/screens/Settings.tsx", "utf8")).toContain(
+  expect(readFileSync("src/screens/Settings.tsx", "utf8")).not.toContain(
     "Choose the sample rate.",
+  );
+  expect(readFileSync("src/screens/Settings.tsx", "utf8")).toContain(
+    "The engine always uses 48 kHz.",
+  );
+  expect(readFileSync("src/screens/Settings.tsx", "utf8")).not.toContain(
+    "<option value={44100}>44.1 kHz</option>",
+  );
+  expect(readFileSync("src/screens/Settings.tsx", "utf8")).not.toContain(
+    "<option value={96000}>96 kHz</option>",
   );
   expect(readFileSync("src/screens/Settings.tsx", "utf8")).not.toContain(
     "\n                  Buffer Size\n",
@@ -5796,8 +5805,11 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/screens/Songs.tsx", "utf8")).not.toContain(
     'placeholder="Full path to WAV, MP3, FLAC, M4A, AIFF or OGG"',
   );
-  expect(readFileSync("src/screens/Songs.tsx", "utf8")).toContain(
+  expect(readFileSync("src/screens/Songs.tsx", "utf8")).not.toContain(
     'placeholder="Paste the full path to a WAV, MP3, FLAC, M4A, AIFF or OGG file."',
+  );
+  expect(readFileSync("src/screens/Songs.tsx", "utf8")).toContain(
+    'placeholder="Paste the full path to a WAV, MP3, FLAC, M4A, AAC, AIFF or OGG file."',
   );
   expect(readFileSync("src/components/Stems.tsx", "utf8")).not.toContain(
     'placeholder="Full path to stems.zip"',

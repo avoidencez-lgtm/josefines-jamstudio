@@ -138,7 +138,7 @@ export const JO_TOOLS: JoToolDeclaration[] = [
   {
     name: "edit_video_shot",
     description:
-      "Edit one existing music-video shot in the open Film project. Changes text and timing only; never generates media or spends API credits. User can Undo and Save video.",
+      "Edit one existing music-video shot in the open Film project. Changes text and timing only; never generates media or spends API credits. User can Undo this edit and Save this project.",
     parameters: {
       type: "object",
       properties: {
