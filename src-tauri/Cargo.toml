@@ -26,6 +26,9 @@ serde_json.workspace = true
 sha2 = "0.10"
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+rustls.workspace = true
 tracing.workspace = true
 reqwest.workspace = true
 tauri-plugin-global-shortcut = "2"

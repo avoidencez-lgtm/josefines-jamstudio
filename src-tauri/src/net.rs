@@ -437,7 +437,7 @@ fn map_transport_error(provider: &str, err: reqwest::Error) -> String {
     format!("The {provider} request failed. Check your connection; it was not retried.")
 }
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)

@@ -96,12 +96,12 @@ Add documented protocol JSON under `tests/fixtures/providers/lyria/` and
 extend `src-tauri/src/net/lyria.rs`. Commands `lyria_start`, `lyria_set`,
 `lyria_stop` and `lyria_status` live in `src-tauri/src/lyria.rs` next to
 voice. Decode only explicit `audio/pcm;rate=48000` stereo little-endian i16.
-The jitter buffer is a pure structure; do not push fixture PCM onto the
-output bus. Band and song start stop Lyria; a successful Lyria start stops
-the band and unloads the reference. BPM is a request and never the
-transport clock. Live WebSocket stays not configured without a Gemini key,
-`JAM_LIVE=1` and a recorded provider session. `JAM_LYRIA_FIXTURE=1` runs
-the synthetic protocol state machine only. Secrets stay in SecretStore;
+The playback queue is a pure bounded structure. Band and song start stop
+Lyria; a successful Lyria start stops the band and unloads the reference.
+BPM is a request and never the transport clock. Live WebSocket stays not
+configured without a Gemini key and `JAM_LIVE=1`.
+`JAM_LYRIA_FIXTURE=1` runs the synthetic protocol and feeds its PCM through
+the playback queue without network access. Secrets stay in SecretStore;
 request bodies are not logged. The WebView never plays audio.
 
 `tests/fixtures/seams/lyria.json` is the contract. Prove it with
