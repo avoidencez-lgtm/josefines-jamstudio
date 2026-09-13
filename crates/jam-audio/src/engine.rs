@@ -18,7 +18,9 @@ use crate::io::{
 use jam_band::sequencer::{BandSequencer, Cue};
 use jam_core::chart::ResolvedChart;
 use jam_core::style::Style;
-use jam_core::timeline::{beats_to_samples, Timeline, TimelineEvent, TransportState};
+use jam_core::timeline::{
+    beats_to_samples, capture_keep_start_sample, Timeline, TimelineEvent, TransportState,
+};
 use jam_dsp::{calculate_level, EnergyFollower, PitchTracker};
 use parking_lot::Mutex;
 use rtrb::RingBuffer;
@@ -1113,6 +1115,23 @@ impl AudioEngine {
     ) -> Result<crate::recorder::TakeMetadata, String> {
         self.ensure_recordable_input()?;
         let frames = self.capture.lock().snapshot()?;
+        let (bpm, time_sig, current_sample, sample_rate) = {
+            let tl = self.timeline.lock();
+            (tl.bpm, tl.time_signature, tl.current_sample, tl.sample_rate)
+        };
+        let raw_start = current_sample.saturating_sub(frames.len() as u64);
+        let start = capture_keep_start_sample(
+            frames.len() as u64,
+            current_sample,
+            bpm,
+            time_sig,
+            sample_rate,
+        );
+        let trim = start.saturating_sub(raw_start) as usize;
+        let frames = match frames.get(trim..) {
+            Some(kept) if !kept.is_empty() => kept.to_vec(),
+            _ => frames,
+        };
         let mut r =
             crate::recorder::TakeRecorder::new(self.sample_rate(), dirs_base().join("takes"));
         r.snapshot = serde_json::json!({"capture": true});
@@ -3504,6 +3523,56 @@ mod tests {
         assert!(msg.contains("Cannot record"), "{msg}");
         assert!(super::input_rate_mismatch(48_000, 48_000).is_none());
         assert!(super::input_rate_mismatch(0, 48_000).is_none());
+    }
+
+    #[test]
+    fn keep_capture_snaps_the_clip_start_to_a_bar_downbeat() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-keep-bar-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("JAM_HEADLESS", "1");
+        std::env::set_var("JAM_DATA_DIR", &dir);
+        let mut engine = AudioEngine::new(AudioConfig::default());
+        engine.start().unwrap();
+        assert!(
+            engine
+                .input_driver
+                .as_ref()
+                .is_some_and(|input| { input.is_running() && input.is_synthetic() }),
+            "headless keep uses FileInput"
+        );
+        engine.transport_set_count_in(0);
+        engine.transport_set_tempo(120.0);
+        engine.transport_set_time_signature((4, 4));
+        engine.transport_locate(5.0).unwrap();
+        let rate = engine.sample_rate();
+        let bpm = engine.transport_bpm();
+        let current = engine.timeline.lock().current_sample;
+        assert_eq!(current, beats_to_samples(5.0, bpm, rate));
+        let buffer_frames = 100_000usize;
+        let take = {
+            let _gate = engine.render_gate.lock();
+            {
+                let mut capture = engine.capture.lock();
+                capture.arm(4).unwrap();
+                capture.push(&vec![[0.1; 9]; buffer_frames], rate);
+            }
+            engine.keep_capture("idea".into()).unwrap()
+        };
+        let start = current - take.sample_count as u64;
+        assert_eq!(
+            start,
+            beats_to_samples(4.0, bpm, rate),
+            "kept clip must start on a bar downbeat"
+        );
+        engine.stop().unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

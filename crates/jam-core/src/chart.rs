@@ -184,6 +184,30 @@ impl ResolvedChart {
         };
         self.bars.get(idx)
     }
+
+    /// Section markers in playing order: `(name, 1-indexed first bar)`.
+    pub fn section_markers(&self) -> Vec<(String, u32)> {
+        let mut out: Vec<(String, u32)> = Vec::new();
+        for bar in &self.bars {
+            if out
+                .last()
+                .map(|(name, _)| name != &bar.section_name)
+                .unwrap_or(true)
+            {
+                out.push((bar.section_name.clone(), bar.bar_index));
+            }
+        }
+        out
+    }
+
+    /// One chord-name marker per bar from [`Self::chord_at`] at the downbeat.
+    pub fn chord_markers(&self) -> Vec<(String, u32)> {
+        self.bars
+            .iter()
+            .map(|bar| (self.chord_at(bar.bar_index, 1).0, bar.bar_index))
+            .filter(|(chord, _)| !chord.is_empty())
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -292,6 +316,11 @@ mod tests {
         let (c9, n9) = resolved.chord_at(9, 1);
         assert_eq!(c9, "E7");
         assert_eq!(n9, Some("D7".into()));
+
+        let chords = resolved.chord_markers();
+        assert_eq!(chords[0], ("A7".into(), 1));
+        assert_eq!(chords[8], ("E7".into(), 9));
+        assert_eq!(resolved.section_markers(), vec![("Verse".into(), 1)]);
     }
 
     #[test]

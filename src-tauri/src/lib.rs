@@ -1390,22 +1390,6 @@ fn persist_session_review(session_id: &str, review: &serde_json::Value) -> Resul
         .map_err(|e| format!("Cannot write session.json. {e}"))
 }
 
-/// Section markers for a chart in playing order: `(name, first bar)`.
-fn chart_sections(chart: &Chart) -> Vec<(String, u32)> {
-    let resolved = chart.resolve();
-    let mut out: Vec<(String, u32)> = Vec::new();
-    for bar in &resolved.bars {
-        if out
-            .last()
-            .map(|(name, _)| name != &bar.section_name)
-            .unwrap_or(true)
-        {
-            out.push((bar.section_name.clone(), bar.bar_index));
-        }
-    }
-    out
-}
-
 /// Exports recorded stems, layers, MIDI, markers and an optional REAPER session builder.
 #[tauri::command]
 async fn takes_export_daw(
@@ -1418,11 +1402,20 @@ async fn takes_export_daw(
     let chart: Option<Chart> = serde_json::from_value(take.snapshot["body"]["chart"].clone())
         .ok()
         .or_else(|| state.library.lock().chart(&take.chart_id).ok());
-    let sections_owned = chart.as_ref().map(chart_sections).unwrap_or_default();
+    let resolved = chart.as_ref().map(|c| c.resolve());
+    let sections_owned = resolved
+        .as_ref()
+        .map(|c| c.section_markers())
+        .unwrap_or_default();
+    let chords_owned = resolved
+        .as_ref()
+        .map(|c| c.chord_markers())
+        .unwrap_or_default();
     let sections: Vec<(&str, u32)> = sections_owned
         .iter()
         .map(|(n, b)| (n.as_str(), *b))
         .collect();
+    let chords: Vec<(&str, u32)> = chords_owned.iter().map(|(n, b)| (n.as_str(), *b)).collect();
     let time_sig = match take.snapshot.get("timeSignature").filter(|v| !v.is_null()) {
         Some(value) => serde_json::from_value::<(u8, u8)>(value.clone()).map_err(|_| {
             "Invalid recorded time signature. Repair the take snapshot before exporting."
@@ -1500,6 +1493,7 @@ async fn takes_export_daw(
         time_sig,
         sample_rate,
         sections: if reference { &[] } else { &sections },
+        chords: if reference { &[] } else { &chords },
         stems: &stems,
         take_dir: Path::new(&take.path_input).parent(),
     };
