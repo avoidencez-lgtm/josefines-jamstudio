@@ -9,6 +9,15 @@ it("formats bar, beat and elapsed clock from the live transport snapshot", () =>
   expect(
     recordingReadout({ bar: 1, beat: 1, positionBeats: 240, bpm: 120 }),
   ).toBe("Recording bar 1 beat 1 · 2:00.");
+  expect(
+    recordingReadout({
+      bar: 5,
+      beat: 1,
+      positionBeats: 0,
+      bpm: 120,
+      seconds: 12,
+    }),
+  ).toBe("Recording bar 5 beat 1 · 0:12.");
 });
 
 it("is the TransportBar recording label", () => {

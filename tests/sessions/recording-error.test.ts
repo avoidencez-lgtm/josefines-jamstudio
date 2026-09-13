@@ -48,3 +48,30 @@ it("keeps a failed take guarded until saving and clears its error before another
     useEngineStore.setState(previous, true);
   }
 });
+
+it("sets isRecording from the recorder telemetry snapshot", async () => {
+  const previous = useEngineStore.getState();
+  const handlers = new Map<string, (payload: unknown) => void>();
+  vi.spyOn(ipc, "listen").mockImplementation(async (event, handler) => {
+    handlers.set(event, handler);
+    return () => handlers.delete(event);
+  });
+  const stop = await previous.initListeners();
+  try {
+    useEngineStore.setState({ isRecording: false });
+    handlers.get("recorder.state")?.({ active: true, duration_secs: 3.2 });
+    expect(useEngineStore.getState().isRecording).toBe(true);
+    expect(useEngineStore.getState().telemetry.recording).toBe(true);
+    expect(useEngineStore.getState().telemetry.recorder).toEqual({
+      active: true,
+      duration_secs: 3.2,
+    });
+    handlers.get("recorder.state")?.({ active: false, duration_secs: 0 });
+    expect(useEngineStore.getState().isRecording).toBe(false);
+    expect(useEngineStore.getState().telemetry.recording).toBe(false);
+  } finally {
+    stop();
+    vi.restoreAllMocks();
+    useEngineStore.setState(previous, true);
+  }
+});
