@@ -65,9 +65,9 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
-2026-09-13. origin/main `772603e`.
+2026-09-13. origin/main `6849bf0`.
 
-Non-human leftovers from #162–#187 landed: IPC_VERSION (#461), status board (#460), hygiene (#459), recording counter (#464), media delete + CSP + single-instance (#463), undo/ErrorBoundary (#465), take notes/label (#466), ARCHITECTURE §9 tests (#467), as-built docs (#468), usage-log rotate (#469), shared NumberField/Jo applied-state/cue-next (#470), loop-pass takes (#471). Human-only remains: two-metre Stage, HeadRush clock-out, signing/tag, friend Mac/rig/Logic, live paid sessions.
+Non-human leftovers from #162–#187 landed: IPC_VERSION (#461), status board (#460), hygiene (#459), recording counter (#464), media delete + CSP + single-instance (#463), undo/ErrorBoundary (#465), take notes/label (#466), ARCHITECTURE §9 tests (#467), as-built docs (#468), usage-log rotate (#469), shared NumberField/Jo applied-state/cue-next (#470), loop-pass takes (#471), status board (#472), resample wait (#473). Human-only remains: signing/tag, friend Mac/rig/Logic, live paid sessions, catalog model ids, HeadRush clock-out, two-metre Stage visual check.
 
 The leftover UI sentence-fragment hunt from 2026-09-12 was working-tree noise; current UI uses complete sentences such as "Clear this search." / "Close this help."
 
