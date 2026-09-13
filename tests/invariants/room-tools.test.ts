@@ -18,6 +18,7 @@ import { newShot } from "../../src/lib/media";
 import { newOriginal, useWriting } from "../../src/lib/originals";
 import {
   applySongIdea,
+  cueNextSetlistItem,
   saveRoomPreference,
   useRoomOperation,
 } from "../../src/lib/roomActions";
@@ -358,6 +359,39 @@ it("cues a setlist entry's own groove only when it plays the chart's meter (#64)
   expect(
     setlistSchema.safeParse([{ ...entry, styleId: "rock-straight" }]).success,
   ).toBe(true);
+});
+
+it("filters a 3/4 chart to waltz grooves and refuses a 4/4 groove", () => {
+  const chart = {
+    ...newOriginal().body.chart,
+    timeSig: [3, 4] as [number, number],
+  };
+  const styles = [
+    { id: "rock-straight", name: "Rock", feel: { timeSig: [4, 4] } },
+    { id: "waltz-34", name: "Waltz 3/4", feel: { timeSig: [3, 4] } },
+  ] as never;
+  const entry = { id: "a", chartId: chart.id, bpm: 100, countIn: 1 };
+  expect(
+    setlistCue({ ...entry, styleId: "waltz-34" }, [chart], styles).styleId,
+  ).toBe("waltz-34");
+  expect(() =>
+    setlistCue({ ...entry, styleId: "rock-straight" }, [chart], styles),
+  ).toThrow(/3\/4/);
+});
+
+it("refuses Cue next when the setlist is empty", async () => {
+  useEngineStore.setState({
+    settings: {
+      schemaVersion: 1,
+      input_channel: 2,
+      sample_rate: 48_000,
+      buffer_size: 256,
+      rehearsalSetlist: [],
+    },
+  });
+  await expect(cueNextSetlistItem()).rejects.toThrow(
+    /Add a chart to the setlist first/,
+  );
 });
 
 it("validates rig snapshot ranges against the installed profile before recall", () => {

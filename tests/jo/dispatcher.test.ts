@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ipc } from "../../src/ipc/client";
+import { __setIpcForTests, ipc } from "../../src/ipc/client";
+import type { EngineTelemetry } from "../../src/ipc/contract";
+import { createPreviewEngine } from "../../src/ipc/preview";
 import { dispatchJoToolCall } from "../../src/lib/jo/dispatcher";
 import type { JoToolCall } from "../../src/lib/jo/persona";
 import { validateToolCall } from "../../src/lib/jo/tools";
@@ -109,11 +111,37 @@ describe("Jo reports accepted actions", () => {
       name: "set_tempo",
       arguments: { bpm: 500 },
     });
-    expect(invoke).toHaveBeenLastCalledWith("transport_set_tempo", {
+    expect(invoke).toHaveBeenCalledWith("transport_set_tempo", {
       bpm: 300,
     });
-    expect(result).toContain("300 BPM");
+    expect(result).toMatch(/Tempo now 300, style /);
     expect(result).not.toContain("500");
+  });
+
+  it("echoes the preview engine's applied tempo, not the requested bpm", async () => {
+    const previous = { ...ipc };
+    const engine = createPreviewEngine({ autoTick: false });
+    __setIpcForTests({
+      invoke: (cmd, args) => engine.invoke(cmd, args ?? {}),
+      listen: (event, handler) => engine.listen(event, handler),
+    });
+    try {
+      const result = await dispatchJoToolCall({
+        name: "set_tempo",
+        arguments: { bpm: 118 },
+      });
+      const tel = await engine.invoke<EngineTelemetry>(
+        "audio_get_telemetry",
+        {},
+      );
+      expect(tel.transport.bpm).toBe(118);
+      expect(result).toContain("Tempo now 118");
+      expect(result).toMatch(/style /);
+      expect(result).not.toContain("requested");
+    } finally {
+      engine.dispose();
+      __setIpcForTests(previous);
+    }
   });
 
   it("does not play after the trainer's starting tempo is refused", async () => {

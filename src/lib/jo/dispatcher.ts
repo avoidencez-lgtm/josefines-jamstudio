@@ -1,7 +1,9 @@
 import { ipc } from "../../ipc/client";
+import type { EngineTelemetry } from "../../ipc/contract";
 import { requireCommand, useEngineStore } from "../../store/engine";
 import { applyReferencePractice, useMedia } from "../media";
 import { PARTS, changeGroove, useWriting } from "../originals";
+import { cueNextSetlistItem } from "../roomActions";
 import type { JoToolCall } from "./persona";
 import { STUDIO_TOOLS, applyStudioEdits } from "./studioTools";
 import { JO_ACTIONS, validateToolCall } from "./tools";
@@ -11,6 +13,25 @@ function editResult(changed: boolean, success: string): string {
   const message = useWriting.getState().message;
   if (message) throw new Error(message);
   return "Song unchanged. The requested settings already match or the parts are locked.";
+}
+
+/** Jo reports the engine's applied band, not the values in the tool request. */
+async function appliedBandEcho(fallback?: {
+  bpm?: number;
+  styleName?: string;
+}): Promise<string> {
+  let bpm = fallback?.bpm;
+  let styleName = fallback?.styleName;
+  try {
+    const tel = await ipc.invoke<EngineTelemetry>("audio_get_telemetry");
+    if (tel?.transport && Number.isFinite(tel.transport.bpm))
+      bpm = tel.transport.bpm;
+    if (tel?.band?.style_name) styleName = tel.band.style_name;
+  } catch {
+    // Keep the command result and store snapshot when the poll is unavailable.
+  }
+  const t = useEngineStore.getState().telemetry;
+  return `Tempo now ${Math.round(bpm ?? t.transport.bpm)}, style ${styleName ?? t.band.style_name}.`;
 }
 
 export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
@@ -233,13 +254,13 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
         const bpm = requireCommand(
           await store.transportSetTempo(call.arguments.bpm),
         );
-        return `Tempo set to ${bpm} BPM.`;
+        return appliedBandEcho({ bpm });
       }
       if (typeof call.arguments.delta === "number") {
         const currentBpm = store.telemetry.transport.bpm;
         const targetBpm = currentBpm + call.arguments.delta;
         const bpm = requireCommand(await store.transportSetTempo(targetBpm));
-        return `Tempo set to ${bpm} BPM.`;
+        return appliedBandEcho({ bpm });
       }
       throw new Error("Set tempo needs a bpm or a delta.");
     }
@@ -258,7 +279,22 @@ export async function dispatchJoToolCall(call: JoToolCall): Promise<string> {
     case "set_style": {
       const styleId = call.arguments.styleId as string;
       requireCommand(await store.bandSetStyle(styleId));
-      return `Style set to ${styleId}.`;
+      return appliedBandEcho({
+        styleName: store.styles.find((s) => s.id === styleId)?.name,
+      });
+    }
+
+    case "cue_next": {
+      await cueNextSetlistItem();
+      return "Next chart cued. Press Play when ready.";
+    }
+
+    case "exit_loop": {
+      const t = store.telemetry.transport;
+      requireCommand(
+        await store.transportSetLoop(t.loop_start_bar, t.loop_end_bar, false),
+      );
+      return "The loop is off.";
     }
 
     case "set_intensity": {
