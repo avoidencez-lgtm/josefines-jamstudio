@@ -342,6 +342,117 @@ fn a_headless_recording_writes_six_stems_a_manifest_and_the_sine_input() {
 }
 
 #[test]
+fn looping_a_recording_counts_passes_at_loop_wraps() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok("recorder_set_latency", json!({"samples": 0}));
+    studio.ok("transport_set_count_in", json!({"bars": 0}));
+    studio.ok("transport_set_tempo", json!({"bpm": 240.0}));
+    studio.ok(
+        "transport_set_loop",
+        json!({"startBar": 1, "endBar": 2, "enabled": true}),
+    );
+
+    let wait_tel = |what: &str, pred: &dyn Fn(&Value) -> bool| -> Value {
+        let deadline = Instant::now() + Duration::from_secs(4);
+        loop {
+            let tel = studio.ok("audio_get_telemetry", json!({}));
+            if pred(&tel) {
+                return tel;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "timed out waiting for {what}; last telemetry: {tel}"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    };
+    wait_tel("count-in off, 240 bpm, one-bar loop", &|t| {
+        t["transport"]["count_in_bars"] == 0
+            && t["transport"]["bpm"] == 240.0
+            && t["transport"]["loop_enabled"] == true
+            && t["transport"]["loop_start_bar"] == 1
+            && t["transport"]["loop_end_bar"] == 2
+    });
+
+    studio.ok("transport_play", json!({}));
+    wait_tel("playing", &|t| t["transport"]["state"] == "playing");
+
+    let session = unique("session");
+    let id = studio.ok("recorder_start", json!({"sessionId": session}));
+    let id = id.as_str().unwrap().to_string();
+    let dir = takes_root().join(&id);
+    assert_eq!(dir.file_name().unwrap().to_string_lossy(), id.as_str());
+
+    let mut last_beats = studio.ok("audio_get_telemetry", json!({}))["transport"]["position_beats"]
+        .as_f64()
+        .unwrap();
+    let mut wraps = 0u32;
+    let deadline = Instant::now() + Duration::from_secs(4);
+    while wraps < 2 {
+        std::thread::sleep(Duration::from_millis(10));
+        let tel = studio.ok("audio_get_telemetry", json!({}));
+        let beats = tel["transport"]["position_beats"].as_f64().unwrap();
+        if beats + 0.5 < last_beats {
+            wraps += 1;
+        }
+        last_beats = beats;
+        assert!(
+            Instant::now() < deadline,
+            "timed out after {wraps} loop wraps; last telemetry: {tel}"
+        );
+    }
+
+    let tel = studio.ok("audio_get_telemetry", json!({}));
+    let bpm = tel["transport"]["bpm"].as_f64().unwrap();
+    let start_bar = tel["transport"]["loop_start_bar"].as_u64().unwrap();
+    let end_bar = tel["transport"]["loop_end_bar"].as_u64().unwrap();
+    let beats_per_bar = tel["transport"]["time_signature"][0].as_u64().unwrap();
+    let rate = tel["status"]["sample_rate"].as_u64().unwrap() as u32;
+    let loop_samples = jam_core::timeline::beats_to_samples(
+        ((end_bar - start_bar) * beats_per_bar) as f64,
+        bpm,
+        rate,
+    );
+
+    let meta = studio.ok("recorder_stop", json!({}));
+    assert_eq!(meta["id"], id);
+    let passes = meta["passes"].as_u64().unwrap();
+    assert!(passes >= 3, "two wraps start pass 3; meta={meta}");
+    let starts: Vec<u64> = meta["passStarts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_u64().expect("passStarts are sample positions"))
+        .collect();
+    assert_eq!(starts.len() as u64, passes);
+    assert_eq!(starts[0], 0);
+    for pair in starts.windows(2).skip(1) {
+        assert_eq!(
+            pair[1] - pair[0],
+            loop_samples,
+            "full-pass length must match the armed loop; starts={starts:?} loop_samples={loop_samples} tel={tel}"
+        );
+    }
+    assert!(
+        starts[1] > 0 && starts[1] <= loop_samples,
+        "first wrap is inside the armed loop; starts={starts:?} loop_samples={loop_samples}"
+    );
+
+    let on_disk = manifest(&dir);
+    assert_eq!(on_disk["id"], id);
+    assert_eq!(on_disk["passes"], passes);
+    assert_eq!(on_disk["passStarts"], meta["passStarts"]);
+    assert_eq!(
+        dir.file_name().unwrap().to_string_lossy(),
+        id.as_str(),
+        "loop passes must not rename the take folder"
+    );
+    assert!(dir.join("guitar-di.wav").is_file());
+    assert_eq!(on_disk["stems"].as_object().unwrap().len(), 6);
+}
+
+#[test]
 fn the_recorder_refuses_a_second_take_and_a_stop_without_one() {
     let _scenario = common::scenario();
     let studio = Studio::boot();

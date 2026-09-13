@@ -51,6 +51,8 @@ pub struct TakeRecorder {
     pub midi: Vec<crate::workstation::MidiNote>,
     pub frames_written: u64,
     pub(crate) reference_timing: Option<crate::reference_timing::ReferenceTiming>,
+    /// Take-relative sample where each loop pass began. Pass 1 is always 0.
+    pass_starts: Vec<u64>,
 }
 impl TakeRecorder {
     pub fn new(sample_rate: u32, base_dir: PathBuf) -> Self {
@@ -65,6 +67,7 @@ impl TakeRecorder {
             midi: Vec::new(),
             frames_written: 0,
             reference_timing: None,
+            pass_starts: Vec::new(),
         }
     }
     pub fn set_latency_compensation(&mut self, samples: usize) {
@@ -237,7 +240,15 @@ impl TakeRecorder {
         self.failure = None;
         self.midi.clear();
         self.frames_written = 0;
+        self.pass_starts = vec![0];
         Ok(id)
+    }
+
+    /// First audio before a wrap is pass 1. Each wrap starts the next pass.
+    pub(crate) fn note_loop_wrap(&mut self, at_sample: u64) {
+        if self.is_recording() {
+            record_loop_pass(&mut self.pass_starts, at_sample);
+        }
     }
     pub(crate) fn push_frames(
         &mut self,
@@ -291,6 +302,7 @@ impl TakeRecorder {
             .join()
             .map_err(|_| "Recording writer failed; partial WAVs kept")??;
         meta.midi = std::mem::take(&mut self.midi);
+        persist_loop_passes(&mut meta.extra, &self.pass_starts);
         if let Some(timing) = self.reference_timing.take() {
             meta.extra.insert(
                 "referenceTiming".into(),
@@ -337,6 +349,22 @@ impl Drop for TakeRecorder {
         }
     }
 }
+/// First pass starts at sample 0. Each wrap appends the take sample of the wrap.
+pub(crate) fn record_loop_pass(starts: &mut Vec<u64>, at_sample: u64) {
+    if starts.is_empty() {
+        starts.push(0);
+    }
+    if starts.last().is_some_and(|&last| at_sample > last) {
+        starts.push(at_sample);
+    }
+}
+
+fn persist_loop_passes(extra: &mut BTreeMap<String, serde_json::Value>, starts: &[u64]) {
+    let starts = if starts.is_empty() { &[0] } else { starts };
+    extra.insert("passes".into(), serde_json::json!(starts.len() as u64));
+    extra.insert("passStarts".into(), serde_json::json!(starts));
+}
+
 pub fn save_manifest(meta: &TakeMetadata) -> Result<(), String> {
     let dir = Path::new(&meta.path_input)
         .parent()
@@ -427,6 +455,52 @@ mod tests {
         fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
             self.bytes.seek(pos)
         }
+    }
+
+    #[test]
+    fn loop_pass_starts_at_zero_and_appends_each_wrap() {
+        let mut starts = Vec::new();
+        record_loop_pass(&mut starts, 0);
+        assert_eq!(starts, [0]);
+        record_loop_pass(&mut starts, 48_000);
+        record_loop_pass(&mut starts, 48_000);
+        record_loop_pass(&mut starts, 24_000);
+        record_loop_pass(&mut starts, 96_000);
+        assert_eq!(starts, [0, 48_000, 96_000]);
+        let mut extra = BTreeMap::new();
+        persist_loop_passes(&mut extra, &starts);
+        assert_eq!(extra["passes"], serde_json::json!(3));
+        assert_eq!(extra["passStarts"], serde_json::json!([0, 48_000, 96_000]));
+    }
+
+    #[test]
+    fn stop_writes_loop_pass_boundaries_into_take_extra() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-loop-pass-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut r = TakeRecorder::new(48_000, root.clone());
+        r.start_take("song".into(), "rock".into(), "verse".into(), 120.0)
+            .unwrap();
+        r.note_loop_wrap(48_000);
+        r.note_loop_wrap(96_000);
+        r.push_capture(&vec![[0.0; 9]; 8]).unwrap();
+        let take = r.stop_and_save().unwrap();
+        assert_eq!(take.extra["passes"], serde_json::json!(3));
+        assert_eq!(
+            take.extra["passStarts"],
+            serde_json::json!([0, 48_000, 96_000])
+        );
+        let dir = Path::new(&take.path_input).parent().unwrap();
+        let disk: serde_json::Value =
+            serde_json::from_slice(&fs::read(dir.join("take.json")).unwrap()).unwrap();
+        assert_eq!(disk["passes"], 3);
+        assert_eq!(disk["passStarts"], serde_json::json!([0, 48_000, 96_000]));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
