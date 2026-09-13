@@ -304,8 +304,9 @@ Barge-in: a new PTT press during `speaking` stops the voice bus. Latency budget:
 
 ### 6.4 Lyria RealTime (`net/lyria.rs`)
 
-Documented protocol encode/decode and a jitter/state machine live in
-`src-tauri/src/net/lyria.rs`. Commands `lyria_start`, `lyria_set`,
+Documented protocol encode/decode and the session state machine live in
+`src-tauri/src/net/lyria.rs`; the bounded playback queue lives in
+`crates/jam-audio/src/lyria.rs`. Commands `lyria_start`, `lyria_set`,
 `lyria_stop`, `lyria_status` and event `lyria.state` are registered.
 Rust owns bytes and time; the WebView never plays audio. Band and Lyria
 are mutually exclusive: starting one stops the other. BPM is a request,
@@ -313,8 +314,11 @@ not the band or transport clock. A bpm/scale patch records
 `RESET_CONTEXT`; it does not retune the click. Without a Gemini key,
 `JAM_LIVE=1` and a recorded provider session the command is explicitly
 not configured and opens no WebSocket. `JAM_LYRIA_FIXTURE=1` walks the
-synthetic specimen only and never feeds the output bus. Live 10-minute
-stream, reconnect, count-in click and spend meter remain unfinished.
+synthetic specimen and feeds its decoded PCM into the bounded 48 kHz stereo
+queue on the Rust render worker. The queue pre-fills for one second, targets
+500 ms and fades over 250 ms around starvation. Live 10-minute stream,
+WebSocket receive loop, reconnect, count-in click and spend meter remain
+unfinished.
 
 ### 6.5 Track generation and analysis
 
