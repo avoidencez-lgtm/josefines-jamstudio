@@ -1,5 +1,6 @@
 import { Pause, Play, Record, Repeat, Stop } from "@phosphor-icons/react";
 import { useShallow } from "zustand/shallow";
+import { recordingReadout } from "../lib/recordingReadout";
 import { useEngineStore } from "../store/engine";
 import { EngineStatusPill } from "./EngineStatusPill";
 import { JoVoiceControls } from "./JoVoice";
@@ -98,6 +99,16 @@ export function TransportBar() {
               <Record size={18} weight="fill" />
             )}
           </button>
+          {isRecording ? (
+            <span className="font-mono tabular-nums text-sm text-[var(--record)]">
+              {recordingReadout({
+                bar: transport.bar,
+                beat: transport.beat,
+                positionBeats: transport.position_beats,
+                bpm: transport.bpm,
+              })}
+            </span>
+          ) : null}
         </div>
 
         <div className="h-5 w-px bg-[var(--line)]" />
