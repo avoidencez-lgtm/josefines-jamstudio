@@ -31,15 +31,7 @@ fn validate(doc: &Value) -> Result<(), String> {
         let p: jam_rig::controller::PedalPress =
             serde_json::from_value(b["press"].clone()).map_err(|e| e.to_string())?;
         if ![
-            "keep",
-            "record",
-            "play",
-            "loop",
-            "next",
-            "version",
-            "voice",
-            "ramp",
-            "cueNext",
+            "keep", "record", "play", "loop", "next", "version", "voice", "ramp", "cueNext",
             "exitLoop",
         ]
         .contains(&action)
