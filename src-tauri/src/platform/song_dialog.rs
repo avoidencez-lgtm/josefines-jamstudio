@@ -78,7 +78,7 @@ mod tests {
             "set_parent must run before pick_file so IFileDialog is not Show(NULL)"
         );
         assert!(
-            command.contains(r#"&["wav", "mp3", "flac", "m4a", "aac", "aiff", "aif", "ogg"]"#),
+            src.contains(r#"&["wav", "mp3", "flac", "m4a", "aac", "aiff", "aif", "ogg"]"#),
             "the picker must offer the audio extensions the importer accepts"
         );
     }
