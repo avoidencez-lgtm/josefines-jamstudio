@@ -177,7 +177,7 @@ export const SHORTCUTS: Shortcut[] = [
     run: () => useWriting.getState().undo(),
   },
   {
-    keys: "Ctrl/Cmd+Shift+Z / Ctrl+Y",
+    keys: "Shift+Z or Y with Control",
     description: "Redo the last Write edit. A song must be open.",
     group: "App",
     matches: (e) =>
