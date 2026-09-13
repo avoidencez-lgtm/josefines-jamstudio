@@ -164,6 +164,29 @@ export const SHORTCUTS: Shortcut[] = [
     matches: key("?"),
     run: () => undefined,
   },
+  {
+    keys: "Ctrl/Cmd+Z",
+    description: "Undo the last Write edit. A song must be open.",
+    group: "App",
+    matches: (e) =>
+      (e.ctrlKey || e.metaKey) &&
+      !e.altKey &&
+      !e.shiftKey &&
+      !e.repeat &&
+      e.code === "KeyZ",
+    run: () => useWriting.getState().undo(),
+  },
+  {
+    keys: "Ctrl/Cmd+Shift+Z / Ctrl+Y",
+    description: "Redo the last Write edit. A song must be open.",
+    group: "App",
+    matches: (e) =>
+      !e.altKey &&
+      !e.repeat &&
+      ((e.code === "KeyZ" && e.shiftKey && (e.ctrlKey || e.metaKey)) ||
+        (e.code === "KeyY" && e.ctrlKey && !e.shiftKey)),
+    run: () => useWriting.getState().redo(),
+  },
 ];
 
 export interface ShortcutContext {
@@ -191,14 +214,25 @@ export function handleShortcut(
   ) {
     return false;
   }
-  // Leave Ctrl/Cmd chords to the browser. Alt is ignored except when it is
-  // how the layout typed `[` / `]` (Option+8/9 on a Norwegian Mac; AltGr+8/9
-  // on Windows Nordic layouts, where Chromium also sets ctrlKey).
-  if (
-    e.metaKey ||
-    (e.ctrlKey && (!e.altKey || (e.key !== "[" && e.key !== "]")))
-  )
-    return false;
+  // Undo/Redo in Write take Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (or Ctrl+Y) when a
+  // song is open. Other Ctrl/Cmd chords stay with the browser. Alt is ignored
+  // except when it is how the layout typed `[` / `]` (Option+8/9 on a Norwegian
+  // Mac; AltGr+8/9 on Windows Nordic layouts, where Chromium also sets ctrlKey).
+  if (e.ctrlKey || e.metaKey) {
+    if (useWriting.getState().song) {
+      for (const s of SHORTCUTS) {
+        if (s.matches(e)) {
+          void s.run(store);
+          return true;
+        }
+      }
+    }
+    if (
+      e.metaKey ||
+      (e.ctrlKey && (!e.altKey || (e.key !== "[" && e.key !== "]")))
+    )
+      return false;
+  }
   if (e.altKey && e.key !== "[" && e.key !== "]") return false;
   if (
     e.repeat &&

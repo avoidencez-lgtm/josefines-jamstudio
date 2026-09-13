@@ -511,3 +511,5 @@ The bilingual manual source is docs/guide/manual.json. Every title and text bloc
 - **[ / ]**: Transpose the chart down or up a semitone.
 - **U**: Toggle this tuner.
 - **?**: Open help and guides.
+- **Ctrl/Cmd+Z**: Undo the last Write edit. A song must be open.
+- **Ctrl/Cmd+Shift+Z / Ctrl+Y**: Redo the last Write edit. A song must be open.

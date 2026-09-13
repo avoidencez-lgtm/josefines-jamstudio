@@ -3,6 +3,7 @@ import type React from "react";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { Button } from "./components/Button";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Notices } from "./components/Notices";
 import { RoomTools } from "./components/RoomTools";
 import { TransportBar } from "./components/TransportBar";
@@ -365,7 +366,7 @@ export const App: React.FC = () => {
             <Suspense
               fallback={<p className="workspace-note">Opening the room…</p>}
             >
-              {renderScreen()}
+              <ErrorBoundary>{renderScreen()}</ErrorBoundary>
             </Suspense>
           </main>
           {showHelp && (
