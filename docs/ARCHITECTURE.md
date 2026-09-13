@@ -311,14 +311,15 @@ Documented protocol encode/decode and the session state machine live in
 Rust owns bytes and time; the WebView never plays audio. Band and Lyria
 are mutually exclusive: starting one stops the other. BPM is a request,
 not the band or transport clock. A bpm/scale patch records
-`RESET_CONTEXT`; it does not retune the click. Without a Gemini key,
-`JAM_LIVE=1` and a recorded provider session the command is explicitly
-not configured and opens no WebSocket. `JAM_LYRIA_FIXTURE=1` walks the
-synthetic specimen and feeds its decoded PCM into the bounded 48 kHz stereo
-queue on the Rust render worker. The queue pre-fills for one second, targets
-500 ms and fades over 250 ms around starvation. Live 10-minute stream,
-WebSocket receive loop, reconnect, count-in click and spend meter remain
-unfinished.
+`RESET_CONTEXT`; it does not retune the click. With a Gemini key and
+`JAM_LIVE=1`, the Rust task opens the provider WebSocket, waits for
+`setupComplete`, sends controls and feeds decoded PCM into the bounded 48 kHz
+stereo queue on the render worker. Credential-bearing URLs and provider bodies
+never enter errors or logs; each connection attempt records its model, status
+and duration against a query-free path. `JAM_LYRIA_FIXTURE=1` exercises the same
+protocol and queue without network access. The queue pre-fills for one second, targets
+500 ms and fades over 250 ms around starvation. Reconnect, a session cap,
+count-in click, spend meter and the live 10-minute acceptance remain unfinished.
 
 ### 6.5 Track generation and analysis
 

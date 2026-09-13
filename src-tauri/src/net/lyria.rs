@@ -1,12 +1,22 @@
-//! Documented Lyria RealTime protocol. Live WebSocket is not configured.
+//! Lyria RealTime protocol and credential-safe WebSocket transport.
 use base64::Engine;
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::time::Duration;
+use tokio::{net::TcpStream, time::timeout};
+use tokio_tungstenite::{
+    tungstenite::{protocol::WebSocketConfig, Message},
+    MaybeTlsStream, WebSocketStream,
+};
 
-pub const NOT_CONFIGURED: &str = "Lyria RealTime is not configured. Add a Google Gemini key in Settings, set JAM_LIVE=1, and record a provider session before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.";
+pub const NOT_CONFIGURED: &str = "Lyria RealTime is not configured. Add a Google Gemini key in Settings and set JAM_LIVE=1 before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.";
 
 const MAX_MESSAGE: usize = 4 * 1024 * 1024;
-const MODEL: &str = "models/lyria-realtime-exp";
+pub const MODEL: &str = "models/lyria-realtime-exp";
+pub const USAGE_PATH: &str =
+    "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic";
+const ENDPOINT: &str = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic";
 const SCALES: &[&str] = &[
     "C_MAJOR_A_MINOR",
     "D_FLAT_MAJOR_B_FLAT_MINOR",
@@ -180,6 +190,127 @@ pub fn decode_audio(value: &Value) -> Result<Vec<i16>, String> {
     Ok(samples)
 }
 
+type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+pub struct LiveSocket(Socket);
+
+fn socket_error(error: tokio_tungstenite::tungstenite::Error) -> String {
+    match error {
+        tokio_tungstenite::tungstenite::Error::Http(response) => format!(
+            "WebSocket handshake rejected with HTTP {}",
+            response.status().as_u16()
+        ),
+        tokio_tungstenite::tungstenite::Error::Tls(_) => "WebSocket TLS validation failed".into(),
+        _ => "WebSocket connection failed (details suppressed to protect credentials)".into(),
+    }
+}
+
+async fn send(socket: &mut Socket, value: &Value) -> Result<(), String> {
+    timeout(
+        Duration::from_secs(5),
+        socket.send(Message::Text(value.to_string().into())),
+    )
+    .await
+    .map_err(|_| "WebSocket send timed out")?
+    .map_err(|_| "WebSocket send failed".into())
+}
+
+async fn receive(socket: &mut Socket) -> Result<Value, String> {
+    loop {
+        let message = socket
+            .next()
+            .await
+            .ok_or("WebSocket closed")?
+            .map_err(|_| "WebSocket receive failed")?;
+        let bytes = match message {
+            Message::Text(text) => text.as_bytes().to_vec(),
+            Message::Binary(bytes) => bytes.to_vec(),
+            Message::Ping(_) => {
+                socket.flush().await.map_err(|_| "Pong failed")?;
+                continue;
+            }
+            Message::Pong(_) => continue,
+            Message::Close(_) => return Err("WebSocket closed".into()),
+            _ => return Err("Unexpected WebSocket frame".into()),
+        };
+        let value: Value = serde_json::from_slice(&bytes).map_err(|_| "Invalid server JSON")?;
+        if value.get("error").is_some() {
+            return Err("Provider rejected the session (details suppressed)".into());
+        }
+        return Ok(value);
+    }
+}
+
+impl LiveSocket {
+    pub async fn connect(config: Config, key: &str) -> Result<(Self, Machine), String> {
+        if key.is_empty()
+            || !key
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+        {
+            return Err("Stored Gemini credential has an unsupported format".into());
+        }
+        Self::connect_to(&format!("{ENDPOINT}?key={key}"), config).await
+    }
+
+    async fn connect_to(url: &str, config: Config) -> Result<(Self, Machine), String> {
+        validate(&config)?;
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let limits = WebSocketConfig::default()
+            .max_message_size(Some(MAX_MESSAGE))
+            .max_frame_size(Some(MAX_MESSAGE));
+        // Never format a tungstenite error: it may contain the credential-bearing URL.
+        let mut socket = timeout(
+            Duration::from_secs(15),
+            tokio_tungstenite::connect_async_with_config(url, Some(limits), true),
+        )
+        .await
+        .map_err(|_| "WebSocket connection timed out")?
+        .map(|(socket, _)| socket)
+        .map_err(socket_error)?;
+        send(&mut socket, &setup_message()).await?;
+        let reply = timeout(Duration::from_secs(15), receive(&mut socket))
+            .await
+            .map_err(|_| "Lyria setup timed out")??;
+        if !reply["setupComplete"].is_object() {
+            return Err("Expected setupComplete before sending controls".into());
+        }
+        let machine = Machine::live(config);
+        for message in machine.outbound.iter().skip(1) {
+            send(&mut socket, message).await?;
+        }
+        Ok((Self(socket), machine))
+    }
+
+    pub async fn send_all(&mut self, messages: &[Value]) -> Result<(), String> {
+        for message in messages {
+            send(&mut self.0, message).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn next_audio(&mut self) -> Result<Vec<i16>, String> {
+        loop {
+            let message = receive(&mut self.0).await?;
+            if message["serverContent"]["audioChunks"].is_array() {
+                return decode_audio(&message);
+            }
+            if message.get("filteredPrompt").is_some() {
+                return Err("Provider filtered the Lyria prompt; raw text is not logged".into());
+            }
+            if message.get("warning").is_some() {
+                continue;
+            }
+            return Err("Unexpected Lyria server message".into());
+        }
+    }
+
+    pub async fn stop(mut self) {
+        let _ = send(&mut self.0, &playback("STOP")).await;
+        let _ = timeout(Duration::from_secs(2), self.0.close(None)).await;
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
@@ -198,6 +329,7 @@ pub struct Machine {
     pub config: Config,
     pub outbound: Vec<Value>,
     pub buffering: bool,
+    live: bool,
 }
 
 impl Default for Machine {
@@ -207,11 +339,27 @@ impl Default for Machine {
             config: Config::default(),
             outbound: Vec::new(),
             buffering: false,
+            live: false,
         }
     }
 }
 
 impl Machine {
+    fn live(config: Config) -> Self {
+        Self {
+            phase: "playing",
+            outbound: vec![
+                setup_message(),
+                prompt_message(&config.prompts),
+                config_message(&config),
+                playback("PLAY"),
+            ],
+            config,
+            buffering: true,
+            live: true,
+        }
+    }
+
     pub fn from_fixture() -> Result<Self, String> {
         let doc = protocol();
         let mut machine = Self::default();
@@ -280,7 +428,7 @@ impl Machine {
             requested_bpm: self.config.bpm,
             scale: self.config.scale.clone(),
             buffering: self.buffering,
-            live: false,
+            live: self.live,
             drives_clock: false,
             outbound: self.outbound.len(),
         }
@@ -338,6 +486,22 @@ mod tests {
             ..valid
         })
         .is_err());
+    }
+
+    #[test]
+    fn handshake_errors_never_reveal_credentials_or_server_bodies() {
+        let response = tokio_tungstenite::tungstenite::http::Response::builder()
+            .status(403)
+            .header("x-secret", "never-print-this")
+            .body(Some(b"private response".to_vec()))
+            .unwrap();
+        assert_eq!(
+            socket_error(tokio_tungstenite::tungstenite::Error::Http(Box::new(
+                response
+            ))),
+            "WebSocket handshake rejected with HTTP 403"
+        );
+        assert!(!USAGE_PATH.contains('?'));
     }
 
     #[test]
@@ -400,5 +564,57 @@ mod tests {
             .outbound
             .iter()
             .any(|m| m.get("clientContent").is_some()));
+    }
+
+    #[tokio::test]
+    async fn live_socket_waits_for_setup_and_yields_pcm() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let fixture = protocol();
+        let server_fixture = fixture.clone();
+        let expected = Machine::live(Config::default()).outbound;
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut socket = tokio_tungstenite::accept_async(tcp).await.unwrap();
+            let setup = socket.next().await.unwrap().unwrap();
+            assert_eq!(
+                serde_json::from_slice::<Value>(&setup.into_data()).unwrap(),
+                expected[0]
+            );
+            socket
+                .send(Message::Text(
+                    server_fixture["setupReply"].to_string().into(),
+                ))
+                .await
+                .unwrap();
+            for expected in expected.iter().skip(1) {
+                let message = socket.next().await.unwrap().unwrap();
+                assert_eq!(
+                    serde_json::from_slice::<Value>(&message.into_data()).unwrap(),
+                    *expected
+                );
+            }
+            socket
+                .send(Message::Text(server_fixture["audio"].to_string().into()))
+                .await
+                .unwrap();
+            let stop = socket.next().await.unwrap().unwrap();
+            assert_eq!(
+                serde_json::from_slice::<Value>(&stop.into_data()).unwrap(),
+                server_fixture["stop"]
+            );
+        });
+
+        let (mut socket, machine) =
+            LiveSocket::connect_to(&format!("ws://{address}"), Config::default())
+                .await
+                .unwrap();
+        assert!(machine.status().live);
+        assert_eq!(
+            socket.next_audio().await.unwrap(),
+            [16_384, -16_384, 8192, -8192]
+        );
+        socket.stop().await;
+        server.await.unwrap();
     }
 }
