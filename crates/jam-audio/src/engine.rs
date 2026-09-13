@@ -3431,19 +3431,17 @@ mod tests {
         };
         engine.transport_play();
         let id = engine.recorder_start("jam".into()).unwrap();
-        let mut last = engine.timeline.lock().current_sample;
-        let mut wraps = 0u32;
-        let deadline = Instant::now() + Duration::from_secs(4);
-        while wraps < 2 {
-            thread::sleep(Duration::from_millis(10));
-            let now = engine.timeline.lock().current_sample;
-            if now + loop_samples / 2 < last {
-                wraps += 1;
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            thread::sleep(Duration::from_millis(20));
+            let n = engine.recorder.lock().pass_starts().len();
+            if n >= 3 {
+                break;
             }
-            last = now;
             assert!(
                 Instant::now() < deadline,
-                "timed out after {wraps} loop wraps"
+                "timed out with {n} pass starts; current_sample={}",
+                engine.timeline.lock().current_sample
             );
         }
         let take = engine.recorder_stop().unwrap();

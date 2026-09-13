@@ -250,6 +250,10 @@ impl TakeRecorder {
             record_loop_pass(&mut self.pass_starts, at_sample);
         }
     }
+
+    pub(crate) fn pass_starts(&self) -> &[u64] {
+        &self.pass_starts
+    }
     pub(crate) fn push_frames(
         &mut self,
         frames: Vec<Frame>,

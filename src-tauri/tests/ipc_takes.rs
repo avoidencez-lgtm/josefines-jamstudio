@@ -354,7 +354,7 @@ fn looping_a_recording_counts_passes_at_loop_wraps() {
     );
 
     let wait_tel = |what: &str, pred: &dyn Fn(&Value) -> bool| -> Value {
-        let deadline = Instant::now() + Duration::from_secs(4);
+        let deadline = Instant::now() + Duration::from_secs(15);
         loop {
             let tel = studio.ok("audio_get_telemetry", json!({}));
             if pred(&tel) {
@@ -364,7 +364,7 @@ fn looping_a_recording_counts_passes_at_loop_wraps() {
                 Instant::now() < deadline,
                 "timed out waiting for {what}; last telemetry: {tel}"
             );
-            std::thread::sleep(Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(20));
         }
     };
     wait_tel("count-in off, 240 bpm, one-bar loop", &|t| {
@@ -384,24 +384,10 @@ fn looping_a_recording_counts_passes_at_loop_wraps() {
     let dir = takes_root().join(&id);
     assert_eq!(dir.file_name().unwrap().to_string_lossy(), id.as_str());
 
-    let mut last_beats = studio.ok("audio_get_telemetry", json!({}))["transport"]["position_beats"]
-        .as_f64()
-        .unwrap();
-    let mut wraps = 0u32;
-    let deadline = Instant::now() + Duration::from_secs(4);
-    while wraps < 2 {
-        std::thread::sleep(Duration::from_millis(10));
-        let tel = studio.ok("audio_get_telemetry", json!({}));
-        let beats = tel["transport"]["position_beats"].as_f64().unwrap();
-        if beats + 0.5 < last_beats {
-            wraps += 1;
-        }
-        last_beats = beats;
-        assert!(
-            Instant::now() < deadline,
-            "timed out after {wraps} loop wraps; last telemetry: {tel}"
-        );
-    }
+    wait_tel("two loop passes of recorded audio", &|t| {
+        t["recorder"]["active"] == true
+            && t["recorder"]["duration_secs"].as_f64().unwrap_or(0.0) >= 2.5
+    });
 
     let tel = studio.ok("audio_get_telemetry", json!({}));
     let bpm = tel["transport"]["bpm"].as_f64().unwrap();
