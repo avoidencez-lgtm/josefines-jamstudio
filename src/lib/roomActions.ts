@@ -114,6 +114,22 @@ export async function cueSetlistItem(item: Setlist[number]) {
   e.setTempoTrainer({ enabled: false });
 }
 
+/** Cue the setlist entry after the loaded chart, or the first entry if none match. */
+export async function cueNextSetlistItem() {
+  const e = useEngineStore.getState();
+  const parsed = setlistSchema.safeParse(e.settings?.rehearsalSetlist ?? []);
+  if (!parsed.success || parsed.data.length === 0)
+    throw new Error("Add a chart to the setlist first.");
+  const list = parsed.data;
+  const idx = list.findIndex((item) => item.chartId === e.currentChart?.id);
+  const next = idx < 0 ? list[0] : list[idx + 1];
+  if (!next)
+    throw new Error(
+      "This is the last setlist entry. Cue an earlier song from Stage.",
+    );
+  await cueSetlistItem(next);
+}
+
 export async function recallRig(value: unknown) {
   if (isPreview) throw new Error("Hardware recall needs the desktop app.");
   const e = useEngineStore.getState();

@@ -9,6 +9,14 @@
     {
       "action": "record",
       "press": { "kind": "cc", "channel": 2, "number": 64 }
+    },
+    {
+      "action": "cueNext",
+      "press": { "kind": "cc", "channel": 1, "number": 20 }
+    },
+    {
+      "action": "exitLoop",
+      "press": { "kind": "note", "channel": 1, "number": 60 }
     }
   ],
   "customNote": "User labels survive pedal reassignments."

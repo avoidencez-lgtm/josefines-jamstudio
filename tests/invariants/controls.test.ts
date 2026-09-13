@@ -40,6 +40,11 @@ it("keeps every Stage action on a shortcut, Jo tool and default control-map bind
   }
 });
 
+it("accepts Cue next and Exit loop as Jo tools a control map can bind", () => {
+  validateToolCall({ name: "cue_next", arguments: {} });
+  validateToolCall({ name: "exit_loop", arguments: {} });
+});
+
 it("refuses an unknown control-map action", () => {
   expect(() =>
     validateControlMap({

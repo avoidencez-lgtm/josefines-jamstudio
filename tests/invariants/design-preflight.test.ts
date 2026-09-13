@@ -8612,6 +8612,12 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
   expect(readFileSync("src/lib/controller.ts", "utf8")).toContain(
     'ramp: "Toggle this reference practice ramp."',
   );
+  expect(readFileSync("src/lib/controller.ts", "utf8")).toContain(
+    'cueNext: "Cue the next setlist entry."',
+  );
+  expect(readFileSync("src/lib/controller.ts", "utf8")).toContain(
+    'exitLoop: "Exit this loop."',
+  );
   expect(readFileSync("docs/guide/manual.json", "utf8")).not.toContain(
     "Actions include Keep that riff, Record/save take",
   );
@@ -8628,10 +8634,10 @@ it("DESIGN empty and error copy exists on each listed screen", () => {
     "Loop this selected section. Loop this next section.",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
-    "Actions include Keep this riff, Record or save this take, Play or stop this, Loop this selected section, Loop this next section and Keep this version.",
+    "Actions include Keep this riff, Record or save this take, Play or stop this, Loop this selected section, Loop this next section, Keep this version, Cue the next setlist entry and Exit this loop.",
   );
   expect(readFileSync("docs/guide/manual.json", "utf8")).toContain(
-    "velge Keep this riff, Record or save this take, Play or stop this, Loop this selected section, Loop this next section og Keep this version.",
+    "velge Keep this riff, Record or save this take, Play or stop this, Loop this selected section, Loop this next section, Keep this version, Cue the next setlist entry og Exit this loop.",
   );
   expect(readFileSync("src/components/JoVoice.tsx", "utf8")).not.toContain(
     "learn Talk / send to Jo",

@@ -17,6 +17,8 @@ export const PEDAL_ACTIONS = {
   version: "Keep this version.",
   voice: "Talk or send this to Jo.",
   ramp: "Toggle this reference practice ramp.",
+  cueNext: "Cue the next setlist entry.",
+  exitLoop: "Exit this loop.",
 } as const;
 export type PedalAction = keyof typeof PEDAL_ACTIONS;
 export interface PedalPress {
@@ -191,6 +193,17 @@ export const useController = create<ControllerState>((set, get) => ({
     }
     if (action === "ramp") {
       await toggleReferenceRamp();
+      return;
+    }
+    if (action === "cueNext" || action === "exitLoop") {
+      try {
+        await dispatchJoToolCall({
+          name: action === "cueNext" ? "cue_next" : "exit_loop",
+          arguments: {},
+        });
+      } catch (e) {
+        set({ message: String(e) });
+      }
       return;
     }
     const w = useWriting.getState();
