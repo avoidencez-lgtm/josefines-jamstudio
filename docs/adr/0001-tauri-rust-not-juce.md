@@ -16,7 +16,7 @@ Tauri 2 with a Rust workspace engine and a React/TypeScript UI. VST3/AU hosting 
 2. An AI coding agent is measurably more reliable in TypeScript and Rust than in modern C++/CMake, where mistakes surface as crashes rather than type errors and the build system is fiddlier across two operating systems.
 3. Microphone capture must live in native code either way (WKWebView `getUserMedia` is flaky); Rust `cpal` handles that cleanly.
 4. Licensing: JUCE 8 is GPL or commercial (free tier with limits); a public Apache-2.0 repository fits Tauri and the Rust crates without exceptions.
-5. Tauri's IPC, plugins (global shortcut, dialog, log, http, updater) and `tauri-action` CI cover everything else the app needs.
+5. Tauri's IPC, plugins (global shortcut, dialog, log, http, updater) and `tauri-action` CI cover everything else the app needs. **As built (2026-09-13):** `tauri-plugin-log`, `tauri-plugin-dialog` and `tauri-plugin-global-shortcut` are in `src-tauri`. The main capability is event listen/unlisten (`src-tauri/capabilities/default.json`). `plugin-http` and `plugin-updater` are not used; HTTP is `reqwest` in Rust.
 
 ## Consequences
 

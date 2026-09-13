@@ -611,7 +611,7 @@ fn bundled_rig_profiles_are_listed_with_their_midi_facts() {
         "quad-cortex",
         "helix",
         "kemper",
-        "axe-fx",
+        "axe-fx-iii",
     ] {
         assert!(ids.contains(&wanted), "{wanted} missing from {ids:?}");
     }

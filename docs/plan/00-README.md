@@ -108,7 +108,10 @@ Rules for the board: ☐ becomes ⏳ when work starts, and ✅ only when the imp
 - Spike findings: [`docs/spikes/`](../spikes/).
 - Code (from M0): `crates/`, `src-tauri/`, `src/`, `tests/`, `styles/`, `charts/`, `rigs/`, `controls/`.
 - The guitarist's data at runtime: `~/JosefinesJamstudio/` (files are truth; SQLite is a cache).
-# Songwriting slice: writing and recording originals
+
+The H1/H2 slice summaries below are historical addenda from 2026-09; the status board above is current.
+
+## Songwriting slice: writing and recording originals
 
 Added on top of the real-band rebuild: Write editor, independent section parts and
 groove locks, optional rolling capture, trimmed guitar layers, overdub recording,

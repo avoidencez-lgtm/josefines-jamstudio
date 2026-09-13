@@ -32,7 +32,8 @@ $env:JAM_HEADLESS = "1"; cargo test --workspace
 cargo deny check
 
 # Run the app (headless engine with the file-backed guitar input)
-$env:JAM_HEADLESS = "1"; $env:JAM_FAKE_INPUT = "tests/fixtures/audio/guitar-e-blues-120.wav"; corepack pnpm tauri dev
+$env:JAM_HEADLESS = "1"; corepack pnpm tauri dev
+# Optional: $env:JAM_FAKE_INPUT = "<local-wav>". WAVs under tests/fixtures/audio/ are gitignored (see that folder's README); assets_ensure does not fetch them. A missing path falls back to a 440 Hz sine.
 
 # Smoke-run the built app the way CI does (exit 0 = the frontend completed its handshake; run it right after the build, cargo test rebuilds the binary without the embedded frontend)
 corepack pnpm tauri build --debug --no-bundle; $env:JAM_HEADLESS = "1"; $env:JAM_SMOKE_SECONDS = "25"; .\target\debug\src-tauri.exe
@@ -64,7 +65,7 @@ A spike is a time-boxed experiment that decides an architectural question ([03-b
 
 - Keys are entered in the app's Settings screen and stored in the OS keychain through the `SecretStore` seam. There is no `.env` for keys. `.env.example` lists provider *names* only.
 - Automated tests never call a provider. Provider clients are tested against recorded fixtures in `tests/fixtures/providers/<provider>/`. A recorded fixture is captured once with `JAM_RECORD_FIXTURES=1` while a key is present, then scrubbed (the recorder strips headers and any key-like string) and committed.
-- Manual live checks are opt-in: `JAM_LIVE=1 cargo test -p josefines-jamstudio --test live -- --ignored`.
+- Manual live checks are opt-in `#[ignore]` tests on the crate that owns them, with `JAM_LIVE=1`. There is no `josefines-jamstudio` package and no `tests/live.rs`. Example: `$env:JAM_LIVE = "1"; cargo test -p src-tauri -- --ignored`.
 - Nothing leaves the app from a headless run: under `cfg(test)` or `JAM_HEADLESS=1` (CI, the smoke harness, `tauri dev` as documented above) `provider_fetch`, the media adapters and the installed-agent bridge refuse every request unless `JAM_LIVE=1` is also set. A smoke harness that starts the real binary must set `JAM_HEADLESS=1` itself; `cfg(test)` only covers unit tests inside the crate.
 - Never log a request body that could contain audio or a key. Log provider, model, duration, bytes and estimated cost.
 
