@@ -464,7 +464,7 @@ describe("rooms, end to end through the preview engine", () => {
     await useEngineStore.getState().loadRigProfiles();
     const store = useEngineStore.getState();
     expect(store.availableProfiles.map((p) => p.id)).toEqual([
-      "axe-fx",
+      "axe-fx-iii",
       "headrush-pedalboard",
       "black-spirit-200",
       "kemper",
@@ -519,7 +519,7 @@ describe("rooms, end to end through the preview engine", () => {
   it("maps sections to scenes per profile and drops mappings the next profile cannot play", async () => {
     await useEngineStore.getState().loadRigProfiles();
     const store = useEngineStore.getState();
-    await store.selectRigProfile("axe-fx");
+    await store.selectRigProfile("axe-fx-iii");
     expect(
       useEngineStore.getState().rigState?.currentProfile.scenes,
     ).toHaveLength(8);
