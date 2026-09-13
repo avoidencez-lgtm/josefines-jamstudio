@@ -66,38 +66,113 @@ State snapshots for the UI are published by the render worker into `arc-swap` ce
 
 ## 3. Repository layout
 
+As-built paths. `tests/invariants/architecture-layout.test.ts` asserts every path in this tree exists. One token per line; comments follow two spaces.
+
 ```
-josefines-jamstudio/
-  AGENTS.md  README.md  LICENSE  deny.toml  Cargo.toml (workspace)  package.json  biome.json  tsconfig.json  vite.config.ts
-  crates/
-    jam-core/    types, timeline, chart, style, rig profile, control map, schema versions, registries (pure, serde)
-    jam-dsp/     pure DSP: level, pitch, energy
-    jam-audio/   cpal devices and streams, io traits, engine (ring buffers, callback, render worker), transport, mixer, click, recorder, song player (offline + live stretch in jam-dsp)
-    jam-band/    sequencer, instruments (Sampler, Sf2Synth), voicing, bass, comp, cues, offline render
-    jam-rig/     MidiSink/MidirSink/MemorySink, profiles, scenes, scheduler, clock, input
-  src-tauri/
-    src/main.rs, lib.rs (command table; IPC_VERSION lives in src/ipc/contract.ts)
-    src/assets.rs, keys.rs, settings.rs, store.rs, library.rs, voice.rs, lyria.rs, aliases.rs
-    src/media.rs + media/{songs,stems,analysis,grid}.rs
-    src/net.rs + net/{lyria,musicai,review,voice,media}.rs
-    src/platform/ OS-specific (paths, CPU sample, voice shortcut)
-    tauri.conf.json, capabilities/
+AGENTS.md
+README.md
+LICENSE
+deny.toml
+Cargo.toml
+package.json
+biome.json
+tsconfig.json
+vite.config.ts
+crates/
+  jam-core/          types, timeline, chart, style, registries
+  jam-dsp/           level, pitch, energy, stretch, offline analysis
+  jam-audio/         cpal, io traits, engine, recorder, song player
+  jam-band/          sequencer, sampler, voicing, offline render
+  jam-rig/           MidiSink, MemorySink, profiles, scheduler
+src-tauri/
   src/
-    app/          App shell, router, theme, global shortcuts
-    screens/      registry.ts + one folder per screen (stage, library, sessions, rig, settings)
-    components/   design primitives (Button, Dial, BigReadout, Meter, Panel, ...)
-    design/       tokens.css, motion.ts
-    ipc/          contract.ts + one file per domain wrapping invoke/listen; engine store (zustand)
-    ai/           llm/ (AI SDK + fetch shim), tools/*.tool.ts + index.ts, jo/ (persona.md, session.ts, transcript.ts)
-    lib/          chart/ (parse, transpose, resolve), controls/ (control-map dispatcher), format/
-  styles/  charts/  rigs/  controls/     bundled data files (seams)
-  assets/  manifest.json, LICENSES.md, README.md
-  tests/
-    fixtures/     audio/, providers/<provider>/, seams/, jo/
-    invariants/   seams.test.ts
-  scripts/        check-js-licences.mjs, gen-fixtures.mjs, spikes/
-  docs/           plan/, adr/, hardware/, spikes/, ARCHITECTURE.md, EXTENDING.md, DESIGN.md, guide/
-  .github/workflows/ ci.yml, release.yml
+    main.rs
+    lib.rs
+    agents.rs
+    aliases.rs
+    assets.rs
+    clips.rs
+    controller.rs
+    keys.rs
+    library.rs
+    lyria.rs
+    media.rs
+    originals.rs
+    persistence.rs
+    settings.rs
+    store.rs
+    voice.rs
+    media/
+      songs.rs
+      stems.rs
+      analysis.rs
+      grid.rs
+    net.rs
+    net/
+      lyria.rs
+      musicai.rs
+      review.rs
+      voice.rs
+      media.rs
+    platform/
+  tauri.conf.json
+  capabilities/
+src/
+  App.tsx
+  screens/
+    registry.ts
+    Stage.tsx
+    Library.tsx
+    Sessions.tsx
+    Rig.tsx
+    Settings.tsx
+  components/
+  design/
+    tokens.css
+  ipc/
+    client.ts
+    contract.ts
+    preview.ts
+  store/
+    engine.ts
+  lib/
+    chart/
+    controls.ts
+    jo/
+    net/
+      providerFetch.ts
+styles/
+charts/
+rigs/
+controls/
+assets/
+  manifest.json
+  LICENSES.md
+  README.md
+tests/
+  fixtures/
+    providers/
+    seams/
+    jo/
+  invariants/
+    seams.test.ts
+    architecture-layout.test.ts
+scripts/
+  check-js-licences.mjs
+  spikes/
+docs/
+  plan/
+  adr/
+  hardware/
+  spikes/
+  ARCHITECTURE.md
+  EXTENDING.md
+  DESIGN.md
+  guide/
+.github/
+  workflows/
+    ci.yml
+    release.yml
 ```
 
 ## 4. Audio engine
@@ -527,28 +602,46 @@ Current verification: `tests/invariants/seams.test.ts` checks bundled manifest f
 
 ### 9.1 Deterministic DSP and engine tests (synthetic signals, 48 kHz, exact tolerances)
 
-| Test | Signal | Assertion |
-|---|---|---|
-| Level meter | -20.0 dBFS 1 kHz sine, 1 s | RMS = -20.00 ±0.10 dB; peak within ±0.01 dB |
-| Pitch | sine sweep 55 to 1319 Hz with +40 dB SNR noise, 2048-frame window | median error ≤ 10 cents, max ≤ 25 cents, no octave errors |
-| Onset | click track 120 bpm, 30 s, hop 256 | every onset within ±12 ms, zero false positives, zero misses |
-| Chroma and chords | 24 major and 24 minor triads as 3-partial stacks | 100 % root and quality; 7ths ≥ 90 % |
-| Resampler | 1 kHz sine 48k → 44.1k → 48k | Pearson r ≥ 0.999 after alignment; noise floor ≤ -80 dBFS |
-| Time-stretch | 1 kHz sine × 1.25 | length ±1 ms; dominant bin ±1 Hz |
-| Pitch-shift | 1 kHz sine +2 semitones | f0 = 1122.5 ±5 Hz |
-| Timeline | tempo map with 3 changes, 10 000 random beats | round-trip error < 1e-9 beats |
-| Transport loop | 4 bars at 120 bpm with `NullOutput` | wrap within ±1 sample |
-| MIDI scheduling | PC at bar 5 beat 1 through `MemorySink` | emitted within ±1 ms of the timeline timestamp minus lookahead |
-| Alignment | `FileInput` impulse at sample 24000 while the band renders a click | recorded impulse and click transient within ±1 sample after the offset |
-| Render budget | 10 000 blocks of the busiest style | under 25 % of real time on the CI runner |
+Each row is a shipped function plus a synthetic-signal test. `Where` is `file::test`. Do not duplicate these tests under a second name.
+
+| Test | Signal | Assertion | Where |
+|---|---|---|---|
+| Level meter | -20.0 dBFS 1 kHz sine, 1 s | RMS = -20.00 ±0.10 dB; peak within ±0.01 dB | `crates/jam-dsp/src/level.rs::minus_twenty_dbfs_sine_rms_and_peak` |
+| Pitch | sine sweep 55 to 1319 Hz with +40 dB SNR noise, 2048-frame window | median error ≤ 10 cents, max ≤ 25 cents, no octave errors | `crates/jam-dsp/src/pitch.rs::sweep_55_to_1319_with_noise_stays_within_cents` |
+| Onset | click track 120 bpm, 30 s, hop 256 | every onset within ±12 ms, zero false positives, zero misses | `crates/jam-dsp/src/offline.rs::click_track_onsets_are_within_twelve_ms` |
+| Chroma and chords | 24 major and 24 minor triads as 3-partial stacks | 100 % root and quality; 7ths ≥ 90 % | `crates/jam-dsp/src/offline.rs::twenty_four_major_and_minor_triads_and_sevenths` |
+| Resampler | 1 kHz sine 48k → 44.1k → 48k | Pearson r ≥ 0.999 after alignment; noise floor ≤ -80 dBFS | `crates/jam-audio/src/import.rs::sine_48k_through_441_round_trip_pearson_and_noise_floor` |
+| Time-stretch | 1 kHz sine × 1.25 | length ±1 ms; dominant bin ±1 Hz | `crates/jam-dsp/src/stretch.rs::time_stretch_125_length_and_dominant_bin` |
+| Pitch-shift | 1 kHz sine +2 semitones | f0 = 1122.5 ±5 Hz | `crates/jam-dsp/src/stretch.rs::pitch_shift_plus_two_semitones_is_1122_5_hz` |
+| Timeline | tempo map with 3 changes, 10 000 random beats | round-trip error < 1e-9 beats | `crates/jam-core/src/timeline.rs::tempo_map_three_changes_round_trip_ten_thousand_beats` |
+| Transport loop | 4 bars at 120 bpm, headless `NullOutput` | wrap within ±1 sample on the render worker (`RenderContext`). The wall-clock `NullOutput` timer is not the ±1-sample oracle. | `crates/jam-audio/src/engine.rs::four_bar_loop_at_120_wraps_within_one_sample_on_null_output` |
+| MIDI scheduling | PC at bar 5 beat 1 through `MemorySink` | emitted within ±1 ms of the timeline timestamp minus lookahead | `crates/jam-rig/src/scheduler.rs::program_change_at_bar_five_lands_within_one_ms_of_lookahead` |
+| Alignment | `FileInput` impulse at sample 24000 while the band renders a click | recorded impulse and click transient within ±1 sample after the offset | `crates/jam-audio/src/engine.rs::file_input_impulse_and_click_align_within_one_sample_after_offset` |
+| Render budget | 10 000 blocks of the busiest style (funk-16) | under 25 % of real time on the CI runner | `crates/jam-band/tests/golden.rs::test_render_worker_benchmark_budget` |
 
 ### 9.2 Golden renders (band)
 
-`band_render_offline` with `NullOutput`; assert onset positions within ±1 sample, per-bus RMS within ±0.05 dB, exact frame count `bars × beats × 48000 × 60 / bpm` (rounded as documented in `jam-core::timeline`); the SHA-256 of the render is logged as a tripwire only, never asserted (float and SF2 paths differ across OS).
+Offline `jam_band::offline::render_style` / `bus_rms_db` (same sequencer as live play; no device I/O). IPC `band_render_offline` writes the WAV under the user dir. Assertions:
+
+- exact frame count `bars × beats_per_bar × 48000 × 60 / bpm`, rounded as `jam-core::timeline::beats_to_samples` (`crates/jam-band/src/offline.rs::one_bar_at_120_is_exact_frames`; `src-tauri/tests/ipc_aliases.rs::band_render_offline_writes_wav_under_user_dir`)
+- per-bus RMS repeatable within ±0.05 dB (`crates/jam-band/src/offline.rs::bus_rms_repeats_within_half_a_decibel`)
+- kick onsets within ±1 sample on the onset-grid fixture (`crates/jam-band/src/offline.rs::kick_onsets_land_within_one_sample`; `src-tauri/tests/ipc_aliases.rs::band_render_offline_onsets_within_one_sample`)
+- bundled styles and the extending fixture render deterministically at a fixed seed (`crates/jam-band/tests/golden.rs::test_golden_render_*`, `fixture_style_golden_renders_without_entering_bundled_styles`)
+
+SHA-256 of the PCM is not asserted and not logged: float and SF2 paths differ across OS. Same-OS byte identity of the mix at seed 42 is the tripwire.
 
 ### 9.3 TypeScript tests
 
-Chart parsing and transposition for every preset, section expansion, style schema validation, tool argument validation, control-map dispatch, the fetch shim, the Jo script against recorded LLM fixtures, the bundle-scan test (no key-like strings in `dist/`).
+| Area | Where |
+|---|---|
+| Chart parsing and transposition for every preset | `tests/chart/text.test.ts` (`round-trips every bundled chart through text`, `moves chords and key…`) |
+| Section expansion | `tests/chart/text.test.ts` (`supports an explicit arrangement and section style overrides`); Rust `crates/jam-core/src/chart.rs::test_12_bar_blues_expansion` |
+| Style schema validation | `tests/invariants/seams.test.ts`; Rust `crates/jam-core/tests/seams.rs::test_bundled_registries_load` |
+| Tool argument validation | `tests/jo/dispatcher.test.ts`; `tests/invariants/controls.test.ts` |
+| Control-map dispatch | `tests/invariants/controls.test.ts` (`matchControlMidi`, unknown action refused) |
+| Fetch shim | `tests/lib/provider-fetch.test.ts`; live-guard IPC `src-tauri/tests/ipc_net.rs` |
+| Jo script against recorded LLM fixtures | `tests/jo/script.test.ts` (`tests/fixtures/jo/script.json`, `tests/fixtures/providers/gemini/jo-script.json`) |
+| Bundle-scan (no key-like strings in `dist/`) | `tests/invariants/bundle-scan.test.ts` |
 
 ### 9.4 Provider tests
 
