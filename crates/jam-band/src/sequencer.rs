@@ -1221,6 +1221,7 @@ mod tests {
         seq.handle_timeline_event(&TimelineEvent::LoopWrapped {
             from_sample: 96_000,
             to_sample: 0,
+            offset: 0,
         });
         assert_eq!(seq.pending_note_offs.len(), 0);
         assert_eq!(seq.synth.sustaining_voices(CH_BASS), 0);
@@ -1847,6 +1848,7 @@ mod tests {
         seq.handle_timeline_event(&TimelineEvent::LoopWrapped {
             from_sample: 96_000,
             to_sample: 0,
+            offset: 0,
         });
         for on in &ons {
             let ch = on.bytes[0] & 0x0f;

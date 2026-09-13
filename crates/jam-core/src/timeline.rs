@@ -61,6 +61,8 @@ pub enum TimelineEvent {
     LoopWrapped {
         from_sample: u64,
         to_sample: u64,
+        /// Frame inside the current render block at which the wrap lands.
+        offset: usize,
     },
 }
 
@@ -328,6 +330,15 @@ impl Timeline {
                                 is_count_in,
                                 offset: offset + block_offset,
                             },
+                            TimelineEvent::LoopWrapped {
+                                from_sample,
+                                to_sample,
+                                offset,
+                            } => TimelineEvent::LoopWrapped {
+                                from_sample,
+                                to_sample,
+                                offset: offset + block_offset,
+                            },
                             other => other,
                         }));
                         spans.extend(sub_spans.into_iter().map(|s| Span {
@@ -359,6 +370,7 @@ impl Timeline {
                                 events.push(TimelineEvent::LoopWrapped {
                                     from_sample: start_sample,
                                     to_sample: loop_start_sample,
+                                    offset: block_offset,
                                 });
                                 self.current_sample = loop_start_sample;
                                 continue;
@@ -386,6 +398,7 @@ impl Timeline {
                         events.push(TimelineEvent::LoopWrapped {
                             from_sample: segment_end,
                             to_sample: target,
+                            offset: block_offset,
                         });
                         self.current_sample = target;
                     } else {
@@ -856,7 +869,8 @@ mod tests {
             e,
             TimelineEvent::LoopWrapped {
                 from_sample: 192_000,
-                to_sample: 0
+                to_sample: 0,
+                offset: 1000
             }
         )));
     }
@@ -1007,9 +1021,14 @@ mod tests {
         tl.advance(96_000 * 6); // bar 7
         tl.set_loop(1, 3, true);
         let (ev, spans) = tl.advance_with_spans(256);
-        assert!(ev
-            .iter()
-            .any(|e| matches!(e, TimelineEvent::LoopWrapped { to_sample: 0, .. })));
+        assert!(ev.iter().any(|e| matches!(
+            e,
+            TimelineEvent::LoopWrapped {
+                to_sample: 0,
+                offset: 0,
+                ..
+            }
+        )));
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].start_beats, 0.0);
         assert_eq!(tl.current_sample, 256);

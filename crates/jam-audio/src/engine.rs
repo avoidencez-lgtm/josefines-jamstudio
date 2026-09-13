@@ -1707,6 +1707,8 @@ impl AudioEngine {
                 let mut input_queue: VecDeque<f32> = VecDeque::with_capacity(block_len * 16);
                 let mut primed = false;
                 let mut output_index = 0u64;
+                let mut take_rendered = 0u64;
+                let mut last_take = 0u64;
                 let mut pending_notes: VecDeque<(u64, u64, crate::workstation::MidiNote)> =
                     VecDeque::new();
 
@@ -1945,6 +1947,16 @@ impl AudioEngine {
                         } else {
                             0
                         };
+                        if take != last_take {
+                            take_rendered = 0;
+                            last_take = take;
+                        }
+                        if take != 0 && !ctx.loop_wrap_offsets.is_empty() {
+                            let mut recorder = recorder_arc.lock();
+                            for &offset in &ctx.loop_wrap_offsets {
+                                recorder.note_loop_wrap(take_rendered + offset as u64);
+                            }
+                        }
                         if take != 0 {
                             for note in notes {
                                 pending_notes.push_back((take, output_index + note.frame, note));
@@ -1972,6 +1984,7 @@ impl AudioEngine {
                         }
                         output_index += block_len as u64;
                         if take != 0 {
+                            take_rendered += block_len as u64;
                             clock.end.store(output_index, Ordering::Release);
                         }
                         rendered = true;
@@ -2077,6 +2090,8 @@ struct RenderContext {
     out_left: Vec<f32>,
     out_right: Vec<f32>,
     spans: Vec<jam_core::timeline::Span>,
+    /// Block-local frame offsets of `TimelineEvent::LoopWrapped` in this render.
+    loop_wrap_offsets: Vec<usize>,
     tone_phase: f32,
     click: Option<ClickVoice>,
     click_len: usize,
@@ -2146,6 +2161,7 @@ impl RenderContext {
             out_left: vec![0.0; RENDER_BLOCK],
             out_right: vec![0.0; RENDER_BLOCK],
             spans: Vec::new(),
+            loop_wrap_offsets: Vec::new(),
             tone_phase: 0.0,
             click: None,
             click_len: (sample_rate as f32 * CLICK_SECS) as usize,
@@ -2265,10 +2281,17 @@ impl RenderContext {
         let counting_in = transport.state == "counting_in";
         self.band_volume = band_vol;
         let mut click_starts: Vec<(usize, f32)> = Vec::new();
+        self.loop_wrap_offsets.clear();
         for ev in &events {
-            if let TimelineEvent::Beat { beat, offset, .. } = ev {
-                let freq = if *beat == 1 { 1200.0 } else { 800.0 };
-                click_starts.push(((*offset).min(frames - 1), freq));
+            match ev {
+                TimelineEvent::Beat { beat, offset, .. } => {
+                    let freq = if *beat == 1 { 1200.0 } else { 800.0 };
+                    click_starts.push(((*offset).min(frames - 1), freq));
+                }
+                TimelineEvent::LoopWrapped { offset, .. } => {
+                    self.loop_wrap_offsets.push(*offset);
+                }
+                _ => {}
             }
         }
         click_starts.sort_by_key(|(o, _)| *o);
@@ -3383,6 +3406,81 @@ mod tests {
         assert!((t.hz - 440.0).abs() < 5.0, "got {} Hz", t.hz);
         assert!(t.note.starts_with('A'));
         engine.stop().unwrap();
+    }
+
+    #[test]
+    fn looping_a_recording_counts_passes_at_loop_wraps() {
+        let mut engine = headless_engine();
+        let root = std::env::temp_dir().join(format!(
+            "jam-loop-pass-engine-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        *engine.recorder.lock() = crate::recorder::TakeRecorder::new(48_000, root.clone());
+        engine.start().unwrap();
+        engine.transport_set_count_in(0);
+        engine.transport_set_tempo(240.0);
+        engine.transport_set_loop(1, 2, true).unwrap();
+        let loop_samples = {
+            let tl = engine.timeline.lock();
+            tl.samples_per_bar() * u64::from(tl.loop_end_bar.saturating_sub(tl.loop_start_bar))
+        };
+        engine.transport_play();
+        let id = engine.recorder_start("jam".into()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            thread::sleep(Duration::from_millis(20));
+            let n = engine.recorder.lock().pass_starts.len();
+            if n >= 3 {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "timed out with {n} pass starts; current_sample={}",
+                engine.timeline.lock().current_sample
+            );
+        }
+        let take = engine.recorder_stop().unwrap();
+        engine.stop().unwrap();
+        assert_eq!(take.id, id);
+        let passes = take.extra["passes"].as_u64().unwrap();
+        assert!(
+            passes >= 3,
+            "two wraps start pass 3; extra={:?}",
+            take.extra
+        );
+        let starts: Vec<u64> = take.extra["passStarts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_u64().expect("passStarts are sample positions"))
+            .collect();
+        assert_eq!(starts.len() as u64, passes);
+        assert_eq!(starts[0], 0);
+        for pair in starts.windows(2).skip(1) {
+            assert_eq!(
+                pair[1] - pair[0],
+                loop_samples,
+                "full-pass length must match the armed loop; starts={starts:?} loop_samples={loop_samples}"
+            );
+        }
+        assert!(
+            starts[1] > 0 && starts[1] <= loop_samples,
+            "first wrap is inside the armed loop; starts={starts:?} loop_samples={loop_samples}"
+        );
+        let dir = std::path::Path::new(&take.path_input).parent().unwrap();
+        let disk: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.join("take.json")).unwrap()).unwrap();
+        assert_eq!(disk["id"], id);
+        assert_eq!(disk["passes"], passes);
+        assert_eq!(disk["passStarts"], take.extra["passStarts"]);
+        assert_eq!(dir.file_name().unwrap().to_string_lossy(), id.as_str());
+        assert_eq!(take.stems.len(), 6);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
