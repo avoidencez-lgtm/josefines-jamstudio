@@ -202,9 +202,9 @@ export const Settings: React.FC = () => {
       input_device: settings.input_device ?? null,
       output_device: settings.output_device ?? null,
       input_channel: settings.input_channel,
-      sample_rate: settings.sample_rate,
       buffer_size: settings.buffer_size,
       ...patch,
+      sample_rate: 48000,
     };
     setApplying(true);
     try {
@@ -544,24 +544,12 @@ export const Settings: React.FC = () => {
                 </label>
               </div>
               <div>
-                <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
-                  Choose the sample rate.
-                  <select
-                    value={settings?.sample_rate ?? 48000}
-                    disabled={applying}
-                    onChange={(e) =>
-                      applyAudio({
-                        sample_rate:
-                          Number.parseInt(e.target.value, 10) || 48000,
-                      })
-                    }
-                    className="mt-1 block w-full bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] p-2 rounded-[var(--radius-m)] text-sm font-mono"
-                  >
-                    <option value={44100}>44.1 kHz</option>
-                    <option value={48000}>48 kHz</option>
-                    <option value={96000}>96 kHz</option>
-                  </select>
-                </label>
+                <p className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">
+                  The engine always uses 48 kHz.
+                </p>
+                <p className="mt-1 text-sm">
+                  Devices at another rate are converted at the edge.
+                </p>
               </div>
               <div>
                 <label className="block text-xs uppercase font-mono text-[var(--fg-2)] mb-1">

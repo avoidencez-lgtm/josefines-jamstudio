@@ -1,0 +1,35 @@
+name: Bug
+description: Something did not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: trigger
+    attributes:
+      label: Trigger
+      description: What you did and what happened.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What should have happened.
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Build / commit
+      description: App version, git tag, or commit SHA.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Windows
+        - macOS
+        - Other
+    validations:
+      required: true

@@ -10,7 +10,7 @@ pub async fn song_pick_file<R: tauri::Runtime>(
         app,
         window,
         "Audio",
-        &["wav", "mp3", "flac", "m4a", "aiff", "aif", "ogg"],
+        &["wav", "mp3", "flac", "m4a", "aac", "aiff", "aif", "ogg"],
     )
     .await
 }
@@ -76,6 +76,10 @@ mod tests {
         assert!(
             parent < pick,
             "set_parent must run before pick_file so IFileDialog is not Show(NULL)"
+        );
+        assert!(
+            command.contains(r#"&["wav", "mp3", "flac", "m4a", "aac", "aiff", "aif", "ogg"]"#),
+            "the picker must offer the audio extensions the importer accepts"
         );
     }
 }

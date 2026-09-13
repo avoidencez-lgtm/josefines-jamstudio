@@ -256,7 +256,7 @@ Biblioteket viser analysestatus. Et avbrutt eller mislykket forsøk beholder imp
 
 ### Bruk en miks i en film
 
-Use this in Film velger filen som lydspor i gjeldende film. Save video lagrer valget. Generert lyd vises i samme bibliotek når jobben er ferdig. Generert tekst/struktur vises hvis leverandøren returnerer det. Øvingskopier kan også brukes som lydspor når de passer innenfor filmens varighetsgrense. Film bruker originalens stereofil, uten lagrede stem-nivåer eller mute-valg.
+Use this in Film velger filen som lydspor i gjeldende film. Save this project lagrer valget. Generert lyd vises i samme bibliotek når jobben er ferdig. Generert tekst/struktur vises hvis leverandøren returnerer det. Øvingskopier kan også brukes som lydspor når de passer innenfor filmens varighetsgrense. Film bruker originalens stereofil, uten lagrede stem-nivåer eller mute-valg.
 
 ### Dette er låtform fra en referanse.
 
@@ -336,7 +336,7 @@ Let the selected brain direct this gir redigerbare klippbeskrivelser fra tekst/t
 
 ### Lagre og rendre
 
-Save video lagrer prosjektinnstillinger og lokal modellkonfigurasjon. Render & jobs viser manglende video, manglende lydspor og lengdeavvik. Fit all these cuts to the song length skalerer klipplengder proporsjonalt. Render this music video krever alle klipp og en tidslinje som passer. Resultatet er 720p, 30 bilder/s, beskåret til valgt format, med lydspor i 48 kHz AAC; lyd fra genererte videoklipp fjernes. Originale lydfiler beholdes separat.
+Save this project lagrer prosjektinnstillinger og lokal modellkonfigurasjon. Render & jobs viser manglende video, manglende lydspor og lengdeavvik. Fit all these cuts to the song length skalerer klipplengder proporsjonalt. Render this music video krever alle klipp og en tidslinje som passer. Resultatet er 720p, 30 bilder/s, beskåret til valgt format, med lydspor i 48 kHz AAC; lyd fra genererte videoklipp fjernes. Originale lydfiler beholdes separat.
 
 Forhåndsvisningen i appen er lydløs. Play this film with sound åpner systemets spiller. Cancel stopper lokal rendring; den kan ikke trekke tilbake en innsendt skygenerering. Ferdige eksporter og prosjektkopier ligger under music-videos/exports. Grensene er 120 klipp, 0,1–120 sekunder per klipp og ti minutter totalt. Undo gjenoppretter endringer og beholder diskrevisjonen.
 
