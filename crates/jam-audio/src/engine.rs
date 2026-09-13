@@ -344,6 +344,7 @@ pub struct AudioEngine {
     pub clips: Arc<Mutex<Vec<crate::workstation::Clip>>>,
     pub song_snapshot: serde_json::Value,
     pub audition: Arc<Mutex<Option<crate::workstation::Audition>>>,
+    lyria: Arc<Mutex<crate::lyria::LyriaBus>>,
     pub voice: Arc<Mutex<crate::voice::VoiceBus>>,
     reference: Arc<Mutex<Option<crate::song::ReferenceSong>>>,
     reference_position: Arc<AtomicU64>,
@@ -489,6 +490,7 @@ fn render_ahead_needed(
     capture: &Mutex<crate::workstation::Capture>,
     timeline: &Mutex<Timeline>,
     reference: &Mutex<Option<crate::song::ReferenceSong>>,
+    lyria: &Mutex<crate::lyria::LyriaBus>,
     voice: &Mutex<crate::voice::VoiceBus>,
     audition: &Mutex<Option<crate::workstation::Audition>>,
     calib: &Mutex<Option<CalibRun>>,
@@ -510,6 +512,9 @@ fn render_ahead_needed(
         .as_ref()
         .is_some_and(|s| s.info.state == "playing")
     {
+        return true;
+    }
+    if lyria.lock().status().active {
         return true;
     }
     {
@@ -536,6 +541,7 @@ impl AudioEngine {
             clips: Arc::new(Mutex::new(Vec::new())),
             song_snapshot: serde_json::Value::Null,
             audition: Arc::new(Mutex::new(None)),
+            lyria: Arc::new(Mutex::new(crate::lyria::LyriaBus::default())),
             voice: Arc::new(Mutex::new(crate::voice::VoiceBus::default())),
             reference: Arc::new(Mutex::new(None)),
             reference_position: Arc::new(AtomicU64::new(0)),
@@ -617,6 +623,25 @@ impl AudioEngine {
 
     pub fn set_band_volume(&self, vol: f32) {
         self.mix.lock().band_volume = vol.clamp(0.0, 1.0);
+    }
+
+    pub fn lyria_start(&self) {
+        self.lyria.lock().start();
+        self.wake_render();
+    }
+
+    pub fn lyria_push_pcm16(&self, samples: &[i16]) -> Result<(), String> {
+        self.lyria.lock().push_pcm16(samples)?;
+        self.wake_render();
+        Ok(())
+    }
+
+    pub fn lyria_stop(&self) {
+        self.lyria.lock().stop();
+    }
+
+    pub fn lyria_status(&self) -> crate::lyria::LyriaBusStatus {
+        self.lyria.lock().status()
     }
 
     pub fn mix_levels(&self) -> (f32, f32) {
@@ -1619,6 +1644,7 @@ impl AudioEngine {
         let clips = Arc::clone(&self.clips);
         let audition = Arc::clone(&self.audition);
         let voice_bus = Arc::clone(&self.voice);
+        let lyria_bus = Arc::clone(&self.lyria);
         let reference = Arc::clone(&self.reference);
         let telemetry = Arc::clone(&self.latest_telemetry);
         let status_arc = Arc::clone(&self.status);
@@ -1716,6 +1742,7 @@ impl AudioEngine {
                         &capture,
                         &timeline_arc,
                         &reference,
+                        &lyria_bus,
                         &voice_bus,
                         &audition,
                         &calib,
@@ -1821,6 +1848,9 @@ impl AudioEngine {
                             }
                         }
                         drop(preview);
+                        lyria_bus
+                            .lock()
+                            .render(&mut ctx.out_left, &mut ctx.out_right);
                         ctx.render_voice(&mut voice_bus.lock());
                         let mut calib_idx = [0u32; RENDER_BLOCK];
                         let mut calib_gen = 0u32;

@@ -21,11 +21,11 @@ fn idle() -> Status {
 }
 
 impl Session {
-    fn arm(config: Config) -> Result<Machine, String> {
+    fn arm(config: Config) -> Result<(Machine, Vec<i16>), String> {
         lyria::validate(&config)?;
         let mut machine = lyria::recorded_for_session()?;
         machine.apply(config)?;
-        Ok(machine)
+        Ok((machine, lyria::recorded_audio()?))
     }
 
     fn commit(&mut self, machine: Machine) -> Status {
@@ -69,12 +69,14 @@ pub fn lyria_start<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Status, String> {
-    let machine = Session::arm(config.unwrap_or_default())?;
+    let (machine, audio) = Session::arm(config.unwrap_or_default())?;
     {
         let mut eng = state.engine.lock();
         eng.ensure_timing_editable()?;
         eng.unload_reference()?;
         eng.transport_stop();
+        eng.lyria_start();
+        eng.lyria_push_pcm16(&audio)?;
     }
     let status = state.lyria.lock().commit(machine);
     emit(&app, &status);
@@ -94,6 +96,7 @@ pub fn lyria_set<R: Runtime>(
 
 #[tauri::command]
 pub fn lyria_stop<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>) -> Status {
+    state.engine.lock().lyria_stop();
     let status = state.lyria.lock().stop();
     emit(&app, &status);
     status
@@ -105,6 +108,7 @@ pub fn lyria_status(state: State<'_, AppState>) -> Status {
 }
 
 pub fn stop_and_emit<R: Runtime>(app: &AppHandle<R>, state: &AppState) {
+    state.engine.lock().lyria_stop();
     let status = state.lyria.lock().stop();
     emit(app, &status);
 }

@@ -6,6 +6,7 @@ pub mod devices;
 pub mod engine;
 pub mod export;
 pub mod io;
+pub mod lyria;
 pub mod melody;
 pub mod practice;
 pub mod recorder;

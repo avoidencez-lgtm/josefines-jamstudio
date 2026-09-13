@@ -3,7 +3,7 @@ mod common;
 use common::Studio;
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
-use tauri::Listener;
+use tauri::{Listener, Manager};
 
 #[test]
 fn lyria_start_is_not_configured_without_a_recorded_session() {
@@ -41,7 +41,13 @@ fn recorded_protocol_fixture_is_exclusive_and_does_not_drive_the_clock() {
     assert_eq!(started["phase"], "playing");
     assert_eq!(started["live"], false);
     assert_eq!(started["drivesClock"], false);
+    assert_eq!(started["buffering"], true);
     assert_eq!(started["requestedBpm"], 100.0);
+    let state = studio.app().state::<app_lib::AppState>();
+    let audio = state.engine.lock().lyria_status();
+    assert!(audio.active);
+    assert!(audio.buffering);
+    assert!(audio.queued_frames > 0);
     let patched = studio.ok(
         "lyria_set",
         json!({"patch":{
@@ -78,6 +84,10 @@ fn recorded_protocol_fixture_is_exclusive_and_does_not_drive_the_clock() {
     assert_eq!(again["phase"], "playing");
     studio.ok("lyria_stop", json!({}));
     assert_eq!(studio.ok("lyria_status", json!({}))["phase"], "idle");
+    assert_eq!(
+        state.engine.lock().lyria_status(),
+        jam_audio::lyria::LyriaBusStatus::default()
+    );
     std::env::remove_var("JAM_LYRIA_FIXTURE");
 }
 

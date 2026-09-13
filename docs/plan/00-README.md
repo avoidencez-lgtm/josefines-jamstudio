@@ -3077,10 +3077,12 @@ does not close M5–M7.
 and `lyria_status` are registered. Rust owns the documented protocol, jitter
 buffer and exclusivity with band/song. Without a Gemini key, `JAM_LIVE=1` and
 a recorded provider session the command is explicitly not configured and
-opens no WebSocket. `JAM_LYRIA_FIXTURE=1` walks the synthetic specimen only
-and never feeds the output bus. BPM is a request, not the clock. This does
-not claim a live 10-minute stream, reconnect or spend meter, and does not
-close M4–M7.
+opens no WebSocket. `JAM_LYRIA_FIXTURE=1` walks the synthetic specimen and
+feeds its decoded PCM into the bounded 48 kHz stereo queue on the Rust render
+worker. The queue pre-fills for one second, targets 500 ms and fades over
+250 ms around starvation. BPM is a request, not the clock. This does not claim
+a live WebSocket, 10-minute stream, reconnect or spend meter, and does not close
+M4–M7.
 
 2026-09-11 M1e loopback calibration: `audio_calibrate_latency` plays three clicks
 on the output clock, pairs guitar input at the callback, and measures round-trip
