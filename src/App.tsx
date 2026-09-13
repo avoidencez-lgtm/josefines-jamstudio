@@ -16,6 +16,7 @@ import {
   windowCloseAction,
 } from "./lib/closeGuard";
 import { listenToController } from "./lib/controller";
+import { routeStudioKey } from "./lib/help";
 import { handleJoQuery } from "./lib/jo/conversation";
 import { useAi } from "./lib/jo/providers";
 import { listenToVoice } from "./lib/jo/voice";
@@ -235,15 +236,15 @@ export const App: React.FC = () => {
   // One global key handler for the whole app (see lib/shortcuts.ts for the list).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (showClose) return;
-      if (
-        showHelp &&
-        e.target instanceof Element &&
-        e.target.closest("#studio-help")
-      ) {
-        if (e.key === "Escape" && !e.defaultPrevented) setShowHelp(false);
+      const route = routeStudioKey(e, {
+        helpOpen: showHelp,
+        closeOpen: showClose,
+      });
+      if (route === "close-help") {
+        setShowHelp(false);
         return;
       }
+      if (route === "ignore") return;
       const consumed = handleShortcut(e, useEngineStore.getState(), {
         toggleHelp: () => {
           setHelpTopic(null);

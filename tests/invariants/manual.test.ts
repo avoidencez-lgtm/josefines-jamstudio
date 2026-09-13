@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import manual from "../../docs/guide/manual.json";
 import { WRITING_HELP } from "../../src/lib/help";
@@ -32,6 +33,17 @@ it("documents every studio room and shortcut in both languages with current expo
     Object.fromEntries(SHORTCUTS.map((s) => [s.keys, s.description])),
   );
   execFileSync(process.execPath, ["scripts/export-manual.mjs", "--check"]);
+});
+
+it("keeps the status board free of the leftover splice-tracking log", () => {
+  const board = readFileSync("docs/plan/00-README.md", "utf8");
+  expect(board).not.toContain("DESIGN full copy-audit stays");
+});
+
+it("quotes the Film Save this project button instead of Save video", () => {
+  const text = JSON.stringify(manual);
+  expect(text).not.toContain("Save video");
+  expect(text).toContain("Save this project");
 });
 
 it("keeps the Norwegian vocabulary consistent: skjema for chart, crash, slå inn tempoet", () => {

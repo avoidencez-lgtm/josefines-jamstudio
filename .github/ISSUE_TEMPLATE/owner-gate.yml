@@ -1,0 +1,30 @@
+name: Owner-gate result
+description: Record a friend-led owner-gate run. Friend gates are V2 and do not block V1.
+labels: [P3]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Friend-led owner gates are deferred to V2. Do not tick them as passed for V1.
+        Procedures live in `docs/plan/06-owner-verification.md`.
+  - type: input
+    id: gate
+    attributes:
+      label: Gate number
+      description: Number from docs/plan/06-owner-verification.md (1–11).
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Build tag
+      description: Git tag, commit SHA, or installer name that was run.
+    validations:
+      required: true
+  - type: textarea
+    id: numbers
+    attributes:
+      label: Numbers
+      description: Measured values, pass/fail against the expected column, OS, date, surprises.
+    validations:
+      required: true

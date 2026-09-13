@@ -256,7 +256,7 @@ The library shows analysis status. An interrupted or failed attempt keeps the im
 
 ### Use a mix in a film
 
-Use this in Film sets the selected asset as the current film soundtrack. Save video to keep that choice. Generated audio appears in the same library after its job completes. Generated lyrics/structure are shown when returned by the provider. Practice copies can also be selected as soundtracks when they fit the film duration limit. Film uses the original stereo file, without saved stem levels or mutes.
+Use this in Film sets the selected asset as the current film soundtrack. Save this project to keep that choice. Generated audio appears in the same library after its job completes. Generated lyrics/structure are shown when returned by the provider. Practice copies can also be selected as soundtracks when they fit the film duration limit. Film uses the original stereo file, without saved stem levels or mutes.
 
 ### This is a reference blueprint.
 
@@ -336,7 +336,7 @@ Let the selected brain direct this returns editable shot descriptions from text/
 
 ### Save and render
 
-Save video persists project settings and local-model configuration. Render & jobs shows missing footage, missing soundtrack and length mismatch. Fit all these cuts to the song length scales durations proportionally. Render this music video requires all clips and a matching timeline. Output is 720p, 30 fps, cropped to fill the chosen frame, with 48 kHz AAC soundtrack; generated clip audio is discarded. The original audio files remain separate.
+Save this project keeps project settings and local-model configuration. Render & jobs shows missing footage, missing soundtrack and length mismatch. Fit all these cuts to the song length scales durations proportionally. Render this music video requires all clips and a matching timeline. Output is 720p, 30 fps, cropped to fill the chosen frame, with 48 kHz AAC soundtrack; generated clip audio is discarded. The original audio files remain separate.
 
 The in-app preview is silent. Play this film with sound opens the native player. Cancel stops local rendering; it cannot recall a submitted cloud generation. Completed exports and project snapshots remain under music-videos/exports. Limits are 120 shots, 0.1–120 seconds per shot and ten minutes total. Undo restores edits while preserving the disk revision.
 
