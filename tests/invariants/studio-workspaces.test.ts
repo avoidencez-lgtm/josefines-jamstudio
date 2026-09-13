@@ -9,6 +9,7 @@ import {
   joNeedsReview,
   useJoConversation,
 } from "../../src/lib/jo/conversation";
+import { newOriginal, useWriting } from "../../src/lib/originals";
 import { SHORTCUTS, handleShortcut } from "../../src/lib/shortcuts";
 import { SCREENS, SCREEN_ICONS } from "../../src/screens/registry";
 import type { EngineState } from "../../src/store/engine";
@@ -185,6 +186,108 @@ describe("Studio workspaces", () => {
       ),
     ).toBe(false);
     expect(transportStop).not.toHaveBeenCalled();
+  });
+  it("undoes and redoes Write from Ctrl/Cmd chords when a song is open", () => {
+    class HTMLInputElement {
+      closest() {
+        return null;
+      }
+    }
+    vi.stubGlobal("HTMLInputElement", HTMLInputElement);
+    vi.stubGlobal("HTMLTextAreaElement", class HTMLTextAreaElement {});
+    vi.stubGlobal("HTMLSelectElement", class HTMLSelectElement {});
+    const ctx = { toggleHelp: () => {} };
+    const store = {
+      telemetry: { transport: {}, band: {} },
+    } as unknown as EngineState;
+    const undo = vi.fn();
+    const redo = vi.fn();
+    const previous = useWriting.getState();
+    const chord = (
+      init: Partial<KeyboardEvent> & { code: string },
+    ): KeyboardEvent =>
+      ({
+        key: init.key ?? "",
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
+        shiftKey: false,
+        repeat: false,
+        defaultPrevented: false,
+        target: null,
+        ...init,
+      }) as unknown as KeyboardEvent;
+    try {
+      useWriting.setState({ song: newOriginal(), undo, redo });
+      expect(
+        handleShortcut(
+          chord({ code: "KeyZ", key: "z", ctrlKey: true }),
+          store,
+          ctx,
+        ),
+      ).toBe(true);
+      expect(undo).toHaveBeenCalledTimes(1);
+      undo.mockClear();
+      expect(
+        handleShortcut(
+          chord({
+            code: "KeyZ",
+            key: "z",
+            ctrlKey: true,
+            target: new HTMLInputElement() as unknown as EventTarget,
+          }),
+          store,
+          ctx,
+        ),
+      ).toBe(false);
+      expect(undo).not.toHaveBeenCalled();
+      expect(
+        handleShortcut(
+          chord({ code: "KeyZ", key: "z", metaKey: true }),
+          store,
+          ctx,
+        ),
+      ).toBe(true);
+      expect(undo).toHaveBeenCalledTimes(1);
+      expect(
+        handleShortcut(
+          chord({ code: "KeyZ", key: "Z", ctrlKey: true, shiftKey: true }),
+          store,
+          ctx,
+        ),
+      ).toBe(true);
+      expect(redo).toHaveBeenCalledTimes(1);
+      redo.mockClear();
+      expect(
+        handleShortcut(
+          chord({ code: "KeyZ", key: "Z", metaKey: true, shiftKey: true }),
+          store,
+          ctx,
+        ),
+      ).toBe(true);
+      expect(redo).toHaveBeenCalledTimes(1);
+      redo.mockClear();
+      expect(
+        handleShortcut(
+          chord({ code: "KeyY", key: "y", ctrlKey: true }),
+          store,
+          ctx,
+        ),
+      ).toBe(true);
+      expect(redo).toHaveBeenCalledTimes(1);
+      useWriting.setState({ song: null });
+      undo.mockClear();
+      expect(
+        handleShortcut(
+          chord({ code: "KeyZ", key: "z", ctrlKey: true }),
+          store,
+          ctx,
+        ),
+      ).toBe(false);
+      expect(undo).not.toHaveBeenCalled();
+    } finally {
+      useWriting.setState(previous, true);
+    }
   });
   it("keeps screen modules to components so fast refresh and tests stay simple", () => {
     const dir = path.resolve(process.cwd(), "src/screens");

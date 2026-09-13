@@ -1057,7 +1057,9 @@
     "[ / ]": "Transponer skjemaet ned eller opp en halvtone.",
     "U": "Vis eller skjul stemmeapparatet.",
     "?": "Åpne hjelp og veiledninger.",
-    "Q": "Slå denne referanseøvingsrampen av eller på. Dette bruker øktens innstillinger."
+    "Q": "Slå denne referanseøvingsrampen av eller på. Dette bruker øktens innstillinger.",
+    "Ctrl/Cmd+Z": "Angre den siste redigeringen i Write. En låt må være åpen.",
+    "Shift+Z or Y with Control": "Gjør om den siste redigeringen i Write. En låt må være åpen."
   },
   "shortcutsEn": {
     "Q": "Toggle this reference practice ramp using the current session settings.",
@@ -1076,6 +1078,8 @@
     "1 – 9": "Jump to this bar. The range is 1–9 from the start of the form.",
     "[ / ]": "Transpose the chart down or up a semitone.",
     "U": "Toggle this tuner.",
-    "?": "Open help and guides."
+    "?": "Open help and guides.",
+    "Ctrl/Cmd+Z": "Undo the last Write edit. A song must be open.",
+    "Shift+Z or Y with Control": "Redo the last Write edit. A song must be open."
   }
 }
