@@ -43,7 +43,10 @@ describe("repo hygiene", () => {
     }
     expect(envExample).toMatch(/keychain/i);
 
-    expect(readFileSync(files.toolchain, "utf8")).toContain("1.88");
+    const toolchain = readFileSync(files.toolchain, "utf8");
+    expect(toolchain).toContain("1.88");
+    expect(toolchain).toContain("rustfmt");
+    expect(toolchain).toContain("clippy");
   });
 
   it("ships GitHub issue templates", () => {
