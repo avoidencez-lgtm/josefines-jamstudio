@@ -106,6 +106,9 @@ export function TransportBar() {
                 beat: transport.beat,
                 positionBeats: transport.position_beats,
                 bpm: transport.bpm,
+                seconds: telemetry.recorder?.active
+                  ? telemetry.recorder.duration_secs
+                  : undefined,
               })}
             </span>
           ) : null}

@@ -542,6 +542,29 @@ pub fn takes_favourite(
     Ok(take)
 }
 
+/// Updates persisted take notes and a display label. Never renames the take folder id.
+#[tauri::command]
+pub fn takes_update(
+    take_id: String,
+    notes: Option<String>,
+    title: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<TakeMetadata, String> {
+    if notes.is_none() && title.is_none() {
+        return Err("Choose notes or a title to save.".into());
+    }
+    let mut take = crate::find_take(&state, &take_id)?;
+    if let Some(notes) = notes {
+        take.notes = notes;
+    }
+    if let Some(title) = title {
+        take.extra.insert("label".into(), Value::String(title));
+    }
+    save_take_manifest(&take)?;
+    state.store.lock().insert_take(&take)?;
+    Ok(take)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

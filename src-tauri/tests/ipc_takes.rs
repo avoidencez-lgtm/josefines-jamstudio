@@ -243,11 +243,18 @@ fn a_headless_recording_writes_six_stems_a_manifest_and_the_sine_input() {
     assert!(dir.is_dir(), "{} is created at start", dir.display());
     let state = studio.app().state::<app_lib::AppState>();
     assert!(state.engine.lock().recorder_is_recording());
+    let tel = studio.ok("audio_get_telemetry", json!({}));
+    assert_eq!(tel["recording"], true);
+    assert_eq!(tel["recorder"]["active"], true);
+    assert!(tel["recorder"]["duration_secs"].as_f64().unwrap() >= 0.0);
 
     // At least a quarter second of 24-bit mono input on disk before stopping.
     wait_for_file(&dir.join("guitar-di.wav"), 3 * (RATE as u64) / 4);
     let meta = studio.ok("recorder_stop", json!({}));
     assert!(!state.engine.lock().recorder_is_recording());
+    let tel = studio.ok("audio_get_telemetry", json!({}));
+    assert_eq!(tel["recording"], false);
+    assert_eq!(tel["recorder"]["active"], false);
 
     assert_eq!(meta["id"], id);
     assert_eq!(meta["sessionId"], session);
@@ -629,8 +636,11 @@ fn analysis_and_favourite_never_write_through_another_takes_input_path() {
     let mut doc = manifest(&own.dir);
     doc["pathInput"] = json!(other.input.to_string_lossy());
     std::fs::write(own.dir.join("take.json"), serde_json::to_vec(&doc).unwrap()).unwrap();
-    for command in ["takes_analyze", "takes_favourite"] {
-        let error = studio.err(command, json!({"takeId": own.id, "favourite": true}));
+    for command in ["takes_analyze", "takes_favourite", "takes_update"] {
+        let error = studio.err(
+            command,
+            json!({"takeId": own.id, "favourite": true, "notes": "x"}),
+        );
         assert!(error.contains("not inside its take directory"), "{error}");
     }
     assert_eq!(
@@ -638,6 +648,82 @@ fn analysis_and_favourite_never_write_through_another_takes_input_path() {
         other_before
     );
     assert_eq!(manifest(&own.dir), doc);
+}
+
+#[test]
+fn takes_update_writes_notes_and_a_display_label_without_renaming_the_id() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = synthetic_take(0.1, "1700000000.000");
+    assert_eq!(
+        take.dir.file_name().unwrap().to_string_lossy(),
+        take.id.as_str()
+    );
+
+    let updated = studio.ok(
+        "takes_update",
+        json!({
+            "takeId": take.id,
+            "notes": "keeper from the bridge",
+            "title": "Bridge keeper"
+        }),
+    );
+    assert_eq!(updated["id"], take.id);
+    assert_eq!(updated["notes"], "keeper from the bridge");
+    assert_eq!(updated["label"], "Bridge keeper");
+    let on_disk = manifest(&take.dir);
+    assert_eq!(on_disk["id"], take.id);
+    assert_eq!(on_disk["notes"], "keeper from the bridge");
+    assert_eq!(on_disk["label"], "Bridge keeper");
+    assert_eq!(
+        take.dir.file_name().unwrap().to_string_lossy(),
+        take.id.as_str()
+    );
+
+    let notes_only = studio.ok(
+        "takes_update",
+        json!({ "takeId": take.id, "notes": "second pass" }),
+    );
+    assert_eq!(notes_only["id"], take.id);
+    assert_eq!(notes_only["notes"], "second pass");
+    assert_eq!(notes_only["label"], "Bridge keeper");
+    assert_eq!(manifest(&take.dir)["notes"], "second pass");
+    assert_eq!(manifest(&take.dir)["label"], "Bridge keeper");
+
+    let titled = studio.ok(
+        "takes_update",
+        json!({ "takeId": take.id, "title": "Keep this" }),
+    );
+    assert_eq!(titled["notes"], "second pass");
+    assert_eq!(titled["label"], "Keep this");
+    assert_eq!(manifest(&take.dir)["label"], "Keep this");
+
+    let listed = studio.ok("takes_list", json!({}));
+    let entry = find(&listed, &take.id).unwrap();
+    assert_eq!(entry["notes"], "second pass");
+    assert_eq!(entry["label"], "Keep this");
+
+    let (cached, _) = studio
+        .app()
+        .state::<app_lib::AppState>()
+        .store
+        .lock()
+        .list_takes()
+        .unwrap();
+    let cached = cached.iter().find(|t| t.id == take.id).unwrap();
+    assert_eq!(cached.notes, "second pass");
+    assert_eq!(cached.extra.get("label"), Some(&json!("Keep this")));
+
+    let unknown = unique("nope");
+    assert_eq!(
+        studio.err("takes_update", json!({ "takeId": unknown, "notes": "x" })),
+        format!("take {unknown} is not in the library")
+    );
+    assert_eq!(
+        studio.err("takes_update", json!({ "takeId": take.id })),
+        "Choose notes or a title to save."
+    );
+    assert_eq!(manifest(&take.dir)["notes"], "second pass");
 }
 
 #[test]

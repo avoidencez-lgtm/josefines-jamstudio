@@ -258,6 +258,11 @@ export interface ReferenceRampConfig {
   barsPerStep: number;
 }
 
+export interface RecorderTelemetry {
+  active: boolean;
+  duration_secs: number;
+}
+
 export interface EngineTelemetry {
   reference?: ReferenceState | null;
   xruns: number;
@@ -266,6 +271,9 @@ export interface EngineTelemetry {
   tuner?: TunerTelemetry | null;
   transport: TransportTelemetry;
   band: BandTelemetry;
+  /** Present on engine snapshots; serde default false on older payloads. */
+  recording?: boolean;
+  recorder?: RecorderTelemetry;
 }
 
 export interface AppSettings {
@@ -282,6 +290,8 @@ export interface TakeMetadata {
   /** Versioned evidence from disk; validate before displaying. */
   analysis?: unknown;
   favourite?: boolean;
+  /** Display name from `takes_update`; the take folder id stays path-safe. */
+  label?: string;
   stems?: Record<string, string>;
   snapshot?: unknown;
   id: string;

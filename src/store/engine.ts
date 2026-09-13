@@ -16,6 +16,7 @@ import type {
   MeterTelemetry,
   MidiPortInfo,
   PackStatus,
+  RecorderTelemetry,
   ReferenceState,
   RigProfile,
   RigState,
@@ -280,6 +281,8 @@ export const useEngineStore = create<EngineState>((set, get) => {
       input_level: { peak_db: -180, rms_db: -180 },
       output_level: { peak_db: -180, rms_db: -180 },
       tuner: null,
+      recording: false,
+      recorder: { active: false, duration_secs: 0 },
       transport: {
         state: "stopped",
         bar: 1,
@@ -1023,6 +1026,16 @@ export const useEngineStore = create<EngineState>((set, get) => {
               ? withNextStep(recordingError)
               : null,
           });
+        }),
+        ipc.listen<RecorderTelemetry>("recorder.state", (recorder) => {
+          set((state) => ({
+            telemetry: {
+              ...state.telemetry,
+              recorder,
+              recording: recorder.active,
+            },
+            isRecording: recorder.active,
+          }));
         }),
         ipc.listen<string>("rig.error", (text) => {
           get().notify("error", `The rig reported a problem. ${text}`);
