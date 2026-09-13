@@ -8,6 +8,13 @@ describe("IPC Invariant", () => {
     expect(IPC_VERSION).toBe(2);
   });
 
+  it("keeps the Rust IPC_VERSION constant equal to the TypeScript export", () => {
+    const rust = readFileSync("src-tauri/src/lib.rs", "utf8");
+    const match = rust.match(/pub const IPC_VERSION:\s*u32\s*=\s*(\d+)\s*;/);
+    expect(match).not.toBeNull();
+    expect(Number(match?.[1])).toBe(IPC_VERSION);
+  });
+
   it("maps controller.press onto the backend controller:press emit", () => {
     const backend = readFileSync("src-tauri/src/lib.rs", "utf8");
     const controller = readFileSync("src/lib/controller.ts", "utf8");
