@@ -65,7 +65,9 @@ For each milestone, report implementation status, developer verification evidenc
 
 ## Status board (the builder updates this after every milestone)
 
-2026-09-13. origin/main `3f468a0`.
+2026-09-13. origin/main `772603e`.
+
+Non-human leftovers from #162–#187 landed: IPC_VERSION (#461), status board (#460), hygiene (#459), recording counter (#464), media delete + CSP + single-instance (#463), undo/ErrorBoundary (#465), take notes/label (#466), ARCHITECTURE §9 tests (#467), as-built docs (#468), usage-log rotate (#469), shared NumberField/Jo applied-state/cue-next (#470), loop-pass takes (#471). Human-only remains: two-metre Stage, HeadRush clock-out, signing/tag, friend Mac/rig/Logic, live paid sessions.
 
 The leftover UI sentence-fragment hunt from 2026-09-12 was working-tree noise; current UI uses complete sentences such as "Clear this search." / "Close this help."
 
@@ -83,7 +85,7 @@ Human-only remaining: Apple notarisation / Windows Authenticode; friend Mac/Head
 | M3 | Real songs: import, analysis, stems, stretch, chord timeline, looping | ⏳ | native stem mixing, ElevenLabs upload, live per-stem speed/key and Jo controls added; real provider/guitar-removal acceptance, provider analysis, automatic downbeats/sections and full transport-grid integration pending; confirmed section loops and canonical song-file storage added |
 | M4 | AI music: Lyria RealTime, Lyria 3, ElevenLabs Music (spike S4) | ⏳ | file-generation catalog/workflows in #29; RealTime protocol, playback queue and WebSocket receive loop implemented; reconnect, metering and owner acceptance pending |
 | M5 | Rig orchestration over MIDI | ⏳ | #20, #28; virtual MIDI monitor check in the working tree; owner gate 5 remains V2 |
-| M6 | Sessions: take analysis, LLM review, Logic export, progress | ⏳ | #22, #28; recorded take-review fixture and SMF 5-minute paper drift in the working tree; Logic owner gate remains V2 |
+| M6 | Sessions: take analysis, LLM review, Logic export, progress | ⏳ | #22, #28, #466, #471; notes/label and loop-pass extras on takes; recorded take-review fixture and SMF 5-minute paper drift; Logic owner gate remains V2 |
 | M7 | Polish and distribution | ⏳ | #442; release checksums, CI hardening, first-run checklist and fixture extensibility proofs are implemented; signing and a real tag run remain |
 
 What remains, per open milestone:
