@@ -271,10 +271,7 @@ fn usage_archive_path(path: &Path, year: i32, month: u32) -> PathBuf {
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("usage-log");
-    let ext = path
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("jsonl");
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("jsonl");
     path.with_file_name(format!("{stem}-{year:04}-{month:02}.{ext}"))
 }
 
@@ -761,7 +758,7 @@ mod tests {
             .lines()
             .map(|line| serde_json::from_str(line).unwrap())
             .collect();
-        assert_eq!(archived, vec![january]);
+        assert_eq!(archived, vec![january.clone()]);
 
         let again = CostEntry {
             at_ms: 1_706_745_601_000,
