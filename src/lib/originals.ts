@@ -89,6 +89,25 @@ export interface Original {
   [key: string]: unknown;
 }
 
+/** Song and version names whose clips still point at this take folder id. */
+export function songsReferencingTake(
+  songs: Original[],
+  takeId: string,
+): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const song of songs) {
+    const bodies = [song.body, ...(song.versions ?? []).map((v) => v.body)];
+    const hit = bodies.some((body) =>
+      (body?.clips ?? []).some((clip) => clip.takeId === takeId),
+    );
+    if (!hit || seen.has(song.id)) continue;
+    seen.add(song.id);
+    names.push(song.body?.chart?.name || song.id);
+  }
+  return names;
+}
+
 /** Retain the exact draft accepted by the engine, even if a later play step fails. */
 async function loadOriginal(song: Original) {
   const snapshot = structuredClone(song);

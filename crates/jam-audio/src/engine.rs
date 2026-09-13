@@ -154,6 +154,14 @@ struct RecordingClock {
     lost: Arc<AtomicBool>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct RecorderTelemetry {
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub duration_secs: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EngineTelemetry {
     pub xruns: u64,
@@ -165,6 +173,11 @@ pub struct EngineTelemetry {
     pub status: EngineStatus,
     #[serde(default)]
     pub reference: Option<crate::song::ReferenceState>,
+    /// True while a take writer is open, including a failed capture that still needs saving.
+    #[serde(default)]
+    pub recording: bool,
+    #[serde(default)]
+    pub recorder: RecorderTelemetry,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -1394,6 +1407,21 @@ impl AudioEngine {
             tel.band.style_id = "reference".into();
             tel.band.style_name = "Reference audio".into();
         }
+        let (recording, duration_secs) = {
+            let recorder = self.recorder.lock();
+            let recording = recorder.is_recording();
+            let duration_secs = if recording {
+                recorder.frames_written as f64 / f64::from(recorder.sample_rate().max(1))
+            } else {
+                0.0
+            };
+            (recording, duration_secs)
+        };
+        tel.recording = recording;
+        tel.recorder = RecorderTelemetry {
+            active: recording,
+            duration_secs,
+        };
         tel
     }
 

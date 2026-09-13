@@ -122,6 +122,10 @@ it("records a jam: load a chart, pick a style, press play, hear the chord change
 
   // Four bars at 120 BPM in 4/4 is 8 seconds: the band has moved to the IV chord.
   for (let i = 0; i < 80; i++) engine.tick(0.1);
+  expect(store().isRecording).toBe(true);
+  expect(store().telemetry.recording).toBe(true);
+  expect(store().telemetry.recorder?.active).toBe(true);
+  expect(store().telemetry.recorder?.duration_secs).toBeCloseTo(8, 6);
   expect(store().telemetry.transport.bar).toBe(5);
   expect(store().telemetry.band.current_chord).toBe("D7");
 
@@ -367,6 +371,23 @@ it("deletes a take from the store and the engine, and an unknown id leaves the l
   expect(store().takes).toEqual(before);
   expect(store().notices).toHaveLength(notices);
   expect((await engineTakes()).map((t) => t.id)).toEqual(ids());
+});
+
+it("saves take notes through takes_update without renaming the take id", async () => {
+  const meta = await recordTake(TODAY, 2);
+  const updated = await ipc.invoke<TakeMetadata>("takes_update", {
+    takeId: meta.id,
+    notes: "keeper from the bridge",
+    title: "Bridge keeper",
+  });
+  expect(updated.id).toBe(meta.id);
+  expect(updated.notes).toBe("keeper from the bridge");
+  expect(updated.label).toBe("Bridge keeper");
+  await store().loadTakes();
+  const listed = store().takes.find((t) => t.id === meta.id);
+  expect(listed?.id).toBe(meta.id);
+  expect(listed?.notes).toBe("keeper from the bridge");
+  expect(listed?.label).toBe("Bridge keeper");
 });
 
 it("keeps favouriting a desktop-only action: the preview names the missing command and the take stays unmarked", async () => {

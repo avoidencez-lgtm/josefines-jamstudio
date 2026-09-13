@@ -12,6 +12,7 @@ import {
   fitTempo,
   newOriginal,
   sectionBars,
+  songsReferencingTake,
   useWriting,
 } from "../../src/lib/originals";
 import { SCREENS } from "../../src/screens/registry";
@@ -72,6 +73,37 @@ describe("songwriting workflow", () => {
       { sectionId: "chorus", startBar: 9, endBar: 13 },
       { sectionId: "verse", startBar: 13, endBar: 17 },
     ]);
+  });
+  it("names songs and versions that still clip this take", () => {
+    const clip = {
+      takeId: "take-1",
+      label: "This is guitar 1.",
+      trimStart: 0,
+      trimEnd: 4,
+      startBar: 1,
+      repeats: 1,
+      gain: 1,
+      muted: false,
+    };
+    const song = newOriginal();
+    song.body.chart.name = "River Song";
+    song.body.clips = [clip];
+    const other = newOriginal();
+    other.body.chart.name = "Leaving Town";
+    other.versions = [
+      {
+        id: "v1",
+        name: "demo",
+        body: { ...other.body, clips: [clip] },
+      },
+    ];
+    const unused = newOriginal();
+    unused.body.chart.name = "Unused";
+    expect(songsReferencingTake([song, other, unused], "take-1")).toEqual([
+      "River Song",
+      "Leaving Town",
+    ]);
+    expect(songsReferencingTake([song], "take-missing")).toEqual([]);
   });
   beforeEach(() =>
     useWriting.setState({

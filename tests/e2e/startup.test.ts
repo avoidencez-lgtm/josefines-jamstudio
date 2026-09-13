@@ -294,6 +294,7 @@ describe("desktop startup against the preview engine", () => {
       "lyria.state",
       "meters",
       "recorder.error",
+      "recorder.state",
       "reference.state",
       "rig.error",
       "rig.state",
@@ -575,8 +576,8 @@ describe("desktop startup against the preview engine", () => {
     engine.tick(0);
     unsubscribe();
     // tuner starts off, so no tuner.state: meters, input.meters,
-    // transport.state, band.state, engine.status
-    expect(updates).toBe(5);
+    // transport.state, band.state, recorder.state, engine.status
+    expect(updates).toBe(6);
     expect(store().telemetry.transport.bpm).toBe(110);
     expect(store().telemetry.tuner).toBeNull();
 
@@ -587,7 +588,7 @@ describe("desktop startup against the preview engine", () => {
     });
     engine.tick(0);
     offTuner();
-    expect(updates).toBe(6);
+    expect(updates).toBe(7);
     expect(store().telemetry.tuner?.note).toBe("A4");
   });
 

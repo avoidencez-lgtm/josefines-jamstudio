@@ -1736,6 +1736,7 @@ pub fn configure<R: tauri::Runtime>(
                 let mut last_in: Option<jam_audio::engine::MeterTelemetry> = None;
                 let mut last_had_reference = false;
                 let mut last_tuner_active = false;
+                let mut last_recorder: Option<jam_audio::engine::RecorderTelemetry> = None;
                 let mut last_busy = false;
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(if last_busy {
@@ -1789,7 +1790,8 @@ pub fn configure<R: tauri::Runtime>(
                     }
                     let clock_busy =
                         matches!(tel.transport.state.as_str(), "playing" | "counting_in")
-                            || tel.reference.as_ref().is_some_and(|r| r.state == "playing");
+                            || tel.reference.as_ref().is_some_and(|r| r.state == "playing")
+                            || tel.recording;
                     if clock_busy || last_out.as_ref() != Some(&tel.output_level) {
                         let _ = app_handle.emit("meters", &tel.output_level);
                         last_out = Some(tel.output_level.clone());
@@ -1813,6 +1815,10 @@ pub fn configure<R: tauri::Runtime>(
                     if clock_busy || last_transport.as_ref() != Some(&tel.transport) {
                         let _ = app_handle.emit("transport:state", &tel.transport);
                         last_transport = Some(tel.transport.clone());
+                    }
+                    if clock_busy || last_recorder.as_ref() != Some(&tel.recorder) {
+                        let _ = app_handle.emit("recorder:state", &tel.recorder);
+                        last_recorder = Some(tel.recorder.clone());
                     }
                     let band = tel.band.clone().for_emit(clock_busy);
                     if clock_busy || last_band.as_ref() != Some(&band) {
@@ -1908,6 +1914,7 @@ pub fn configure<R: tauri::Runtime>(
             originals::clip_audition_stop,
             originals::capture_keep,
             originals::takes_favourite,
+            originals::takes_update,
             keys_set,
             keys_has,
             keys_delete,

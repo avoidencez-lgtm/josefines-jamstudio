@@ -13,7 +13,11 @@ import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
 import { WorkspaceHeader } from "../components/Workspace";
 import { ipc, isPreview } from "../ipc/client";
-import { useWriting } from "../lib/originals";
+import {
+  type Original,
+  songsReferencingTake,
+  useWriting,
+} from "../lib/originals";
 import {
   dawExportBanner,
   drillFor,
@@ -72,10 +76,18 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [exportOk, setExportOk] = useState(true);
   const [latencyDraft, setLatencyDraft] = useState<string>("");
+  const [songs, setSongs] = useState<Original[]>([]);
 
   useEffect(() => {
     loadTakes();
   }, [loadTakes]);
+
+  useEffect(() => {
+    void ipc
+      .invoke<Original[]>("originals_list")
+      .then(setSongs)
+      .catch(() => setSongs([]));
+  }, []);
 
   useEffect(() => {
     setLatencyDraft(String(latencySamples));
@@ -89,7 +101,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
   const visibleTakes = takes.filter(
     (t) =>
       (!favourites || t.favourite) &&
-      `${t.id} ${t.chartId} ${t.styleId} ${t.tempo} ${t.notes}`
+      `${t.id} ${t.label ?? ""} ${t.chartId} ${t.styleId} ${t.tempo} ${t.notes}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
@@ -342,6 +354,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
                 key={take.id}
                 take={take}
                 analysis={takeAnalysis[take.id]}
+                songNames={songsReferencingTake(songs, take.id)}
                 onAnalyze={() => analyzeTake(take.id)}
                 onExport={() => handleExport(take.id)}
                 onDelete={() => deleteTake(take.id)}
@@ -358,6 +371,7 @@ export const Sessions: React.FC<{ onHelp: (topic: string) => void }> = ({
 interface TakeRowProps {
   take: import("../ipc/contract").TakeMetadata;
   analysis?: import("../ipc/contract").TakeAnalysis;
+  songNames: string[];
   onAnalyze: () => void;
   onExport: () => void;
   onDelete: () => void;
@@ -367,6 +381,7 @@ interface TakeRowProps {
 const TakeRow: React.FC<TakeRowProps> = ({
   take,
   analysis,
+  songNames,
   onAnalyze,
   onExport,
   onDelete,
@@ -375,6 +390,8 @@ const TakeRow: React.FC<TakeRowProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [notesDraft, setNotesDraft] = useState(take.notes);
+  const [labelDraft, setLabelDraft] = useState(take.label ?? "");
   const song = useWriting((s) => s.song);
   const recording = useEngineStore((s) => s.isRecording);
   const run = async (action: () => Promise<unknown>) => {
@@ -393,6 +410,11 @@ const TakeRow: React.FC<TakeRowProps> = ({
     summary?: string;
     drills?: string[];
   } | null>(null);
+
+  useEffect(() => {
+    setNotesDraft(take.notes);
+    setLabelDraft(take.label ?? "");
+  }, [take.notes, take.label]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -433,10 +455,12 @@ const TakeRow: React.FC<TakeRowProps> = ({
         <div className="flex flex-col gap-1 min-w-[200px]">
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono font-bold text-[var(--fg-0)]">
-              {takeDate(take.timestamp)?.toLocaleString([], {
-                dateStyle: "medium",
-                timeStyle: "short",
-              }) ?? take.id}
+              {take.label?.trim() ||
+                takeDate(take.timestamp)?.toLocaleString([], {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }) ||
+                take.id}
             </span>
             <span className="text-[10px] font-mono text-[var(--fg-2)] px-1.5 py-0.5 bg-[var(--bg-2)] rounded-[var(--radius-m)]">
               {formatDuration(take.durationSecs)}
@@ -573,6 +597,11 @@ const TakeRow: React.FC<TakeRowProps> = ({
             <Export size={16} aria-hidden="true" /> Export the stems.
           </Button>
 
+          {songNames.length > 0 && (
+            <p className="workspace-note">
+              Referenced by songs {songNames.join("/")}.
+            </p>
+          )}
           {confirmDelete ? (
             <>
               <span className="workspace-note">
@@ -600,6 +629,45 @@ const TakeRow: React.FC<TakeRowProps> = ({
               Delete this take…
             </Button>
           )}
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="flex flex-col gap-1 text-xs font-mono text-[var(--fg-1)]">
+          Name this take.
+          <input
+            className="studio-field"
+            value={labelDraft}
+            onChange={(e) => setLabelDraft(e.target.value)}
+            aria-label="Name this take."
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-mono text-[var(--fg-1)]">
+          Write the take notes.
+          <textarea
+            className="studio-field"
+            rows={2}
+            value={notesDraft}
+            onChange={(e) => setNotesDraft(e.target.value)}
+            aria-label="Write the take notes."
+          />
+        </label>
+        <div className="workspace-actions">
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await ipc.invoke("takes_update", {
+                  takeId: take.id,
+                  notes: notesDraft,
+                  title: labelDraft,
+                });
+                await useEngineStore.getState().loadTakes();
+              })
+            }
+          >
+            Save these notes.
+          </Button>
         </div>
       </div>
 
