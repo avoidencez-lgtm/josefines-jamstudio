@@ -13,7 +13,7 @@ pub mod voice;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -252,6 +252,32 @@ pub struct CostEntry {
     pub total_tokens: Option<u64>,
 }
 
+/// UTC Gregorian year and month for a Unix-ms timestamp.
+fn utc_year_month(ms: u64) -> (i32, u32) {
+    let z = (ms / 86_400_000) as i64 + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i32 + era as i32 * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = y + i32::from(m <= 2);
+    (y, m)
+}
+
+fn usage_archive_path(path: &Path, year: i32, month: u32) -> PathBuf {
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("usage-log");
+    let ext = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("jsonl");
+    path.with_file_name(format!("{stem}-{year:04}-{month:02}.{ext}"))
+}
+
 pub struct CostLog {
     path: PathBuf,
 }
@@ -321,7 +347,36 @@ impl CostLog {
         &self.path
     }
 
+    fn rotate_if_new_month(&self, now: SystemTime) -> Result<(), String> {
+        let modified = match std::fs::metadata(&self.path) {
+            Ok(meta) => meta.modified().unwrap_or(now),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => {
+                return Err(format!("Cannot read {}. {error}", self.path.display()));
+            }
+        };
+        let last_ms = modified
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::ZERO)
+            .as_millis() as u64;
+        let now_ms = now
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::ZERO)
+            .as_millis() as u64;
+        if utc_year_month(last_ms) == utc_year_month(now_ms) {
+            return Ok(());
+        }
+        let (year, month) = utc_year_month(last_ms);
+        let dest = usage_archive_path(&self.path, year, month);
+        if dest.exists() {
+            return Ok(());
+        }
+        std::fs::rename(&self.path, &dest)
+            .map_err(|e| format!("Cannot rotate {}. {e}", self.path.display()))
+    }
+
     pub fn append(&self, entry: &CostEntry) -> Result<(), String> {
+        self.rotate_if_new_month(SystemTime::now())?;
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Cannot create {}. {e}", parent.display()))?;
@@ -644,6 +699,86 @@ mod tests {
     use super::*;
     use crate::keys::{FailingStore, MemoryStore};
     use std::io::Write;
+
+    #[test]
+    fn utc_year_month_matches_known_unix_instants() {
+        assert_eq!(utc_year_month(0), (1970, 1));
+        assert_eq!(utc_year_month(1_704_067_200_000), (2024, 1));
+        assert_eq!(utc_year_month(1_706_745_599_000), (2024, 1));
+        assert_eq!(utc_year_month(1_706_745_600_000), (2024, 2));
+        assert_eq!(utc_year_month(1_709_164_800_000), (2024, 2));
+        assert_eq!(utc_year_month(1_709_251_200_000), (2024, 3));
+    }
+
+    #[test]
+    fn usage_archive_path_keeps_the_log_stem_and_month() {
+        let path = PathBuf::from("logs/usage-log.jsonl");
+        assert_eq!(
+            usage_archive_path(&path, 2024, 1),
+            PathBuf::from("logs/usage-log-2024-01.jsonl")
+        );
+    }
+
+    #[test]
+    fn append_rotates_a_previous_month_log_without_clobbering_the_archive() {
+        let dir = std::env::temp_dir().join(format!(
+            "jam-usage-rotate-{}-{}",
+            std::process::id(),
+            1_704_067_200_u64
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("usage-log.jsonl");
+        let log = CostLog::new(path.clone());
+        let january = CostEntry {
+            at_ms: 1_704_067_200_000,
+            provider: "gemini".into(),
+            path: "/models".into(),
+            ..CostEntry::default()
+        };
+        log.append(&january).unwrap();
+        let january_mtime = UNIX_EPOCH + Duration::from_secs(1_704_067_200);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(january_mtime)
+            .unwrap();
+
+        let february = CostEntry {
+            at_ms: 1_706_745_600_000,
+            provider: "gemini".into(),
+            path: "/models".into(),
+            ..CostEntry::default()
+        };
+        log.append(&february).unwrap();
+
+        let archive = dir.join("usage-log-2024-01.jsonl");
+        assert!(archive.exists(), "previous month should be renamed");
+        assert_eq!(log.list(10).unwrap(), vec![february.clone()]);
+        let archived: Vec<CostEntry> = std::fs::read_to_string(&archive)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(archived, vec![january]);
+
+        let again = CostEntry {
+            at_ms: 1_706_745_601_000,
+            provider: "openai".into(),
+            path: "/chat".into(),
+            ..CostEntry::default()
+        };
+        log.append(&again).unwrap();
+        assert_eq!(log.list(10).unwrap(), vec![february, again]);
+        let archived_again: Vec<CostEntry> = std::fs::read_to_string(&archive)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(archived_again, vec![january]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn cost_tail_stops_after_enough_rows_and_bounds_damaged_lines() {
