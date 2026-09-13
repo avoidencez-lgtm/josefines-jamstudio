@@ -512,4 +512,4 @@ Den tospråklige håndbokkilden er docs/guide/manual.json. Hver tittel og tekstb
 - **?**: Åpne hjelp og veiledninger.
 - **Q**: Slå denne referanseøvingsrampen av eller på. Dette bruker øktens innstillinger.
 - **Ctrl/Cmd+Z**: Angre den siste redigeringen i Write. En låt må være åpen.
-- **Ctrl/Cmd+Shift+Z / Ctrl+Y**: Gjør om den siste redigeringen i Write. En låt må være åpen.
+- **Shift+Z or Y with Control**: Gjør om den siste redigeringen i Write. En låt må være åpen.

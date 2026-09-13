@@ -214,7 +214,7 @@ export function handleShortcut(
   ) {
     return false;
   }
-  // Undo/Redo in Write take Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (or Ctrl+Y) when a
+  // Undo/Redo in Write take Control/Command Z and Shift+Z or Y with Control when a
   // song is open. Other Ctrl/Cmd chords stay with the browser. Alt is ignored
   // except when it is how the layout typed `[` / `]` (Option+8/9 on a Norwegian
   // Mac; AltGr+8/9 on Windows Nordic layouts, where Chromium also sets ctrlKey).
