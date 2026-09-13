@@ -670,6 +670,7 @@ export function createPreviewEngine(
     diagnostics_report_fps: () =>
       "canvas fps is not written in the browser preview.",
     app_version: () => "preview",
+    ipc_version: () => 2,
     analysis_cancel: () => undefined,
     media_guitar_residual: () => {
       throw new Error(

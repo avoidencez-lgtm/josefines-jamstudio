@@ -28,6 +28,13 @@ fn boots_headless_and_answers_the_startup_handshake() {
 }
 
 #[test]
+fn ipc_version_matches_the_typescript_contract() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    assert_eq!(studio.ok("ipc_version", json!({})), 2);
+}
+
+#[test]
 fn the_handshake_marks_the_ui_ready_for_smoke_runs() {
     let _scenario = common::scenario();
     use tauri::Manager;
