@@ -34,6 +34,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 
+/// 2 since ADR 0010 removed the never-wired M3/M4 placeholder commands.
+pub const IPC_VERSION: u32 = 2;
+
 /// Warnings about damaged files are shown once per session, not on every refresh
 /// (issues #32 and #51): the file stays on disk and the message stays true.
 #[derive(Default)]
@@ -1862,6 +1865,7 @@ pub fn configure<R: tauri::Runtime>(
             diagnostics_sample_stage,
             diagnostics_report_fps,
             app_version,
+            ipc_version,
             media::media_list,
             media::media_save,
             media::media_import,
@@ -2099,6 +2103,11 @@ fn logs_export() -> Result<String, String> {
 #[tauri::command]
 fn app_version() -> String {
     env!("CARGO_PKG_VERSION").into()
+}
+
+#[tauri::command]
+fn ipc_version() -> u32 {
+    IPC_VERSION
 }
 
 fn jam_log_level_from(raw: Option<&str>) -> tauri_plugin_log::log::LevelFilter {

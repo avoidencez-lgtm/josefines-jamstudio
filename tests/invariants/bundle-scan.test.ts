@@ -36,4 +36,22 @@ describe("bundle-scan", () => {
       found.push(...hits(path.resolve("dist")));
     expect(found).toEqual([]);
   });
+
+  it("keeps WebView audio APIs out of src except muted video in MusicVideo", () => {
+    const banned = /<audio\b|new Audio\(|AudioContext|speechSynthesis/;
+    const root = path.resolve("src");
+    const found: string[] = [];
+    for (const file of walk(root)) {
+      if (!/\.(?:ts|tsx)$/.test(file)) continue;
+      const text = readFileSync(file, "utf8");
+      const rel = path.relative(process.cwd(), file).replaceAll("\\", "/");
+      if (banned.test(text)) found.push(`${rel}: audio playback API`);
+      if (/<video\b/.test(text)) {
+        if (rel !== "src/screens/MusicVideo.tsx") found.push(`${rel}: <video>`);
+        else if (!/<video\b[\s\S]*?\bmuted\b/.test(text))
+          found.push(`${rel}: <video> is not muted`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
 });
