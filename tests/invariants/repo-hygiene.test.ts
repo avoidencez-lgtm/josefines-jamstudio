@@ -47,7 +47,9 @@ describe("repo hygiene", () => {
     expect(toolchain).toContain('channel = "stable"');
     expect(toolchain).toContain("rustfmt");
     expect(toolchain).toContain("clippy");
-    expect(readFileSync("Cargo.toml", "utf8")).toContain('rust-version = "1.88"');
+    expect(readFileSync("Cargo.toml", "utf8")).toContain(
+      'rust-version = "1.88"',
+    );
   });
 
   it("ships GitHub issue templates", () => {
