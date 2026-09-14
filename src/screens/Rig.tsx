@@ -44,6 +44,8 @@ export const Rig: React.FC = () => {
     setRigControl,
     sendRigProgram,
     clearRigMonitor,
+    startRigLearn,
+    cancelRigLearn,
     checkVirtualMidi,
   } = useEngineStore(
     useShallow((s) => ({
@@ -64,6 +66,8 @@ export const Rig: React.FC = () => {
       setRigControl: s.setRigControl,
       sendRigProgram: s.sendRigProgram,
       clearRigMonitor: s.clearRigMonitor,
+      startRigLearn: s.startRigLearn,
+      cancelRigLearn: s.cancelRigLearn,
       checkVirtualMidi: s.checkVirtualMidi,
     })),
   );
@@ -91,6 +95,8 @@ export const Rig: React.FC = () => {
 
   const [view, setView] = useState("Play scenes");
   const [programInput, setProgramInput] = useState(0);
+  const [learnName, setLearnName] = useState("");
+  const learning = rigState?.learning ?? null;
 
   return (
     <div className="flex flex-col gap-6 max-w-6xl mx-auto w-full">
@@ -285,22 +291,60 @@ export const Rig: React.FC = () => {
           )}
         </Panel>
 
-        {profile && profile.controls.length > 0 && (
+        {profile && (
           <Panel title={`These are the ${profile.name} knobs.`}>
             <p className="text-xs font-mono text-[var(--fg-2)] mb-4">
               Real-time Control Change. Values are clamped to the profile's
-              declared range.
+              declared range. The HeadRush has no factory CC map; learn a
+              Control Change by name.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {profile.controls.map((c) => (
-                <ControlRow
-                  key={c.cc}
-                  control={c}
-                  value={rigState?.controlValues[String(c.cc)] ?? c.default}
-                  onChange={(v) => setRigControl(c.cc, v)}
+            {profile.controls.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {profile.controls.map((c) => (
+                  <ControlRow
+                    key={c.name}
+                    control={c}
+                    value={rigState?.controlValues[String(c.cc)] ?? c.default}
+                    learning={learning === c.name}
+                    onChange={(v) => setRigControl(c.cc, v)}
+                    onLearn={() =>
+                      learning === c.name
+                        ? cancelRigLearn()
+                        : startRigLearn(c.name)
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap items-end gap-3 mt-4">
+              <label className="text-xs font-mono text-[var(--fg-2)] flex flex-col gap-1">
+                Learn a HeadRush CC.
+                <input
+                  type="text"
+                  aria-label="This is the HeadRush CC name."
+                  value={learnName}
+                  onChange={(e) => setLearnName(e.target.value)}
+                  className="w-48 bg-[var(--bg-2)] border border-[var(--line)] text-xs font-mono text-[var(--fg-0)] px-2 py-1 rounded-[var(--radius-m)] focus:border-[var(--accent)]"
                 />
-              ))}
+              </label>
+              <Button size="sm" onClick={() => startRigLearn(learnName)}>
+                Learn this CC.
+              </Button>
+              {learning && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => cancelRigLearn()}
+                >
+                  Cancel this learn.
+                </Button>
+              )}
             </div>
+            {learning && (
+              <p className="text-xs font-mono text-[var(--fg-2)] mt-3">
+                Move a HeadRush knob to assign {learning}.
+              </p>
+            )}
           </Panel>
         )}
       </div>
@@ -505,11 +549,18 @@ function formatMs(ms: number): string {
 const ControlRow: React.FC<{
   control: RigControl;
   value: number;
+  learning: boolean;
   onChange: (v: number) => void;
-}> = ({ control, value, onChange }) => {
+  onLearn: () => void;
+}> = ({ control, value, learning, onChange, onLearn }) => {
   // Sliders fire a lot; only send when the pointer settles.
   const [local, setLocal] = useState(value);
   useEffect(() => setLocal(value), [value]);
+  const learnButton = (
+    <Button size="sm" variant="secondary" onClick={onLearn}>
+      {learning ? "Cancel this learn." : "Learn this CC."}
+    </Button>
+  );
 
   if (control.toggle) {
     const on = value >= 64;
@@ -519,17 +570,20 @@ const ControlRow: React.FC<{
           {control.name}
           <span className="text-[var(--fg-2)] ml-2">CC {control.cc}</span>
         </span>
-        <Toggle
-          label={control.name}
-          checked={on}
-          onChange={(v) => onChange(v ? control.max : control.min)}
-        />
+        <div className="flex items-center gap-2">
+          {learnButton}
+          <Toggle
+            label={control.name}
+            checked={on}
+            onChange={(v) => onChange(v ? control.max : control.min)}
+          />
+        </div>
       </div>
     );
   }
   return (
     <div className="p-3 bg-[var(--bg-2)] border border-[var(--line)] rounded-[var(--radius-m)] flex flex-col gap-2">
-      <div className="flex items-center justify-between text-xs font-mono">
+      <div className="flex items-center justify-between text-xs font-mono gap-2">
         <span className="text-[var(--fg-0)]">
           {control.name}
           <span className="text-[var(--fg-2)] ml-2">CC {control.cc}</span>
@@ -553,6 +607,7 @@ const ControlRow: React.FC<{
         }}
         className="w-full accent-[var(--accent)]"
       />
+      {learnButton}
     </div>
   );
 };

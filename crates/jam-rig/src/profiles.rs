@@ -226,6 +226,21 @@ impl RigProfile {
             .collect()
     }
 
+    /// Merges user-learned knobs onto this in-memory profile by control name.
+    /// Bundled JSON on disk is left unchanged.
+    pub fn apply_learned_controls(&mut self, learned: &[Control]) {
+        for item in learned {
+            if item.name.trim().is_empty() || item.cc > 127 || item.min > item.max {
+                continue;
+            }
+            if let Some(existing) = self.controls.iter_mut().find(|c| c.name == item.name) {
+                *existing = item.clone();
+            } else {
+                self.controls.push(item.clone());
+            }
+        }
+    }
+
     /// Only the bytes of a scene (no waits), for tests and monitors.
     pub fn scene_to_midi(&self, scene_idx: usize) -> Vec<Vec<u8>> {
         let cmds = self.scene_commands(scene_idx).unwrap_or_default();
@@ -411,5 +426,47 @@ mod tests {
         let json = serde_json::to_string(&p).unwrap();
         let back: RigProfile = serde_json::from_str(&json).unwrap();
         assert_eq!(p, back);
+    }
+
+    #[test]
+    fn apply_learned_controls_merges_by_name() {
+        let mut p = RigProfile::generic();
+        p.controls.push(Control {
+            cc: 20,
+            name: "Gain".into(),
+            min: 0,
+            max: 100,
+            default: 40,
+            toggle: false,
+        });
+        p.apply_learned_controls(&[
+            Control {
+                cc: 74,
+                name: "Delay mix".into(),
+                min: 0,
+                max: 127,
+                default: 0,
+                toggle: false,
+            },
+            Control {
+                cc: 21,
+                name: "Gain".into(),
+                min: 0,
+                max: 100,
+                default: 40,
+                toggle: false,
+            },
+        ]);
+        assert_eq!(
+            p.controls.iter().find(|c| c.name == "Gain").map(|c| c.cc),
+            Some(21)
+        );
+        assert_eq!(
+            p.controls
+                .iter()
+                .find(|c| c.name == "Delay mix")
+                .map(|c| c.cc),
+            Some(74)
+        );
     }
 }
