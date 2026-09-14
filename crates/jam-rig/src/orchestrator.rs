@@ -51,6 +51,8 @@ pub struct RigOrchestrator {
     transport_playing: bool,
     last_now: u64,
     last_bpm: f64,
+    /// Control name waiting for the next incoming CC, if learn is armed.
+    pub learning: Option<String>,
 }
 
 impl RigOrchestrator {
@@ -76,6 +78,7 @@ impl RigOrchestrator {
             transport_playing: false,
             last_now: 0,
             last_bpm: 0.0,
+            learning: None,
         };
         me.reset_controls();
         me
@@ -104,6 +107,7 @@ impl RigOrchestrator {
         self.current_scene = 0;
         self.last_sent_scene = None;
         self.last_section = None;
+        self.learning = None;
         self.reset_controls();
     }
 
@@ -135,6 +139,11 @@ impl RigOrchestrator {
 
     pub fn monitor(&self) -> Vec<SentMessage> {
         self.monitor.iter().cloned().collect()
+    }
+
+    /// Bytes recorded by a MemorySink, if that is the current output.
+    pub fn recorded_messages(&self) -> Option<&[Vec<u8>]> {
+        self.sink.recorded()
     }
 
     pub fn clear_monitor(&mut self) {
@@ -262,6 +271,60 @@ impl RigOrchestrator {
             &format!("knob {name}"),
         )?;
         Ok(v)
+    }
+
+    /// Arms learn for `name`, creating the in-memory Control when the profile has none.
+    pub fn start_learn(&mut self, name: impl Into<String>) -> Result<(), String> {
+        let name = name.into();
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("Control name is empty. Type a name, then press Learn.".into());
+        }
+        if !self.profile.controls.iter().any(|c| c.name == name) {
+            self.profile.controls.push(crate::profiles::Control {
+                cc: 0,
+                name: name.to_string(),
+                min: 0,
+                max: 127,
+                default: 0,
+                toggle: false,
+            });
+            self.control_values.entry(0).or_insert(0);
+        }
+        self.learning = Some(name.to_string());
+        Ok(())
+    }
+
+    /// Clears the armed name. In-memory controls are left unchanged.
+    pub fn cancel_learn(&mut self) {
+        self.learning = None;
+    }
+
+    /// Assigns the CC number from a channel-voice CC message to the armed control.
+    /// Non-CC bytes are ignored and leave learn armed. Returns true when a CC was stored.
+    pub fn learn_from_bytes(&mut self, bytes: &[u8]) -> Result<bool, String> {
+        let Some(name) = self.learning.clone() else {
+            return Err("Learn is not armed. Press Learn, then move a HeadRush knob.".into());
+        };
+        let Some(cc) = parse_cc_number(bytes) else {
+            return Ok(false);
+        };
+        self.assign_learned_cc(&name, cc);
+        self.learning = None;
+        Ok(true)
+    }
+
+    fn assign_learned_cc(&mut self, name: &str, cc: u8) {
+        let Some(idx) = self.profile.controls.iter().position(|c| c.name == name) else {
+            return;
+        };
+        let old = self.profile.controls[idx].cc;
+        let default = self.profile.controls[idx].default;
+        self.profile.controls[idx].cc = cc;
+        if old != cc && !self.profile.controls.iter().any(|c| c.cc == old) {
+            self.control_values.remove(&old);
+        }
+        self.control_values.entry(cc).or_insert(default);
     }
 
     /// Called from the telemetry loop with the band's current section name. Fires a
@@ -453,6 +516,13 @@ impl RigOrchestrator {
         let reset = self.profile.control_change(121, 0);
         self.send_bytes(notes_off, "panic")?;
         self.send_bytes(reset, "panic")
+    }
+}
+
+fn parse_cc_number(bytes: &[u8]) -> Option<u8> {
+    match bytes {
+        [status, cc, _value, ..] if status & 0xF0 == 0xB0 && *cc <= 127 => Some(*cc),
+        _ => None,
     }
 }
 
@@ -776,5 +846,88 @@ mod tests {
         orch.send_program(2).unwrap();
         assert!(!orch.is_live());
         assert_eq!(orch.monitor().last().unwrap().bytes, vec![0xC0, 2]);
+    }
+
+    #[test]
+    fn learn_assigns_cc_and_set_control_writes_memory_sink() {
+        let hr = crate::bundled_profiles()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == "headrush-pedalboard")
+            .unwrap();
+        assert!(
+            hr.controls.is_empty(),
+            "HeadRush CC numbers come from learn, not the bundled JSON"
+        );
+        let mut orch = RigOrchestrator::with_memory_sink(hr);
+        orch.start_learn("Delay mix").unwrap();
+        assert_eq!(orch.learning.as_deref(), Some("Delay mix"));
+        assert!(orch.profile.controls.iter().any(|c| c.name == "Delay mix"));
+        assert!(
+            !orch.learn_from_bytes(&[0xC0, 3]).unwrap(),
+            "a Program Change must leave learn armed"
+        );
+        assert!(!orch.learn_from_bytes(&[0xF8]).unwrap());
+        assert_eq!(orch.learning.as_deref(), Some("Delay mix"));
+        let learned_cc = 74u8;
+        assert!(orch.learn_from_bytes(&[0xB0, learned_cc, 64]).unwrap());
+        assert_eq!(orch.learning, None);
+        assert_eq!(
+            orch.profile
+                .controls
+                .iter()
+                .find(|c| c.name == "Delay mix")
+                .map(|c| c.cc),
+            Some(learned_cc)
+        );
+        orch.set_control(learned_cc, 64).unwrap();
+        assert_eq!(
+            orch.recorded_messages().and_then(|m| m.last()),
+            Some(&vec![0xB0, learned_cc, 64])
+        );
+        assert_eq!(
+            orch.monitor().last().map(|m| m.bytes.as_slice()),
+            Some([0xB0, learned_cc, 64].as_slice())
+        );
+    }
+
+    #[test]
+    fn cancel_learn_clears_the_armed_name_without_changing_controls() {
+        let mut orch = RigOrchestrator::with_memory_sink(quad_cortex_like());
+        orch.start_learn("Delay mix").unwrap();
+        let before = orch.profile.controls.clone();
+        orch.cancel_learn();
+        assert_eq!(orch.learning, None);
+        assert_eq!(orch.profile.controls, before);
+        assert!(orch.learn_from_bytes(&[0xB0, 74, 64]).is_err());
+        assert!(orch.start_learn("   ").is_err());
+    }
+
+    #[test]
+    fn learned_cc_survives_set_profile_round_trip() {
+        let hr = crate::bundled_profiles()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == "headrush-pedalboard")
+            .unwrap();
+        let mut orch = RigOrchestrator::with_memory_sink(hr);
+        orch.start_learn("Delay mix").unwrap();
+        let learned_cc = 74u8;
+        assert!(orch.learn_from_bytes(&[0xB0, learned_cc, 64]).unwrap());
+        let learned = orch.profile.controls.clone();
+        orch.set_profile(quad_cortex_like());
+        assert!(!orch.profile.controls.iter().any(|c| c.name == "Delay mix"));
+        let mut restored = crate::bundled_profiles()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == "headrush-pedalboard")
+            .unwrap();
+        restored.apply_learned_controls(&learned);
+        orch.set_profile(restored);
+        orch.set_control(learned_cc, 64).unwrap();
+        assert_eq!(
+            orch.recorded_messages().and_then(|m| m.last()),
+            Some(&vec![0xB0, learned_cc, 64])
+        );
     }
 }

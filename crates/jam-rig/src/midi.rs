@@ -12,6 +12,10 @@ pub trait MidiSink: Send {
     fn describe(&self) -> String;
     /// True when bytes leave the computer.
     fn is_live(&self) -> bool;
+    /// Bytes recorded by a MemorySink; `None` for live ports.
+    fn recorded(&self) -> Option<&[Vec<u8>]> {
+        None
+    }
 }
 
 /// MemorySink: in-memory MIDI sink for testing and for when no port is open.
@@ -40,6 +44,9 @@ impl MidiSink for MemorySink {
     }
     fn is_live(&self) -> bool {
         false
+    }
+    fn recorded(&self) -> Option<&[Vec<u8>]> {
+        Some(&self.messages)
     }
 }
 

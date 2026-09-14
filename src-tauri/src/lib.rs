@@ -957,6 +957,8 @@ pub struct RigStateDto {
     pub port_description: String,
     pub live: bool,
     pub monitor: Vec<jam_rig::SentMessage>,
+    /// Armed control name while CC learn is waiting for MIDI.
+    pub learning: Option<String>,
 }
 
 fn rig_state_dto(rig: &jam_rig::RigOrchestrator) -> RigStateDto {
@@ -972,6 +974,7 @@ fn rig_state_dto(rig: &jam_rig::RigOrchestrator) -> RigStateDto {
         port_description: rig.port_description(),
         live: rig.is_live(),
         monitor: rig.monitor(),
+        learning: rig.learning.clone(),
     }
 }
 
@@ -993,6 +996,33 @@ fn persist_rig(
     save_settings(&settings)
 }
 
+fn persist_learned(rig: &jam_rig::RigOrchestrator) -> Result<(), String> {
+    persist_rig(rig, |settings| {
+        settings.set_learned_controls(&rig.profile.id, &rig.profile.controls);
+    })
+}
+
+fn apply_saved_learned(profile: &mut jam_rig::RigProfile, settings: &settings::RigSettings) {
+    profile.apply_learned_controls(&settings.learned_controls(&profile.id));
+}
+
+/// Assigns a learned CC and writes it to settings; rolls back the in-memory profile on persist failure.
+fn try_learn(rig: &mut jam_rig::RigOrchestrator, bytes: &[u8]) -> Result<bool, String> {
+    let controls = rig.profile.controls.clone();
+    let learning = rig.learning.clone();
+    let values = rig.control_values.clone();
+    let assigned = rig.learn_from_bytes(bytes)?;
+    if assigned {
+        if let Err(e) = persist_learned(rig) {
+            rig.profile.controls = controls;
+            rig.learning = learning;
+            rig.control_values = values;
+            return Err(e);
+        }
+    }
+    Ok(assigned)
+}
+
 #[tauri::command]
 fn rig_list_profiles(state: State<'_, AppState>) -> Vec<jam_rig::RigProfile> {
     state.library.lock().rigs()
@@ -1003,8 +1033,10 @@ fn rig_select_profile(
     profile_id: String,
     state: State<'_, AppState>,
 ) -> Result<RigStateDto, String> {
-    let profile = state.library.lock().rig(&profile_id)?;
-    let saved = load_settings()?
+    let mut profile = state.library.lock().rig(&profile_id)?;
+    let loaded = load_settings()?;
+    apply_saved_learned(&mut profile, &loaded.rig);
+    let saved = loaded
         .rig
         .section_mappings
         .get(&profile_id)
@@ -1149,6 +1181,30 @@ fn rig_set_clock(on: bool, state: State<'_, AppState>) -> Result<RigStateDto, St
 fn rig_dry_run(on: bool, state: State<'_, AppState>) -> Result<RigStateDto, String> {
     let mut rig = state.rig.lock();
     rig.set_dry_run(on);
+    Ok(rig_state_dto(&rig))
+}
+
+#[tauri::command]
+fn rig_start_learn(name: String, state: State<'_, AppState>) -> Result<RigStateDto, String> {
+    let mut rig = state.rig.lock();
+    rig.start_learn(name)?;
+    Ok(rig_state_dto(&rig))
+}
+
+#[tauri::command]
+fn rig_cancel_learn(state: State<'_, AppState>) -> RigStateDto {
+    let mut rig = state.rig.lock();
+    rig.cancel_learn();
+    rig_state_dto(&rig)
+}
+
+#[tauri::command]
+fn rig_learn_from_message(
+    bytes: Vec<u8>,
+    state: State<'_, AppState>,
+) -> Result<RigStateDto, String> {
+    let mut rig = state.rig.lock();
+    try_learn(&mut rig, &bytes)?;
     Ok(rig_state_dto(&rig))
 }
 
@@ -1613,10 +1669,11 @@ fn build_rig(settings: &AppSettings, library: &Library) -> jam_rig::RigOrchestra
         .profile_id
         .clone()
         .unwrap_or_else(|| "headrush-pedalboard".to_string());
-    let profile = library
+    let mut profile = library
         .rig(&wanted)
         .or_else(|_| library.rig("headrush-pedalboard"))
         .unwrap_or_else(|_| jam_rig::RigProfile::generic());
+    apply_saved_learned(&mut profile, &settings.rig);
     let mut rig = jam_rig::RigOrchestrator::with_memory_sink(profile);
     rig.follow_sections = settings.rig.follow_sections;
     rig.send_clock = settings.rig.send_clock;
@@ -1796,11 +1853,31 @@ pub fn configure<R: tauri::Runtime>(
                         let _ = app_handle.emit("meters", &tel.output_level);
                         last_out = Some(tel.output_level.clone());
                     }
-                    if let Some(input) = controller.lock().as_ref() {
-                        for press in input.drain() {
-                            if !rig.lock().is_recent_echo(&press) {
-                                let _ = app_handle.emit("controller:press", press);
+                    let presses = controller
+                        .lock()
+                        .as_ref()
+                        .map(jam_rig::controller::ControllerInput::drain)
+                        .unwrap_or_default();
+                    for press in presses {
+                        let mut rig = rig.lock();
+                        if rig.learning.is_some() {
+                            if press.kind == "cc" {
+                                let status = 0xB0u8 | press.channel.saturating_sub(1).min(15);
+                                match try_learn(&mut rig, &[status, press.number, 64]) {
+                                    Ok(true) => {
+                                        let _ = app_handle.emit("rig:state", &rig_state_dto(&rig));
+                                    }
+                                    Ok(false) => {}
+                                    Err(e) => {
+                                        let _ = app_handle.emit("rig:error", &e);
+                                    }
+                                }
                             }
+                            continue;
+                        }
+                        if !rig.is_recent_echo(&press) {
+                            drop(rig);
+                            let _ = app_handle.emit("controller:press", press);
                         }
                     }
                     if clock_busy || last_in.as_ref() != Some(&tel.input_level) {
@@ -1982,6 +2059,9 @@ pub fn configure<R: tauri::Runtime>(
             rig_panic,
             rig_set_clock,
             rig_dry_run,
+            rig_start_learn,
+            rig_cancel_learn,
+            rig_learn_from_message,
             rig_virtual_check,
             takes_analyze,
             takes_review,

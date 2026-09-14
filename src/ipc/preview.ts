@@ -239,15 +239,37 @@ export function createPreviewEngine(
       "No MIDI port is open. Browser preview only logs messages.",
     live: false,
     monitor: [],
+    learning: null,
   };
   let rigLastSection: string | null = null;
   let rigLastSentScene: number | null = null;
   let rigClockPaused = false;
+  const learnedByProfile: Record<string, RigControl[]> = {};
+  const cloneProfile = (profile: RigProfile): RigProfile => ({
+    ...profile,
+    programs: profile.programs.map((p) => ({ ...p })),
+    controls: profile.controls.map((c) => ({ ...c })),
+    scenes: profile.scenes.map((s) => ({
+      ...s,
+      commands: s.commands.map((c) => ({ ...c })),
+    })),
+    supports: { ...profile.supports },
+  });
+  const withLearned = (profile: RigProfile): RigProfile => {
+    const cloned = cloneProfile(profile);
+    for (const item of learnedByProfile[profile.id] ?? []) {
+      const idx = cloned.controls.findIndex((c) => c.name === item.name);
+      if (idx >= 0) cloned.controls[idx] = { ...item };
+      else cloned.controls.push({ ...item });
+    }
+    return cloned;
+  };
   const resetRigControls = () => {
     rig.controlValues = Object.fromEntries(
       rig.currentProfile.controls.map((c) => [String(c.cc), c.default]),
     );
   };
+  rig.currentProfile = cloneProfile(rig.currentProfile);
   resetRigControls();
   const rigSend = (bytes: number[], reason: string) => {
     const msg: SentMidiMessage = {
@@ -1187,8 +1209,9 @@ export function createPreviewEngine(
     rig_select_profile: (a) => {
       const p = rigProfiles.find((r) => r.id === a.profileId);
       if (!p) throw new Error(`unknown rig profile "${a.profileId}"`);
-      rig.currentProfile = p;
+      rig.currentProfile = withLearned(p);
       rig.currentScene = 0;
+      rig.learning = null;
       rigLastSentScene = null;
       for (const [section, idx] of Object.entries(rig.sectionMappings)) {
         if (idx >= p.scenes.length) delete rig.sectionMappings[section];
@@ -1296,6 +1319,74 @@ export function createPreviewEngine(
     },
     rig_dry_run: (a) => {
       rig.dryRun = Boolean(a.on);
+      return rigSnapshot();
+    },
+    rig_start_learn: (a) => {
+      const name = String(a.name ?? "").trim();
+      if (!name) {
+        throw new Error(
+          "Control name is empty. Type a name, then press Learn.",
+        );
+      }
+      if (!rig.currentProfile.controls.some((c) => c.name === name)) {
+        rig.currentProfile = {
+          ...rig.currentProfile,
+          controls: [
+            ...rig.currentProfile.controls,
+            {
+              cc: 0,
+              name,
+              min: 0,
+              max: 127,
+              default: 0,
+              toggle: false,
+            },
+          ],
+        };
+        if (rig.controlValues["0"] === undefined) rig.controlValues["0"] = 0;
+      }
+      rig.learning = name;
+      return rigSnapshot();
+    },
+    rig_cancel_learn: () => {
+      rig.learning = null;
+      return rigSnapshot();
+    },
+    rig_learn_from_message: (a) => {
+      const bytes = a.bytes;
+      if (!Array.isArray(bytes)) {
+        throw new Error("bytes must be MIDI bytes");
+      }
+      if (!rig.learning) {
+        throw new Error(
+          "Learn is not armed. Press Learn, then move a HeadRush knob.",
+        );
+      }
+      if (
+        bytes.length < 3 ||
+        (Number(bytes[0]) & 0xf0) !== 0xb0 ||
+        !Number.isInteger(Number(bytes[1])) ||
+        Number(bytes[1]) < 0 ||
+        Number(bytes[1]) > 127
+      ) {
+        return rigSnapshot();
+      }
+      const cc = Number(bytes[1]);
+      const name = rig.learning;
+      rig.currentProfile = {
+        ...rig.currentProfile,
+        controls: rig.currentProfile.controls.map((c) =>
+          c.name === name ? { ...c, cc } : c,
+        ),
+      };
+      if (rig.controlValues[String(cc)] === undefined) {
+        const ctl = rig.currentProfile.controls.find((c) => c.cc === cc);
+        rig.controlValues[String(cc)] = ctl?.default ?? 0;
+      }
+      rig.learning = null;
+      learnedByProfile[rig.currentProfile.id] = rig.currentProfile.controls.map(
+        (c) => ({ ...c }),
+      );
       return rigSnapshot();
     },
   };

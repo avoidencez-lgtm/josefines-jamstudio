@@ -567,6 +567,50 @@ describe("browser preview engine", () => {
     expect(buses[0].muted).toBe(false);
   });
 
+  it("learns a HeadRush CC onto the in-memory profile", async () => {
+    await engine.invoke("rig_select_profile", {
+      profileId: "headrush-pedalboard",
+    });
+    const armed = await engine.invoke<RigState>("rig_start_learn", {
+      name: "Delay mix",
+    });
+    expect(armed.learning).toBe("Delay mix");
+    expect(
+      armed.currentProfile.controls.some((c) => c.name === "Delay mix"),
+    ).toBe(true);
+    const still = await engine.invoke<RigState>("rig_learn_from_message", {
+      bytes: [0xc0, 3],
+    });
+    expect(still.learning).toBe("Delay mix");
+    const cancelled = await engine.invoke<RigState>("rig_cancel_learn", {});
+    expect(cancelled.learning).toBeNull();
+    expect(cancelled.currentProfile.controls).toEqual(
+      still.currentProfile.controls,
+    );
+    await engine.invoke("rig_start_learn", { name: "Delay mix" });
+    const learnedCc = 74;
+    const learned = await engine.invoke<RigState>("rig_learn_from_message", {
+      bytes: [0xb0, learnedCc, 64],
+    });
+    expect(learned.learning).toBeNull();
+    expect(
+      learned.currentProfile.controls.find((c) => c.name === "Delay mix")?.cc,
+    ).toBe(learnedCc);
+    await engine.invoke("rig_clear_monitor", {});
+    const sent = await engine.invoke<RigState>("rig_set_control", {
+      cc: learnedCc,
+      value: 64,
+    });
+    expect(sent.monitor.at(-1)?.bytes).toEqual([0xb0, learnedCc, 64]);
+    await engine.invoke("rig_select_profile", { profileId: "quad-cortex" });
+    const back = await engine.invoke<RigState>("rig_select_profile", {
+      profileId: "headrush-pedalboard",
+    });
+    expect(
+      back.currentProfile.controls.find((c) => c.name === "Delay mix")?.cc,
+    ).toBe(learnedCc);
+  });
+
   it("clamps knobs to the declared range and remembers them", async () => {
     await engine.invoke("rig_select_profile", { profileId: "quad-cortex" });
     const s = await engine.invoke<RigState>("rig_set_control", {
