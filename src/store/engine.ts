@@ -138,7 +138,9 @@ export interface EngineState {
   toggleFollowEnergy: () => Promise<void>;
 
   lyriaStatus: LyriaStatus;
-  lyriaStart: () => Promise<CommandResult<LyriaStatus>>;
+  lyriaStart: (opts?: {
+    confirm?: boolean;
+  }) => Promise<CommandResult<LyriaStatus>>;
   lyriaStop: () => Promise<CommandResult<LyriaStatus>>;
 
   // Library (styles and charts)
@@ -270,6 +272,7 @@ export const useEngineStore = create<EngineState>((set, get) => {
       live: false,
       drivesClock: false,
       outbound: 0,
+      spend: 0,
     },
     toneOn: false,
     toneHz: 440,
@@ -500,9 +503,12 @@ export const useEngineStore = create<EngineState>((set, get) => {
       await get().bandSet({ followEnergy: !band.follow_energy });
     },
 
-    lyriaStart: async () => {
+    lyriaStart: async (opts) => {
       const result = await command("The Lyria", () =>
-        ipc.invoke<LyriaStatus>("lyria_start"),
+        ipc.invoke<LyriaStatus>(
+          "lyria_start",
+          opts?.confirm ? { confirm: true } : {},
+        ),
       );
       if (result.ok) {
         set({

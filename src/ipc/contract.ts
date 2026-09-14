@@ -276,6 +276,12 @@ export interface EngineTelemetry {
   recorder?: RecorderTelemetry;
 }
 
+export interface LyriaSettings {
+  sessionMinutes?: number;
+  monthlyUsd?: number | null;
+  [key: string]: unknown;
+}
+
 export interface AppSettings {
   schemaVersion: number;
   input_device?: string | null;
@@ -283,6 +289,7 @@ export interface AppSettings {
   input_channel: number;
   sample_rate: number;
   buffer_size: number;
+  lyria?: LyriaSettings;
   [key: string]: unknown;
 }
 
@@ -294,6 +301,14 @@ export interface TakeMetadata {
   label?: string;
   stems?: Record<string, string>;
   snapshot?: unknown;
+  /** Count of loop passes written at LoopWrapped. */
+  passes?: number;
+  /** Take-relative sample where each loop pass began. */
+  passStarts?: number[];
+  /** Relative paths of split guitar-pass WAVs, 1-indexed (`passes/pass-N.wav`). */
+  passFiles?: string[];
+  /** Per-pass TakeAnalyzer results; same shape as `analysis`. */
+  passAnalysis?: unknown;
   id: string;
   sessionId: string;
   timestamp: string;
@@ -454,6 +469,13 @@ export interface TakeAnalysis {
   summary: string;
 }
 
+/** Estimated USD logged for each Lyria RealTime WebSocket connect. */
+export const LYRIA_CONNECT_USD = 0.05;
+export const LYRIA_USAGE_PATH =
+  "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic";
+export const LYRIA_MONTHLY_CAP_REFUSED =
+  "This month's Lyria spend is already at the monthly cap. Confirm on Stage or in Settings before starting.";
+
 /** Lyria RealTime status. `live` stays false until a recorded provider session exists. */
 export interface LyriaStatus {
   phase: string;
@@ -463,6 +485,7 @@ export interface LyriaStatus {
   live: boolean;
   drivesClock: boolean;
   outbound: number;
+  spend: number;
 }
 
 /** What `takes_export_daw` actually wrote. */

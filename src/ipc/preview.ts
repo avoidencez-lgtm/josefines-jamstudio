@@ -6,24 +6,26 @@
 
 import { resolveChart } from "../lib/chart/text";
 import type { Original } from "../lib/originals";
-import type {
-  AudioConfig,
-  BandPatch,
-  BandTelemetry,
-  Chart,
-  EngineStatus,
-  EngineTelemetry,
-  LibraryInfo,
-  MeterTelemetry,
-  RigCommand,
-  RigControl,
-  RigProfile,
-  RigState,
-  SentMidiMessage,
-  StyleSummary,
-  TakeMetadata,
-  TransportTelemetry,
-  TunerTelemetry,
+import {
+  type AudioConfig,
+  type BandPatch,
+  type BandTelemetry,
+  type Chart,
+  type EngineStatus,
+  type EngineTelemetry,
+  LYRIA_CONNECT_USD,
+  LYRIA_MONTHLY_CAP_REFUSED,
+  type LibraryInfo,
+  type MeterTelemetry,
+  type RigCommand,
+  type RigControl,
+  type RigProfile,
+  type RigState,
+  type SentMidiMessage,
+  type StyleSummary,
+  type TakeMetadata,
+  type TransportTelemetry,
+  type TunerTelemetry,
 } from "./contract";
 
 type Handler = (payload: unknown) => void;
@@ -549,10 +551,37 @@ export function createPreviewEngine(
   }
 
   const originals: Original[] = [];
+  let settingsDoc: Record<string, unknown> = {};
+  const lyriaIdle = () => ({
+    phase: "idle",
+    requestedBpm: 0,
+    scale: "",
+    buffering: false,
+    live: false,
+    drivesClock: false,
+    outbound: 0,
+    spend: 0,
+  });
+  const refuseLyriaMonthly = (args: Record<string, unknown>) => {
+    const lyria = settingsDoc.lyria as
+      | { monthlyUsd?: number | null }
+      | undefined;
+    const cap = lyria?.monthlyUsd;
+    if (cap == null || Number.isNaN(Number(cap))) return;
+    if (args.confirm === true) return;
+    if (LYRIA_CONNECT_USD > Number(cap)) {
+      throw new Error(LYRIA_MONTHLY_CAP_REFUSED);
+    }
+  };
+  const lyriaNotConfigured = (): never => {
+    throw new Error(
+      "Lyria RealTime is not configured. Add a Google Gemini key in Settings, set JAM_LIVE=1, and record a provider session before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.",
+    );
+  };
   const commands: Record<string, (args: Record<string, unknown>) => unknown> = {
     settings_get: () => ({
-      ...config,
       schemaVersion: 1,
+      ...settingsDoc,
       input_device: config.input_device,
       output_device: config.output_device,
       input_channel: config.input_channel,
@@ -560,8 +589,9 @@ export function createPreviewEngine(
       buffer_size: config.buffer_size,
     }),
     settings_set: (a) => {
-      const s = a.settings as AudioConfig;
-      config = { ...config, ...s };
+      const s = a.settings as Record<string, unknown>;
+      settingsDoc = { ...settingsDoc, ...s };
+      config = { ...config, ...(s as unknown as AudioConfig) };
     },
     settings_recovery_notice: () => null,
     app_exit: () => undefined,
@@ -608,39 +638,18 @@ export function createPreviewEngine(
         "Music.ai analysis is not configured. Add a Music.ai key in the desktop app, set JAM_LIVE=1, and record a SUCCEEDED job before upload. Local Analyze tempo and chords stays available.",
       );
     },
-    lyria_start: () => {
-      throw new Error(
-        "Lyria RealTime is not configured. Add a Google Gemini key in Settings, set JAM_LIVE=1, and record a provider session before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.",
-      );
+    lyria_start: (a) => {
+      refuseLyriaMonthly(a);
+      lyriaNotConfigured();
     },
     lyria_set: () => {
-      throw new Error(
-        "Lyria RealTime is not configured. Add a Google Gemini key in Settings, set JAM_LIVE=1, and record a provider session before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.",
-      );
+      lyriaNotConfigured();
     },
     lyria_vibe: () => {
-      throw new Error(
-        "Lyria RealTime is not configured. Add a Google Gemini key in Settings, set JAM_LIVE=1, and record a provider session before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.",
-      );
+      lyriaNotConfigured();
     },
-    lyria_stop: () => ({
-      phase: "idle",
-      requestedBpm: 0,
-      scale: "",
-      buffering: false,
-      live: false,
-      drivesClock: false,
-      outbound: 0,
-    }),
-    lyria_status: () => ({
-      phase: "idle",
-      requestedBpm: 0,
-      scale: "",
-      buffering: false,
-      live: false,
-      drivesClock: false,
-      outbound: 0,
-    }),
+    lyria_stop: () => lyriaIdle(),
+    lyria_status: () => lyriaIdle(),
     assets_status: () => [
       {
         id: "standard-rock-kit",
@@ -1026,6 +1035,42 @@ export function createPreviewEngine(
         ),
         notes: "Simulated take from browser preview (no audio).",
       };
+      if (transport.loop_enabled) {
+        const loopBeats =
+          (transport.loop_end_bar - transport.loop_start_bar) *
+          transport.time_signature[0];
+        const loopSamples = Math.max(
+          1,
+          Math.round((loopBeats * 48_000 * 60) / transport.bpm),
+        );
+        const passes = Math.max(
+          2,
+          Math.floor(meta.sampleCount / loopSamples) + 1,
+        );
+        meta.passes = passes;
+        meta.passStarts = Array.from(
+          { length: passes },
+          (_, i) => i * loopSamples,
+        );
+        meta.passFiles = Array.from(
+          { length: passes },
+          (_, i) => `passes/pass-${i + 1}.wav`,
+        );
+        meta.passAnalysis = meta.passFiles.map(() => ({
+          meanGridDistanceMs: null,
+          gridBiasMs: null,
+          gridSpreadMs: null,
+          attackLevelCvPct: null,
+          meanAbsCents: null,
+          pitchedFrames: 0,
+          timingAccuracyPct: 0,
+          dynamicConsistencyPct: 0,
+          intonationAccuracyPct: 0,
+          detectedTransients: 0,
+          summary:
+            "Analysis needs the desktop app. No audio was recorded in this browser preview.",
+        }));
+      }
       takes = [meta, ...takes];
       recording = null;
       return meta;
@@ -1066,6 +1111,42 @@ export function createPreviewEngine(
         take.label = a.title;
       }
       return take;
+    },
+    takes_keep_pass: (a) => {
+      const take = takes.find((t) => t.id === a.takeId);
+      if (!take) {
+        throw new Error(`take ${String(a.takeId)} is not in the library`);
+      }
+      const files = Array.isArray(take.passFiles) ? take.passFiles : [];
+      const passIndex = a.passIndex;
+      if (
+        typeof passIndex !== "number" ||
+        !Number.isInteger(passIndex) ||
+        passIndex < 1 ||
+        passIndex > files.length
+      ) {
+        if (files.length === 0) {
+          throw new Error("This take has no loop passes to keep.");
+        }
+        throw new Error(
+          `Pass ${String(passIndex)} is not in this take. Choose a pass from 1 to ${files.length}.`,
+        );
+      }
+      const {
+        passes: _passes,
+        passStarts: _passStarts,
+        passFiles: _passFiles,
+        passAnalysis: _passAnalysis,
+        ...rest
+      } = take;
+      const kept: TakeMetadata = {
+        ...rest,
+        id: `preview-keep-${Date.now()}`,
+        notes: `Pass ${passIndex} kept from ${take.id}.`,
+        label: `Pass ${passIndex} of ${take.id}`,
+      };
+      takes = [kept, ...takes];
+      return kept;
     },
     takes_analyze: (a) => {
       const take = takes.find((t) => t.id === a.takeId);

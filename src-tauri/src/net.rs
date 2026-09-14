@@ -403,7 +403,7 @@ impl CostLog {
         cost_tail(f, limit).map_err(|error| format!("Cannot read {}. {error}", self.path.display()))
     }
 
-    const TOTALS_TAIL: usize = 10_000;
+    pub const TOTALS_TAIL: usize = 10_000;
 
     /// Totals per provider for the summary line in Settings.
     pub fn totals(&self) -> Result<Vec<CostTotal>, String> {

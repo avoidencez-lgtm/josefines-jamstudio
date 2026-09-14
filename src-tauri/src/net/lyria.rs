@@ -11,11 +11,50 @@ use tokio_tungstenite::{
 };
 
 pub const NOT_CONFIGURED: &str = "Lyria RealTime is not configured. Add a Google Gemini key in Settings and set JAM_LIVE=1 before this command may open a WebSocket. Band mode stays available. Lyria BPM is a request, not the band clock.";
+pub const MONTHLY_CAP_REFUSED: &str = "This month's Lyria spend is already at the monthly cap. Confirm on Stage or in Settings before starting.";
 
 const MAX_MESSAGE: usize = 4 * 1024 * 1024;
 pub const MODEL: &str = "models/lyria-realtime-exp";
 pub const USAGE_PATH: &str =
     "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic";
+/// Estimated USD logged for each Lyria RealTime WebSocket connect. Google did
+/// not publish a RealTime meter in the S4 notes; the spend readout is the sum
+/// of these CostEntry values until a billed rate exists.
+pub const CONNECT_USD: f64 = 0.05;
+
+pub fn session_cap_reached(minutes: u32) -> String {
+    format!(
+        "This session reached the {minutes} minute cap. Start a new session from Stage when you want to continue."
+    )
+}
+
+/// One bar of 4/4 at the engine clock. BPM is a request; this only sizes the count-in.
+pub fn count_in_frames(bpm: f64) -> usize {
+    jam_core::timeline::beats_to_samples(4.0, bpm, jam_core::timeline::SAMPLE_RATE) as usize
+}
+
+pub fn is_usage_entry(entry: &super::CostEntry) -> bool {
+    entry.path == USAGE_PATH
+}
+
+pub fn usage_spend(log: &super::CostLog, since_ms: Option<u64>) -> Result<f64, String> {
+    let mut total = 0.0;
+    for entry in log.list(super::CostLog::TOTALS_TAIL)? {
+        if !is_usage_entry(&entry) {
+            continue;
+        }
+        if since_ms.is_some_and(|start| entry.at_ms < start) {
+            continue;
+        }
+        if let Some(cost) = entry
+            .estimated_cost_usd
+            .filter(|value| value.is_finite() && *value >= 0.0)
+        {
+            total += cost;
+        }
+    }
+    Ok(total)
+}
 const ENDPOINT: &str = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic";
 const SCALES: &[&str] = &[
     "C_MAJOR_A_MINOR",
@@ -332,6 +371,8 @@ pub struct Status {
     pub live: bool,
     pub drives_clock: bool,
     pub outbound: usize,
+    /// Sum of this session's logged Lyria WebSocket CostEntry.estimated_cost_usd.
+    pub spend: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -341,6 +382,7 @@ pub struct Machine {
     pub outbound: Vec<Value>,
     pub buffering: bool,
     live: bool,
+    count_in_remaining: usize,
 }
 
 impl Default for Machine {
@@ -351,6 +393,7 @@ impl Default for Machine {
             outbound: Vec::new(),
             buffering: false,
             live: false,
+            count_in_remaining: 0,
         }
     }
 }
@@ -368,6 +411,7 @@ impl Machine {
             config,
             buffering: true,
             live: true,
+            count_in_remaining: 0,
         }
     }
 
@@ -426,11 +470,31 @@ impl Machine {
             (patch.bpm - self.config.bpm).abs() > f64::EPSILON || patch.scale != self.config.scale;
         self.config = patch;
         self.send(prompt_message(&self.config.prompts));
-        self.send(config_message(&self.config));
         if reset {
-            self.send(playback("RESET_CONTEXT"));
+            self.phase = "counting-in";
+            self.count_in_remaining = count_in_frames(self.config.bpm);
+        } else if self.count_in_remaining == 0 {
+            self.send(config_message(&self.config));
         }
         Ok(())
+    }
+
+    /// Count samples at 48 kHz. After one bar of a bpm/scale change, send config
+    /// and RESET_CONTEXT. Does not send PLAY.
+    pub fn advance(&mut self, frames: usize) {
+        if self.count_in_remaining == 0 {
+            return;
+        }
+        if frames >= self.count_in_remaining {
+            self.count_in_remaining = 0;
+            self.send(config_message(&self.config));
+            self.send(playback("RESET_CONTEXT"));
+            if self.phase == "counting-in" {
+                self.phase = "playing";
+            }
+        } else {
+            self.count_in_remaining -= frames;
+        }
     }
 
     pub fn status(&self) -> Status {
@@ -442,6 +506,7 @@ impl Machine {
             live: self.live,
             drives_clock: false,
             outbound: self.outbound.len(),
+            spend: 0.0,
         }
     }
 }
@@ -535,9 +600,29 @@ mod tests {
         assert!(decode_audio(&json!({"serverContent":{"audioChunks":[{"data":"AEAAwA==","mimeType":"audio/pcm;rate=44100"}]}})).is_err());
     }
 
+    fn has_reset(machine: &Machine) -> bool {
+        machine
+            .outbound
+            .iter()
+            .any(|message| message["playbackControl"] == "RESET_CONTEXT")
+    }
+
+    fn play_count(machine: &Machine) -> usize {
+        machine
+            .outbound
+            .iter()
+            .filter(|message| message["playbackControl"] == "PLAY")
+            .count()
+    }
+
     #[test]
-    fn bpm_patch_is_a_request_and_asks_for_reset_not_a_clock() {
+    fn bpm_patch_is_a_request_and_counts_in_one_bar_before_reset() {
         let mut machine = Machine::from_fixture().unwrap();
+        let bar = count_in_frames(110.0);
+        assert_eq!(
+            bar,
+            jam_core::timeline::beats_to_samples(4.0, 110.0, 48_000) as usize
+        );
         machine
             .apply(Config {
                 bpm: 110.0,
@@ -545,11 +630,58 @@ mod tests {
             })
             .unwrap();
         assert_eq!(machine.config.bpm, 110.0);
+        assert_eq!(machine.phase, "counting-in");
+        assert!(!has_reset(&machine));
+        assert_eq!(play_count(&machine), 1);
+        machine.advance(bar.saturating_sub(1));
+        assert!(!has_reset(&machine));
+        machine.advance(1);
+        assert_eq!(machine.phase, "playing");
         assert_eq!(
             machine.outbound.last().unwrap()["playbackControl"],
             "RESET_CONTEXT"
         );
+        assert_eq!(
+            machine.outbound[machine.outbound.len() - 2]["musicGenerationConfig"]["bpm"],
+            110.0
+        );
+        assert_eq!(play_count(&machine), 1);
         assert!(!machine.status().drives_clock);
+    }
+
+    #[test]
+    fn scale_patch_counts_in_then_resets_without_a_second_play() {
+        let mut machine = Machine::from_fixture().unwrap();
+        machine
+            .apply(Config {
+                scale: "C_MAJOR_A_MINOR".into(),
+                ..machine.config.clone()
+            })
+            .unwrap();
+        assert!(!has_reset(&machine));
+        machine.advance(count_in_frames(machine.config.bpm));
+        assert_eq!(
+            machine.outbound.last().unwrap()["playbackControl"],
+            "RESET_CONTEXT"
+        );
+        assert_eq!(play_count(&machine), 1);
+    }
+
+    #[test]
+    fn prompt_patch_does_not_reset_context() {
+        let mut machine = Machine::from_fixture().unwrap();
+        machine
+            .apply(Config {
+                prompts: vec![Prompt {
+                    text: "Dry pocket".into(),
+                    weight: 1.0,
+                }],
+                ..machine.config.clone()
+            })
+            .unwrap();
+        machine.advance(count_in_frames(machine.config.bpm));
+        assert!(!has_reset(&machine));
+        assert_eq!(play_count(&machine), 1);
     }
 
     #[test]

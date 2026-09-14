@@ -98,6 +98,16 @@ export const Stage: React.FC = () => {
   const [showSolo, setShowSolo] = useState(true);
   const [lastTap, setLastTap] = useState<number | null>(null);
   const [packNote, setPackNote] = useState<string | null>(null);
+  const [lyriaConfirm, setLyriaConfirm] = useState(false);
+
+  const startLyria = async (confirm = false) => {
+    const result = await lyriaStart({ confirm });
+    if (!result.ok && /monthly cap/i.test(result.error)) {
+      setLyriaConfirm(true);
+      return;
+    }
+    setLyriaConfirm(false);
+  };
 
   useEffect(() => {
     void ipc
@@ -258,7 +268,7 @@ export const Stage: React.FC = () => {
               <Button
                 size="sm"
                 variant={activeSource === "lyria" ? "primary" : "secondary"}
-                onClick={() => void lyriaStart()}
+                onClick={() => void startLyria()}
               >
                 Lyria
               </Button>
@@ -278,6 +288,33 @@ export const Stage: React.FC = () => {
                       : "This is the jam band."
                 }
               />
+              <p className="basis-full m-0 text-xs text-[var(--fg-2)]">
+                This session has spent ${lyriaStatus.spend.toFixed(4)} on Lyria.
+              </p>
+              {lyriaConfirm && (
+                <dialog
+                  open
+                  aria-label="Confirm this Lyria start."
+                  className="basis-full workspace-stack bg-[var(--bg-1)] border border-[var(--line)] rounded-[var(--radius-m)] p-3 m-0 max-w-none relative inset-auto"
+                >
+                  <p className="m-0 text-xs text-[var(--fg-0)]">
+                    This month's Lyria spend is already at the monthly cap.
+                    Start this session anyway?
+                  </p>
+                  <div className="workspace-actions">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => void startLyria(true)}
+                    >
+                      Start this session anyway.
+                    </Button>
+                    <Button size="sm" onClick={() => setLyriaConfirm(false)}>
+                      Cancel this start.
+                    </Button>
+                  </div>
+                </dialog>
+              )}
               <p className="basis-full m-0 text-xs text-[var(--fg-2)]">
                 Lyria needs a Gemini key, JAM_LIVE=1 and a recorded provider
                 session before it may open a WebSocket. Provider off until those

@@ -1,9 +1,12 @@
 //! Lyria RealTime session and audio-engine bridge.
 use crate::net::lyria::{self, Config, LiveSocket, Machine, Status};
-use crate::{keys::SecretStore, net::CostLog, AppState};
+use crate::{keys::SecretStore, net::CostLog, settings::load_settings, AppState};
 use parking_lot::Mutex;
 use serde_json::Value;
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tokio::sync::mpsc;
 
@@ -26,6 +29,10 @@ pub struct Session {
     control: Option<mpsc::UnboundedSender<Control>>,
     generation: u64,
     request: u64,
+    started: Option<Instant>,
+    started_ms: Option<u64>,
+    session_cap: Option<Duration>,
+    session_minutes: u32,
 }
 
 fn idle() -> Status {
@@ -37,6 +44,7 @@ fn idle() -> Status {
         live: false,
         drives_clock: false,
         outbound: 0,
+        spend: 0.0,
     }
 }
 
@@ -58,6 +66,9 @@ impl Session {
         generation: u64,
         machine: Machine,
         control: Option<mpsc::UnboundedSender<Control>>,
+        started: Instant,
+        started_ms: u64,
+        session_minutes: u32,
     ) -> Result<Status, String> {
         if generation != self.request {
             return Err("Lyria start was cancelled.".into());
@@ -68,7 +79,20 @@ impl Session {
         self.machine = Some(machine);
         self.control = control;
         self.generation = generation;
+        self.started = Some(started);
+        self.started_ms = Some(started_ms);
+        self.session_minutes = session_minutes;
+        self.session_cap = Some(Duration::from_secs(
+            u64::from(session_minutes).saturating_mul(60),
+        ));
         Ok(self.status())
+    }
+
+    fn clear_timing(&mut self) {
+        self.started = None;
+        self.started_ms = None;
+        self.session_cap = None;
+        self.session_minutes = 0;
     }
 
     fn finish(&mut self, generation: u64) -> bool {
@@ -77,6 +101,7 @@ impl Session {
         }
         self.control = None;
         self.machine = None;
+        self.clear_timing();
         true
     }
 
@@ -87,6 +112,7 @@ impl Session {
             let _ = control.send(Control::Stop);
         }
         self.machine = None;
+        self.clear_timing();
         idle()
     }
 
@@ -97,7 +123,22 @@ impl Session {
             .unwrap_or_else(idle)
     }
 
-    fn set(&mut self, patch: Config) -> Result<Status, String> {
+    fn status_for(&self, log: &CostLog) -> Status {
+        let mut status = self.status();
+        if self.machine.is_some() {
+            status.spend = lyria::usage_spend(log, self.started_ms).unwrap_or(0.0);
+        }
+        status
+    }
+
+    fn over_session_cap(&self) -> bool {
+        match (self.started, self.session_cap) {
+            (Some(started), Some(cap)) => started.elapsed() >= cap,
+            _ => false,
+        }
+    }
+
+    fn set(&mut self, patch: Config, log: &CostLog) -> Result<Status, String> {
         let machine = self
             .machine
             .as_mut()
@@ -112,7 +153,16 @@ impl Session {
                 return Err("The Lyria connection has ended. Start it again.".into());
             }
         }
-        Ok(machine.status())
+        Ok(self.status_for(log))
+    }
+
+    fn advance(&mut self, frames: usize) -> Vec<Value> {
+        let Some(machine) = self.machine.as_mut() else {
+            return Vec::new();
+        };
+        let first_new = machine.outbound.len();
+        machine.advance(frames);
+        machine.outbound[first_new..].to_vec()
     }
 
     pub fn config(&self) -> Option<Config> {
@@ -130,23 +180,23 @@ fn emit<R: Runtime>(app: &AppHandle<R>, status: &Status) {
     let _ = app.emit("lyria:state", status);
 }
 
-async fn connect<R: Runtime>(
-    config: Config,
-    key: &str,
+fn log_usage<R: Runtime>(
     app: &AppHandle<R>,
     cost_log: &CostLog,
-) -> Result<(LiveSocket, Machine), String> {
-    let started = Instant::now();
-    let connected = LiveSocket::connect(config, key).await;
+    status: u16,
+    duration_ms: u64,
+    error: Option<String>,
+) {
     let entry = crate::net::CostEntry {
         at_ms: crate::net::now_ms(),
         provider: "gemini".into(),
         method: "WEBSOCKET".into(),
         path: lyria::USAGE_PATH.into(),
-        status: if connected.is_ok() { 101 } else { 0 },
-        duration_ms: started.elapsed().as_millis() as u64,
+        status,
+        duration_ms,
         model: Some(lyria::MODEL.into()),
-        error: connected.as_ref().err().cloned(),
+        estimated_cost_usd: Some(lyria::CONNECT_USD),
+        error,
         ..crate::net::CostEntry::default()
     };
     if let Err(error) = cost_log.append(&entry) {
@@ -156,6 +206,36 @@ async fn connect<R: Runtime>(
         );
     }
     crate::emit_cost_state(app, cost_log);
+}
+
+fn refuse_monthly(log: &CostLog, confirm: bool) -> Result<(), String> {
+    let settings = load_settings()?;
+    if let Some(cap) = settings.lyria.monthly_usd {
+        if !cap.is_finite() || cap < 0.0 {
+            return Err("Choose a monthly Lyria cap of zero or more, or turn the cap off.".into());
+        }
+        if !confirm && lyria::usage_spend(log, None)? + lyria::CONNECT_USD > cap {
+            return Err(lyria::MONTHLY_CAP_REFUSED.into());
+        }
+    }
+    Ok(())
+}
+
+async fn connect<R: Runtime>(
+    config: Config,
+    key: &str,
+    app: &AppHandle<R>,
+    cost_log: &CostLog,
+) -> Result<(LiveSocket, Machine), String> {
+    let started = Instant::now();
+    let connected = LiveSocket::connect(config, key).await;
+    log_usage(
+        app,
+        cost_log,
+        if connected.is_ok() { 101 } else { 0 },
+        started.elapsed().as_millis() as u64,
+        connected.as_ref().err().cloned(),
+    );
     connected
 }
 
@@ -167,6 +247,14 @@ async fn stream<R: Runtime>(
 ) {
     let mut reconnect = true;
     let result = 'stream: loop {
+        let (over_cap, minutes) = {
+            let session = state.session.lock();
+            (session.over_session_cap(), session.session_minutes)
+        };
+        if over_cap {
+            socket.stop().await;
+            break 'stream Err(lyria::session_cap_reached(minutes));
+        }
         let failure = tokio::select! {
             control = controls.recv() => match control {
                 Some(Control::Send(messages)) => {
@@ -186,11 +274,21 @@ async fn stream<R: Runtime>(
                     if let Err(error) = state.engine.lock().lyria_push_pcm16(&samples) {
                         break 'stream Err(error);
                     }
+                    let frames = samples.len() / 2;
+                    let pending = state.session.lock().advance(frames);
+                    if !pending.is_empty() {
+                        if let Err(error) = socket.send_all(&pending).await {
+                            break 'stream Err(error);
+                        }
+                    }
                     continue;
                 }
                 Err(error) => error,
             }
         };
+        if state.session.lock().over_session_cap() {
+            break Err(lyria::session_cap_reached(minutes));
+        }
         if !reconnect || !lyria::should_reconnect(&failure) {
             break Err(failure);
         }
@@ -220,14 +318,17 @@ async fn stream<R: Runtime>(
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn lyria_start<R: Runtime>(
     config: Option<Config>,
+    confirm: Option<bool>,
+    elapsed_ms: Option<u64>,
     app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Status, String> {
     let config = config.unwrap_or_default();
     lyria::validate(&config)?;
+    refuse_monthly(&state.cost_log, confirm.unwrap_or(false))?;
     state.engine.lock().ensure_timing_editable()?;
     let fixture = std::env::var("JAM_LYRIA_FIXTURE").as_deref() == Ok("1");
     let key = if fixture {
@@ -238,6 +339,12 @@ pub async fn lyria_start<R: Runtime>(
         }
         Some(state.secret_store.require("gemini")?)
     };
+    let session_minutes = load_settings()?.lyria.session_minutes;
+    let elapsed_ms = fixture.then_some(elapsed_ms).flatten().unwrap_or(0);
+    let started = Instant::now()
+        .checked_sub(Duration::from_millis(elapsed_ms))
+        .unwrap_or_else(Instant::now);
+    let started_ms = crate::net::now_ms().saturating_sub(elapsed_ms);
     let generation = state.lyria.lock().reserve();
 
     let (machine, audio, live) = if let Some(key) = key {
@@ -245,6 +352,7 @@ pub async fn lyria_start<R: Runtime>(
         (machine, None, Some(socket))
     } else {
         let (machine, audio) = Session::fixture(config)?;
+        log_usage(&app, &state.cost_log, 101, 0, None);
         (machine, Some(audio), None)
     };
     let (sender, receiver) = mpsc::unbounded_channel();
@@ -261,15 +369,32 @@ pub async fn lyria_start<R: Runtime>(
             if let Some(audio) = &audio {
                 engine.lyria_push_pcm16(audio)?;
             }
-            Some(session.commit(generation, machine, live_control)?)
+            Some(session.commit(
+                generation,
+                machine,
+                live_control,
+                started,
+                started_ms,
+                session_minutes,
+            )?)
         }
     };
-    let Some(status) = committed else {
+    if committed.is_none() {
         if let Some(socket) = live {
             socket.stop().await;
         }
         return Err("Lyria start was cancelled.".into());
-    };
+    }
+    if state.lyria.lock().over_session_cap() {
+        state.engine.lock().lyria_stop();
+        let status = state.lyria.lock().stop();
+        emit(&app, &status);
+        if let Some(socket) = live {
+            socket.stop().await;
+        }
+        return Err(lyria::session_cap_reached(session_minutes));
+    }
+    let status = state.lyria.lock().status_for(&state.cost_log);
     emit(&app, &status);
     if let Some(socket) = live {
         tokio::spawn(stream(
@@ -294,7 +419,7 @@ pub fn lyria_set<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Status, String> {
-    let status = state.lyria.lock().set(patch)?;
+    let status = state.lyria.lock().set(patch, &state.cost_log)?;
     emit(&app, &status);
     Ok(status)
 }
@@ -309,7 +434,7 @@ pub fn lyria_stop<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>) -> 
 
 #[tauri::command]
 pub fn lyria_status(state: State<'_, AppState>) -> Status {
-    state.lyria.lock().status()
+    state.lyria.lock().status_for(&state.cost_log)
 }
 
 pub fn stop_and_emit<R: Runtime>(app: &AppHandle<R>, state: &AppState) {
@@ -327,16 +452,37 @@ mod tests {
         let mut session = Session::default();
         let first = session.reserve();
         session
-            .commit(first, Machine::from_fixture().unwrap(), None)
+            .commit(
+                first,
+                Machine::from_fixture().unwrap(),
+                None,
+                Instant::now(),
+                0,
+                10,
+            )
             .unwrap();
         let second = session.reserve();
         assert!(session.finish(first));
         session
-            .commit(second, Machine::from_fixture().unwrap(), None)
+            .commit(
+                second,
+                Machine::from_fixture().unwrap(),
+                None,
+                Instant::now(),
+                0,
+                10,
+            )
             .unwrap();
         session.stop();
         assert!(session
-            .commit(second, Machine::from_fixture().unwrap(), None)
+            .commit(
+                second,
+                Machine::from_fixture().unwrap(),
+                None,
+                Instant::now(),
+                0,
+                10,
+            )
             .is_err());
     }
 
@@ -346,7 +492,9 @@ mod tests {
         let generation = session.reserve();
         let mut machine = Machine::from_fixture().unwrap();
         machine.config.bpm = 110.0;
-        session.commit(generation, machine, None).unwrap();
+        session
+            .commit(generation, machine, None, Instant::now(), 0, 10)
+            .unwrap();
         assert_eq!(session.reconnect_config(generation).unwrap().bpm, 110.0);
         assert!(session
             .reconnect_config(generation.wrapping_add(1))
