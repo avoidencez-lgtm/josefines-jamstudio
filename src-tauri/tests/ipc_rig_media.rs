@@ -1768,3 +1768,151 @@ fn media_render_names_a_missing_soundtrack_asset() {
     let err = studio.err("media_render", json!({"document": document}));
     assert!(err.contains(&asset), "{err}");
 }
+
+#[test]
+fn rig_learn_assigns_an_injected_cc_and_set_control_logs_those_bytes() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok(
+        "rig_select_profile",
+        json!({"profileId": "headrush-pedalboard"}),
+    );
+    let learned_cc = 74u8;
+    let armed = studio.ok("rig_start_learn", json!({"name": "Delay mix"}));
+    assert_eq!(armed["learning"], "Delay mix");
+    assert!(
+        armed["currentProfile"]["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["name"] == "Delay mix"),
+        "start_learn creates the in-memory control: {}",
+        armed["currentProfile"]["controls"]
+    );
+    let still = studio.ok("rig_learn_from_message", json!({"bytes": [0xC0, 3]}));
+    assert_eq!(
+        still["learning"], "Delay mix",
+        "a Program Change must leave learn armed"
+    );
+    let learned = studio.ok(
+        "rig_learn_from_message",
+        json!({"bytes": [0xB0, learned_cc, 64]}),
+    );
+    assert_eq!(learned["learning"], Value::Null);
+    let delay = learned["currentProfile"]["controls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "Delay mix")
+        .expect("learned Delay mix");
+    assert_eq!(delay["cc"], learned_cc);
+    assert_eq!(
+        settings_on_disk()["rig"]["learnedControls"]["headrush-pedalboard"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "Delay mix")
+            .and_then(|c| c["cc"].as_u64()),
+        Some(u64::from(learned_cc))
+    );
+    studio.ok("rig_clear_monitor", json!({}));
+    let sent = studio.ok("rig_set_control", json!({"cc": learned_cc, "value": 64}));
+    assert_eq!(
+        sent["monitor"].as_array().unwrap().last().unwrap()["bytes"],
+        json!([0xB0, learned_cc, 64])
+    );
+}
+
+#[test]
+fn rig_cancel_learn_clears_the_armed_name_without_changing_controls() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok(
+        "rig_select_profile",
+        json!({"profileId": "headrush-pedalboard"}),
+    );
+    studio.ok("rig_start_learn", json!({"name": "Delay mix"}));
+    let before = studio.ok("rig_get_state", json!({}));
+    let cancelled = studio.ok("rig_cancel_learn", json!({}));
+    assert_eq!(cancelled["learning"], Value::Null);
+    assert_eq!(
+        cancelled["currentProfile"]["controls"],
+        before["currentProfile"]["controls"]
+    );
+    let err = studio.err("rig_learn_from_message", json!({"bytes": [0xB0, 74, 64]}));
+    assert!(err.contains("Learn is not armed"), "{err}");
+    let empty = studio.err("rig_start_learn", json!({"name": "  "}));
+    assert!(empty.contains("empty"), "{empty}");
+}
+
+#[test]
+fn learned_cc_survives_profile_switch_and_ipc_restart_from_settings_extra() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    studio.ok(
+        "rig_select_profile",
+        json!({"profileId": "headrush-pedalboard"}),
+    );
+    let learned_cc = 74u8;
+    studio.ok("rig_start_learn", json!({"name": "Delay mix"}));
+    studio.ok(
+        "rig_learn_from_message",
+        json!({"bytes": [0xB0, learned_cc, 64]}),
+    );
+    let switched = studio.ok("rig_select_profile", json!({"profileId": "quad-cortex"}));
+    assert!(
+        switched["currentProfile"]["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|c| c["name"] != "Delay mix"),
+        "{}",
+        switched["currentProfile"]["controls"]
+    );
+    let back = studio.ok(
+        "rig_select_profile",
+        json!({"profileId": "headrush-pedalboard"}),
+    );
+    assert_eq!(
+        back["currentProfile"]["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "Delay mix")
+            .and_then(|c| c["cc"].as_u64()),
+        Some(u64::from(learned_cc))
+    );
+    studio.ok("rig_clear_monitor", json!({}));
+    let sent = studio.ok("rig_set_control", json!({"cc": learned_cc, "value": 64}));
+    assert_eq!(
+        sent["monitor"].as_array().unwrap().last().unwrap()["bytes"],
+        json!([0xB0, learned_cc, 64])
+    );
+
+    let restarted = Studio::boot();
+    let restored = restarted.ok("rig_get_state", json!({}));
+    assert_eq!(restored["currentProfile"]["id"], "headrush-pedalboard");
+    assert_eq!(
+        restored["currentProfile"]["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "Delay mix")
+            .and_then(|c| c["cc"].as_u64()),
+        Some(u64::from(learned_cc))
+    );
+    restarted.ok("rig_clear_monitor", json!({}));
+    let again = restarted.ok("rig_set_control", json!({"cc": learned_cc, "value": 64}));
+    assert_eq!(
+        again["monitor"].as_array().unwrap().last().unwrap()["bytes"],
+        json!([0xB0, learned_cc, 64])
+    );
+    let bundled = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../rigs/headrush-pedalboard.json"),
+    )
+    .unwrap();
+    assert!(
+        bundled.contains("\"controls\": []"),
+        "learn must not rewrite bundled JSON"
+    );
+}

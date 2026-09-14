@@ -392,6 +392,8 @@ export interface RigState {
   portDescription: string;
   live: boolean;
   monitor: SentMidiMessage[];
+  /** Armed control name while CC learn is waiting for MIDI. */
+  learning: string | null;
 }
 
 /** The only way TypeScript reaches a provider: Rust injects the key. */
