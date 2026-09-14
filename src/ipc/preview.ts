@@ -1026,6 +1026,42 @@ export function createPreviewEngine(
         ),
         notes: "Simulated take from browser preview (no audio).",
       };
+      if (transport.loop_enabled) {
+        const loopBeats =
+          (transport.loop_end_bar - transport.loop_start_bar) *
+          transport.time_signature[0];
+        const loopSamples = Math.max(
+          1,
+          Math.round((loopBeats * 48_000 * 60) / transport.bpm),
+        );
+        const passes = Math.max(
+          2,
+          Math.floor(meta.sampleCount / loopSamples) + 1,
+        );
+        meta.passes = passes;
+        meta.passStarts = Array.from(
+          { length: passes },
+          (_, i) => i * loopSamples,
+        );
+        meta.passFiles = Array.from(
+          { length: passes },
+          (_, i) => `passes/pass-${i + 1}.wav`,
+        );
+        meta.passAnalysis = meta.passFiles.map(() => ({
+          meanGridDistanceMs: null,
+          gridBiasMs: null,
+          gridSpreadMs: null,
+          attackLevelCvPct: null,
+          meanAbsCents: null,
+          pitchedFrames: 0,
+          timingAccuracyPct: 0,
+          dynamicConsistencyPct: 0,
+          intonationAccuracyPct: 0,
+          detectedTransients: 0,
+          summary:
+            "Analysis needs the desktop app. No audio was recorded in this browser preview.",
+        }));
+      }
       takes = [meta, ...takes];
       recording = null;
       return meta;
@@ -1066,6 +1102,42 @@ export function createPreviewEngine(
         take.label = a.title;
       }
       return take;
+    },
+    takes_keep_pass: (a) => {
+      const take = takes.find((t) => t.id === a.takeId);
+      if (!take) {
+        throw new Error(`take ${String(a.takeId)} is not in the library`);
+      }
+      const files = Array.isArray(take.passFiles) ? take.passFiles : [];
+      const passIndex = a.passIndex;
+      if (
+        typeof passIndex !== "number" ||
+        !Number.isInteger(passIndex) ||
+        passIndex < 1 ||
+        passIndex > files.length
+      ) {
+        if (files.length === 0) {
+          throw new Error("This take has no loop passes to keep.");
+        }
+        throw new Error(
+          `Pass ${String(passIndex)} is not in this take. Choose a pass from 1 to ${files.length}.`,
+        );
+      }
+      const {
+        passes: _passes,
+        passStarts: _passStarts,
+        passFiles: _passFiles,
+        passAnalysis: _passAnalysis,
+        ...rest
+      } = take;
+      const kept: TakeMetadata = {
+        ...rest,
+        id: `preview-keep-${Date.now()}`,
+        notes: `Pass ${passIndex} kept from ${take.id}.`,
+        label: `Pass ${passIndex} of ${take.id}`,
+      };
+      takes = [kept, ...takes];
+      return kept;
     },
     takes_analyze: (a) => {
       const take = takes.find((t) => t.id === a.takeId);

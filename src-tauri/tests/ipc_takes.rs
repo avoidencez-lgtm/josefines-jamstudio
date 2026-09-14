@@ -436,6 +436,65 @@ fn looping_a_recording_counts_passes_at_loop_wraps() {
     );
     assert!(dir.join("guitar-di.wav").is_file());
     assert_eq!(on_disk["stems"].as_object().unwrap().len(), 6);
+
+    let files = meta["passFiles"]
+        .as_array()
+        .expect("looped takes write passFiles");
+    assert_eq!(files.len() as u64, passes);
+    for (i, file) in files.iter().enumerate() {
+        let path = dir.join(file.as_str().unwrap());
+        assert!(path.is_file(), "{}", path.display());
+        let (samples, _) = jam_audio::recorder::read_wav_mono(&path).unwrap();
+        let end = starts
+            .get(i + 1)
+            .copied()
+            .unwrap_or(meta["sampleCount"].as_u64().unwrap());
+        assert_eq!(
+            samples.len() as u64,
+            end.saturating_sub(starts[i]),
+            "pass {} length; starts={starts:?} sampleCount={}",
+            i + 1,
+            meta["sampleCount"]
+        );
+    }
+    assert_eq!(
+        meta["passAnalysis"].as_array().expect("passAnalysis").len() as u64,
+        passes
+    );
+    assert_eq!(on_disk["passFiles"], meta["passFiles"]);
+    assert_eq!(
+        on_disk["passAnalysis"].as_array().unwrap().len() as u64,
+        passes
+    );
+
+    let keep_index = 2u64.min(passes);
+    let kept = studio.ok(
+        "takes_keep_pass",
+        json!({ "takeId": id, "passIndex": keep_index }),
+    );
+    assert_ne!(kept["id"], id);
+    assert_eq!(kept["sessionId"], session);
+    assert_eq!(kept["notes"], format!("Pass {keep_index} kept from {id}."));
+    assert_eq!(kept["label"], format!("Pass {keep_index} of {id}"));
+    let kept_id = kept["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        takes_root()
+            .join(&kept_id)
+            .file_name()
+            .unwrap()
+            .to_string_lossy(),
+        kept_id.as_str()
+    );
+    let pass_bytes =
+        std::fs::read(dir.join(files[(keep_index as usize) - 1].as_str().unwrap())).unwrap();
+    let kept_bytes = std::fs::read(PathBuf::from(kept["pathInput"].as_str().unwrap())).unwrap();
+    assert_eq!(kept_bytes, pass_bytes);
+    assert_eq!(manifest(&dir)["id"], id);
+    let err = studio.err("takes_keep_pass", json!({ "takeId": id, "passIndex": 0 }));
+    assert!(
+        err.starts_with("Pass 0 is not in this take.") && err.contains("Choose a pass from 1"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -733,10 +792,15 @@ fn analysis_and_favourite_never_write_through_another_takes_input_path() {
     let mut doc = manifest(&own.dir);
     doc["pathInput"] = json!(other.input.to_string_lossy());
     std::fs::write(own.dir.join("take.json"), serde_json::to_vec(&doc).unwrap()).unwrap();
-    for command in ["takes_analyze", "takes_favourite", "takes_update"] {
+    for command in [
+        "takes_analyze",
+        "takes_favourite",
+        "takes_update",
+        "takes_keep_pass",
+    ] {
         let error = studio.err(
             command,
-            json!({"takeId": own.id, "favourite": true, "notes": "x"}),
+            json!({"takeId": own.id, "favourite": true, "notes": "x", "passIndex": 1}),
         );
         assert!(error.contains("not inside its take directory"), "{error}");
     }
@@ -821,6 +885,82 @@ fn takes_update_writes_notes_and_a_display_label_without_renaming_the_id() {
         "Choose notes or a title to save."
     );
     assert_eq!(manifest(&take.dir)["notes"], "second pass");
+}
+
+#[test]
+fn takes_keep_pass_copies_the_chosen_pass_and_refuses_a_bad_index() {
+    let _scenario = common::scenario();
+    let studio = Studio::boot();
+    let take = synthetic_take(0.2, "1700000002.000");
+    let passes = take.dir.join("passes");
+    std::fs::create_dir_all(&passes).unwrap();
+    let pass1 = passes.join("pass-1.wav");
+    let pass2 = passes.join("pass-2.wav");
+    std::fs::copy(&take.input, &pass1).unwrap();
+    write_sine_wav(&pass2, 330.0, 0.1, 0.5);
+    let mut doc = manifest(&take.dir);
+    doc["passes"] = json!(2);
+    doc["passStarts"] = json!([0, take.frames / 2]);
+    doc["passFiles"] = json!(["passes/pass-1.wav", "passes/pass-2.wav"]);
+    std::fs::write(
+        take.dir.join("take.json"),
+        serde_json::to_vec_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+
+    let kept = studio.ok(
+        "takes_keep_pass",
+        json!({ "takeId": take.id, "passIndex": 2 }),
+    );
+    assert_ne!(kept["id"], take.id);
+    assert_eq!(kept["sessionId"], format!("session-of-{}", take.id));
+    assert_eq!(kept["notes"], format!("Pass 2 kept from {}.", take.id));
+    assert_eq!(kept["label"], format!("Pass 2 of {}", take.id));
+    let kept_input = PathBuf::from(kept["pathInput"].as_str().unwrap());
+    assert_eq!(
+        std::fs::read(&kept_input).unwrap(),
+        std::fs::read(&pass2).unwrap()
+    );
+    assert_eq!(
+        jam_audio::recorder::read_wav_mono(&kept_input)
+            .unwrap()
+            .0
+            .len(),
+        jam_audio::recorder::read_wav_mono(&pass2).unwrap().0.len()
+    );
+    assert_eq!(manifest(&take.dir)["id"], take.id);
+    assert_eq!(
+        take.dir.file_name().unwrap().to_string_lossy(),
+        take.id.as_str()
+    );
+    let listed = studio.ok("takes_list", json!({}));
+    assert!(find(&listed, kept["id"].as_str().unwrap()).is_some());
+    assert!(find(&listed, &take.id).is_some());
+
+    let too_high = studio.err(
+        "takes_keep_pass",
+        json!({ "takeId": take.id, "passIndex": 9 }),
+    );
+    assert!(
+        too_high.starts_with("Pass 9 is not in this take.")
+            && too_high.contains("Choose a pass from 1 to 2"),
+        "{too_high}"
+    );
+    assert_eq!(
+        studio.err(
+            "takes_keep_pass",
+            json!({ "takeId": take.id, "passIndex": 0 })
+        ),
+        "Pass 0 is not in this take. Choose a pass from 1 to 2."
+    );
+    let unknown = unique("nope");
+    assert_eq!(
+        studio.err(
+            "takes_keep_pass",
+            json!({ "takeId": unknown, "passIndex": 1 })
+        ),
+        format!("take {unknown} is not in the library")
+    );
 }
 
 #[test]

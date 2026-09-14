@@ -147,6 +147,38 @@ describe("browser preview engine", () => {
     });
   });
 
+  it("keeps a numbered loop pass as a new take without renaming the source", async () => {
+    await engine.invoke("transport_set_loop", {
+      startBar: 1,
+      endBar: 2,
+      enabled: true,
+    });
+    const id = await engine.invoke<string>("recorder_start", {
+      sessionId: "jam",
+    });
+    engine.tick(2);
+    const meta = await engine.invoke<TakeMetadata>("recorder_stop", {});
+    expect(meta.id).toBe(id);
+    expect(meta.passFiles?.length).toBeGreaterThanOrEqual(2);
+    const kept = await engine.invoke<TakeMetadata>("takes_keep_pass", {
+      takeId: id,
+      passIndex: 1,
+    });
+    expect(kept.id).not.toBe(id);
+    expect(kept.sessionId).toBe("jam");
+    expect(kept.notes).toBe(`Pass 1 kept from ${id}.`);
+    expect(kept.label).toBe(`Pass 1 of ${id}`);
+    const listed = await engine.invoke<TakeMetadata[]>("takes_list", {});
+    expect(listed.find((t) => t.id === id)?.id).toBe(id);
+    expect(listed.find((t) => t.id === kept.id)?.notes).toBe(kept.notes);
+    await expect(
+      engine.invoke("takes_keep_pass", { takeId: id, passIndex: 0 }),
+    ).rejects.toThrow(/Pass 0 is not in this take/);
+    await expect(
+      engine.invoke("takes_keep_pass", { takeId: "gone", passIndex: 1 }),
+    ).rejects.toThrow(/gone/);
+  });
+
   it("serves the bundled library", async () => {
     const styles = await engine.invoke<StyleSummary[]>("band_list_styles", {});
     const charts = await engine.invoke<Chart[]>("band_list_charts", {});
