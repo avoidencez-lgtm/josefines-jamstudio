@@ -276,6 +276,12 @@ export interface EngineTelemetry {
   recorder?: RecorderTelemetry;
 }
 
+export interface LyriaSettings {
+  sessionMinutes?: number;
+  monthlyUsd?: number | null;
+  [key: string]: unknown;
+}
+
 export interface AppSettings {
   schemaVersion: number;
   input_device?: string | null;
@@ -283,6 +289,7 @@ export interface AppSettings {
   input_channel: number;
   sample_rate: number;
   buffer_size: number;
+  lyria?: LyriaSettings;
   [key: string]: unknown;
 }
 
@@ -464,6 +471,13 @@ export interface TakeAnalysis {
   summary: string;
 }
 
+/** Estimated USD logged for each Lyria RealTime WebSocket connect. */
+export const LYRIA_CONNECT_USD = 0.05;
+export const LYRIA_USAGE_PATH =
+  "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic";
+export const LYRIA_MONTHLY_CAP_REFUSED =
+  "This month's Lyria spend is already at the monthly cap. Confirm on Stage or in Settings before starting.";
+
 /** Lyria RealTime status. `live` stays false until a recorded provider session exists. */
 export interface LyriaStatus {
   phase: string;
@@ -473,6 +487,7 @@ export interface LyriaStatus {
   live: boolean;
   drivesClock: boolean;
   outbound: number;
+  spend: number;
 }
 
 /** What `takes_export_daw` actually wrote. */

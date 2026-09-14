@@ -27,8 +27,43 @@ pub struct AppSettings {
     pub rig: RigSettings,
     #[serde(default)]
     pub recorder: RecorderSettings,
+    #[serde(default, skip_serializing_if = "is_default_lyria")]
+    pub lyria: LyriaSettings,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// Lyria RealTime session and spend caps. Unknown nested fields survive a rewrite.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LyriaSettings {
+    #[serde(default = "default_session_minutes", rename = "sessionMinutes")]
+    pub session_minutes: u32,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "monthlyUsd"
+    )]
+    pub monthly_usd: Option<f64>,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+fn default_session_minutes() -> u32 {
+    10
+}
+
+fn is_default_lyria(value: &LyriaSettings) -> bool {
+    *value == LyriaSettings::default()
+}
+
+impl Default for LyriaSettings {
+    fn default() -> Self {
+        Self {
+            session_minutes: default_session_minutes(),
+            monthly_usd: None,
+            extra: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -182,6 +217,7 @@ impl Default for AppSettings {
             buffer_size: default_buffer_size(),
             rig: RigSettings::default(),
             recorder: RecorderSettings::default(),
+            lyria: LyriaSettings::default(),
             extra: HashMap::new(),
         }
     }
@@ -478,6 +514,48 @@ mod tests {
         assert!(text.contains("futureClockPpq"), "{text}");
         assert!(text.contains("futurePunchIn"), "{text}");
         assert!(text.contains("futureCalibrator"), "{text}");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn lyria_caps_default_and_unknown_fields_survive_a_rewrite() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-settings-lyria-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("settings.json");
+        assert_eq!(AppSettings::default().lyria.session_minutes, 10);
+        assert_eq!(AppSettings::default().lyria.monthly_usd, None);
+        fs::write(
+            &path,
+            r#"{
+                "schemaVersion": 1,
+                "lyria": {
+                    "sessionMinutes": 15,
+                    "monthlyUsd": 4.5,
+                    "futureMeter": "per-bar"
+                }
+            }"#,
+        )
+        .unwrap();
+        let mut settings = load_from(&path).unwrap();
+        assert_eq!(settings.lyria.session_minutes, 15);
+        assert_eq!(settings.lyria.monthly_usd, Some(4.5));
+        assert_eq!(settings.lyria.extra.get("futureMeter").unwrap(), "per-bar");
+        settings.buffer_size = 512;
+        save_to(&path, &settings).unwrap();
+        let round = load_from(&path).unwrap();
+        assert_eq!(round.buffer_size, 512);
+        assert_eq!(round.lyria.session_minutes, 15);
+        assert_eq!(round.lyria.monthly_usd, Some(4.5));
+        assert_eq!(round.lyria.extra.get("futureMeter").unwrap(), "per-bar");
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("futureMeter"), "{text}");
         fs::remove_dir_all(root).unwrap();
     }
 }

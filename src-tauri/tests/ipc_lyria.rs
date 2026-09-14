@@ -62,6 +62,7 @@ fn recorded_protocol_fixture_is_exclusive_and_does_not_drive_the_clock() {
     );
     assert_eq!(patched["requestedBpm"], 110.0);
     assert_eq!(patched["drivesClock"], false);
+    assert_eq!(patched["phase"], "counting-in");
     let seen: Arc<Mutex<Vec<Value>>> = Arc::default();
     let sink = Arc::clone(&seen);
     studio.app().listen_any("lyria:state", move |event| {
@@ -109,5 +110,93 @@ fn originals_load_and_record_stop_lyria() {
         json!({ "sessionId": common::unique("session") }),
     );
     assert_eq!(studio.ok("lyria_status", json!({}))["phase"], "idle");
+    std::env::remove_var("JAM_LYRIA_FIXTURE");
+}
+
+fn lyria_spend_from_log(studio: &Studio) -> f64 {
+    studio
+        .ok("cost_log_list", json!({"limit": 1_000_000}))
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["path"] == app_lib::net::lyria::USAGE_PATH)
+        .filter_map(|entry| entry["estimatedCostUsd"].as_f64())
+        .sum()
+}
+
+#[test]
+fn spend_meter_matches_the_logged_lyria_cost_entries() {
+    let _scenario = common::scenario();
+    std::env::set_var("JAM_LYRIA_FIXTURE", "1");
+    let studio = Studio::boot();
+    let started = studio.ok("lyria_start", json!({}));
+    let from_log = lyria_spend_from_log(&studio);
+    assert!(
+        from_log > 0.0 && started["spend"] == from_log,
+        "start spend {} must equal CostLog sum {from_log}",
+        started["spend"]
+    );
+
+    studio
+        .app()
+        .state::<app_lib::AppState>()
+        .cost_log
+        .append(&app_lib::net::CostEntry {
+            at_ms: 4_000_000_000_000,
+            provider: "gemini".into(),
+            method: "WEBSOCKET".into(),
+            path: app_lib::net::lyria::USAGE_PATH.into(),
+            status: 101,
+            estimated_cost_usd: Some(1.25),
+            ..app_lib::net::CostEntry::default()
+        })
+        .unwrap();
+    let after_append = lyria_spend_from_log(&studio);
+    assert_eq!(studio.ok("lyria_status", json!({}))["spend"], after_append);
+    assert!(after_append > from_log);
+    studio.ok("lyria_stop", json!({}));
+    std::env::remove_var("JAM_LYRIA_FIXTURE");
+}
+
+#[test]
+fn session_cap_stops_the_fixture_session_when_elapsed_time_is_injected() {
+    let _scenario = common::scenario();
+    std::env::set_var("JAM_LYRIA_FIXTURE", "1");
+    let studio = Studio::boot();
+    let mut settings = studio.ok("settings_get", json!({}));
+    settings["lyria"] = json!({"sessionMinutes": 0});
+    studio.ok("settings_set", json!({ "settings": settings }));
+    let tiny = studio.err("lyria_start", json!({}));
+    assert!(
+        tiny.contains("minute cap") && tiny.contains("Start a new session"),
+        "{tiny}"
+    );
+    assert_eq!(studio.ok("lyria_status", json!({}))["phase"], "idle");
+    settings["lyria"] = json!({"sessionMinutes": 10});
+    studio.ok("settings_set", json!({ "settings": settings }));
+    let stopped = studio.err("lyria_start", json!({ "elapsedMs": 10 * 60 * 1000 }));
+    assert!(
+        stopped.contains("minute cap") && stopped.contains("Start a new session"),
+        "{stopped}"
+    );
+    assert_eq!(studio.ok("lyria_status", json!({}))["phase"], "idle");
+    std::env::remove_var("JAM_LYRIA_FIXTURE");
+}
+
+#[test]
+fn monthly_cap_refuses_without_confirm_and_proceeds_with_confirm() {
+    let _scenario = common::scenario();
+    std::env::set_var("JAM_LYRIA_FIXTURE", "1");
+    let studio = Studio::boot();
+    let mut settings = studio.ok("settings_get", json!({}));
+    settings["lyria"] = json!({"sessionMinutes": 10, "monthlyUsd": 0.0});
+    studio.ok("settings_set", json!({ "settings": settings }));
+    let refused = studio.err("lyria_start", json!({}));
+    assert_eq!(refused, app_lib::net::lyria::MONTHLY_CAP_REFUSED);
+    assert_eq!(studio.ok("lyria_status", json!({}))["phase"], "idle");
+    let started = studio.ok("lyria_start", json!({ "confirm": true }));
+    assert_eq!(started["phase"], "playing");
+    assert_eq!(started["drivesClock"], false);
+    studio.ok("lyria_stop", json!({}));
     std::env::remove_var("JAM_LYRIA_FIXTURE");
 }

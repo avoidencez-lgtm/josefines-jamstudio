@@ -3,16 +3,20 @@ import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { AiSettings } from "../components/AiSettings";
 import { Button } from "../components/Button";
+import { NumberField } from "../components/NumberField";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/States";
+import { Toggle } from "../components/Toggle";
 import { WorkspaceHeader, WorkspaceViews } from "../components/Workspace";
 import { ipc } from "../ipc/client";
-import type {
-  AudioConfig,
-  CostEntry,
-  CostTotal,
-  EngineStatus,
-  IdleCpuSample,
+import {
+  type AudioConfig,
+  type CostEntry,
+  type CostTotal,
+  type EngineStatus,
+  type IdleCpuSample,
+  LYRIA_CONNECT_USD,
+  LYRIA_USAGE_PATH,
 } from "../ipc/contract";
 import { bundledControlMaps } from "../lib/controls";
 import { withNextStep } from "../lib/loudError";
@@ -633,6 +637,43 @@ const UsageLog: React.FC = () => {
   const [entries, setEntries] = useState<CostEntry[]>([]);
   const [totals, setTotals] = useState<CostTotal[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const { settings, loadSettings, lyriaStart } = useEngineStore(
+    useShallow((s) => ({
+      settings: s.settings,
+      loadSettings: s.loadSettings,
+      lyriaStart: s.lyriaStart,
+    })),
+  );
+  const sessionMinutes = settings?.lyria?.sessionMinutes ?? 10;
+  const monthlyUsd = settings?.lyria?.monthlyUsd;
+  const monthlyOn = monthlyUsd != null;
+  const lyriaLogged = entries
+    .filter((entry) => entry.path === LYRIA_USAGE_PATH)
+    .reduce((sum, entry) => sum + (entry.estimatedCostUsd ?? 0), 0);
+  const overMonthly =
+    monthlyOn && lyriaLogged + LYRIA_CONNECT_USD > Number(monthlyUsd);
+  const saveLyria = async (patch: {
+    sessionMinutes?: number;
+    monthlyUsd?: number | null;
+  }) => {
+    const current =
+      await ipc.invoke<NonNullable<typeof settings>>("settings_get");
+    const existing = {
+      ...((current.lyria as Record<string, unknown> | undefined) ?? {}),
+    };
+    const { monthlyUsd: _ignored, ...extra } = existing;
+    const nextMonthly =
+      patch.monthlyUsd === undefined ? monthlyUsd : patch.monthlyUsd;
+    const lyria = {
+      ...extra,
+      sessionMinutes: patch.sessionMinutes ?? sessionMinutes,
+      ...(nextMonthly == null ? {} : { monthlyUsd: nextMonthly }),
+    };
+    await ipc.invoke("settings_set", {
+      settings: { ...current, lyria },
+    });
+    await loadSettings();
+  };
 
   const load = useCallback(async () => {
     try {
@@ -670,6 +711,61 @@ const UsageLog: React.FC = () => {
 
   return (
     <Panel title="This is the network usage log.">
+      <div className="workspace-stack mb-4">
+        <p className="text-sm text-[var(--fg-1)]">
+          Lyria stops after the session length. A monthly cap refuses a new
+          start until you confirm.
+        </p>
+        <NumberField
+          label="Choose the Lyria session length."
+          value={sessionMinutes}
+          min={1}
+          max={120}
+          onChange={(value) => void saveLyria({ sessionMinutes: value })}
+          suffix="minutes"
+          className="flex items-center gap-1.5 text-xs font-mono text-[var(--fg-2)]"
+          inputClassName="w-16 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded-[var(--radius-m)] text-xs font-mono tabular-nums"
+        />
+        <Toggle
+          checked={monthlyOn}
+          onChange={(on) =>
+            void saveLyria({ monthlyUsd: on ? (monthlyUsd ?? 1) : null })
+          }
+          label="Cap monthly Lyria spend."
+        />
+        {monthlyOn && (
+          <NumberField
+            label="Choose the monthly Lyria cap."
+            value={monthlyUsd ?? 1}
+            min={0}
+            max={1000}
+            step={0.01}
+            onChange={(value) => void saveLyria({ monthlyUsd: value })}
+            suffix="USD"
+            className="flex items-center gap-1.5 text-xs font-mono text-[var(--fg-2)]"
+            inputClassName="w-20 bg-[var(--bg-2)] border border-[var(--line)] text-[var(--fg-0)] px-1.5 py-0.5 rounded-[var(--radius-m)] text-xs font-mono tabular-nums"
+          />
+        )}
+        {overMonthly && (
+          <dialog
+            open
+            aria-label="Confirm this Lyria start."
+            className="workspace-stack bg-[var(--bg-1)] border border-[var(--line)] rounded-[var(--radius-m)] p-3 m-0 max-w-none relative inset-auto"
+          >
+            <p className="m-0 text-sm text-[var(--fg-0)]">
+              This month's Lyria spend is already at the monthly cap. Start this
+              session anyway?
+            </p>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => void lyriaStart({ confirm: true })}
+            >
+              Start this session anyway.
+            </Button>
+          </dialog>
+        )}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="flex flex-wrap gap-3 text-xs font-mono text-[var(--fg-1)]">
           {!error && totals.length === 0 && (
