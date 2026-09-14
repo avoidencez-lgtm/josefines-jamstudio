@@ -191,6 +191,9 @@ export interface EngineState {
   setRigControl: (cc: number, value: number) => Promise<void>;
   sendRigProgram: (program: number) => Promise<void>;
   clearRigMonitor: () => Promise<void>;
+  startRigLearn: (name: string) => Promise<void>;
+  cancelRigLearn: () => Promise<void>;
+  learnRigFromMessage: (bytes: number[]) => Promise<void>;
   checkVirtualMidi: () => Promise<CommandResult>;
   assetPacks: PackStatus[];
   ensureAssets: (ids?: string[]) => Promise<CommandResult>;
@@ -791,6 +794,24 @@ export const useEngineStore = create<EngineState>((set, get) => {
     clearRigMonitor: async () => {
       const state = await run("The rig monitor", () =>
         ipc.invoke<RigState>("rig_clear_monitor"),
+      );
+      if (state) set({ rigState: state });
+    },
+    startRigLearn: async (name) => {
+      const state = await run("The rig learn", () =>
+        ipc.invoke<RigState>("rig_start_learn", { name }),
+      );
+      if (state) set({ rigState: state });
+    },
+    cancelRigLearn: async () => {
+      const state = await run("The rig cancel learn", () =>
+        ipc.invoke<RigState>("rig_cancel_learn"),
+      );
+      if (state) set({ rigState: state });
+    },
+    learnRigFromMessage: async (bytes) => {
+      const state = await run("The rig learn message", () =>
+        ipc.invoke<RigState>("rig_learn_from_message", { bytes }),
       );
       if (state) set({ rigState: state });
     },

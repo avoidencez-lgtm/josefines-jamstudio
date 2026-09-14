@@ -133,6 +133,32 @@ impl Default for RigSettings {
     }
 }
 
+const LEARNED_CONTROLS: &str = "learnedControls";
+
+impl RigSettings {
+    /// User-learned knobs for one profile, stored in `extra` so bundled JSON is never rewritten.
+    pub fn learned_controls(&self, profile_id: &str) -> Vec<jam_rig::Control> {
+        self.extra
+            .get(LEARNED_CONTROLS)
+            .and_then(|v| v.get(profile_id))
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn set_learned_controls(&mut self, profile_id: &str, controls: &[jam_rig::Control]) {
+        let mut map = match self.extra.get(LEARNED_CONTROLS) {
+            Some(serde_json::Value::Object(m)) => m.clone(),
+            _ => serde_json::Map::new(),
+        };
+        map.insert(
+            profile_id.to_string(),
+            serde_json::to_value(controls).unwrap_or(serde_json::Value::Array(vec![])),
+        );
+        self.extra
+            .insert(LEARNED_CONTROLS.into(), serde_json::Value::Object(map));
+    }
+}
+
 fn default_input_channel() -> u16 {
     2 // HeadRush dry DI (channel 3 is index 2)
 }
