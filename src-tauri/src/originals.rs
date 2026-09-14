@@ -279,7 +279,7 @@ pub fn file_takes() -> Result<(Vec<TakeMetadata>, Vec<String>), String> {
 }
 
 /// Metadata paths are untrusted; updates belong only to root/<validated take id>.
-pub fn save_take_manifest(take: &TakeMetadata) -> Result<(), String> {
+pub fn take_folder(take: &TakeMetadata) -> Result<PathBuf, String> {
     valid_id(&take.id)?;
     let root = takes_root().canonicalize().map_err(|e| e.to_string())?;
     let dir = root.join(&take.id);
@@ -299,6 +299,11 @@ pub fn save_take_manifest(take: &TakeMetadata) -> Result<(), String> {
             take.id
         ));
     }
+    Ok(dir)
+}
+
+pub fn save_take_manifest(take: &TakeMetadata) -> Result<(), String> {
+    take_folder(take)?;
     jam_audio::recorder::save_manifest(take)
 }
 
@@ -528,6 +533,21 @@ pub fn capture_keep(
     let _ = state.store.lock().insert_take(&take);
     Ok(take)
 }
+
+/// Copies one numbered loop pass into a new take in the same session. Never renames the source.
+#[tauri::command]
+pub fn takes_keep_pass(
+    take_id: String,
+    pass_index: u32,
+    state: State<'_, AppState>,
+) -> Result<TakeMetadata, String> {
+    let source = crate::find_take(&state, &take_id)?;
+    take_folder(&source)?;
+    let take = jam_audio::recorder::keep_loop_pass(&source, pass_index, &takes_root())?;
+    let _ = state.store.lock().insert_take(&take);
+    Ok(take)
+}
+
 #[tauri::command]
 pub fn takes_favourite(
     take_id: String,

@@ -1990,6 +1990,7 @@ pub fn configure<R: tauri::Runtime>(
             originals::clip_audition,
             originals::clip_audition_stop,
             originals::capture_keep,
+            originals::takes_keep_pass,
             originals::takes_favourite,
             originals::takes_update,
             keys_set,

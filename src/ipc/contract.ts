@@ -294,6 +294,14 @@ export interface TakeMetadata {
   label?: string;
   stems?: Record<string, string>;
   snapshot?: unknown;
+  /** Count of loop passes written at LoopWrapped. */
+  passes?: number;
+  /** Take-relative sample where each loop pass began. */
+  passStarts?: number[];
+  /** Relative paths of split guitar-pass WAVs, 1-indexed (`passes/pass-N.wav`). */
+  passFiles?: string[];
+  /** Per-pass TakeAnalyzer results; same shape as `analysis`. */
+  passAnalysis?: unknown;
   id: string;
   sessionId: string;
   timestamp: string;

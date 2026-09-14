@@ -3480,6 +3480,34 @@ mod tests {
         assert_eq!(disk["passStarts"], take.extra["passStarts"]);
         assert_eq!(dir.file_name().unwrap().to_string_lossy(), id.as_str());
         assert_eq!(take.stems.len(), 6);
+        let files = take.extra["passFiles"]
+            .as_array()
+            .expect("looped takes write passFiles");
+        assert_eq!(files.len(), starts.len());
+        for (i, file) in files.iter().enumerate() {
+            let path = dir.join(file.as_str().unwrap());
+            assert!(path.is_file(), "{}", path.display());
+            let (samples, _) = crate::recorder::read_wav_mono(&path).unwrap();
+            let end = starts
+                .get(i + 1)
+                .copied()
+                .unwrap_or(take.sample_count as u64);
+            assert_eq!(
+                samples.len() as u64,
+                end.saturating_sub(starts[i]),
+                "pass {} length; starts={starts:?} sample_count={}",
+                i + 1,
+                take.sample_count
+            );
+        }
+        assert_eq!(
+            take.extra["passAnalysis"]
+                .as_array()
+                .expect("looped takes write passAnalysis")
+                .len(),
+            starts.len()
+        );
+        assert_eq!(disk["passFiles"], take.extra["passFiles"]);
         std::fs::remove_dir_all(root).unwrap();
     }
 

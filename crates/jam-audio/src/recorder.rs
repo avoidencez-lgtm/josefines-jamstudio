@@ -1,4 +1,5 @@
 //! Bounded disk recording. WAV headers checkpoint every second; manifests are truth.
+use crate::analysis::TakeAnalyzer;
 use crate::workstation::Frame;
 use hound::{WavSpec, WavWriter};
 use serde::{Deserialize, Serialize};
@@ -303,6 +304,7 @@ impl TakeRecorder {
             .map_err(|_| "Recording writer failed; partial WAVs kept")??;
         meta.midi = std::mem::take(&mut self.midi);
         persist_loop_passes(&mut meta.extra, &self.pass_starts);
+        split_and_analyze_loop_passes(&mut meta, &self.pass_starts)?;
         if let Some(timing) = self.reference_timing.take() {
             meta.extra.insert(
                 "referenceTiming".into(),
@@ -363,6 +365,248 @@ fn persist_loop_passes(extra: &mut BTreeMap<String, serde_json::Value>, starts: 
     let starts = if starts.is_empty() { &[0] } else { starts };
     extra.insert("passes".into(), serde_json::json!(starts.len() as u64));
     extra.insert("passStarts".into(), serde_json::json!(starts));
+}
+
+/// Split the guitar DI at loop-pass sample boundaries and analyse each pass.
+/// Only runs when there are at least two pass starts. Unknown extra fields stay.
+fn split_and_analyze_loop_passes(meta: &mut TakeMetadata, starts: &[u64]) -> Result<(), String> {
+    if starts.len() < 2 {
+        return Ok(());
+    }
+    let src = Path::new(&meta.path_input);
+    let dir = src.parent().ok_or("Take directory missing")?;
+    fs::create_dir_all(dir.join("passes"))
+        .map_err(|e| format!("Cannot create the passes folder. {e}"))?;
+    let total = meta.sample_count as u64;
+    let mut files = Vec::new();
+    let mut analyses = Vec::new();
+    for (i, start) in starts.iter().copied().enumerate() {
+        let end = starts.get(i + 1).copied().unwrap_or(total);
+        let n = i + 1;
+        let rel = format!("passes/pass-{n}.wav");
+        let dest = dir.join(&rel);
+        let frames = write_wav_range(src, &dest, start, end)?;
+        files.push(rel);
+        analyses.push(analyze_pass_wav(&dest, meta.tempo, frames)?);
+    }
+    meta.extra
+        .insert("passFiles".into(), serde_json::json!(files));
+    meta.extra
+        .insert("passAnalysis".into(), serde_json::json!(analyses));
+    Ok(())
+}
+
+fn analyze_pass_wav(path: &Path, tempo: f64, frames: u64) -> Result<serde_json::Value, String> {
+    let rate_hint = wav_sample_rate(path).unwrap_or(1).max(1);
+    if frames == 0 {
+        let mut fields = serde_json::to_value(TakeAnalyzer::new(rate_hint).analyze(&[], tempo))
+            .map_err(|e| e.to_string())?;
+        stamp_pass_analysis(&mut fields, rate_hint, 0, tempo);
+        return Ok(fields);
+    }
+    let (samples, rate) = read_wav_mono(path)?;
+    let mut fields = serde_json::to_value(TakeAnalyzer::new(rate).analyze(&samples, tempo))
+        .map_err(|e| e.to_string())?;
+    stamp_pass_analysis(&mut fields, rate, samples.len(), tempo);
+    Ok(fields)
+}
+
+fn stamp_pass_analysis(fields: &mut serde_json::Value, rate: u32, samples: usize, tempo: f64) {
+    let Some(obj) = fields.as_object_mut() else {
+        return;
+    };
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    obj.entry("schemaVersion".to_string())
+        .or_insert(serde_json::json!(1));
+    obj.entry("analyzerVersion".to_string())
+        .or_insert(serde_json::json!(2));
+    obj.insert("analyzedAtMs".into(), serde_json::json!(at));
+    obj.insert("sourceSampleRate".into(), serde_json::json!(rate));
+    obj.insert("sourceSampleCount".into(), serde_json::json!(samples));
+    obj.insert("sourceTempo".into(), serde_json::json!(tempo));
+}
+
+fn write_wav_range(src: &Path, dest: &Path, start: u64, end: u64) -> Result<u64, String> {
+    let reader =
+        hound::WavReader::open(src).map_err(|e| format!("Cannot open {}. {e}", src.display()))?;
+    let spec = reader.spec();
+    let channels = spec.channels.max(1) as u64;
+    let total_frames = u64::from(reader.duration());
+    drop(reader);
+    let start = start.min(total_frames);
+    let end = end.min(total_frames).max(start);
+    let frames = end - start;
+    let start_sample = start * channels;
+    let sample_count = frames * channels;
+    match spec.sample_format {
+        hound::SampleFormat::Float => {
+            write_sample_range::<f32>(src, dest, spec, start_sample, sample_count)?;
+        }
+        hound::SampleFormat::Int if spec.bits_per_sample <= 16 => {
+            write_sample_range::<i16>(src, dest, spec, start_sample, sample_count)?;
+        }
+        hound::SampleFormat::Int => {
+            write_sample_range::<i32>(src, dest, spec, start_sample, sample_count)?;
+        }
+    }
+    Ok(frames)
+}
+
+fn write_sample_range<S: hound::Sample + Copy>(
+    src: &Path,
+    dest: &Path,
+    spec: WavSpec,
+    start: u64,
+    count: u64,
+) -> Result<(), String> {
+    let mut reader =
+        hound::WavReader::open(src).map_err(|e| format!("Cannot open {}. {e}", src.display()))?;
+    let samples: Vec<S> = reader
+        .samples::<S>()
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let start = (start as usize).min(samples.len());
+    let end = (start + count as usize).min(samples.len());
+    let mut writer = WavWriter::create(dest, spec)
+        .map_err(|e| format!("Cannot create {}. {e}", dest.display()))?;
+    for &s in &samples[start..end] {
+        writer.write_sample(s).map_err(|e| e.to_string())?;
+    }
+    writer.finalize().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn pass_file_path(
+    take: &TakeMetadata,
+    dest_root: &Path,
+    pass_index: u32,
+) -> Result<PathBuf, String> {
+    let files = take
+        .extra
+        .get("passFiles")
+        .and_then(|v| v.as_array())
+        .filter(|files| !files.is_empty())
+        .ok_or_else(|| "This take has no loop passes to keep.".to_string())?;
+    if pass_index == 0 || pass_index as usize > files.len() {
+        return Err(format!(
+            "Pass {pass_index} is not in this take. Choose a pass from 1 to {}.",
+            files.len()
+        ));
+    }
+    let rel = files[(pass_index as usize) - 1]
+        .as_str()
+        .ok_or_else(|| "Pass file path is missing.".to_string())?;
+    let rel_path = Path::new(rel);
+    if rel_path.is_absolute()
+        || rel_path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err("Pass file is not inside the take directory.".into());
+    }
+    let take_dir = dest_root.join(&take.id);
+    let src = take_dir.join(rel_path);
+    let take_dir = take_dir
+        .canonicalize()
+        .map_err(|e| format!("Cannot open the take folder. {e}"))?;
+    let src = src
+        .canonicalize()
+        .map_err(|e| format!("Cannot open the pass file. {e}"))?;
+    if !src.starts_with(&take_dir) {
+        return Err("Pass file is not inside the take directory.".into());
+    }
+    Ok(src)
+}
+
+fn write_silence(path: &Path, rate: u32, channels: u16, frames: usize) -> Result<(), String> {
+    let mut writer = WavWriter::create(
+        path,
+        WavSpec {
+            channels,
+            sample_rate: rate.max(1),
+            bits_per_sample: 24,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .map_err(|e| format!("Cannot create {}. {e}", path.display()))?;
+    let n = frames.saturating_mul(channels.max(1) as usize);
+    for _ in 0..n {
+        writer.write_sample(0i32).map_err(|e| e.to_string())?;
+    }
+    writer.finalize().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Copy one numbered loop pass into a new take in the same session. Never renames the source.
+pub fn keep_loop_pass(
+    source: &TakeMetadata,
+    pass_index: u32,
+    dest_root: &Path,
+) -> Result<TakeMetadata, String> {
+    let src_wav = pass_file_path(source, dest_root, pass_index)?;
+    let reader =
+        hound::WavReader::open(&src_wav).map_err(|e| format!("Cannot open the pass file. {e}"))?;
+    let spec = reader.spec();
+    let frames = reader.duration() as usize;
+    drop(reader);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?;
+    let id = format!("take-{}", now.as_nanos());
+    fs::create_dir_all(dest_root).map_err(|e| e.to_string())?;
+    let dir = dest_root.join(&id);
+    fs::create_dir(&dir).map_err(|e| e.to_string())?;
+    let dest_input = dir.join("guitar-di.wav");
+    fs::copy(&src_wav, &dest_input)
+        .map_err(|e| format!("Cannot copy the pass into the new take. {e}"))?;
+    let layout: [(&str, u16); 5] = [
+        ("band", 2),
+        ("master", 2),
+        ("drums", 2),
+        ("bass", 1),
+        ("comp", 1),
+    ];
+    let mut stems = BTreeMap::new();
+    stems.insert(
+        "guitar-di".into(),
+        dest_input.to_string_lossy().into_owned(),
+    );
+    for (name, channels) in layout {
+        let path = dir.join(format!("{name}.wav"));
+        write_silence(&path, spec.sample_rate, channels, frames)?;
+        stems.insert(name.to_string(), path.to_string_lossy().into_owned());
+    }
+    let mut take = TakeMetadata {
+        id,
+        session_id: source.session_id.clone(),
+        timestamp: format!("{}.{:03}", now.as_secs(), now.subsec_millis()),
+        duration_secs: frames as f64 / spec.sample_rate.max(1) as f64,
+        style_id: source.style_id.clone(),
+        chart_id: source.chart_id.clone(),
+        tempo: source.tempo,
+        sample_count: frames,
+        path_input: stems["guitar-di"].clone(),
+        path_band: stems["band"].clone(),
+        path_master: stems["master"].clone(),
+        notes: format!("Pass {pass_index} kept from {}.", source.id),
+        stems,
+        snapshot: serde_json::json!({
+            "keptPass": { "takeId": source.id, "passIndex": pass_index }
+        }),
+        sample_rate: spec.sample_rate,
+        ..Default::default()
+    };
+    take.extra
+        .insert("schemaVersion".into(), serde_json::json!(1));
+    take.extra.insert(
+        "label".into(),
+        serde_json::json!(format!("Pass {pass_index} of {}", source.id)),
+    );
+    save_manifest(&take)?;
+    Ok(take)
 }
 
 pub fn save_manifest(meta: &TakeMetadata) -> Result<(), String> {
@@ -468,9 +712,11 @@ mod tests {
         record_loop_pass(&mut starts, 96_000);
         assert_eq!(starts, [0, 48_000, 96_000]);
         let mut extra = BTreeMap::new();
+        extra.insert("futureField".into(), serde_json::json!({"keep": true}));
         persist_loop_passes(&mut extra, &starts);
         assert_eq!(extra["passes"], serde_json::json!(3));
         assert_eq!(extra["passStarts"], serde_json::json!([0, 48_000, 96_000]));
+        assert_eq!(extra["futureField"], serde_json::json!({"keep": true}));
     }
 
     #[test]
@@ -495,11 +741,94 @@ mod tests {
             take.extra["passStarts"],
             serde_json::json!([0, 48_000, 96_000])
         );
+        let files = take.extra["passFiles"].as_array().unwrap();
+        assert_eq!(files.len(), 3);
+        assert_eq!(take.extra["passAnalysis"].as_array().unwrap().len(), 3);
         let dir = Path::new(&take.path_input).parent().unwrap();
         let disk: serde_json::Value =
             serde_json::from_slice(&fs::read(dir.join("take.json")).unwrap()).unwrap();
         assert_eq!(disk["passes"], 3);
         assert_eq!(disk["passStarts"], serde_json::json!([0, 48_000, 96_000]));
+        assert_eq!(disk["passFiles"], take.extra["passFiles"]);
+        assert_eq!(disk["schemaVersion"], 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stop_splits_guitar_passes_and_keep_copies_the_chosen_pass() {
+        let root = std::env::temp_dir().join(format!(
+            "jam-loop-pass-split-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut r = TakeRecorder::new(48_000, root.clone());
+        r.start_take("song".into(), "rock".into(), "verse".into(), 120.0)
+            .unwrap();
+        r.note_loop_wrap(30);
+        r.note_loop_wrap(60);
+        let mut frames = vec![[0.0f32; 9]; 90];
+        for frame in frames.iter_mut().take(30) {
+            frame[0] = 0.1;
+        }
+        for frame in frames.iter_mut().skip(30).take(30) {
+            frame[0] = 0.2;
+        }
+        for frame in frames.iter_mut().skip(60) {
+            frame[0] = 0.3;
+        }
+        r.push_capture(&frames).unwrap();
+        let take = r.stop_and_save().unwrap();
+        let starts: Vec<u64> = take.extra["passStarts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_u64().unwrap())
+            .collect();
+        assert_eq!(starts, [0, 30, 60]);
+        let files = take.extra["passFiles"].as_array().unwrap();
+        assert_eq!(files.len(), starts.len());
+        let dir = Path::new(&take.path_input).parent().unwrap();
+        for (i, file) in files.iter().enumerate() {
+            let path = dir.join(file.as_str().unwrap());
+            assert!(path.is_file(), "{}", path.display());
+            let (samples, _) = read_wav_mono(&path).unwrap();
+            let end = starts
+                .get(i + 1)
+                .copied()
+                .unwrap_or(take.sample_count as u64);
+            assert_eq!(
+                samples.len() as u64,
+                end - starts[i],
+                "pass {} length; starts={starts:?}",
+                i + 1
+            );
+        }
+        assert_eq!(
+            take.extra["passAnalysis"].as_array().unwrap().len(),
+            starts.len()
+        );
+        let pass2 = dir.join(files[1].as_str().unwrap());
+        let kept = keep_loop_pass(&take, 2, &root).unwrap();
+        assert_ne!(kept.id, take.id);
+        assert_eq!(kept.session_id, take.session_id);
+        assert_eq!(
+            fs::read(&kept.path_input).unwrap(),
+            fs::read(&pass2).unwrap()
+        );
+        assert_eq!(kept.notes, format!("Pass 2 kept from {}.", take.id));
+        assert_eq!(
+            kept.extra.get("label"),
+            Some(&serde_json::json!(format!("Pass 2 of {}", take.id)))
+        );
+        assert_eq!(dir.file_name().unwrap().to_string_lossy(), take.id.as_str());
+        let err = keep_loop_pass(&take, 0, &root).unwrap_err();
+        assert!(
+            err.starts_with("Pass 0 is not in this take.") && err.contains("1 to 3"),
+            "{err}"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
