@@ -27,7 +27,7 @@ jam-rig = { path = "crates/jam-rig" }
 
 # Audio & DSP
 cpal = "0.15"
-rtrb = "0.3"
+rtrb = "0.4"
 hound = "3.5"
 pitch-estimate = "=0.1.0"
 rustysynth = "1.3"
